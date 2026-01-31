@@ -1,0 +1,107 @@
+# Available model configurations for QLoRA post-training
+
+# Finance Domain Models
+finance_models:
+  qwen-1.5b-instruct:
+    name: "Qwen/Qwen2.5-1.5B-Instruct"
+    quantization_bits: 4
+    max_length: 1024
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 2.0
+    recommended: true
+
+  llama-3.2-1b-instruct:
+    name: "meta-llama/Llama-3.2-1B-Instruct"
+    quantization_bits: 4
+    max_length: 1024
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 1.5
+    recommended: true
+
+  qwen-0.5b-instruct:
+    name: "Qwen/Qwen2.5-0.5B-Instruct"
+    quantization_bits: 4
+    max_length: 512
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 0.8
+    recommended: false  # Too small for finance domain
+
+# General Purpose Models
+general_models:
+  phi-3-mini:
+    name: "microsoft/Phi-3-mini-4k-instruct"
+    quantization_bits: 4
+    max_length: 4096
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 3.5
+    recommended: false  # May OOM on 8GB VRAM
+
+  gemma-2-2b-it:
+    name: "google/gemma-2-2b-it"
+    quantization_bits: 4
+    max_length: 1024
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 2.5
+    recommended: true
+
+# LoRA Target Modules by Model Architecture
+lora_modules:
+  qwen:
+    target_modules: ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    r: 16
+    lora_alpha: 32
+
+  llama:
+    target_modules: ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    r: 16
+    lora_alpha: 32
+
+  phi:
+    target_modules: ["q_proj", "v_proj", "fc1", "fc2"]
+    r: 16
+    lora_alpha: 32
+
+  gemma:
+    target_modules: ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    r: 16
+    lora_alpha: 32
+
+# Finance Datasets
+finance_datasets:
+  - name: "finance-alpaca"
+    path: "yahma/alpaca-cleaned"  # Will filter for finance examples
+    format: "alpaca"
+    size: 52000
+
+  - name: "financial-instructions"
+    path: "PatronusAI/financebench"
+    format: "alpaca"
+    size: 500
+
+  - name: "stock-analysis"
+    path: "custom"  # User-provided stock data
+    format: "alpaca"
+    size: null  # Variable
+
+# Memory Optimizations by VRAM
+memory_presets:
+  8gb_vram:  # RTX 4060, RTX 3070, etc.
+    batch_size: 1
+    gradient_accumulation_steps: 8
+    gradient_checkpointing: true
+    max_length: 1024
+    bf16: true
+
+  12gb_vram:  # RTX 4070, RTX 3080, etc.
+    batch_size: 2
+    gradient_accumulation_steps: 4
+    gradient_checkpointing: true
+    max_length: 2048
+    bf16: true
+
+  16gb_vram:  # RTX 4080, RTX 3090, etc.
+    batch_size: 4
+    gradient_accumulation_steps: 2
+    gradient_checkpointing: false
+    max_length: 2048
+    bf16: true
