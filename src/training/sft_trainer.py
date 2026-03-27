@@ -16,6 +16,7 @@ from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, Log
 from src.models import load_model_and_tokenizer, print_model_info
 from src.data import AlpacaDataset, FinanceDataset
 from src.utils import set_seed, setup_logging, setup_wandb, setup_tensorboard, log_metrics, log_gpu_memory, console
+from src.utils.platform_utils import get_platform
 
 
 class MemoryCallback(TrainerCallback):
@@ -84,9 +85,13 @@ class SFTTrainer:
         # Load model and tokenizer
         self.model, self.tokenizer = load_model_and_tokenizer(self.model_config)
 
-        # Prepare model for k-bit training
-        console.print("[cyan]Preparing model for k-bit training...[/cyan]")
-        self.model = prepare_model_for_kbit_training(self.model)
+        # Prepare model for k-bit training (only needed with bitsandbytes quantization)
+        platform_info = get_platform()
+        if platform_info.is_cuda and self.model_config.quantization_bits in (4, 8):
+            console.print("[cyan]Preparing model for k-bit training...[/cyan]")
+            self.model = prepare_model_for_kbit_training(self.model)
+        else:
+            console.print("[cyan]Skipping k-bit preparation (not needed on this platform)[/cyan]")
 
         # Get LoRA configuration
         lora_cfg = LoraConfig(

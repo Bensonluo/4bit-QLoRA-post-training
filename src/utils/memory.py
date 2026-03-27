@@ -1,16 +1,23 @@
-"""GPU memory monitoring and optimization utilities."""
+"""GPU/memory monitoring and optimization utilities.
+
+Supports:
+- NVIDIA (CUDA): VRAM tracking via torch.cuda
+- Apple Silicon (MPS): Unified memory tracking
+"""
 
 import gc
 import subprocess
 import sys
 from typing import Dict, Optional
 
+from src.utils.platform_utils import get_platform
+
 
 def get_vram_usage() -> Dict[str, float]:
-    """Get GPU VRAM usage statistics.
+    """Get GPU memory usage statistics (works on both CUDA and MPS).
 
     Returns:
-        Dictionary with VRAM info in GB:
+        Dictionary with memory info in GB:
         - allocated: Currently allocated memory
         - reserved: Total reserved memory
         - free: Free memory
@@ -18,27 +25,40 @@ def get_vram_usage() -> Dict[str, float]:
     """
     try:
         import torch
+        platform_info = get_platform()
 
-        if not torch.cuda.is_available():
+        if platform_info.is_cuda:
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+
             return {
-                "allocated": 0.0,
-                "reserved": 0.0,
-                "free": 0.0,
-                "total": 0.0,
+                "allocated": round(allocated, 2),
+                "reserved": round(reserved, 2),
+                "free": round(total - reserved, 2),
+                "total": round(total, 2),
             }
 
-        allocated = torch.cuda.memory_allocated() / 1024**3
-        reserved = torch.cuda.memory_reserved() / 1024**3
-        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        if platform_info.is_mps:
+            # MPS uses unified memory — report system-level usage
+            allocated = torch.mps.current_allocated_memory() / 1024**3
+            total = platform_info.total_memory_gb
+
+            return {
+                "allocated": round(allocated, 2),
+                "reserved": round(allocated, 2),  # MPS doesn't separate reserved
+                "free": round(total - allocated, 2),
+                "total": round(total, 2),
+            }
 
         return {
-            "allocated": round(allocated, 2),
-            "reserved": round(reserved, 2),
-            "free": round(total - reserved, 2),
-            "total": round(total, 2),
+            "allocated": 0.0,
+            "reserved": 0.0,
+            "free": 0.0,
+            "total": 0.0,
         }
     except Exception as e:
-        print(f"Warning: Could not get VRAM usage: {e}")
+        print(f"Warning: Could not get memory usage: {e}")
         return {
             "allocated": 0.0,
             "reserved": 0.0,
@@ -48,21 +68,23 @@ def get_vram_usage() -> Dict[str, float]:
 
 
 def print_vram_usage(prefix: str = "") -> None:
-    """Print VRAM usage to console.
+    """Print GPU/memory usage to console.
 
     Args:
         prefix: Optional prefix string for the output
     """
     vram = get_vram_usage()
+    platform_info = get_platform()
 
     if vram["total"] == 0:
-        print(f"{prefix}No GPU detected or CUDA not available")
+        print(f"{prefix}No GPU detected")
         return
 
     usage_percent = (vram["allocated"] / vram["total"]) * 100
+    mem_type = "VRAM" if platform_info.is_cuda else "Memory"
 
     print(
-        f"{prefix}VRAM: {vram['allocated']:.2f}GB / {vram['total']:.2f}GB "
+        f"{prefix}{mem_type}: {vram['allocated']:.2f}GB / {vram['total']:.2f}GB "
         f"({usage_percent:.1f}%) | Free: {vram['free']:.2f}GB"
     )
 
@@ -71,13 +93,19 @@ def clear_cache() -> None:
     """Clear GPU cache and run garbage collection."""
     try:
         import torch
+        platform_info = get_platform()
 
-        if torch.cuda.is_available():
+        if platform_info.is_cuda:
             torch.cuda.empty_cache()
             gc.collect()
-            print("GPU cache cleared")
+            print("CUDA cache cleared")
+        elif platform_info.is_mps:
+            torch.mps.empty_cache()
+            gc.collect()
+            print("MPS cache cleared")
         else:
-            print("No CUDA device available")
+            gc.collect()
+            print("No GPU cache to clear (CPU only)")
     except Exception as e:
         print(f"Warning: Could not clear cache: {e}")
 
@@ -96,6 +124,7 @@ def optimize_memory(
         Dictionary with optimization recommendations
     """
     vram = get_vram_usage()
+    platform_info = get_platform()
 
     if vram["total"] == 0:
         return {
@@ -114,7 +143,20 @@ def optimize_memory(
         "recommendation": "",
     }
 
-    if vram["total"] < 8:
+    if platform_info.is_mps:
+        optimizations["use_flash_attention"] = False
+        if vram["total"] >= 32:
+            optimizations["gradient_checkpointing"] = False
+            optimizations["recommendation"] = (
+                f"Apple Silicon with {vram['total']:.0f}GB unified memory. "
+                "No special optimizations needed."
+            )
+        else:
+            optimizations["gradient_checkpointing"] = True
+            optimizations["recommendation"] = (
+                "Apple Silicon with limited memory. Gradient checkpointing recommended."
+            )
+    elif vram["total"] < 8:
         optimizations["gradient_checkpointing"] = True
         optimizations["use_flash_attention"] = True
         optimizations["recommendation"] = (

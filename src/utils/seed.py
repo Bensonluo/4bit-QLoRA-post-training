@@ -19,16 +19,16 @@ def set_seed(seed: int, deterministic: bool = False) -> None:
 
     try:
         torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
 
         if deterministic:
-            # Enable deterministic algorithms (may impact performance)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
         else:
-            # Allow non-deterministic algorithms for better performance
             torch.backends.cudnn.deterministic = False
-            torch.backends.cudnn.benchmark = True
+            if torch.cuda.is_available():
+                torch.backends.cudnn.benchmark = True
 
     except Exception as e:
         print(f"Warning: Could not fully set seed for PyTorch: {e}")

@@ -162,6 +162,12 @@ class MemoryMonitorCallback(TrainerCallback):
                     console.print(
                         f"[dim]VRAM: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved[/dim]"
                     )
+                elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    allocated = torch.mps.current_allocated_memory() / 1024**3
+
+                    console.print(
+                        f"[dim]MPS Memory: {allocated:.2f}GB allocated[/dim]"
+                    )
             except Exception:
                 pass
 

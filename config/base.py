@@ -29,14 +29,33 @@ class ModelConfig:
     torch_dtype: str = "bfloat16"
 
     def __post_init__(self):
-        """Validate configuration."""
-        if self.quantization_bits not in [4, 8]:
-            raise ValueError("quantization_bits must be 4 or 8")
+        """Validate configuration and auto-adjust for platform."""
+        if self.quantization_bits not in [4, 8, None]:
+            raise ValueError("quantization_bits must be 4, 8, or None")
 
         if self.torch_dtype not in ["float32", "float16", "bfloat16"]:
             raise ValueError(
                 "torch_dtype must be one of: float32, float16, bfloat16"
             )
+
+        # Auto-adjust for platform
+        from src.utils.platform_utils import get_platform
+        platform_info = get_platform()
+
+        if platform_info.is_mps or platform_info.device == "cpu":
+            # Quantization not supported on MPS/CPU — disable it
+            if self.quantization_bits is not None:
+                import warnings
+                warnings.warn(
+                    f"Quantization (bitsandbytes) is not available on {platform_info.device}. "
+                    "Setting quantization_bits=None. Model will load in full precision.",
+                    stacklevel=2,
+                )
+                self.quantization_bits = None
+
+            # device_map is not supported on MPS
+            if self.device_map == "auto":
+                self.device_map = None
 
 
 @dataclass

@@ -19,6 +19,7 @@ from config.dpo import DPOConfig, ReferenceModelConfig, PreferenceDataConfig, DP
 from src.models import load_model_and_tokenizer
 from src.data.loaders import PreferenceDataset
 from src.utils import set_seed, console, setup_logging
+from src.utils.platform_utils import get_platform
 
 
 class DPOTrainer:
@@ -83,8 +84,12 @@ class DPOTrainer:
         console.print(f"[cyan]Loading main model: {self.model_config.name}[/cyan]")
         self.model, self.tokenizer = load_model_and_tokenizer(self.model_config)
 
-        # Prepare for k-bit training
-        self.model = prepare_model_for_kbit_training(self.model)
+        # Prepare for k-bit training (only needed with bitsandbytes quantization)
+        platform_info = get_platform()
+        if platform_info.is_cuda and self.model_config.quantization_bits in (4, 8):
+            self.model = prepare_model_for_kbit_training(self.model)
+        else:
+            console.print("[cyan]Skipping k-bit preparation (not needed on this platform)[/cyan]")
 
         # Apply LoRA
         console.print(f"[cyan]Applying LoRA (r={self.lora_config.r})...[/cyan]")

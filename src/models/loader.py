@@ -1,4 +1,9 @@
-"""Model loading utilities with quantization support."""
+"""Model loading utilities with platform-aware quantization support.
+
+Supports:
+- NVIDIA GPU (CUDA): bitsandbytes 4-bit/8-bit quantization
+- Apple Silicon (MPS): bf16/fp16 without quantization
+"""
 
 from typing import Optional, Tuple
 
@@ -6,7 +11,6 @@ import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
     PreTrainedModel,
     PreTrainedTokenizer,
 )
@@ -14,6 +18,15 @@ from transformers import (
 from config.base import ModelConfig
 from src.models.base import print_model_info
 from src.utils.logging import console
+from src.utils.platform_utils import get_platform, get_torch_dtype
+
+# bitsandbytes is only available on CUDA
+_BITSANDBYTES_AVAILABLE = False
+try:
+    from transformers import BitsAndBytesConfig
+    _BITSANDBYTES_AVAILABLE = True
+except ImportError:
+    pass
 
 
 def load_tokenizer(
@@ -50,10 +63,10 @@ def load_tokenizer(
     return tokenizer
 
 
-def get_quantization_config(
+def _get_quantization_config(
     quantization_bits: int = 4,
-) -> BitsAndBytesConfig:
-    """Get quantization configuration.
+):
+    """Get bitsandbytes quantization config (CUDA only).
 
     Args:
         quantization_bits: Number of bits (4 or 8)
@@ -61,6 +74,12 @@ def get_quantization_config(
     Returns:
         BitsAndBytesConfig instance
     """
+    if not _BITSANDBYTES_AVAILABLE:
+        raise RuntimeError(
+            "bitsandbytes is not available. "
+            "Quantization requires an NVIDIA GPU with bitsandbytes installed."
+        )
+
     if quantization_bits == 4:
         return BitsAndBytesConfig(
             load_in_4bit=True,
@@ -79,7 +98,11 @@ def get_quantization_config(
 def load_model(
     config: ModelConfig,
 ) -> PreTrainedModel:
-    """Load model with quantization.
+    """Load model with platform-aware configuration.
+
+    On CUDA: uses bitsandbytes quantization if configured.
+    On MPS (Apple Silicon): loads in bf16/fp16 without quantization.
+    On CPU: loads in float32.
 
     Args:
         config: Model configuration
@@ -87,33 +110,49 @@ def load_model(
     Returns:
         Loaded model
     """
+    platform_info = get_platform()
+
     console.print(f"\n[bold cyan]Loading model: {config.name}[/bold cyan]")
-    console.print(f"  Quantization: {config.quantization_bits}-bit")
+    console.print(f"  Platform: {platform_info.description}")
     console.print(f"  Flash Attention: {config.use_flash_attention}")
     console.print(f"  Data Type: {config.torch_dtype}\n")
+
+    # Resolve dtype for platform
+    torch_dtype = get_torch_dtype(config.torch_dtype, platform_info)
 
     # Prepare model loading arguments
     model_kwargs = {
         "trust_remote_code": config.trust_remote_code,
-        "device_map": config.device_map,
-        "torch_dtype": getattr(torch, config.torch_dtype),
+        "torch_dtype": torch_dtype,
     }
 
-    # Add quantization config
-    if config.quantization_bits == 4 and not config.load_in_8bit:
-        model_kwargs["quantization_config"] = get_quantization_config(4)
-        console.print("[green]✓ 4-bit quantization enabled (NF4)[/green]")
-    elif config.load_in_8bit or config.quantization_bits == 8:
-        model_kwargs["quantization_config"] = get_quantization_config(8)
-        console.print("[green]✓ 8-bit quantization enabled[/green]")
+    # Platform-specific device and quantization
+    if platform_info.is_cuda:
+        model_kwargs["device_map"] = config.device_map
 
-    # Add Flash Attention if available
-    if config.use_flash_attention:
-        try:
-            model_kwargs["attn_implementation"] = "flash_attention_2"
-            console.print("[green]✓ Flash Attention 2 enabled[/green]")
-        except Exception:
-            console.print("[yellow]⚠ Flash Attention 2 not available, using default[/yellow]")
+        if config.quantization_bits in (4, 8):
+            model_kwargs["quantization_config"] = _get_quantization_config(
+                config.quantization_bits
+            )
+            console.print(
+                f"[green]✓ {config.quantization_bits}-bit quantization enabled (CUDA/bitsandbytes)[/green]"
+            )
+        else:
+            console.print("[cyan]Loading without quantization (full precision on CUDA)[/cyan]")
+
+    elif platform_info.is_mps:
+        # MPS: no device_map, no quantization — load then move to MPS
+        console.print("[cyan]Apple Silicon detected — loading in bf16 without quantization[/cyan]")
+
+    else:
+        console.print("[yellow]⚠ No GPU detected — loading on CPU (slow)[/yellow]")
+
+    # Flash Attention (CUDA only, not available on MPS)
+    if config.use_flash_attention and platform_info.is_cuda:
+        model_kwargs["attn_implementation"] = "flash_attention_2"
+        console.print("[green]✓ Flash Attention 2 enabled[/green]")
+    elif config.use_flash_attention:
+        console.print("[yellow]⚠ Flash Attention not available on this platform, using default[/yellow]")
 
     # Load model
     console.print("[cyan]Loading model (this may take a while)...[/cyan]")
@@ -123,7 +162,11 @@ def load_model(
         **model_kwargs,
     )
 
-    console.print(f"[green]✓ Model loaded successfully![/green]\n")
+    # Move to MPS after loading (MPS doesn't support device_map)
+    if platform_info.is_mps:
+        model = model.to("mps")
+
+    console.print(f"[green]✓ Model loaded successfully on {platform_info.device}![/green]\n")
 
     return model
 
@@ -131,7 +174,7 @@ def load_model(
 def load_model_and_tokenizer(
     config: ModelConfig,
 ) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
-    """Load model and tokenizer with configuration.
+    """Load model and tokenizer with platform-aware configuration.
 
     This is the main entry point for loading models for training.
 
@@ -141,6 +184,9 @@ def load_model_and_tokenizer(
     Returns:
         Tuple of (model, tokenizer)
     """
+    platform_info = get_platform()
+    console.print(f"[bold]Platform: {platform_info.description}[/bold]\n")
+
     # Load tokenizer first
     tokenizer = load_tokenizer(
         model_name=config.name,

@@ -172,6 +172,16 @@ def log_gpu_memory(step: int, wandb_run=None) -> None:
             }
 
             log_metrics(metrics, step=step, prefix="memory/", wandb_run=wandb_run)
+
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            allocated = torch.mps.current_allocated_memory() / 1024**3
+
+            metrics = {
+                "mps_allocated_gb": allocated,
+            }
+
+            log_metrics(metrics, step=step, prefix="memory/", wandb_run=wandb_run)
+
     except Exception as e:
         console.print(f"[yellow]Warning: Could not log GPU memory: {e}[/yellow]")
 

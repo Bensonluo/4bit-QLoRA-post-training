@@ -1,6 +1,6 @@
 # LLM Post-Training Portfolio Project
 
-> A complete 4-bit QLoRA framework for fine-tuning LLMs on consumer GPUs, with finance domain specialization and Mac+Windows distributed training workflow.
+> A complete QLoRA framework for fine-tuning LLMs on consumer hardware, with finance domain specialization. Supports both NVIDIA GPU and Apple Silicon.
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/pytorch-2.1+-ee4c2c.svg)](https://pytorch.org/)
@@ -8,31 +8,30 @@
 
 ## 🎯 Overview
 
-This project demonstrates end-to-end LLM post-training using **4-bit QLoRA (Quantized Low-Rank Adaptation)** optimized for consumer GPUs. It implements multiple fine-tuning techniques (SFT, Domain Adaptation, DPO) and showcases production-ready ML engineering practices.
+This project demonstrates end-to-end LLM post-training using **QLoRA (Quantized Low-Rank Adaptation)** optimized for consumer hardware. It supports both **NVIDIA GPU** (4-bit quantization via bitsandbytes) and **Apple Silicon** (bf16 via Metal Performance Shaders) with automatic platform detection. Multiple fine-tuning techniques (SFT, Domain Adaptation, DPO) showcase production-ready ML engineering practices.
 
 ### Key Features
 
-- ✅ **Memory Efficient**: Train 1.5B parameter models on 8GB VRAM (RTX 4060)
-- ✅ **4-bit QLoRA**: 84% memory reduction with minimal quality loss
+- ✅ **Cross-Platform**: Auto-detects NVIDIA GPU (CUDA) or Apple Silicon (MPS) — no config needed
+- ✅ **Memory Efficient**: Train 1.5B models on 8GB VRAM (NVIDIA) or run up to ~14B on Apple Silicon 64GB
+- ✅ **4-bit QLoRA**: 84% memory reduction with minimal quality loss (NVIDIA only)
+- ✅ **Apple Silicon Native**: bf16 training via Metal Performance Shaders, no quantization needed
 - ✅ **Finance Specialization**: Domain-adapted models for financial/investment tasks
 - ✅ **DPO Support**: Direct Preference Optimization for alignment
 - ✅ **Distributed Workflow**: Mac development + Windows GPU training
 - ✅ **Production Ready**: Comprehensive tests, logging, monitoring
-- ✅ **China Optimized**: Hugging Face mirror integration for fast downloads
-- ✅ **Extensible Architecture**: Easy to add new techniques (continued pre-training, KTO, ORPO)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-**Minimum Hardware:**
-- GPU: NVIDIA RTX 4060 8GB VRAM (or similar)
-- RAM: 16GB system memory
-- Storage: 30GB free space
+**Hardware (one of):**
+- NVIDIA GPU with 8GB+ VRAM (RTX 4060, etc.)
+- Apple Silicon Mac with 16GB+ unified memory (M1/M2/M3/M4 Pro/Max/Ultra)
 
 **Software:**
 - Python 3.10+
-- CUDA 11.8+ or 12.x
+- CUDA 11.8+ (NVIDIA only)
 - SSH access (if using remote Windows machine)
 
 ### Installation
@@ -107,6 +106,8 @@ This project demonstrates mastery of:
 
 ### Technical Skills
 - **QLoRA**: 4-bit quantization + Low-Rank Adaptation
+- **Cross-Platform ML**: Platform abstraction layer (CUDA/MPS/CPU)
+- **Apple Silicon Training**: Metal Performance Shaders, unified memory optimization
 - **SFT**: Supervised Fine-Tuning with instruction datasets
 - **Domain Adaptation**: Specializing models for specific domains
 - **DPO**: Direct Preference Optimization for alignment
@@ -131,12 +132,14 @@ This project demonstrates mastery of:
 
 ### Hardware Optimization
 
-| Model | VRAM (4-bit) | RTX 4060 8GB |
-|-------|--------------|---------------|
-| Qwen 0.5B | ~1.5 GB | ✅ Perfect |
-| Qwen 1.5B | ~2.3 GB | ✅ Perfect |
-| Llama 3.2 3B | ~4.5 GB | ✅ Good |
-| Phi-3 3.8B | ~5.5 GB | ⚠️ Tight |
+| Model | VRAM (4-bit, NVIDIA) | Apple Silicon 64GB (bf16) |
+|-------|----------------------|---------------------------|
+| Qwen 0.5B | ~1.5 GB ✅ | ~1 GB ✅ |
+| Qwen 1.5B | ~2.3 GB ✅ | ~3 GB ✅ |
+| Llama 3.2 3B | ~4.5 GB ✅ | ~6 GB ✅ |
+| Phi-3 3.8B | ~5.5 GB ⚠️ | ~8 GB ✅ |
+| Qwen 7B | OOM ❌ | ~14 GB ✅ |
+| Llama 3.1 8B | OOM ❌ | ~16 GB ✅ |
 
 ### Training Results
 
@@ -151,7 +154,7 @@ This project demonstrates mastery of:
 ### Core Framework
 - **transformers** (Hugging Face) - Model loading
 - **peft** - LoRA implementation
-- **bitsandbytes** - 4-bit quantization
+- **bitsandbytes** - 4-bit quantization (NVIDIA only)
 - **trl** - SFT and DPO trainers
 - **accelerate** - Multi-GPU/CPU offloading
 

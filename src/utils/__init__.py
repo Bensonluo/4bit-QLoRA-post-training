@@ -25,9 +25,14 @@ from src.utils.memory import (
     optimize_memory,
     print_vram_usage,
 )
+from src.utils.platform_utils import get_platform, detect_platform, recommend_settings
 from src.utils.seed import get_seed, set_seed
 
 __all__ = [
+    # Platform
+    "get_platform",
+    "detect_platform",
+    "recommend_settings",
     # Memory
     "get_vram_usage",
     "print_vram_usage",
