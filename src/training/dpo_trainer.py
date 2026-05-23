@@ -20,6 +20,7 @@ from src.models import load_model_and_tokenizer
 from src.data.loaders import PreferenceDataset
 from src.utils import set_seed, console, setup_logging
 from src.utils.platform_utils import get_platform
+from src.tracking import get_tracker, MLflowTrainCallback
 
 
 class DPOTrainer:
@@ -75,6 +76,9 @@ class DPOTrainer:
         self.ref_model = None
         self.tokenizer = None
         self.trainer = None
+
+        # MLflow tracker (no-op if use_mlflow=False)
+        self._tracker = get_tracker(logging_config)
 
     def prepare_models(self):
         """Load main model, reference model, and tokenizer."""
@@ -250,6 +254,20 @@ class DPOTrainer:
                 },
             )
 
+        # MLflow run
+        if self._tracker.active:
+            self._tracker.start_run(
+                run_name=self.logging_config.mlflow_run_name,
+                config={
+                    "model": self.model_config.__dict__,
+                    "training": self.training_config.__dict__,
+                    "lora": self.lora_config.__dict__,
+                    "dpo": self.dpo_config.__dict__,
+                    "data": self.data_config.__dict__,
+                    "reference_model": self.reference_config.__dict__,
+                },
+            )
+
         try:
             self.trainer.train()
 
@@ -263,6 +281,7 @@ class DPOTrainer:
             if self.logging_config.use_wandb:
                 import wandb
                 wandb.finish()
+            self._tracker.end_run()
 
     def evaluate(self):
         """Evaluate DPO-trained model."""

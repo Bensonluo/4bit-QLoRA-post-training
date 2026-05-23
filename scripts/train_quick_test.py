@@ -83,6 +83,9 @@ def main():
     logging_config = LoggingConfig(
         use_wandb=False,
         use_tensorboard=False,
+        use_mlflow=True,
+        mlflow_experiment_name="quick-test",
+        mlflow_run_name="quick-test-qwen-0.5b",
         console_level="INFO",
     )
 
@@ -139,6 +142,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-EOF
-
-echo "✓ Created scripts/train_quick_test.py"

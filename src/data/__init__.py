@@ -7,6 +7,7 @@ from src.data.loaders import (
     PreferenceDataset,
     load_custom_dataset,
 )
+from src.data.medical_dataset import MedicalEntityDataset
 from src.data.preprocessors import (
     DataCollator,
     compute_statistics,
@@ -21,6 +22,7 @@ __all__ = [
     # Loaders
     "AlpacaDataset",
     "FinanceDataset",
+    "MedicalEntityDataset",
     "PreferenceDataset",
     "load_custom_dataset",
     # Preprocessors

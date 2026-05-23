@@ -179,12 +179,33 @@ def parse_args():
         default=None,
         help="Resume from checkpoint path",
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file (overrides other args)",
+    )
 
     return parser.parse_args()
 
 
 def apply_args_to_config(config, args):
     """Apply command line arguments to configuration."""
+
+    # Load from config file if provided
+    if args.config:
+        console.print(f"[cyan]Loading config from: {args.config}[/cyan]")
+        import yaml
+        from config.dpo import DPOTrainingConfig
+        with open(args.config) as f:
+            cfg_dict = yaml.safe_load(f)
+        # Apply YAML values to config sub-objects
+        for section_key, section_val in cfg_dict.items():
+            if hasattr(config, f"{section_key}_config") and isinstance(section_val, dict):
+                sub_config = getattr(config, f"{section_key}_config")
+                for k, v in section_val.items():
+                    if hasattr(sub_config, k):
+                        setattr(sub_config, k, v)
 
     # Quick test mode
     if args.quick_test:

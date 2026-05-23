@@ -1,0 +1,974 @@
+[
+  {
+    "query": "华西医院",
+    "standard_name": "四川大学华西医院",
+    "code": "H510104001",
+    "entity_type": "hospital",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 0
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "同济医院",
+    "standard_name": "华中科技大学同济医学院附属同济医院",
+    "code": "H420106001",
+    "entity_type": "hospital",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 0
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      },
+      {
+        "name": "中山大学附属第一医院",
+        "code": "H440106001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "atorvastatin",
+    "standard_name": "阿托伐他汀钙片",
+    "code": "H19990258",
+    "entity_type": "drug",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "阿托伐他汀钙片",
+        "code": "H19990258",
+        "label": 1
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 0
+      },
+      {
+        "name": "头孢克肟分散片",
+        "code": "H20050650",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林克拉维酸钾片",
+        "code": "H20044234",
+        "label": 0
+      },
+      {
+        "name": "复方甘草片",
+        "code": "H32025541",
+        "label": 0
+      },
+      {
+        "name": "盐酸安罗替尼胶囊",
+        "code": "H20180004",
+        "label": 0
+      },
+      {
+        "name": "地塞米松磷酸钠注射液",
+        "code": "H32021541",
+        "label": 0
+      },
+      {
+        "name": "布洛芬缓释胶囊",
+        "code": "H10900089",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "复方甘草",
+    "standard_name": "复方甘草片",
+    "code": "H32025541",
+    "entity_type": "drug",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "复方甘草片",
+        "code": "H32025541",
+        "label": 1
+      },
+      {
+        "name": "甲硝唑片",
+        "code": "H32023112",
+        "label": 0
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      },
+      {
+        "name": "氯吡格雷片",
+        "code": "H20000542",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "布洛芬缓释胶囊",
+        "code": "H10900089",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林克拉维酸钾片",
+        "code": "H20044234",
+        "label": 0
+      },
+      {
+        "name": "阿托伐他汀钙片",
+        "code": "H19990258",
+        "label": 0
+      },
+      {
+        "name": "注射用紫杉醇(白蛋白结合型)",
+        "code": "H20180005",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "硝苯地平控释片",
+    "standard_name": "硝苯地平控释片",
+    "code": "J20040031",
+    "entity_type": "drug",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "硝苯地平控释片",
+        "code": "J20040031",
+        "label": 1
+      },
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 0
+      },
+      {
+        "name": "头孢克肟分散片",
+        "code": "H20050650",
+        "label": 0
+      },
+      {
+        "name": "阿托伐他汀钙片",
+        "code": "H19990258",
+        "label": 0
+      },
+      {
+        "name": "盐酸二甲双胍片",
+        "code": "H20023371",
+        "label": 0
+      },
+      {
+        "name": "盐酸安罗替尼胶囊",
+        "code": "H20180004",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林克拉维酸钾片",
+        "code": "H20044234",
+        "label": 0
+      },
+      {
+        "name": "阿司匹林肠溶片",
+        "code": "H20065051",
+        "label": 0
+      },
+      {
+        "name": "盐酸氨溴索口服溶液",
+        "code": "H20059205",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "地米",
+    "standard_name": "地塞米松磷酸钠注射液",
+    "code": "H32021541",
+    "entity_type": "drug",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "地塞米松磷酸钠注射液",
+        "code": "H32021541",
+        "label": 1
+      },
+      {
+        "name": "甲硝唑片",
+        "code": "H32023112",
+        "label": 0
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      },
+      {
+        "name": "氯吡格雷片",
+        "code": "H20000542",
+        "label": 0
+      },
+      {
+        "name": "复方甘草片",
+        "code": "H32025541",
+        "label": 0
+      },
+      {
+        "name": "布洛芬缓释胶囊",
+        "code": "H10900089",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "盐酸氨溴索口服溶液",
+        "code": "H20059205",
+        "label": 0
+      },
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "甲消唑",
+    "standard_name": "甲硝唑片",
+    "code": "H32023112",
+    "entity_type": "drug",
+    "difficulty": "medium",
+    "candidates": [
+      {
+        "name": "甲硝唑片",
+        "code": "H32023112",
+        "label": 1
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      },
+      {
+        "name": "氯吡格雷片",
+        "code": "H20000542",
+        "label": 0
+      },
+      {
+        "name": "复方甘草片",
+        "code": "H32025541",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 0
+      },
+      {
+        "name": "左氧氟沙星片",
+        "code": "H20040091",
+        "label": 0
+      },
+      {
+        "name": "布洛芬缓释胶囊",
+        "code": "H10900089",
+        "label": 0
+      },
+      {
+        "name": "盐酸氨溴索口服溶液",
+        "code": "H20059205",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "注射用紫杉醇(白蛋白结合型)",
+    "standard_name": "注射用紫杉醇(白蛋白结合型)",
+    "code": "H20180005",
+    "entity_type": "drug",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "注射用紫杉醇(白蛋白结合型)",
+        "code": "H20180005",
+        "label": 1
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 0
+      },
+      {
+        "name": "头孢克肟分散片",
+        "code": "H20050650",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林克拉维酸钾片",
+        "code": "H20044234",
+        "label": 0
+      },
+      {
+        "name": "氨苄西林钠舒巴坦钠",
+        "code": "H20044235",
+        "label": 0
+      },
+      {
+        "name": "左氧氟沙星片",
+        "code": "H20040091",
+        "label": 0
+      },
+      {
+        "name": "阿托伐他汀钙片",
+        "code": "H19990258",
+        "label": 0
+      },
+      {
+        "name": "硝苯地平控释片",
+        "code": "J20040031",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "头孢克洛",
+    "standard_name": "头孢克洛分散片",
+    "code": "H20050649",
+    "entity_type": "drug",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 1
+      },
+      {
+        "name": "头孢克肟分散片",
+        "code": "H20050650",
+        "label": 0
+      },
+      {
+        "name": "甲硝唑片",
+        "code": "H32023112",
+        "label": 0
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      },
+      {
+        "name": "氯吡格雷片",
+        "code": "H20000542",
+        "label": 0
+      },
+      {
+        "name": "盐酸安罗替尼胶囊",
+        "code": "H20180004",
+        "label": 0
+      },
+      {
+        "name": "注射用紫杉醇(白蛋白结合型)",
+        "code": "H20180005",
+        "label": 0
+      },
+      {
+        "name": "阿司匹林肠溶片",
+        "code": "H20065051",
+        "label": 0
+      },
+      {
+        "name": "奥美拉唑肠溶胶囊",
+        "code": "H20059414",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "省医",
+    "standard_name": "广东省人民医院",
+    "code": "H440106002",
+    "entity_type": "hospital",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      },
+      {
+        "name": "中山大学附属第一医院",
+        "code": "H440106001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "盐酸氨溴索口服溶液",
+    "standard_name": "盐酸氨溴索口服溶液",
+    "code": "H20059205",
+    "entity_type": "drug",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "盐酸氨溴索口服溶液",
+        "code": "H20059205",
+        "label": 1
+      },
+      {
+        "name": "盐酸二甲双胍片",
+        "code": "H20023371",
+        "label": 0
+      },
+      {
+        "name": "盐酸安罗替尼胶囊",
+        "code": "H20180004",
+        "label": 0
+      },
+      {
+        "name": "阿司匹林肠溶片",
+        "code": "H20065051",
+        "label": 0
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "头孢克肟分散片",
+        "code": "H20050650",
+        "label": 0
+      },
+      {
+        "name": "布洛芬缓释胶囊",
+        "code": "H10900089",
+        "label": 0
+      },
+      {
+        "name": "氨苄西林钠舒巴坦钠",
+        "code": "H20044235",
+        "label": 0
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "阿司匹林",
+    "standard_name": "阿司匹林肠溶片",
+    "code": "H20065051",
+    "entity_type": "drug",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "阿司匹林肠溶片",
+        "code": "H20065051",
+        "label": 1
+      },
+      {
+        "name": "阿莫西林胶囊",
+        "code": "H44023614",
+        "label": 0
+      },
+      {
+        "name": "甲硝唑片",
+        "code": "H32023112",
+        "label": 0
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      },
+      {
+        "name": "氯吡格雷片",
+        "code": "H20000542",
+        "label": 0
+      },
+      {
+        "name": "左氧氟沙星片",
+        "code": "H20040091",
+        "label": 0
+      },
+      {
+        "name": "氨苄西林钠舒巴坦钠",
+        "code": "H20044235",
+        "label": 0
+      },
+      {
+        "name": "头孢克洛分散片",
+        "code": "H20050649",
+        "label": 0
+      },
+      {
+        "name": "头孢克肟分散片",
+        "code": "H20050650",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "广东省医",
+    "standard_name": "广东省人民医院",
+    "code": "H440106002",
+    "entity_type": "hospital",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "中山大学附属第一医院",
+        "code": "H440106001",
+        "label": 0
+      },
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "北医三院",
+    "standard_name": "北京大学第三医院",
+    "code": "H110108001",
+    "entity_type": "hospital",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 0
+      },
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "洛赛克",
+    "standard_name": "奥美拉唑肠溶胶囊",
+    "code": "H20059414",
+    "entity_type": "drug",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "奥美拉唑肠溶胶囊",
+        "code": "H20059414",
+        "label": 1
+      },
+      {
+        "name": "甲硝唑片",
+        "code": "H32023112",
+        "label": 0
+      },
+      {
+        "name": "蒙脱石散",
+        "code": "H20068320",
+        "label": 0
+      },
+      {
+        "name": "氯吡格雷片",
+        "code": "H20000542",
+        "label": 0
+      },
+      {
+        "name": "复方甘草片",
+        "code": "H32025541",
+        "label": 0
+      },
+      {
+        "name": "盐酸氨溴索口服溶液",
+        "code": "H20059205",
+        "label": 0
+      },
+      {
+        "name": "阿托伐他汀钙片",
+        "code": "H19990258",
+        "label": 0
+      },
+      {
+        "name": "注射用紫杉醇(白蛋白结合型)",
+        "code": "H20180005",
+        "label": 0
+      },
+      {
+        "name": "氨苄西林钠舒巴坦钠",
+        "code": "H20044235",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "中山一院",
+    "standard_name": "中山大学附属第一医院",
+    "code": "H440106001",
+    "entity_type": "hospital",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "中山大学附属第一医院",
+        "code": "H440106001",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 0
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      },
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "West China Hospital",
+    "standard_name": "四川大学华西医院",
+    "code": "H510104001",
+    "entity_type": "hospital",
+    "difficulty": "hard",
+    "candidates": [
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 1
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "复旦大学附属中山医院",
+        "code": "H310104001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 0
+      },
+      {
+        "name": "中山大学附属第一医院",
+        "code": "H440106001",
+        "label": 0
+      }
+    ]
+  },
+  {
+    "query": "华西",
+    "standard_name": "四川大学华西医院",
+    "code": "H510104001",
+    "entity_type": "hospital",
+    "difficulty": "easy",
+    "candidates": [
+      {
+        "name": "四川大学华西医院",
+        "code": "H510104001",
+        "label": 1
+      },
+      {
+        "name": "北京协和医院",
+        "code": "H110101001",
+        "label": 0
+      },
+      {
+        "name": "广东省人民医院",
+        "code": "H440106002",
+        "label": 0
+      },
+      {
+        "name": "北京大学第三医院",
+        "code": "H110108001",
+        "label": 0
+      },
+      {
+        "name": "中南大学湘雅医院",
+        "code": "H430103001",
+        "label": 0
+      },
+      {
+        "name": "浙江大学医学院附属第一医院",
+        "code": "H330102001",
+        "label": 0
+      },
+      {
+        "name": "华中科技大学同济医学院附属同济医院",
+        "code": "H420106001",
+        "label": 0
+      },
+      {
+        "name": "上海交通大学医学院附属瑞金医院",
+        "code": "H310103001",
+        "label": 0
+      },
+      {
+        "name": "中山大学附属第一医院",
+        "code": "H440106001",
+        "label": 0
+      }
+    ]
+  }
+]

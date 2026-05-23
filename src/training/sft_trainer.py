@@ -17,6 +17,7 @@ from src.models import load_model_and_tokenizer, print_model_info
 from src.data import AlpacaDataset, FinanceDataset
 from src.utils import set_seed, setup_logging, setup_wandb, setup_tensorboard, log_metrics, log_gpu_memory, console
 from src.utils.platform_utils import get_platform
+from src.tracking import get_tracker, MLflowTrainCallback
 
 
 class MemoryCallback(TrainerCallback):
@@ -77,6 +78,20 @@ class SFTTrainer:
         self.model = None
         self.tokenizer = None
         self.trainer = None
+
+        # MLflow tracker (no-op if use_mlflow=False)
+        self._tracker = get_tracker(logging_config)
+
+    def _get_report_to(self) -> list[str]:
+        """Determine reporting backends based on logging config."""
+        backends = []
+        if self.logging_config.use_wandb:
+            backends.append("wandb")
+        if self.logging_config.use_tensorboard:
+            backends.append("tensorboard")
+        if self.logging_config.use_mlflow:
+            backends.append("mlflow")
+        return backends if backends else ["none"]
 
     def prepare_model(self):
         """Load model and apply LoRA adapters."""
@@ -178,7 +193,7 @@ class SFTTrainer:
             fp16=self.training_config.fp16,
             bf16=self.training_config.bf16,
             max_grad_norm=self.training_config.max_grad_norm,
-            report_to=["wandb"] if self.logging_config.use_wandb else ["tensorboard"],
+            report_to=self._get_report_to(),
             run_name=self.logging_config.wandb_run_name,
             logging_dir=self.logging_config.log_dir if self.logging_config.use_tensorboard else None,
             save_strategy="steps",
@@ -205,7 +220,7 @@ class SFTTrainer:
             train_dataset=self.train_dataset,
             eval_dataset=self.eval_dataset,
             data_collator=data_collator,
-            callbacks=[MemoryCallback(log_steps=self.training_config.logging_steps)],
+            callbacks=[MemoryCallback(log_steps=self.training_config.logging_steps), MLflowTrainCallback(self._tracker)],
         )
 
         console.print("[green]✓ Trainer configured[/green]")
@@ -238,6 +253,18 @@ class SFTTrainer:
             enabled=self.logging_config.use_tensorboard,
         )
 
+        # MLflow run
+        if self._tracker.active:
+            self._tracker.start_run(
+                run_name=self.logging_config.mlflow_run_name,
+                config={
+                    "model": self.model_config.__dict__,
+                    "training": self.training_config.__dict__,
+                    "lora": self.lora_config.__dict__,
+                    "data": self.data_config.__dict__,
+                },
+            )
+
         # Train
         try:
             train_result = self.trainer.train()
@@ -262,6 +289,7 @@ class SFTTrainer:
         finally:
             if wandb_run is not None:
                 wandb_run.finish()
+            self._tracker.end_run()
 
     def evaluate(self):
         """Evaluate model."""

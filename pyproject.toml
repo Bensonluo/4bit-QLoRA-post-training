@@ -64,8 +64,15 @@ notebook = [
     "pandas>=2.1.0",
 ]
 
+ui = [
+    "mlflow>=2.10.0",
+    "streamlit>=1.36.0",
+    "plotly>=5.18.0",
+    "pandas>=2.1.0",
+]
+
 all = [
-    "qlora-post-training[dev,notebook]",
+    "qlora-post-training[dev,notebook,ui]",
 ]
 
 [project.scripts]
@@ -75,6 +82,7 @@ train-dpo = "scripts.train_dpo:app"
 merge-lora = "scripts.merge_lora:app"
 evaluate-model = "scripts.evaluate:app"
 download-data = "scripts.download_data:app"
+qlora-dashboard = "scripts.launch_dashboard:app"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/4bit-QLoRA-post-training"
@@ -132,6 +140,9 @@ module = [
     "bitsandbytes.*",
     "accelerate.*",
     "wandb.*",
+    "mlflow.*",
+    "streamlit.*",
+    "plotly.*",
 ]
 ignore_missing_imports = true
 

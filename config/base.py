@@ -215,6 +215,10 @@ class LoggingConfig:
     log_dir: str = "./outputs/logs"
     log_memory: bool = True
     console_level: str = "INFO"
+    use_mlflow: bool = False
+    mlflow_tracking_uri: str = "./outputs/mlruns"
+    mlflow_experiment_name: str = "qlora-post-training"
+    mlflow_run_name: Optional[str] = None
 
 
 @dataclass

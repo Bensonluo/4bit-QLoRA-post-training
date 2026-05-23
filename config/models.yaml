@@ -44,9 +44,56 @@ general_models:
     vram_estimate_gb: 2.5
     recommended: true
 
+# Qwen3 Models (medical entity domain)
+qwen3_models:
+  qwen3-0.6b:
+    name: "Qwen/Qwen3-0.6B"
+    quantization_bits: 4
+    max_length: 1024
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 1.2
+    recommended: false  # Very small, for testing only
+
+  qwen3-1.7b:
+    name: "Qwen/Qwen3-1.7B"
+    quantization_bits: 4
+    max_length: 1024
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 2.0
+    recommended: true
+
+  qwen3-4b:
+    name: "Qwen/Qwen3-4B-Instruct-2507"
+    quantization_bits: 4
+    max_length: 1024
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 3.5
+    recommended: true
+
+  qwen3-8b:
+    name: "Qwen/Qwen3-8B"
+    quantization_bits: 4
+    max_length: 2048
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 6.0
+    recommended: true
+
+  qwen3-14b:
+    name: "Qwen/Qwen3-14B"
+    quantization_bits: 4
+    max_length: 2048
+    torch_dtype: "bfloat16"
+    vram_estimate_gb: 10.0
+    recommended: false  # Needs 16GB+ VRAM
+
 # LoRA Target Modules by Model Architecture
 lora_modules:
   qwen:
+    target_modules: ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    r: 16
+    lora_alpha: 32
+
+  qwen3:
     target_modules: ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
     r: 16
     lora_alpha: 32
