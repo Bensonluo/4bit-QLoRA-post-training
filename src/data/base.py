@@ -68,12 +68,14 @@ class BaseDataset(ABC):
         if self.dataset is None:
             self.load()
 
-        split_dict = self.dataset.train_test_split(
-            test_size=validation_split,
-            seed=seed,
-        )
+        if validation_split is not None and validation_split > 0:
+            split_dict = self.dataset.train_test_split(
+                test_size=validation_split,
+                seed=seed,
+            )
+            return split_dict["train"], split_dict["test"]
 
-        return split_dict["train"], split_dict["test"]
+        return self.dataset, None
 
     def __len__(self) -> int:
         """Get dataset length."""

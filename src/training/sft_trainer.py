@@ -1,6 +1,7 @@
 """Supervised Fine-Tuning (SFT) trainer with QLoRA."""
 
 import os
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -136,13 +137,17 @@ class SFTTrainer:
 
         # Choose dataset type based on config
         if "finance" in self.data_config.dataset_name.lower() or self.data_config.dataset_name == "yahma/alpaca-cleaned":
-            # Use finance dataset
             dataset = FinanceDataset(
                 data_path=self.data_config.dataset_name,
                 max_samples=self.data_config.max_samples,
             )
+        elif "medical_entity" in self.data_config.dataset_name.lower():
+            from src.data.medical_dataset import MedicalEntityDataset
+            dataset = MedicalEntityDataset(
+                data_path=self.data_config.dataset_name,
+                max_samples=self.data_config.max_samples,
+            )
         else:
-            # Use standard Alpaca dataset
             dataset = AlpacaDataset(
                 data_path=self.data_config.dataset_name,
                 max_samples=self.data_config.max_samples,
@@ -158,17 +163,42 @@ class SFTTrainer:
         )
 
         console.print(f"[green]✓ Train samples: {len(self.train_dataset):,}[/green]")
-        console.print(f"[green]✓ Validation samples: {len(self.eval_dataset):,}[/green]\n")
+
+        # Load separate validation file if no split was done
+        _val_dataset_obj = None
+        if self.eval_dataset is None and self.data_config.validation_file:
+            val_path = Path(self.data_config.validation_file)
+            if val_path.exists():
+                val_cls = type(dataset)
+                _val_dataset_obj = val_cls(
+                    data_path=self.data_config.validation_file,
+                    max_samples=self.data_config.max_samples,
+                )
+                _val_dataset_obj.load()
+                self.eval_dataset = _val_dataset_obj.dataset
+                console.print(f"[green]✓ Validation samples: {len(self.eval_dataset):,}[/green]\n")
+            else:
+                console.print("[yellow]⚠ No validation data found[/yellow]\n")
+        else:
+            val_count = len(self.eval_dataset) if self.eval_dataset else 0
+            console.print(f"[green]✓ Validation samples: {val_count:,}[/green]\n")
 
         # Format datasets for training
         self.train_dataset = dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
         )
-        self.eval_dataset = dataset.format_for_training(
-            self.tokenizer,
-            max_length=self.model_config.max_length,
-        )
+        if self.eval_dataset is not None:
+            if _val_dataset_obj is not None:
+                self.eval_dataset = _val_dataset_obj.format_for_training(
+                    self.tokenizer,
+                    max_length=self.model_config.max_length,
+                )
+            else:
+                self.eval_dataset = dataset.format_for_training(
+                    self.tokenizer,
+                    max_length=self.model_config.max_length,
+                )
 
     def setup_trainer(self):
         """Setup Hugging Face Trainer."""
@@ -204,6 +234,8 @@ class SFTTrainer:
             seed=self.training_config.seed,
             data_seed=self.training_config.seed,
             ddp_find_unused_parameters=False,
+            dataloader_num_workers=0,
+            dataloader_pin_memory=False,
         )
 
         # Data collator
@@ -227,9 +259,12 @@ class SFTTrainer:
         console.print(f"  Effective batch size: {self.training_config.effective_batch_size}")
         console.print(f"  Training steps: {len(self.train_dataset) // self.training_config.effective_batch_size * self.training_config.num_epochs}\n")
 
-    def train(self):
+    def train(self, resume_from_checkpoint: str | None = None):
         """Run training."""
-        console.print("\n[bold green]=== Starting Training ===[/bold green]\n")
+        if resume_from_checkpoint:
+            console.print(f"\n[bold green]=== Resuming Training from {resume_from_checkpoint} ===[/bold green]\n")
+        else:
+            console.print("\n[bold green]=== Starting Training ===[/bold green]\n")
 
         # Setup W&B
         if self.logging_config.use_wandb:
@@ -267,7 +302,7 @@ class SFTTrainer:
 
         # Train
         try:
-            train_result = self.trainer.train()
+            train_result = self.trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
             # Save final model
             console.print(f"\n[cyan]Saving model to: {self.training_config.output_dir}[/cyan]")
@@ -310,6 +345,7 @@ def run_sft_training(
     lora_config: LoRAConfig,
     data_config: DataConfig,
     logging_config: LoggingConfig,
+    resume_from_checkpoint: str | None = None,
 ) -> None:
     """Run complete SFT training pipeline.
 
@@ -319,6 +355,7 @@ def run_sft_training(
         lora_config: LoRA configuration
         data_config: Data configuration
         logging_config: Logging configuration
+        resume_from_checkpoint: Optional path to checkpoint for resuming
     """
     # Create trainer
     trainer = SFTTrainer(
@@ -339,7 +376,7 @@ def run_sft_training(
     trainer.setup_trainer()
 
     # Train
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     # Evaluate
     trainer.evaluate()

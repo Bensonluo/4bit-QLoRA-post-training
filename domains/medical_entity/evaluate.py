@@ -18,6 +18,7 @@ from domains.medical_entity.eval.models import (
     JaccardBaseline,
     LLMAPISimulator,
     RandomBaseline,
+    RealFinetunedModel,
 )
 from domains.medical_entity.eval.report import generate_executive_summary, save_results
 from domains.medical_entity.eval.runner import load_test_data, run_evaluation
@@ -25,6 +26,14 @@ from src.utils.logging import console
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="医疗实体匹配评测")
+    parser.add_argument("--model-path", type=str, default=None, help="LoRA adapter 路径（真实推理）")
+    parser.add_argument("--base-model", type=str, default=None, help="base model 名称")
+    parser.add_argument("--skip-real", action="store_true", help="跳过真实模型推理")
+    args = parser.parse_args()
+
     test_data = load_test_data()
     console.print(f"[cyan]加载测试数据: {len(test_data)} 条[/cyan]\n")
 
@@ -36,6 +45,12 @@ def main():
         LLMAPISimulator(),
         FinetunedModelSimulator(),
     ]
+
+    if args.model_path and not args.skip_real:
+        models.append(RealFinetunedModel(
+            model_path=args.model_path,
+            base_model=args.base_model,
+        ))
 
     reports = []
     for model in models:

@@ -28,17 +28,21 @@ app = typer.Typer(add_completion=False)
 @app.command()
 def main(
     mac: bool = typer.Option(False, "--mac", help="Mac 64GB (Qwen3-14B, bf16)"),
+    mac_8b: bool = typer.Option(False, "--mac-8b", help="Mac 64GB (Qwen3-8B, 1 epoch 快速验证)"),
     mac_small: bool = typer.Option(False, "--mac-small", help="Mac 64GB (Qwen3-4B, 对比用)"),
     poc: bool = typer.Option(False, "--poc", help="POC 模式 (4B, 8GB VRAM)"),
     model_name: Optional[str] = typer.Option(None, "--model-name", "-m", help="覆盖模型名"),
     epochs: int = typer.Option(3, "--epochs", "-e", help="训练轮数"),
     lr: float = typer.Option(2e-4, "--lr", help="学习率"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="输出目录"),
+    resume_from: Optional[str] = typer.Option(None, "--resume-from", help="从 checkpoint 恢复训练"),
 ):
     """训练医疗实体匹配模型"""
 
     if mac:
         preset = "mac"
+    elif mac_8b:
+        preset = "mac-8b"
     elif mac_small:
         preset = "mac-small"
     elif poc:
@@ -63,7 +67,8 @@ def main(
         f"LoRA r={config.lora.r}\n"
         f"Batch: {config.training.effective_batch_size}\n"
         f"Epochs: {config.training.num_epochs}\n"
-        f"数据: {config.data.train_file}",
+        f"数据: {config.data.train_file}\n"
+        f"恢复: {resume_from or '无'}",
         border_style="green",
     ))
 
@@ -80,6 +85,7 @@ def main(
             lora_config=config.lora,
             data_config=config.data,
             logging_config=config.logging,
+            resume_from_checkpoint=resume_from,
         )
         console.print(f"\n[bold green]✓ 训练完成: {config.training.output_dir}[/bold green]")
     except Exception as e:

@@ -1,6 +1,6 @@
 """
-内置 baseline 模型实现，无需 GPU 即可运行。
-用于 POC 评测对比。
+内置 baseline 模型实现 + 真实精调模型推理。
+用于评测对比。
 """
 
 import json
@@ -223,7 +223,7 @@ class FinetunedModelSimulator(BaseModel):
 
     @property
     def name(self) -> str:
-        return "Fine-tuned Qwen-7B LoRA"
+        return "Fine-tuned Qwen-7B LoRA (sim)"
 
     def predict(self, query: str, candidates: list[dict]) -> dict:
         import hashlib
@@ -272,3 +272,141 @@ class FinetunedModelSimulator(BaseModel):
         if CombinedHeuristicBaseline._edit_distance(q, m) <= 2:
             return "medium"
         return "hard"
+
+
+class RealFinetunedModel(BaseModel):
+    """真实精调模型推理：加载 LoRA adapter，对候选列表做实际推理。"""
+
+    def __init__(
+        self,
+        model_path: str,
+        base_model: str | None = None,
+        max_new_tokens: int = 128,
+        device: str | None = None,
+    ):
+        self.model_path = model_path
+        self.base_model = base_model
+        self.max_new_tokens = max_new_tokens
+        self._model = None
+        self._tokenizer = None
+        self._device = device
+        self._loaded = False
+
+    def _load(self):
+        if self._loaded:
+            return
+        import json as _json
+        import pathlib
+
+        import torch
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        from src.utils.platform_utils import detect_platform
+
+        if self._device is None:
+            platform = detect_platform()
+            self._device = platform.device
+
+        # 尝试从 adapter config 读取 base model
+        base = self.base_model
+        if not base:
+            for candidate in ["adapter_config.json", "config.json"]:
+                p = pathlib.Path(self.model_path) / candidate
+                if p.exists():
+                    with open(p) as f:
+                        cfg = _json.load(f)
+                    base = cfg.get("base_model_name_or_path", cfg.get("_name_or_path"))
+                    break
+        if not base:
+            raise ValueError(f"无法确定 base model，请通过 base_model 参数指定")
+
+        self._tokenizer = AutoTokenizer.from_pretrained(base, trust_remote_code=True)
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
+        model_kwargs = {"trust_remote_code": True, "torch_dtype": torch.bfloat16}
+        if self._device == "mps":
+            model_kwargs["device_map"] = {"": "mps"}
+        elif self._device == "cpu":
+            model_kwargs["device_map"] = {"": "cpu"}
+
+        base_m = AutoModelForCausalLM.from_pretrained(base, **model_kwargs)
+        self._model = PeftModel.from_pretrained(base_m, self.model_path)
+        self._model.eval()
+        self._loaded = True
+
+    @property
+    def name(self) -> str:
+        import pathlib
+        return f"Fine-tuned ({pathlib.Path(self.model_path).name})"
+
+    def predict(self, query: str, candidates: list[dict]) -> dict:
+        import json as _json
+        import time
+
+        import torch
+
+        self._load()
+
+        candidates_text = "\n".join(
+            f"{i + 1}. {c['name']} ({c['code']})" for i, c in enumerate(candidates)
+        )
+        prompt = (
+            "### Instruction:\n"
+            '从候选列表中选出与输入实体匹配的标准名称。'
+            '输出JSON：{"match_index": 序号, "standard_name": "标准名", '
+            '"code": "编码", "confidence": 置信度}\n\n'
+            "### Input:\n"
+            f"输入实体: {query}\n候选:\n{candidates_text}\n\n"
+            "### Response:\n"
+        )
+
+        t0 = time.time()
+        inputs = self._tokenizer(prompt, return_tensors="pt").to(self._model.device)
+        with torch.no_grad():
+            outputs = self._model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                do_sample=False,
+                temperature=1.0,
+            )
+        response = self._tokenizer.decode(
+            outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        )
+        latency = (time.time() - t0) * 1000
+
+        # 解析 JSON 输出
+        try:
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start >= 0 and end > start:
+                parsed = _json.loads(response[start:end])
+                return {
+                    "standard_name": parsed.get("standard_name", ""),
+                    "code": parsed.get("code", ""),
+                    "match_index": parsed.get("match_index"),
+                    "confidence": parsed.get("confidence", 0.0),
+                    "latency_ms": latency,
+                }
+        except (_json.JSONDecodeError, ValueError):
+            pass
+
+        # JSON 解析失败，尝试用 match_index 或候选名匹配
+        for i, c in enumerate(candidates):
+            if c["name"] in response or str(i + 1) in response:
+                return {
+                    "standard_name": c["name"],
+                    "code": c["code"],
+                    "match_index": i + 1,
+                    "confidence": 0.3,
+                    "latency_ms": latency,
+                }
+
+        return {
+            "standard_name": "",
+            "code": "",
+            "match_index": None,
+            "confidence": 0.0,
+            "latency_ms": latency,
+        }

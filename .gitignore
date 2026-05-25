@@ -41,6 +41,7 @@ env/
 # Data and Models (large files)
 data/raw/
 data/processed/
+data/external/
 outputs/checkpoints/
 outputs/logs/
 outputs/merged/
@@ -91,3 +92,8 @@ dmypy.json
 *.tar.gz
 *.zip
 /.omc
+/.claude
+CLAUDE.md
+/outputs/test-quick
+/outputs
+/domains/medical_entity/data

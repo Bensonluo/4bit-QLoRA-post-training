@@ -1,63 +1,27 @@
 #!/usr/bin/env python3
-"""生成医疗实体匹配训练数据。
+"""生成医疗实体匹配训练数据（大规模版）。
+
+从 drug_knowledge_base.json 加载 14K+ 药品，动态生成变体和负采样，
+合并原有 10 家医院数据，产出 Alpaca 指令格式训练集。
 
 用法:
     cd 4bit-QLoRA-post-training
     python -m domains.medical_entity.prepare_data
+    python -m domains.medical_entity.prepare_data --max-drugs 5000   # 限制药品数
 """
 
 import json
 import random
+import re
 import sys
 from pathlib import Path
 
 random.seed(42)
 
 DOMAIN_ROOT = Path(__file__).resolve().parent
+KB_PATH = DOMAIN_ROOT / "data" / "drug_knowledge_base.json"
 
-# 模拟药品数据库
-DRUG_DATABASE = [
-    {"standard_name": "阿莫西林胶囊", "code": "H44023614", "category": "青霉素类",
-     "variants": ["阿莫西林", "阿莫仙", "Amoxicillin Capsules", "amoxicillin胶囊", "阿莫西林胶襄"]},
-    {"standard_name": "头孢克洛分散片", "code": "H20050649", "category": "头孢类",
-     "variants": ["可福乐", "头孢克洛", "cefaclor分散片", "头孢克洛分散片(可福乐)", "头包克洛分散片"]},
-    {"standard_name": "头孢克肟分散片", "code": "H20050650", "category": "头孢类",
-     "variants": ["世福素", "头孢克肟", "cefixime分散片", "头孢克肟分散片(世福素)", "头孢克肟胶襄"]},
-    {"standard_name": "阿莫西林克拉维酸钾片", "code": "H20044234", "category": "青霉素类",
-     "variants": ["安灭菌", "阿莫西林克拉维酸钾", "阿莫西林/克拉维酸钾", "安奇", "Amoxicillin and Clavulanate"]},
-    {"standard_name": "氨苄西林钠舒巴坦钠", "code": "H20044235", "category": "青霉素类",
-     "variants": ["安苄西林钠舒巴坦钠", "氨苄西林舒巴坦", "凯德林", "舒氨新", "ampicillin sulbactam"]},
-    {"standard_name": "阿托伐他汀钙片", "code": "H19990258", "category": "调脂药",
-     "variants": ["立普妥", "阿托伐他汀", "atorvastatin", "阿乐", "阿托伐他汀钙", "立普妥阿托伐他汀钙片"]},
-    {"standard_name": "硝苯地平控释片", "code": "J20040031", "category": "降压药",
-     "variants": ["拜新同", "硝苯地平", "nifedipine控释片", "倪福达", "硝苯地平缓释片"]},
-    {"standard_name": "盐酸二甲双胍片", "code": "H20023371", "category": "降糖药",
-     "variants": ["格华止", "二甲双胍", "metformin", "美迪康", "盐二甲双胍", "二甲双胍盐酸盐片"]},
-    {"standard_name": "氯吡格雷片", "code": "H20000542", "category": "抗凝药",
-     "variants": ["波立维", "氯吡格雷", "clopidogrel", "泰嘉", "硫酸氯吡格雷片"]},
-    {"standard_name": "奥美拉唑肠溶胶囊", "code": "H20059414", "category": "质子泵抑制剂",
-     "variants": ["洛赛克", "奥美拉唑", "omeprazole", "奥克", "奥美拉唑肠溶片"]},
-    {"standard_name": "布洛芬缓释胶囊", "code": "H10900089", "category": "解热镇痛药",
-     "variants": ["芬必得", "布洛芬", "ibuprofen", "美林", "布洛芬缓释胶囊(芬必得)"]},
-    {"standard_name": "阿司匹林肠溶片", "code": "H20065051", "category": "解热镇痛药",
-     "variants": ["拜阿司匹灵", "阿司匹林", "ASA", "aspirin", "乙酰水杨酸", "巴米尔"]},
-    {"standard_name": "左氧氟沙星片", "code": "H20040091", "category": "喹诺酮类",
-     "variants": ["可乐必妥", "左氧氟沙星", "levofloxacin", "利复星", "左氧", "左氧氟沙星氯化钠"]},
-    {"standard_name": "甲硝唑片", "code": "H32023112", "category": "硝基咪唑类",
-     "variants": ["灭滴灵", "甲硝唑", "metronidazole", "甲硝唑氯化钠注射液", "甲消唑"]},
-    {"standard_name": "盐酸安罗替尼胶囊", "code": "H20180004", "category": "靶向药",
-     "variants": ["正大天晴安罗替尼", "安罗替尼", "anlotinib", "福可维", "盐酸安罗替尼"]},
-    {"standard_name": "注射用紫杉醇(白蛋白结合型)", "code": "H20180005", "category": "抗肿瘤药",
-     "variants": ["白蛋白紫杉醇", "凯素", "Abraxane", "紫杉醇白蛋白", "注射用紫杉醇"]},
-    {"standard_name": "地塞米松磷酸钠注射液", "code": "H32021541", "category": "糖皮质激素",
-     "variants": ["地塞米松", "DXM", "dexamethasone", "地米", "地塞米松磷酸钠"]},
-    {"standard_name": "盐酸氨溴索口服溶液", "code": "H20059205", "category": "祛痰药",
-     "variants": ["沐舒坦", "氨溴索", "ambroxol", "痰易净", "盐酸氨溴索"]},
-    {"standard_name": "蒙脱石散", "code": "H20068320", "category": "止泻药",
-     "variants": ["思密达", "蒙脱石", "smectite", "蒙脱石散剂", "猛脱石散"]},
-    {"standard_name": "复方甘草片", "code": "H32025541", "category": "镇咳药",
-     "variants": ["甘草片", "复方甘草", "brown mixture", "复甘草片", "复方甘草合剂"]},
-]
+# ─── 原有医院数据库（保留） ──────────────────────────────────────────
 
 HOSPITAL_DATABASE = [
     {"standard_name": "北京大学第三医院", "code": "H110108001", "city": "北京",
@@ -82,6 +46,8 @@ HOSPITAL_DATABASE = [
      "variants": ["省医", "广东省医", "广省人民医院", "GDPPH"]},
 ]
 
+
+# ─── 工具函数 ─────────────────────────────────────────────────────────
 
 def _edit_distance(s1: str, s2: str) -> int:
     if len(s1) < len(s2):
@@ -109,52 +75,253 @@ def classify_difficulty(query: str, standard: str) -> str:
     return "hard"
 
 
-def _pick_negatives(standard, variant, database, all_standards, n=8):
-    same_cat = [(item["standard_name"], item["code"]) for item in database if item["standard_name"] != standard]
-    similar = sorted(same_cat, key=lambda x: _edit_distance(variant, x[0]))[: n // 2]
+def add_noise(text: str) -> str:
+    """对文本注入 1-2 个字符噪声（替换/删除/插入）。"""
+    if len(text) < 3:
+        return text
+    ops = []
+    chars = list(text)
+    n_ops = random.choice([1, 1, 2])
+    for _ in range(n_ops):
+        pos = random.randint(0, len(chars) - 1)
+        op = random.choice(["replace", "delete", "insert"])
+        if op == "replace":
+            chars[pos] = random.choice("的一是不了在人我有这他中大来")
+        elif op == "delete" and len(chars) > 3:
+            chars.pop(pos)
+        elif op == "insert":
+            chars.insert(pos, random.choice("的一是不了"))
+    return "".join(chars)
+
+
+# ─── 知识库加载 ──────────────────────────────────────────────────────
+
+def load_drug_kb(max_drugs: int | None = None) -> tuple[list[dict], dict[str, list[str]]]:
+    """加载药品知识库。返回 (drugs_list, generic_groups)。"""
+    if not KB_PATH.exists():
+        print(f"错误: 知识库不存在 {KB_PATH}")
+        print("请先运行: python scripts/build_drug_knowledge_base.py")
+        sys.exit(1)
+
+    with open(KB_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+
+    drugs = data["drugs"]
+    generic_groups = data.get("generic_groups", {})
+
+    if max_drugs and max_drugs < len(drugs):
+        # 优先选择有多剂型的通用名对应的药品（信息更丰富）
+        multi_form = {name for names in generic_groups.values() for name in names}
+        priority = [d for d in drugs if d["standard_name"] in multi_form]
+        rest = [d for d in drugs if d["standard_name"] not in multi_form]
+        drugs = priority[:max_drugs]
+        if len(drugs) < max_drugs:
+            drugs += rest[: max_drugs - len(drugs)]
+
+    print(f"加载药品知识库: {len(drugs)} 种药物, {len(generic_groups)} 个多剂型通用名")
+    return drugs, generic_groups
+
+
+# ─── 负采样 ──────────────────────────────────────────────────────────
+
+def pick_drug_negatives(
+    query_standard: str,
+    query_generic: str,
+    all_standards: list[tuple[str, str]],
+    generic_groups: dict[str, list[str]],
+    n: int = 8,
+) -> list[tuple[str, str]]:
+    """药品负采样：同类硬负例 + 随机负例。
+
+    硬负例策略：
+    1. 同 generic_name 的其他剂型（最相似）
+    2. generic_name 前缀相似的其他药物
+    3. 随机负例
+    """
+    negatives = []
+    used = {query_standard}
+
+    # 1. 同通用名不同剂型（最强硬负例）
+    same_generic = generic_groups.get(query_generic, [])
+    for name in same_generic:
+        if name != query_standard and name not in used:
+            # 找到对应的 code
+            for s, c in all_standards:
+                if s == name:
+                    negatives.append((s, c))
+                    used.add(name)
+                    break
+        if len(negatives) >= n // 3:
+            break
+
+    # 2. 前缀相似的药物（名称前 2-4 字相同）
+    prefix = query_generic[:min(4, len(query_generic))]
+    if prefix:
+        similar = [
+            (s, c) for s, c in all_standards
+            if s != query_standard and s not in used and s.startswith(prefix)
+        ]
+        random.shuffle(similar)
+        for s, c in similar:
+            negatives.append((s, c))
+            used.add(s)
+            if len(negatives) >= n // 2:
+                break
+
+    # 3. 随机负例
+    pool = [(s, c) for s, c in all_standards if s not in used]
+    if pool:
+        negatives.extend(random.sample(pool, min(n - len(negatives), len(pool))))
+
+    return negatives[:n]
+
+
+def pick_hospital_negatives(
+    standard: str,
+    all_standards: list[tuple[str, str]],
+    n: int = 8,
+) -> list[tuple[str, str]]:
+    """医院负采样（保留原逻辑）。"""
+    same_cat = [(s, c) for s, c in all_standards if s != standard]
+    similar = sorted(same_cat, key=lambda x: _edit_distance(standard, x[0]))[: n // 2]
     others = [s for s in all_standards if s[0] != standard and s not in similar]
     rand_negs = random.sample(others, min(n - len(similar), len(others)))
     return similar + rand_negs
 
 
-def generate_samples(database, entity_type):
-    all_standards = [(item["standard_name"], item["code"]) for item in database]
+# ─── 样本生成 ────────────────────────────────────────────────────────
+
+def generate_drug_samples(
+    drugs: list[dict],
+    generic_groups: dict[str, list[str]],
+    augment_noise: bool = True,
+) -> list[dict]:
+    """从药品知识库生成训练样本。"""
+    all_standards = [(d["standard_name"], d["code"]) for d in drugs]
     samples = []
-    for item in database:
+
+    for drug in drugs:
+        standard = drug["standard_name"]
+        code = drug["code"]
+        generic = drug["generic_name"]
+        known_variants = drug.get("variants", [])
+
+        # 收集所有可用的 query
+        queries = set()
+
+        # 1. 通用名（最常见的查询方式）
+        if generic and generic != standard:
+            queries.add(generic)
+
+        # 2. 已知变体/品牌名
+        for v in known_variants:
+            queries.add(v)
+
+        # 3. 标准名本身（easy 难度）
+        queries.add(standard)
+
+        # 4. 同通用名的其他剂型名作为查询
+        for other_name in generic_groups.get(generic, []):
+            if other_name != standard:
+                queries.add(other_name)
+
+        # 5. 噪声注入（每个 query 最多生成 1 个噪声变体）
+        noise_queries = set()
+        if augment_noise:
+            for q in list(queries):
+                if len(q) >= 4 and random.random() < 0.3:
+                    noise_queries.add(add_noise(q))
+        queries.update(noise_queries)
+
+        # 为每个 query 生成样本
+        for query in queries:
+            negatives = pick_drug_negatives(
+                standard, generic, all_standards, generic_groups
+            )
+            if not negatives:
+                continue
+            samples.append({
+                "query": query,
+                "standard_name": standard,
+                "code": code,
+                "entity_type": "drug",
+                "difficulty": classify_difficulty(query, standard),
+                "candidates": (
+                    [{"name": standard, "code": code, "label": 1}]
+                    + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
+                ),
+            })
+
+    return samples
+
+
+def generate_hospital_samples() -> list[dict]:
+    """生成医院实体匹配样本（保留原逻辑）。"""
+    all_standards = [(h["standard_name"], h["code"]) for h in HOSPITAL_DATABASE]
+    samples = []
+    for item in HOSPITAL_DATABASE:
         standard, code = item["standard_name"], item["code"]
         for variant in item["variants"]:
-            negatives = _pick_negatives(standard, variant, database, all_standards)
+            negatives = pick_hospital_negatives(standard, all_standards)
             samples.append({
-                "query": variant, "standard_name": standard, "code": code,
-                "entity_type": entity_type,
+                "query": variant,
+                "standard_name": standard,
+                "code": code,
+                "entity_type": "hospital",
                 "difficulty": classify_difficulty(variant, standard),
-                "candidates": [{"name": standard, "code": code, "label": 1}] +
-                              [{"name": n[0], "code": n[1], "label": 0} for n in negatives],
+                "candidates": (
+                    [{"name": standard, "code": code, "label": 1}]
+                    + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
+                ),
             })
+        # 标准名本身
+        negatives = pick_hospital_negatives(standard, all_standards)
         samples.append({
-            "query": standard, "standard_name": standard, "code": code,
-            "entity_type": entity_type, "difficulty": "easy",
-            "candidates": [{"name": standard, "code": code, "label": 1}] +
-                          [{"name": n[0], "code": n[1], "label": 0}
-                           for n in _pick_negatives(standard, standard, database, all_standards)],
+            "query": standard,
+            "standard_name": standard,
+            "code": code,
+            "entity_type": "hospital",
+            "difficulty": "easy",
+            "candidates": (
+                [{"name": standard, "code": code, "label": 1}]
+                + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
+            ),
         })
     return samples
 
 
-def format_as_instruction(sample):
+# ─── 指令格式化 ──────────────────────────────────────────────────────
+
+def format_as_instruction(sample: dict) -> dict:
     candidates_text = "\n".join(
-        f"{i+1}. {c['name']} ({c['code']})" for i, c in enumerate(sample["candidates"])
+        f"{i + 1}. {c['name']} ({c['code']})" for i, c in enumerate(sample["candidates"])
     )
     return {
-        "instruction": '从候选列表中选出与输入实体匹配的标准名称。输出JSON：{"match_index": 序号, "standard_name": "标准名", "code": "编码", "confidence": 置信度}',
+        "instruction": (
+            '从候选列表中选出与输入实体匹配的标准名称。'
+            '输出JSON：{"match_index": 序号, "standard_name": "标准名", '
+            '"code": "编码", "confidence": 置信度}'
+        ),
         "input": f"输入实体: {sample['query']}\n候选:\n{candidates_text}",
-        "output": json.dumps({"match_index": 1, "standard_name": sample["standard_name"],
-                              "code": sample["code"], "confidence": 0.95}, ensure_ascii=False),
-        "metadata": {"entity_type": sample["entity_type"], "difficulty": sample["difficulty"]},
+        "output": json.dumps(
+            {
+                "match_index": 1,
+                "standard_name": sample["standard_name"],
+                "code": sample["code"],
+                "confidence": 0.95,
+            },
+            ensure_ascii=False,
+        ),
+        "metadata": {
+            "entity_type": sample["entity_type"],
+            "difficulty": sample["difficulty"],
+        },
     }
 
 
-def main():
+# ─── 主流程 ──────────────────────────────────────────────────────────
+
+def main(max_drugs: int | None = None):
     raw_dir = DOMAIN_ROOT / "data" / "raw"
     train_dir = DOMAIN_ROOT / "data" / "train"
     val_dir = DOMAIN_ROOT / "data" / "val"
@@ -162,19 +329,40 @@ def main():
     for d in [raw_dir, train_dir, val_dir, test_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
-    all_samples = generate_samples(DRUG_DATABASE, "drug") + generate_samples(HOSPITAL_DATABASE, "hospital")
+    # 加载药品
+    drugs, generic_groups = load_drug_kb(max_drugs)
+
+    # 生成样本
+    print("生成药品训练样本...")
+    drug_samples = generate_drug_samples(drugs, generic_groups, augment_noise=True)
+    print(f"  药品样本: {len(drug_samples)}")
+
+    print("生成医院训练样本...")
+    hospital_samples = generate_hospital_samples()
+    print(f"  医院样本: {len(hospital_samples)}")
+
+    all_samples = drug_samples + hospital_samples
     random.shuffle(all_samples)
 
-    stats = {}
+    # 统计
+    stats: dict[str, int] = {}
+    type_stats: dict[str, int] = {}
     for s in all_samples:
         stats[s["difficulty"]] = stats.get(s["difficulty"], 0) + 1
-    print(f"总样本: {len(all_samples)} (easy={stats.get('easy',0)}, medium={stats.get('medium',0)}, hard={stats.get('hard',0)})")
+        type_stats[s["entity_type"]] = type_stats.get(s["entity_type"], 0) + 1
+    print(f"\n总样本: {len(all_samples)}")
+    print(f"  难度: easy={stats.get('easy', 0)}, medium={stats.get('medium', 0)}, hard={stats.get('hard', 0)}")
+    print(f"  类型: {type_stats}")
 
+    # 保存原始数据
     with open(raw_dir / "all_samples.json", "w") as f:
         json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
+    # 80/10/10 划分
     n = len(all_samples)
-    train_raw, val_raw, test_raw = all_samples[:int(n*0.8)], all_samples[int(n*0.8):int(n*0.9)], all_samples[int(n*0.9):]
+    train_raw = all_samples[: int(n * 0.8)]
+    val_raw = all_samples[int(n * 0.8): int(n * 0.9)]
+    test_raw = all_samples[int(n * 0.9):]
 
     with open(train_dir / "train.json", "w") as f:
         json.dump([format_as_instruction(s) for s in train_raw], f, ensure_ascii=False, indent=2)
@@ -185,9 +373,16 @@ def main():
     with open(test_dir / "test_raw.json", "w") as f:
         json.dump(test_raw, f, ensure_ascii=False, indent=2)
 
-    print(f"训练: {len(train_raw)}, 验证: {len(val_raw)}, 测试: {len(test_raw)}")
+    print(f"\n数据划分:")
+    print(f"  训练: {len(train_raw)}")
+    print(f"  验证: {len(val_raw)}")
+    print(f"  测试: {len(test_raw)}")
     print(f"保存至: {DOMAIN_ROOT}/data/")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max-drugs", type=int, default=None, help="限制药品数量（测试用）")
+    args = parser.parse_args()
+    main(max_drugs=args.max_drugs)
