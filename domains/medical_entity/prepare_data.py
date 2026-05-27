@@ -240,16 +240,18 @@ def generate_drug_samples(
             )
             if not negatives:
                 continue
+            candidates = (
+                [{"name": standard, "code": code, "label": 1}]
+                + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
+            )
+            random.shuffle(candidates)
             samples.append({
                 "query": query,
                 "standard_name": standard,
                 "code": code,
                 "entity_type": "drug",
                 "difficulty": classify_difficulty(query, standard),
-                "candidates": (
-                    [{"name": standard, "code": code, "label": 1}]
-                    + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
-                ),
+                "candidates": candidates,
             })
 
     return samples
@@ -263,29 +265,33 @@ def generate_hospital_samples() -> list[dict]:
         standard, code = item["standard_name"], item["code"]
         for variant in item["variants"]:
             negatives = pick_hospital_negatives(standard, all_standards)
+            candidates = (
+                [{"name": standard, "code": code, "label": 1}]
+                + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
+            )
+            random.shuffle(candidates)
             samples.append({
                 "query": variant,
                 "standard_name": standard,
                 "code": code,
                 "entity_type": "hospital",
                 "difficulty": classify_difficulty(variant, standard),
-                "candidates": (
-                    [{"name": standard, "code": code, "label": 1}]
-                    + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
-                ),
+                "candidates": candidates,
             })
         # 标准名本身
         negatives = pick_hospital_negatives(standard, all_standards)
+        candidates = (
+            [{"name": standard, "code": code, "label": 1}]
+            + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
+        )
+        random.shuffle(candidates)
         samples.append({
             "query": standard,
             "standard_name": standard,
             "code": code,
             "entity_type": "hospital",
             "difficulty": "easy",
-            "candidates": (
-                [{"name": standard, "code": code, "label": 1}]
-                + [{"name": n[0], "code": n[1], "label": 0} for n in negatives]
-            ),
+            "candidates": candidates,
         })
     return samples
 
@@ -296,6 +302,9 @@ def format_as_instruction(sample: dict) -> dict:
     candidates_text = "\n".join(
         f"{i + 1}. {c['name']} ({c['code']})" for i, c in enumerate(sample["candidates"])
     )
+    match_idx = next(
+        i for i, c in enumerate(sample["candidates"]) if c["label"] == 1
+    ) + 1
     return {
         "instruction": (
             '从候选列表中选出与输入实体匹配的标准名称。'
@@ -305,7 +314,7 @@ def format_as_instruction(sample: dict) -> dict:
         "input": f"输入实体: {sample['query']}\n候选:\n{candidates_text}",
         "output": json.dumps(
             {
-                "match_index": 1,
+                "match_index": match_idx,
                 "standard_name": sample["standard_name"],
                 "code": sample["code"],
                 "confidence": 0.95,
@@ -332,52 +341,73 @@ def main(max_drugs: int | None = None):
     # 加载药品
     drugs, generic_groups = load_drug_kb(max_drugs)
 
-    # 生成样本
-    print("生成药品训练样本...")
-    drug_samples = generate_drug_samples(drugs, generic_groups, augment_noise=True)
-    print(f"  药品样本: {len(drug_samples)}")
+    # 按药品编码分组，确保 train/val/test 的药品完全不重叠
+    random.shuffle(drugs)
+    n_drugs = len(drugs)
+    train_drugs = drugs[: int(n_drugs * 0.8)]
+    val_drugs = drugs[int(n_drugs * 0.8): int(n_drugs * 0.9)]
+    test_drugs = drugs[int(n_drugs * 0.9):]
 
+    train_codes = {d["code"] for d in train_drugs}
+    val_codes = {d["code"] for d in val_drugs}
+    test_codes = {d["code"] for d in test_drugs}
+    assert not (train_codes & val_codes), "train/val 药品重叠!"
+    assert not (train_codes & test_codes), "train/test 药品重叠!"
+
+    # 各自生成样本（负采样从全量药品中取）
+    print(f"按药品划分: 训练 {len(train_drugs)} 种 | 验证 {len(val_drugs)} 种 | 测试 {len(test_drugs)} 种")
+
+    print("生成训练样本...")
+    train_samples = generate_drug_samples(train_drugs, generic_groups, augment_noise=True)
+    print(f"  训练样本: {len(train_samples)}")
+
+    print("生成验证样本...")
+    val_samples = generate_drug_samples(val_drugs, generic_groups, augment_noise=True)
+    print(f"  验证样本: {len(val_samples)}")
+
+    print("生成测试样本...")
+    test_samples = generate_drug_samples(test_drugs, generic_groups, augment_noise=True)
+    print(f"  测试样本: {len(test_samples)}")
+
+    # 医院数据全部加入训练集（量小，不影响评估）
     print("生成医院训练样本...")
     hospital_samples = generate_hospital_samples()
     print(f"  医院样本: {len(hospital_samples)}")
+    train_samples = train_samples + hospital_samples
 
-    all_samples = drug_samples + hospital_samples
-    random.shuffle(all_samples)
+    # 打乱
+    random.shuffle(train_samples)
+    random.shuffle(val_samples)
+    random.shuffle(test_samples)
 
     # 统计
-    stats: dict[str, int] = {}
-    type_stats: dict[str, int] = {}
-    for s in all_samples:
-        stats[s["difficulty"]] = stats.get(s["difficulty"], 0) + 1
-        type_stats[s["entity_type"]] = type_stats.get(s["entity_type"], 0) + 1
-    print(f"\n总样本: {len(all_samples)}")
-    print(f"  难度: easy={stats.get('easy', 0)}, medium={stats.get('medium', 0)}, hard={stats.get('hard', 0)}")
-    print(f"  类型: {type_stats}")
+    for name, samples in [("训练", train_samples), ("验证", val_samples), ("测试", test_samples)]:
+        stats: dict[str, int] = {}
+        type_stats: dict[str, int] = {}
+        for s in samples:
+            stats[s["difficulty"]] = stats.get(s["difficulty"], 0) + 1
+            type_stats[s["entity_type"]] = type_stats.get(s["entity_type"], 0) + 1
+        print(f"\n{name}: {len(samples)} 条")
+        print(f"  难度: easy={stats.get('easy', 0)}, medium={stats.get('medium', 0)}, hard={stats.get('hard', 0)}")
+        print(f"  类型: {type_stats}")
 
-    # 保存原始数据
-    with open(raw_dir / "all_samples.json", "w") as f:
-        json.dump(all_samples, f, ensure_ascii=False, indent=2)
-
-    # 80/10/10 划分
-    n = len(all_samples)
-    train_raw = all_samples[: int(n * 0.8)]
-    val_raw = all_samples[int(n * 0.8): int(n * 0.9)]
-    test_raw = all_samples[int(n * 0.9):]
-
+    # 保存
     with open(train_dir / "train.json", "w") as f:
-        json.dump([format_as_instruction(s) for s in train_raw], f, ensure_ascii=False, indent=2)
+        json.dump([format_as_instruction(s) for s in train_samples], f, ensure_ascii=False, indent=2)
     with open(val_dir / "val.json", "w") as f:
-        json.dump([format_as_instruction(s) for s in val_raw], f, ensure_ascii=False, indent=2)
+        json.dump([format_as_instruction(s) for s in val_samples], f, ensure_ascii=False, indent=2)
     with open(test_dir / "test_instruction.json", "w") as f:
-        json.dump([format_as_instruction(s) for s in test_raw], f, ensure_ascii=False, indent=2)
+        json.dump([format_as_instruction(s) for s in test_samples], f, ensure_ascii=False, indent=2)
     with open(test_dir / "test_raw.json", "w") as f:
-        json.dump(test_raw, f, ensure_ascii=False, indent=2)
+        json.dump(test_samples, f, ensure_ascii=False, indent=2)
 
-    print(f"\n数据划分:")
-    print(f"  训练: {len(train_raw)}")
-    print(f"  验证: {len(val_raw)}")
-    print(f"  测试: {len(test_raw)}")
-    print(f"保存至: {DOMAIN_ROOT}/data/")
+    # 保存原始数据（合并）
+    with open(raw_dir / "all_samples.json", "w") as f:
+        json.dump(train_samples + val_samples + test_samples, f, ensure_ascii=False, indent=2)
+
+    print(f"\n保存至: {DOMAIN_ROOT}/data/")
+    print(f"训练集药品: {len(train_codes)} 种 (codes 已写入 train)")
+    print(f"测试集药品: {len(test_codes)} 种 (与训练集完全无重叠)")
 
 
 if __name__ == "__main__":

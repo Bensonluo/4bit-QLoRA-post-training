@@ -45,7 +45,7 @@ MEDICAL_ENTITY_MAC_CONFIG = SFTConfig(
         format="alpaca",
         validation_split=0.0,
         train_file=f"{DOMAIN_ROOT}/data/train/train.json",
-        validation_file=f"{DOMAIN_ROOT}/data/val/val.json",
+        validation_file=None,
     ),
     logging=LoggingConfig(
         use_wandb=False,
@@ -182,12 +182,105 @@ MEDICAL_ENTITY_MAC_8B_CONFIG = SFTConfig(
     ),
 )
 
+# ── Mac 2B (64GB, 最快) ── Qwen3.5-2B bf16，验证 DeltaNet 兼容性
+MEDICAL_ENTITY_MAC_2B_CONFIG = SFTConfig(
+    model=ModelConfig(
+        name="Qwen/Qwen3.5-2B",
+        quantization_bits=None,
+        max_length=1024,
+        torch_dtype="bfloat16",
+        use_flash_attention=False,
+    ),
+    lora=LoRAConfig(
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+        target_modules=["q_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    training=TrainingConfig(
+        output_dir="./outputs/medical-entity-mac-2b",
+        num_epochs=1,
+        batch_size=4,
+        gradient_accumulation_steps=2,
+        learning_rate=2e-4,
+        warmup_ratio=0.05,
+        gradient_checkpointing=False,
+        bf16=True,
+        logging_steps=10,
+        save_steps=100,
+        save_total_limit=2,
+        seed=42,
+    ),
+    data=DataConfig(
+        dataset_name=f"{DOMAIN_ROOT}/data/train/train.json",
+        format="alpaca",
+        validation_split=0.0,
+        train_file=f"{DOMAIN_ROOT}/data/train/train.json",
+        validation_file=f"{DOMAIN_ROOT}/data/val/val.json",
+    ),
+    logging=LoggingConfig(
+        use_wandb=False,
+        use_tensorboard=True,
+        log_memory=True,
+        use_mlflow=True,
+        mlflow_tracking_uri="./outputs/mlruns",
+        mlflow_experiment_name="medical-entity-matching",
+    ),
+)
+
+# ── Mac 1.7B (64GB, 最快) ── Qwen3-1.7B bf16
+MEDICAL_ENTITY_MAC_1B_CONFIG = SFTConfig(
+    model=ModelConfig(
+        name="Qwen/Qwen3-1.7B",
+        quantization_bits=None,
+        max_length=512,
+        torch_dtype="bfloat16",
+        use_flash_attention=False,
+    ),
+    lora=LoRAConfig(
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    training=TrainingConfig(
+        output_dir="./outputs/medical-entity-mac-1b",
+        num_epochs=1,
+        batch_size=4,
+        gradient_accumulation_steps=2,
+        learning_rate=2e-4,
+        warmup_ratio=0.05,
+        gradient_checkpointing=False,
+        bf16=True,
+        logging_steps=10,
+        eval_steps=500,
+        save_steps=500,
+        save_total_limit=2,
+        seed=42,
+    ),
+    data=DataConfig(
+        dataset_name=f"{DOMAIN_ROOT}/data/train/train.json",
+        format="alpaca",
+        validation_split=0.0,
+        train_file=f"{DOMAIN_ROOT}/data/train/train.json",
+        validation_file=None,
+    ),
+    logging=LoggingConfig(
+        use_wandb=False,
+        use_tensorboard=True,
+        log_memory=True,
+        use_mlflow=True,
+        mlflow_tracking_uri="./outputs/mlruns",
+        mlflow_experiment_name="medical-entity-matching",
+    ),
+)
+
 # ── Mac Small (64GB, 对比用) ── Qwen3-4B bf16，与 14B 对比
 MEDICAL_ENTITY_MAC_SMALL_CONFIG = SFTConfig(
     model=ModelConfig(
         name="Qwen/Qwen3-4B-Instruct-2507",
         quantization_bits=None,
-        max_length=1024,
+        max_length=512,
         torch_dtype="bfloat16",
         use_flash_attention=False,
     ),
@@ -200,14 +293,14 @@ MEDICAL_ENTITY_MAC_SMALL_CONFIG = SFTConfig(
     training=TrainingConfig(
         output_dir="./outputs/medical-entity-mac-small",
         num_epochs=3,
-        batch_size=2,
-        gradient_accumulation_steps=4,
+        batch_size=4,
+        gradient_accumulation_steps=2,
         learning_rate=2e-4,
         warmup_ratio=0.05,
-        gradient_checkpointing=True,
+        gradient_checkpointing=False,
         bf16=True,
         logging_steps=5,
-        save_steps=50,
+        save_steps=2000,
         save_total_limit=2,
         seed=42,
     ),
@@ -225,6 +318,8 @@ MEDICAL_ENTITY_MAC_SMALL_CONFIG = SFTConfig(
 PRESETS = {
     "mac": MEDICAL_ENTITY_MAC_CONFIG,
     "mac-8b": MEDICAL_ENTITY_MAC_8B_CONFIG,
+    "mac-2b": MEDICAL_ENTITY_MAC_2B_CONFIG,
+    "mac-1b": MEDICAL_ENTITY_MAC_1B_CONFIG,
     "mac-small": MEDICAL_ENTITY_MAC_SMALL_CONFIG,
     "poc": MEDICAL_ENTITY_POC_CONFIG,
     "full": MEDICAL_ENTITY_FULL_CONFIG,

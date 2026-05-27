@@ -274,6 +274,111 @@ class FinetunedModelSimulator(BaseModel):
         return "hard"
 
 
+class RealLLMAPI(BaseModel):
+    """真实 LLM API 推理（OpenAI 兼容格式，支持智谱 GLM、DeepSeek 等）。"""
+
+    def __init__(
+        self,
+        model_name: str = "glm-4-flash",
+        base_url: str | None = None,
+        api_key: str | None = None,
+        max_new_tokens: int = 4096,
+    ):
+        self._model_name = model_name
+        self._base_url = base_url
+        self._api_key = api_key
+        self._max_new_tokens = max_new_tokens
+
+    @property
+    def name(self) -> str:
+        return f"LLM API ({self._model_name})"
+
+    def predict(self, query: str, candidates: list[dict]) -> dict:
+        import json as _json
+        import os
+        import time
+
+        from openai import OpenAI
+
+        base_url = self._base_url or os.environ.get("LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
+
+        # Ollama 本地不需要 API key
+        is_local = "localhost" in base_url or "127.0.0.1" in base_url
+        if is_local:
+            api_key = "ollama"
+        else:
+            api_key = self._api_key or os.environ.get("ZHIPUAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("请设置 ZHIPUAI_API_KEY 或 OPENAI_API_KEY 环境变量")
+
+        client = OpenAI(api_key=api_key, base_url=base_url)
+
+        candidates_text = "\n".join(
+            f"{i + 1}. {c['name']} ({c['code']})" for i, c in enumerate(candidates)
+        )
+        prompt = (
+            "从候选列表中选出与输入实体匹配的标准名称。"
+            '输出JSON：{"match_index": 序号, "standard_name": "标准名", '
+            '"code": "编码", "confidence": 置信度}\n\n'
+            f"输入实体: {query}\n候选:\n{candidates_text}\n\n"
+            "只输出JSON，不要其他内容。"
+        )
+
+        t0 = time.time()
+        kwargs = {
+            "model": self._model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self._max_new_tokens,
+            "temperature": 0.0,
+        }
+        # GLM 思考模型关闭思考模式
+        if "glm" in self._model_name.lower() and any(v in self._model_name.lower() for v in ["4.7", "5"]):
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+
+        # Qwen3 思考模型：API 参数 + prompt 末尾 /no_think 双保险
+        if "qwen3" in self._model_name.lower():
+            kwargs["extra_body"] = {"think": False}
+            prompt += "\n/no_think"
+
+        response = client.chat.completions.create(**kwargs)
+        latency = (time.time() - t0) * 1000
+
+        text = response.choices[0].message.content.strip()
+
+        try:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start >= 0 and end > start:
+                parsed = _json.loads(text[start:end])
+                return {
+                    "standard_name": parsed.get("standard_name", ""),
+                    "code": parsed.get("code", ""),
+                    "match_index": parsed.get("match_index"),
+                    "confidence": parsed.get("confidence", 0.0),
+                    "latency_ms": latency,
+                }
+        except (_json.JSONDecodeError, ValueError):
+            pass
+
+        for i, c in enumerate(candidates):
+            if c["name"] in text or str(i + 1) in text:
+                return {
+                    "standard_name": c["name"],
+                    "code": c["code"],
+                    "match_index": i + 1,
+                    "confidence": 0.3,
+                    "latency_ms": latency,
+                }
+
+        return {
+            "standard_name": "",
+            "code": "",
+            "match_index": None,
+            "confidence": 0.0,
+            "latency_ms": latency,
+        }
+
+
 class RealFinetunedModel(BaseModel):
     """真实精调模型推理：加载 LoRA adapter，对候选列表做实际推理。"""
 
@@ -281,7 +386,7 @@ class RealFinetunedModel(BaseModel):
         self,
         model_path: str,
         base_model: str | None = None,
-        max_new_tokens: int = 128,
+        max_new_tokens: int = 4096,
         device: str | None = None,
     ):
         self.model_path = model_path

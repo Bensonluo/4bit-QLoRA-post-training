@@ -29,11 +29,13 @@ app = typer.Typer(add_completion=False)
 def main(
     mac: bool = typer.Option(False, "--mac", help="Mac 64GB (Qwen3-14B, bf16)"),
     mac_8b: bool = typer.Option(False, "--mac-8b", help="Mac 64GB (Qwen3-8B, 1 epoch 快速验证)"),
+    mac_2b: bool = typer.Option(False, "--mac-2b", help="Mac 64GB (Qwen3.5-2B)"),
+    mac_1b: bool = typer.Option(False, "--mac-1b", help="Mac 64GB (Qwen3-1.7B, 最快)"),
     mac_small: bool = typer.Option(False, "--mac-small", help="Mac 64GB (Qwen3-4B, 对比用)"),
     poc: bool = typer.Option(False, "--poc", help="POC 模式 (4B, 8GB VRAM)"),
     model_name: Optional[str] = typer.Option(None, "--model-name", "-m", help="覆盖模型名"),
-    epochs: int = typer.Option(3, "--epochs", "-e", help="训练轮数"),
-    lr: float = typer.Option(2e-4, "--lr", help="学习率"),
+    epochs: Optional[int] = typer.Option(None, "--epochs", "-e", help="训练轮数（默认用 preset 配置）"),
+    lr: Optional[float] = typer.Option(None, "--lr", help="学习率（默认用 preset 配置）"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="输出目录"),
     resume_from: Optional[str] = typer.Option(None, "--resume-from", help="从 checkpoint 恢复训练"),
 ):
@@ -43,6 +45,10 @@ def main(
         preset = "mac"
     elif mac_8b:
         preset = "mac-8b"
+    elif mac_2b:
+        preset = "mac-2b"
+    elif mac_1b:
+        preset = "mac-1b"
     elif mac_small:
         preset = "mac-small"
     elif poc:
@@ -54,8 +60,10 @@ def main(
 
     if model_name:
         config.model.name = model_name
-    config.training.num_epochs = epochs
-    config.training.learning_rate = lr
+    if epochs is not None:
+        config.training.num_epochs = epochs
+    if lr is not None:
+        config.training.learning_rate = lr
     if output_dir:
         config.training.output_dir = output_dir
 

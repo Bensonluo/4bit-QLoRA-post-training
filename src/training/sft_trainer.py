@@ -227,10 +227,10 @@ class SFTTrainer:
             run_name=self.logging_config.wandb_run_name,
             logging_dir=self.logging_config.log_dir if self.logging_config.use_tensorboard else None,
             save_strategy="steps",
-            eval_strategy="steps",
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
+            eval_strategy="steps" if self.eval_dataset is not None else "no",
+            load_best_model_at_end=self.eval_dataset is not None,
+            metric_for_best_model="eval_loss" if self.eval_dataset is not None else None,
+            greater_is_better=False if self.eval_dataset is not None else None,
             seed=self.training_config.seed,
             data_seed=self.training_config.seed,
             ddp_find_unused_parameters=False,
@@ -375,11 +375,8 @@ def run_sft_training(
     # Setup trainer
     trainer.setup_trainer()
 
-    # Train
+    # Train (Trainer runs final eval automatically if eval_dataset exists)
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-
-    # Evaluate
-    trainer.evaluate()
 
 
 if __name__ == "__main__":

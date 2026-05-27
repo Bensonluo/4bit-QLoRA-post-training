@@ -35,9 +35,15 @@ class EvalResult:
     latency_ms: float
     correct: bool = False
     error: str = ""
+    seen_in_train: bool = False
 
     def is_correct(self) -> bool:
-        return self.predicted_code == self.ground_truth_code
+        if self.predicted_code == self.ground_truth_code:
+            return True
+        # 模型可能省略「国药准字」前缀，用包含匹配
+        if self.predicted_code and self.ground_truth_code:
+            return self.predicted_code in self.ground_truth_code or self.ground_truth_code in self.predicted_code
+        return False
 
 
 @dataclass
@@ -55,8 +61,8 @@ class EvalReport:
     def correct_count(self) -> int:
         return sum(1 for r in self.results if r.correct)
 
-    def accuracy(self, difficulty: str = None, entity_type: str = None) -> float:
-        filtered = self._filter(difficulty, entity_type)
+    def accuracy(self, difficulty: str = None, entity_type: str = None, seen: bool = None) -> float:
+        filtered = self._filter(difficulty, entity_type, seen)
         if not filtered:
             return 0.0
         return sum(1 for r in filtered if r.correct) / len(filtered)
@@ -104,15 +110,19 @@ class EvalReport:
             return 0.0
         return self.total / (self.total_time_ms / 1000)
 
-    def _filter(self, difficulty: str = None, entity_type: str = None) -> list[EvalResult]:
+    def _filter(self, difficulty: str = None, entity_type: str = None, seen: bool = None) -> list[EvalResult]:
         filtered = self.results
         if difficulty:
             filtered = [r for r in filtered if r.difficulty == difficulty]
         if entity_type:
             filtered = [r for r in filtered if r.entity_type == entity_type]
+        if seen is not None:
+            filtered = [r for r in filtered if r.seen_in_train == seen]
         return filtered
 
     def summary(self) -> dict:
+        seen_results = [r for r in self.results if r.seen_in_train]
+        unseen_results = [r for r in self.results if not r.seen_in_train]
         return {
             "model": self.model_name,
             "total": self.total,
@@ -126,6 +136,12 @@ class EvalReport:
             "accuracy_by_type": {
                 "drug": self.accuracy(entity_type="drug"),
                 "hospital": self.accuracy(entity_type="hospital"),
+            },
+            "accuracy_by_seen": {
+                "seen_count": len(seen_results),
+                "seen_accuracy": sum(1 for r in seen_results if r.correct) / len(seen_results) if seen_results else 0,
+                "unseen_count": len(unseen_results),
+                "unseen_accuracy": sum(1 for r in unseen_results if r.correct) / len(unseen_results) if unseen_results else 0,
             },
             "mrr": self.mrr(),
             "avg_confidence": self.avg_confidence(),
@@ -160,25 +176,26 @@ def load_test_data(path: str = None) -> list[dict]:
         return json.load(f)
 
 
-def run_evaluation(model: BaseModel, test_data: list[dict] = None) -> EvalReport:
+def run_evaluation(model: BaseModel, test_data: list[dict] = None, log_every: int = 50, concurrency: int = 1, train_codes: set[str] | None = None) -> EvalReport:
     """运行完整评测"""
     if test_data is None:
         test_data = load_test_data()
 
     report = EvalReport(model_name=model.name)
     start = time.time()
+    total = len(test_data)
+    completed = [0]  # 用列表以便在闭包中修改
 
-    for sample in test_data:
+    def _eval_one(sample):
         query = sample["query"]
         ground_truth = sample["standard_name"]
         ground_truth_code = sample["code"]
         candidates = [{"name": c["name"], "code": c["code"]} for c in sample["candidates"]]
-
+        seen = train_codes is not None and ground_truth_code in train_codes
         try:
             t0 = time.time()
             pred = model.predict(query, candidates)
             latency = (time.time() - t0) * 1000
-
             result = EvalResult(
                 query=query,
                 ground_truth=ground_truth,
@@ -190,9 +207,9 @@ def run_evaluation(model: BaseModel, test_data: list[dict] = None) -> EvalReport
                 difficulty=sample["difficulty"],
                 entity_type=sample["entity_type"],
                 latency_ms=latency,
+                seen_in_train=seen,
             )
             result.correct = result.is_correct()
-
         except Exception as e:
             result = EvalResult(
                 query=query,
@@ -206,9 +223,48 @@ def run_evaluation(model: BaseModel, test_data: list[dict] = None) -> EvalReport
                 entity_type=sample["entity_type"],
                 latency_ms=0,
                 error=str(e),
+                seen_in_train=seen,
             )
+        return result
 
-        report.results.append(result)
+    if concurrency > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {pool.submit(_eval_one, s): i for i, s in enumerate(test_data)}
+            results = [None] * total
+            for future in as_completed(futures):
+                idx = futures[future]
+                results[idx] = future.result()
+                completed[0] += 1
+                if completed[0] % log_every == 0:
+                    elapsed = time.time() - start
+                    speed = completed[0] / elapsed
+                    eta = (total - completed[0]) / speed if speed > 0 else 0
+                    acc_so_far = sum(1 for r in results[:completed[0]] if r and r.correct) / completed[0] * 100
+                    print(
+                        f"  [{model.name}] {completed[0]}/{total} "
+                        f"({completed[0]/total*100:.0f}%) "
+                        f"acc={acc_so_far:.1f}% "
+                        f"speed={speed:.1f}/s "
+                        f"ETA={eta:.0f}s"
+                    )
+            report.results = [r for r in results if r]
+    else:
+        for idx, sample in enumerate(test_data):
+            result = _eval_one(sample)
+            report.results.append(result)
+            if (idx + 1) % log_every == 0:
+                elapsed = time.time() - start
+                speed = (idx + 1) / elapsed
+                eta = (total - idx - 1) / speed if speed > 0 else 0
+                acc = report.correct_count / len(report.results) * 100
+                print(
+                    f"  [{model.name}] {idx + 1}/{total} "
+                    f"({(idx+1)/total*100:.0f}%) "
+                    f"acc={acc:.1f}% "
+                    f"speed={speed:.1f}/s "
+                    f"ETA={eta:.0f}s"
+                )
 
     report.total_time_ms = (time.time() - start) * 1000
     return report
