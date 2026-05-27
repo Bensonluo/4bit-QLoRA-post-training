@@ -78,15 +78,15 @@ class EvalReport:
         filtered = self._filter(difficulty)
         if not filtered:
             return 0.0
-        return sum(r.confidence for r in filtered) / len(filtered)
+        return sum(float(r.confidence) for r in filtered) / len(filtered)
 
     def confidence_calibration(self) -> dict:
         """置信度校准：高置信度时的实际准确率"""
         bins = {
-            ">=0.9": [r for r in self.results if r.confidence >= 0.9],
-            "0.7-0.9": [r for r in self.results if 0.7 <= r.confidence < 0.9],
-            "0.5-0.7": [r for r in self.results if 0.5 <= r.confidence < 0.7],
-            "<0.5": [r for r in self.results if r.confidence < 0.5],
+            ">=0.9": [r for r in self.results if float(r.confidence) >= 0.9],
+            "0.7-0.9": [r for r in self.results if 0.7 <= float(r.confidence) < 0.9],
+            "0.5-0.7": [r for r in self.results if 0.5 <= float(r.confidence) < 0.7],
+            "<0.5": [r for r in self.results if float(r.confidence) < 0.5],
         }
         calibration = {}
         for bin_name, results in bins.items():

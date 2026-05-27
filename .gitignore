@@ -96,5 +96,7 @@ dmypy.json
 CLAUDE.md
 /outputs/test-quick
 /outputs
-/domains/medical_entity/data
+/domains/medical_entity/data/external
+/domains/medical_entity/data/raw
+/domains/medical_entity/data/*.bak
 /mlruns
