@@ -32,12 +32,14 @@ def main(
     mac_2b: bool = typer.Option(False, "--mac-2b", help="Mac 64GB (Qwen3.5-2B)"),
     mac_1b: bool = typer.Option(False, "--mac-1b", help="Mac 64GB (Qwen3-1.7B, 最快)"),
     mac_small: bool = typer.Option(False, "--mac-small", help="Mac 64GB (Qwen3-4B, 对比用)"),
+    mac_35_4b: bool = typer.Option(False, "--mac-35-4b", help="Mac 64GB (Qwen3.5-4B, 微调)"),
     poc: bool = typer.Option(False, "--poc", help="POC 模式 (4B, 8GB VRAM)"),
     model_name: Optional[str] = typer.Option(None, "--model-name", "-m", help="覆盖模型名"),
     epochs: Optional[int] = typer.Option(None, "--epochs", "-e", help="训练轮数（默认用 preset 配置）"),
     lr: Optional[float] = typer.Option(None, "--lr", help="学习率（默认用 preset 配置）"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="输出目录"),
     resume_from: Optional[str] = typer.Option(None, "--resume-from", help="从 checkpoint 恢复训练"),
+    save_steps: Optional[int] = typer.Option(None, "--save-steps", help="保存和评估间隔步数（0=关闭eval）"),
 ):
     """训练医疗实体匹配模型"""
 
@@ -51,6 +53,8 @@ def main(
         preset = "mac-1b"
     elif mac_small:
         preset = "mac-small"
+    elif mac_35_4b:
+        preset = "mac-35-4b"
     elif poc:
         preset = "poc"
     else:
@@ -66,6 +70,9 @@ def main(
         config.training.learning_rate = lr
     if output_dir:
         config.training.output_dir = output_dir
+    if save_steps is not None:
+        config.training.save_steps = save_steps
+        config.training.eval_steps = save_steps if save_steps > 0 else 999999
 
     console.print(Panel.fit(
         f"[bold]医疗实体匹配训练[/bold]\n\n"

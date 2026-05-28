@@ -314,6 +314,53 @@ MEDICAL_ENTITY_MAC_SMALL_CONFIG = SFTConfig(
     logging=LoggingConfig(use_wandb=False, use_tensorboard=True, log_memory=True),
 )
 
+# ── Mac Qwen3.5-4B (64GB) ── Qwen3.5-4B bf16，医疗实体微调
+MEDICAL_ENTITY_MAC_35_4B_CONFIG = SFTConfig(
+    model=ModelConfig(
+        name="Qwen/Qwen3.5-4B",
+        quantization_bits=None,
+        max_length=512,
+        torch_dtype="bfloat16",
+        use_flash_attention=False,
+    ),
+    lora=LoRAConfig(
+        r=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    training=TrainingConfig(
+        output_dir="./outputs/medical-entity-mac-35-4b",
+        num_epochs=1,
+        batch_size=2,
+        gradient_accumulation_steps=4,
+        learning_rate=2e-4,
+        warmup_ratio=0.05,
+        gradient_checkpointing=False,
+        bf16=True,
+        logging_steps=10,
+        eval_steps=999999,
+        save_steps=100,
+        save_total_limit=2,
+        seed=42,
+    ),
+    data=DataConfig(
+        dataset_name=f"{DOMAIN_ROOT}/data/train/train.json",
+        format="alpaca",
+        validation_split=0.0,
+        train_file=f"{DOMAIN_ROOT}/data/train/train.json",
+        validation_file=None,
+    ),
+    logging=LoggingConfig(
+        use_wandb=False,
+        use_tensorboard=True,
+        log_memory=True,
+        use_mlflow=True,
+        mlflow_tracking_uri="./outputs/mlruns",
+        mlflow_experiment_name="medical-entity-matching",
+    ),
+)
+
 # 预设映射
 PRESETS = {
     "mac": MEDICAL_ENTITY_MAC_CONFIG,
@@ -321,6 +368,7 @@ PRESETS = {
     "mac-2b": MEDICAL_ENTITY_MAC_2B_CONFIG,
     "mac-1b": MEDICAL_ENTITY_MAC_1B_CONFIG,
     "mac-small": MEDICAL_ENTITY_MAC_SMALL_CONFIG,
+    "mac-35-4b": MEDICAL_ENTITY_MAC_35_4B_CONFIG,
     "poc": MEDICAL_ENTITY_POC_CONFIG,
     "full": MEDICAL_ENTITY_FULL_CONFIG,
 }

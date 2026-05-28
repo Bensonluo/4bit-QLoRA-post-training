@@ -386,7 +386,7 @@ class RealFinetunedModel(BaseModel):
         self,
         model_path: str,
         base_model: str | None = None,
-        max_new_tokens: int = 4096,
+        max_new_tokens: int = 64,
         device: str | None = None,
     ):
         self.model_path = model_path

@@ -340,7 +340,7 @@ def main():
     # brand_names test 稍后保存（需要先去重叠）
 
     # 从 brand_names test 中移除与训练集重叠的药品
-    train_all_codes = train_c | val_c | test_c
+    train_all_codes = train_c | val_c  # 只去 train+val 重叠，保留 test 共享
     brand_test_codes = set(s["code"] for s in new_test_brand)
     overlap = train_all_codes & brand_test_codes
     if overlap:

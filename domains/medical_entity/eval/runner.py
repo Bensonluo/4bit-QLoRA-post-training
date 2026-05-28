@@ -37,13 +37,14 @@ class EvalResult:
     error: str = ""
     seen_in_train: bool = False
 
+    @staticmethod
+    def _normalize_code(code: str) -> str:
+        return code.replace(" ", "").replace("国药准字", "")
+
     def is_correct(self) -> bool:
-        if self.predicted_code == self.ground_truth_code:
-            return True
-        # 模型可能省略「国药准字」前缀，用包含匹配
-        if self.predicted_code and self.ground_truth_code:
-            return self.predicted_code in self.ground_truth_code or self.ground_truth_code in self.predicted_code
-        return False
+        gt = self._normalize_code(self.ground_truth_code)
+        pred = self._normalize_code(self.predicted_code)
+        return bool(gt and pred and gt == pred)
 
 
 @dataclass
