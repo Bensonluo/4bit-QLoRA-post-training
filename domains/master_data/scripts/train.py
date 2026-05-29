@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
 import json
+import random
 from dataclasses import dataclass
 
 import torch
@@ -53,7 +54,7 @@ class TrainConfig:
     logging_steps: int = 10
     bf16: bool = True
     gradient_checkpointing: bool = False
-    save_total_limit: int = 2
+    save_total_limit: int = 3
     seed: int = 42
 
 
@@ -148,7 +149,14 @@ def main(
     console.print(f"  训练样本: {len(raw_data)} 条")
 
     from datasets import Dataset
-    dataset = Dataset.from_list(raw_data)
+    # 拆分验证集（100条）
+    rng = random.Random(config.seed)
+    rng.shuffle(raw_data)
+    val_data = raw_data[:100]
+    train_data = raw_data[100:]
+    train_dataset = Dataset.from_list(train_data)
+    val_dataset = Dataset.from_list(val_data)
+    console.print(f"  训练样本: {len(train_data)} 条, 验证样本: {len(val_data)} 条")
 
     # Load model and tokenizer
     console.print(f"[cyan]加载模型: {config.model_name}[/cyan]")
@@ -185,10 +193,12 @@ def main(
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         learning_rate=config.learning_rate,
         warmup_ratio=config.warmup_ratio,
-        bf16=config.bf16,
+        bf16=config.bf16 if platform.device == "cuda" else False,
         logging_steps=config.logging_steps,
         save_steps=config.save_steps,
         save_total_limit=config.save_total_limit,
+        eval_strategy="steps",
+        eval_steps=config.save_steps,
         gradient_checkpointing=config.gradient_checkpointing,
         seed=config.seed,
         report_to="tensorboard",
@@ -200,7 +210,8 @@ def main(
     trainer = SFTTrainer(
         model=model,
         args=training_args,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
         processing_class=tokenizer,
         max_seq_length=config.max_length,
     )

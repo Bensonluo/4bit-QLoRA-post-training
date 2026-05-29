@@ -85,11 +85,17 @@ def call_model(messages: list[dict], model_name: str, base_url: str, max_tokens:
     if "qwen3" in model_name.lower():
         kwargs["extra_body"] = {"think": False}
 
+    # MiniMax M2.7: thinking cannot be disabled, but can be split into separate field
+    if is_minimax:
+        kwargs["extra_body"] = {"reasoning_split": True}
+
     t0 = time.time()
     response = client.chat.completions.create(**kwargs)
     latency = (time.time() - t0) * 1000
 
-    return response.choices[0].message.content.strip(), latency
+    msg = response.choices[0].message
+    text = msg.content or getattr(msg, "reasoning", None) or ""
+    return text.strip(), latency
 
 
 def parse_json_array(text: str) -> list[dict]:
@@ -138,6 +144,9 @@ class EvalResult:
     prod_grade_details: dict = field(default_factory=dict)  # {grade: {correct, total}}
     prod_core_name_correct: int = 0
     prod_core_name_total: int = 0
+    # Top-1 selection metrics (业务核心：是否选出了最佳匹配)
+    top1_correct: int = 0  # 选中的最佳匹配与 ground truth 一致
+    top1_total: int = 0
 
     def inst_accuracy(self) -> float:
         return (self.inst_tp + self.inst_tn) / self.total_candidates if self.total_candidates else 0
@@ -186,7 +195,8 @@ def _eval_one_sample(sample: dict, model_name: str, base_url: str, task: str) ->
             pred_item = next((p for p in predicted if p.get("index") == gt_idx), None) if predicted else None
             result["candidates"].append({"gt": gt_item, "pred": pred_item})
 
-    except Exception:
+    except Exception as e:
+        console.print(f"[red]模型调用失败: {e}[/red]")
         result["parse_failure"] = 1
         result["total_candidates"] = len(ground_truth)
         result["candidates"] = [{"gt": gt, "pred": None} for gt in ground_truth]
@@ -200,6 +210,40 @@ def _merge_sample(result: EvalResult, sample_result: dict, task: str):
     result.total_candidates += sample_result["total_candidates"]
     result.latencies.append(sample_result["latency"])
     result.parse_failures += sample_result["parse_failure"]
+
+    # Top-1 selection: find best match in ground truth and prediction
+    result.top1_total += 1
+    if task == "institution":
+        # GT best = matched=true
+        gt_best = next((c for c in sample_result["candidates"] if c["gt"].get("matched")), None)
+        gt_best_idx = gt_best["gt"].get("index") if gt_best else None
+        # Pred best = matched=true with highest confidence
+        conf_order = {"High": 3, "Medium": 2, "Low": 1}
+        pred_matches = [
+            c for c in sample_result["candidates"]
+            if c["pred"] and c["pred"].get("matched")
+        ]
+        if pred_matches:
+            pred_best = max(pred_matches, key=lambda c: conf_order.get(c["pred"].get("confidence", "Low"), 0))
+            pred_best_idx = pred_best["pred"].get("index")
+        else:
+            pred_best_idx = None
+        if gt_best_idx is not None and pred_best_idx == gt_best_idx:
+            result.top1_correct += 1
+    elif task == "product":
+        grade_score = {"A": 95, "B": 75, "D": 0}
+        # GT best = highest grade score
+        gt_best = max(sample_result["candidates"], key=lambda c: grade_score.get(c["gt"].get("match_grade", "D"), 0))
+        gt_best_idx = gt_best["gt"].get("index")
+        # Pred best = highest grade score among valid predictions
+        valid_preds = [c for c in sample_result["candidates"] if c["pred"] and c["pred"].get("match_grade") in grade_score]
+        if valid_preds:
+            pred_best = max(valid_preds, key=lambda c: grade_score.get(c["pred"].get("match_grade", "D"), 0))
+            pred_best_idx = pred_best["pred"].get("index")
+        else:
+            pred_best_idx = None
+        if pred_best_idx == gt_best_idx:
+            result.top1_correct += 1
 
     for pair in sample_result["candidates"]:
         gt_item, pred_item = pair["gt"], pair["pred"]
@@ -260,10 +304,12 @@ def evaluate_model(model_name: str, base_url: str, task: str, samples: list[dict
 def _print_progress(result: EvalResult, model_name: str, done: int, total: int, task: str):
     if task == "institution":
         acc = (result.inst_tp + result.inst_tn) / result.total_candidates * 100 if result.total_candidates else 0
-        print(f"  [{model_name}] {done}/{total} acc={acc:.1f}% parse_fail={result.parse_failures}")
+        top1 = result.top1_correct / result.top1_total * 100 if result.top1_total else 0
+        print(f"  [{model_name}] {done}/{total} acc={acc:.1f}% top1={top1:.1f}% parse_fail={result.parse_failures}")
     else:
         acc = result.prod_grade_correct / result.total_candidates * 100 if result.total_candidates else 0
-        print(f"  [{model_name}] {done}/{total} grade_acc={acc:.1f}% parse_fail={result.parse_failures}")
+        top1 = result.top1_correct / result.top1_total * 100 if result.top1_total else 0
+        print(f"  [{model_name}] {done}/{total} grade_acc={acc:.1f}% top1={top1:.1f}% parse_fail={result.parse_failures}")
 
 
 def print_results(results: list[EvalResult]):
@@ -275,6 +321,7 @@ def print_results(results: list[EvalResult]):
     if inst_results:
         table = Table(title="机构匹配 (Institution Matching)")
         table.add_column("模型", style="cyan")
+        table.add_column("Top-1选择", justify="right")
         table.add_column("准确率", justify="right")
         table.add_column("Precision", justify="right")
         table.add_column("Recall", justify="right")
@@ -282,9 +329,11 @@ def print_results(results: list[EvalResult]):
         table.add_column("解析失败", justify="right")
         table.add_column("平均延迟", justify="right")
 
-        for r in sorted(inst_results, key=lambda x: x.inst_accuracy(), reverse=True):
+        for r in sorted(inst_results, key=lambda x: x.top1_correct / x.top1_total if x.top1_total else 0, reverse=True):
+            top1 = r.top1_correct / r.top1_total if r.top1_total else 0
             table.add_row(
                 r.model_name,
+                f"[bold]{top1:.1%}[/bold]",
                 f"{r.inst_accuracy():.1%}",
                 f"{r.inst_precision():.1%}",
                 f"{r.inst_recall():.1%}",
@@ -299,26 +348,27 @@ def print_results(results: list[EvalResult]):
     if prod_results:
         table = Table(title="产品匹配 (Product Matching)")
         table.add_column("模型", style="cyan")
+        table.add_column("Top-1选择", justify="right")
         table.add_column("等级准确率", justify="right")
         table.add_column("核心名准确率", justify="right")
         table.add_column("A级", justify="right")
         table.add_column("B级", justify="right")
-        table.add_column("C级", justify="right")
         table.add_column("D级", justify="right")
         table.add_column("解析失败", justify="right")
         table.add_column("平均延迟", justify="right")
 
-        for r in sorted(prod_results, key=lambda x: x.prod_accuracy(), reverse=True):
+        for r in sorted(prod_results, key=lambda x: x.top1_correct / x.top1_total if x.top1_total else 0, reverse=True):
+            top1 = r.top1_correct / r.top1_total if r.top1_total else 0
             grades = r.prod_grade_details
             a_acc = f"{grades.get('A', {}).get('correct', 0) / grades.get('A', {}).get('total', 1):.0%}" if grades.get('A') else "-"
             b_acc = f"{grades.get('B', {}).get('correct', 0) / grades.get('B', {}).get('total', 1):.0%}" if grades.get('B') else "-"
-            c_acc = f"{grades.get('C', {}).get('correct', 0) / grades.get('C', {}).get('total', 1):.0%}" if grades.get('C') else "-"
             d_acc = f"{grades.get('D', {}).get('correct', 0) / grades.get('D', {}).get('total', 1):.0%}" if grades.get('D') else "-"
             table.add_row(
                 r.model_name,
+                f"[bold]{top1:.1%}[/bold]",
                 f"{r.prod_accuracy():.1%}",
                 f"{r.prod_core_name_accuracy():.1%}",
-                a_acc, b_acc, c_acc, d_acc,
+                a_acc, b_acc, d_acc,
                 f"{r.parse_failures}/{r.total_samples}",
                 f"{r.avg_latency():.0f}ms",
             )
@@ -365,7 +415,12 @@ def main():
 
         if args.api_model:
             import os
-            api_url = args.api_base_url or os.environ.get("LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
+            if args.api_base_url:
+                api_url = args.api_base_url
+            elif "minimax" in args.api_model.lower():
+                api_url = "https://api.minimax.chat/v1/"
+            else:
+                api_url = os.environ.get("LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
             console.print(f"[yellow]评测: {args.api_model} ({task}, 并发={args.concurrency})[/yellow]")
             r = evaluate_model(args.api_model, api_url, task, data, concurrency=args.concurrency)
             results.append(r)
@@ -386,6 +441,7 @@ def main():
             "total_samples": r.total_samples, "total_candidates": r.total_candidates,
             "parse_failures": r.parse_failures, "avg_latency_ms": r.avg_latency(),
         }
+        d["top1_accuracy"] = r.top1_correct / r.top1_total if r.top1_total else 0
         if r.task == "institution":
             d.update({"accuracy": r.inst_accuracy(), "precision": r.inst_precision(),
                        "recall": r.inst_recall(), "f1": r.inst_f1()})
