@@ -100,3 +100,11 @@ CLAUDE.md
 /domains/medical_entity/data/raw
 /domains/medical_entity/data/*.bak
 /mlruns
+/domains/master_data/data
+/domains/medical_entity/data
+/domains/master_data/models
+/domains/master_data/data
+/domains/master_data/data
+/domains/master_data/data
+/domains/master_data/data
+/domains/master_data/data/train

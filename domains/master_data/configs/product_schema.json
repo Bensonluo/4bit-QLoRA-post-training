@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["index", "core_name_match", "modifier_diff", "spec_diff", "match_grade"],
+    "properties": {
+      "index": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "候选产品在列表中的序号"
+      },
+      "core_name_match": {
+        "type": "boolean",
+        "description": "核心产品名是否一致"
+      },
+      "modifier_diff": {
+        "type": "string",
+        "description": "修饰词差异描述，如'无'、'剂型差异'"
+      },
+      "spec_diff": {
+        "type": "string",
+        "description": "规格差异描述，如'无'、'0.25g*24片/盒vs0.5g*20粒/盒'"
+      },
+      "match_grade": {
+        "type": "string",
+        "enum": ["A", "B", "D"],
+        "description": "匹配等级：A=完全匹配，B=同核心名有差异，D=核心名不一致"
+      }
+    },
+    "additionalProperties": false
+  }
+}

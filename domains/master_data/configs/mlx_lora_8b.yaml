@@ -1,0 +1,40 @@
+model: "domains/master_data/models/Qwen3-8B-MLX-4bit"
+train: true
+data: "domains/master_data/data/mlx_train"
+
+batch_size: 1
+iters: 16200
+learning_rate: 1e-4
+max_seq_length: 1024
+
+# 训练全部 36 层
+num_layers: 36
+
+lora_parameters:
+  rank: 64
+  scale: 128.0
+  dropout: 0.05
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+    - "mlp.gate_proj"
+    - "mlp.up_proj"
+    - "mlp.down_proj"
+
+steps_per_report: 100
+steps_per_eval: 1000
+val_batches: 20
+
+save_every: 2000
+adapter_path: "domains/master_data/outputs/adapters-8b-v2"
+
+mask_prompt: true
+seed: 42
+
+lr_schedule:
+  name: cosine_decay
+  warmup: 500
+  warmup_init: 1e-7
+  arguments: [1e-4, 16200, 1e-7]
