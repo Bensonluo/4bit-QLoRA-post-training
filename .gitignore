@@ -108,3 +108,14 @@ CLAUDE.md
 /domains/master_data/data
 /domains/master_data/data
 /domains/master_data/data/train
+
+# Temporary documents (AI review plans, scratch notes)
+REVIEW_FIX_PLAN.md
+REFERENCE.md
+*.review.md
+*.scratch.md
+
+# Runtime artifacts
+EOF
+amp
+mlflow.db

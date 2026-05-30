@@ -1,0 +1,47 @@
+# Gemma-4-26b MLX 4-bit LoRA 训练配置
+# 用法: python -m mlx_lm.lora --config domains/master_data/configs/mlx_lora_26b.yaml
+
+# 模型路径：填 LM Studio 本地路径或 HuggingFace ID
+# 示例本地路径: ~/.lmstudio/models/google/gemma-4-26b-a4b
+# 如果用 HuggingFace ID，确保已登录或模型公开
+model: "mlx-community/gemma-4-26b-a4b-it-4bit"
+
+train: true
+data: "domains/master_data/data/mlx_train"
+
+# 训练参数（26B 必须 batch_size=1）
+batch_size: 1
+iters: 6000
+learning_rate: 1e-4
+max_seq_length: 1280
+
+# LoRA 参数（26B 用 rank=32 够用了）
+lora_parameters:
+  rank: 32
+  scale: 64.0
+  dropout: 0.05
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+    - "mlp.gate_proj"
+    - "mlp.up_proj"
+    - "mlp.down_proj"
+
+# 日志与保存
+steps_per_report: 100
+steps_per_eval: 1000
+val_batches: 100
+save_every: 2000
+adapter_path: "domains/master_data/outputs/adapters-gemma-26b"
+
+mask_prompt: true
+seed: 42
+
+# 学习率调度
+lr_schedule:
+  name: cosine_decay
+  warmup: 500
+  warmup_init: 1e-7
+  arguments: [1e-4, 12000, 1e-7]
