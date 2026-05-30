@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from mlx_lm import load, generate
+from mlx_lm.sample_utils import make_sampler
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 ADAPTER_PATH = str(DOMAIN_ROOT / "outputs" / "adapters-gemma-26b")
@@ -18,20 +19,17 @@ def main() -> None:
     model, tokenizer = load(MODEL_ID, adapter_path=ADAPTER_PATH)
 
     # 读测试数据
-    test_file = DOMAIN_ROOT / "data" / "test.jsonl"
-    with open(test_file) as f:
-        test_data = [json.loads(line) for line in f]
+    inst_file = DOMAIN_ROOT / "data" / "test" / "eval_institution.json"
+    prod_file = DOMAIN_ROOT / "data" / "test" / "eval_product.json"
 
-    # 找1条机构和1条产品
-    inst_sample = None
-    prod_sample = None
-    for d in test_data:
-        if "institution" in d.get("task", "") and inst_sample is None:
-            inst_sample = d
-        elif "product" in d.get("task", "") and prod_sample is None:
-            prod_sample = d
-        if inst_sample and prod_sample:
-            break
+    with open(inst_file) as f:
+        inst_data = json.load(f)
+    with open(prod_file) as f:
+        prod_data = json.load(f)
+
+    # 各取第一条
+    inst_sample = inst_data[0] if inst_data else None
+    prod_sample = prod_data[0] if prod_data else None
 
     for name, sample in [("机构", inst_sample), ("产品", prod_sample)]:
         if sample is None:
@@ -44,12 +42,13 @@ def main() -> None:
         print(f"{'='*60}")
 
         t0 = time.time()
+        sampler = make_sampler(temp=0.1)
         response = generate(
             model,
             tokenizer,
             prompt=prompt,
             max_tokens=1024,
-            temp=0.1,
+            sampler=sampler,
             verbose=False,
         )
         latency = time.time() - t0

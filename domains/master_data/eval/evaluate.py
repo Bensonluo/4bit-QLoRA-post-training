@@ -10,8 +10,8 @@
     # 评测云端 API
     python -m domains.master_data.eval.evaluate --api-model glm-5.1 --task product --max-samples 200
 
-    # 全量评测所有模型
-    python -m domains.master_data.eval.evaluate --all --max-samples 100
+    # 评测 MLX 本地模型 + LoRA adapter
+    python -m domains.master_data.eval.evaluate --adapter-path outputs/adapters-gemma-26b --mlx-model-id mlx-community/gemma-4-26b-a4b-it-4bit --task institution --max-samples 400
 """
 
 import sys
@@ -98,6 +98,27 @@ def call_model(messages: list[dict], model_name: str, base_url: str, max_tokens:
     return text.strip(), latency
 
 
+def call_model_mlx(messages: list[dict], model, tokenizer, max_tokens: int = 2048) -> tuple[str, float]:
+    """Call MLX local model with adapter and return (response_text, latency_ms)."""
+    from mlx_lm import generate
+    from mlx_lm.sample_utils import make_sampler
+
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    sampler = make_sampler(temp=0.0)  # greedy decoding for eval
+
+    t0 = time.time()
+    response = generate(
+        model,
+        tokenizer,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        sampler=sampler,
+        verbose=False,
+    )
+    latency = (time.time() - t0) * 1000
+    return response.strip(), latency
+
+
 def parse_json_array(text: str) -> list[dict]:
     """Parse JSON array from model response, handling reasoning text before/after."""
     import re
@@ -171,7 +192,14 @@ class EvalResult:
         return sum(self.latencies) / len(self.latencies) if self.latencies else 0
 
 
-def _eval_one_sample(sample: dict, model_name: str, base_url: str, task: str) -> dict:
+def _eval_one_sample(
+    sample: dict,
+    model_name: str,
+    base_url: str,
+    task: str,
+    mlx_model=None,
+    mlx_tokenizer=None,
+) -> dict:
     """Evaluate a single sample, return per-sample metrics."""
     input_messages = [m for m in sample["messages"] if m["role"] != "assistant"]
     ground_truth = extract_ground_truth(sample)
@@ -182,7 +210,10 @@ def _eval_one_sample(sample: dict, model_name: str, base_url: str, task: str) ->
     }
 
     try:
-        response_text, latency = call_model(input_messages, model_name, base_url)
+        if mlx_model is not None and mlx_tokenizer is not None:
+            response_text, latency = call_model_mlx(input_messages, mlx_model, mlx_tokenizer)
+        else:
+            response_text, latency = call_model(input_messages, model_name, base_url)
         result["latency"] = latency
 
         predicted = parse_json_array(response_text)
@@ -274,13 +305,29 @@ def _merge_sample(result: EvalResult, sample_result: dict, task: str):
                 result.prod_core_name_correct += 1
 
 
-def evaluate_model(model_name: str, base_url: str, task: str, samples: list[dict],
-                   concurrency: int = 1, log_every: int = 50) -> EvalResult:
+def evaluate_model(
+    model_name: str,
+    base_url: str,
+    task: str,
+    samples: list[dict],
+    concurrency: int = 1,
+    log_every: int = 50,
+    adapter_path: Optional[str] = None,
+    mlx_model_id: Optional[str] = None,
+) -> EvalResult:
     """Evaluate a model on a task with optional concurrency."""
     result = EvalResult(model_name=model_name, task=task)
     total = len(samples)
 
-    if concurrency > 1:
+    # Load MLX model + adapter if adapter_path is provided
+    mlx_model = None
+    mlx_tokenizer = None
+    if adapter_path:
+        from mlx_lm import load
+        console.print(f"[dim]加载 MLX 模型: {mlx_model_id or model_name} + adapter: {adapter_path}[/dim]")
+        mlx_model, mlx_tokenizer = load(mlx_model_id or model_name, adapter_path=adapter_path)
+
+    if concurrency > 1 and not adapter_path:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             futures = {pool.submit(_eval_one_sample, s, model_name, base_url, task): i for i, s in enumerate(samples)}
@@ -293,7 +340,9 @@ def evaluate_model(model_name: str, base_url: str, task: str, samples: list[dict
                     _print_progress(result, model_name, completed, total, task)
     else:
         for idx, sample in enumerate(samples):
-            sample_result = _eval_one_sample(sample, model_name, base_url, task)
+            sample_result = _eval_one_sample(
+                sample, model_name, base_url, task, mlx_model=mlx_model, mlx_tokenizer=mlx_tokenizer
+            )
             _merge_sample(result, sample_result, task)
             if (idx + 1) % log_every == 0:
                 _print_progress(result, model_name, idx + 1, total, task)
@@ -386,13 +435,15 @@ def main():
     parser.add_argument("--local-base-url", type=str, default="http://127.0.0.1:1234/v1/", help="LM Studio URL")
     parser.add_argument("--api-model", type=str, help="云端 API 模型名 (如 glm-5.1)")
     parser.add_argument("--api-base-url", type=str, default=None, help="云端 API URL")
+    parser.add_argument("--adapter-path", type=str, default=None, help="MLX LoRA adapter 路径（本地直接评测）")
+    parser.add_argument("--mlx-model-id", type=str, default=None, help="MLX 模型 ID（用于 --adapter-path 模式）")
     parser.add_argument("--task", choices=["institution", "product", "both"], default="both", help="评测任务")
     parser.add_argument("--max-samples", type=int, default=200, help="每个任务最大评测条数")
     parser.add_argument("--concurrency", type=int, default=3, help="本地模型并发数（默认3）")
     args = parser.parse_args()
 
-    if not args.local_model and not args.api_model:
-        console.print("[red]请指定 --local-model 或 --api-model[/red]")
+    if not args.local_model and not args.api_model and not args.adapter_path:
+        console.print("[red]请指定 --local-model、--api-model 或 --adapter-path[/red]")
         return
 
     results = []
@@ -406,6 +457,17 @@ def main():
             random.seed(42)
             data = random.sample(data, args.max_samples)
         console.print(f"  评测 {len(data)} 条")
+
+        if args.adapter_path:
+            model_id = args.mlx_model_id or args.local_model or "mlx-community/gemma-4-26b-a4b-it-4bit"
+            console.print(f"[yellow]评测: {model_id} + adapter ({task})[/yellow]")
+            r = evaluate_model(
+                model_id, "", task, data,
+                adapter_path=args.adapter_path,
+                mlx_model_id=model_id,
+            )
+            results.append(r)
+            console.print(f"  [green]✓ adapter {task} 完成[/green]")
 
         if args.local_model:
             console.print(f"[yellow]评测: {args.local_model} ({task}, 并发={args.concurrency})[/yellow]")
