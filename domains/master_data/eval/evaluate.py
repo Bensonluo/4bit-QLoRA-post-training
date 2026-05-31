@@ -104,14 +104,14 @@ def call_model_mlx(messages: list[dict], model, tokenizer, max_tokens: int = 204
     from mlx_lm.sample_utils import make_sampler
 
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    sampler = make_sampler(temp=0.0)  # greedy decoding for eval
+    sampler = make_sampler(temp=0.1)  # low temp for eval consistency
 
     t0 = time.time()
     response = generate(
         model,
         tokenizer,
         prompt=prompt,
-        max_tokens=max_tokens,
+        max_tokens=1024,
         sampler=sampler,
         verbose=False,
     )
