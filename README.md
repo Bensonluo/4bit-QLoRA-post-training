@@ -1,302 +1,387 @@
-# LLM Post-Training Portfolio Project
+<div align="center">
 
-> A complete QLoRA framework for fine-tuning LLMs on consumer hardware. Supports NVIDIA GPU, Apple Silicon, and CPU with automatic platform detection. Includes a full ML platform UI for configuration, training, evaluation, and model comparison.
+# 4-bit QLoRA Post-Training Framework
 
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/pytorch-2.1+-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**Fine-tune LLMs from 0.6B to 14B on consumer hardware. Cross-platform (NVIDIA GPU / Apple Silicon / CPU), with a full ML platform dashboard for config → train → monitor → evaluate.**
 
-## 🎯 Overview
+[![Live Dashboard](https://img.shields.io/badge/LIVE-DASHBOARD-brightgreen?style=for-the-badge&logo=vercel)](https://benluo.art/qlora-dashboard/)
+[![GitHub stars](https://img.shields.io/github/stars/Bensonluo/4bit-QLoRA-post-training?style=for-the-badge)](https://github.com/Bensonluo/4bit-QLoRA-post-training/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-This project demonstrates end-to-end LLM post-training using **QLoRA (Quantized Low-Rank Adaptation)** optimized for consumer hardware. It supports **NVIDIA GPU** (4-bit quantization), **Apple Silicon** (bf16 via MPS), and **CPU** with automatic platform detection.
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.1+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Transformers-yellow)](https://huggingface.co/)
+[![Qwen3](https://img.shields.io/badge/Qwen3-0.6B--14B-6D4AAE)](https://github.com/QwenLM/Qwen)
+[![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B)](https://streamlit.io/)
 
-### What's Included
+<!-- 🎬 录制说明:用 kap/licecap 录 30 秒 dashboard 操作流程,存到 docs/assets/dashboard.gif -->
+<img src="docs/assets/dashboard.gif" alt="QLoRA Dashboard Demo" width="80%">
 
-- **🖥️ ML Platform Dashboard** — Streamlit UI covering the full lifecycle: configure → train → monitor → evaluate → compare
-- **📊 MLflow Tracking** — Automatic experiment logging, metric history, and run comparison
-- **🏥 Domain Adaptation System** — Extensible domain modules with built-in medical entity showcase
-- **🤖 Multi-Model Support** — Qwen2.5, Qwen3, Llama 3.2, Phi-3, Gemma 2
+*🎬 Replace this with a 30s GIF of the dashboard — see [Recording Guide](#-demo-recording-guide) below*
 
-### Key Features
+</div>
 
-- ✅ **Cross-Platform**: Auto-detects NVIDIA GPU (CUDA), Apple Silicon (MPS), or CPU — no config needed
-- ✅ **Memory Efficient**: Train 1.5B models on 8GB VRAM (NVIDIA) or run up to ~14B on Apple Silicon 64GB
-- ✅ **4-bit QLoRA**: 84% memory reduction with minimal quality loss (NVIDIA only)
-- ✅ **Apple Silicon Native**: bf16 training via Metal Performance Shaders
-- ✅ **MLflow Tracking**: Automatic experiment logging with metric history and run comparison
-- ✅ **Streamlit Dashboard**: Visual UI for training configuration, live monitoring, evaluation, and model comparison
-- ✅ **Domain Adaptation**: Extensible domain system with built-in medical entity evaluation
-- ✅ **DPO Support**: Direct Preference Optimization for alignment
-- ✅ **Qwen3 Ready**: Full support for Qwen3 series (0.6B to 14B)
-- ✅ **Production Ready**: Comprehensive tests, logging, monitoring
+---
+
+## 📌 Table of Contents
+
+- [Why This Project](#-why-this-project)
+- [Key Highlights](#-key-highlights)
+- [Supported Models & Hardware](#-supported-models--hardware)
+- [Quick Start](#-quick-start)
+- [Dashboard Tour](#-dashboard-tour)
+- [Domain Adaptation](#-domain-adaptation)
+- [Project Structure](#-project-structure)
+- [中文说明](#-中文说明)
+
+---
+
+## 💡 Why This Project
+
+Most QLoRA tutorials assume an A100 and stop at `trainer.train()`. Reality for most practitioners:
+
+- ❌ You have an **RTX 4060 (8GB)** or a **MacBook Pro M2**, not a datacenter GPU
+- ❌ You need to actually **compare models**, not just train one and guess if it's better
+- ❌ Apple Silicon users are stuck — most QLoRA guides are CUDA-only
+- ❌ "Fine-tuning" feels like a black box with no UI to visualize what's happening
+
+This project solves all of them:
+
+> 🔥 **Train Qwen3-4B in 8GB VRAM** with 4-bit QLoRA — or train **Qwen3-14B on Apple Silicon** in bf16 — with a Streamlit dashboard for the entire lifecycle and MLflow for experiment tracking.
+
+It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT, DPO, domain adaptation, evaluation, and side-by-side model comparison.
+
+---
+
+## ✨ Key Highlights
+
+<div align="center">
+
+| 🚀 Training | 📊 Tracking | 🎯 Evaluation |
+|:---:|:---:|:---:|
+| SFT + DPO + Domain Adapt | MLflow auto-logging | Difficulty-stratified |
+| Cross-platform auto-detect | Live loss curves | Multi-model comparison |
+| LoRA r=16–64 | Run diff viewer | Confidence calibration |
+
+| 🍎 Apple Silicon | 🖥️ NVIDIA | 📋 Reporting |
+|:---:|:---:|:---:|
+| bf16 via MPS | 4-bit QLoRA | Markdown exec summary |
+| Up to 14B on 64GB | 84% VRAM savings | Cost estimation |
+| Zero-config detect | 8GB VRAM compatible | Deploy recommendations |
+
+| 📈 Stats | | |
+|:---:|:---:|:---:|
+| **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **3** post-training techniques |
+| **4** dashboard pages | **5+** model families | **3** platforms supported |
+
+</div>
+
+### 🧠 What makes it different
+
+1. **True cross-platform** — one codebase, auto-detects CUDA / MPS / CPU, no config flags
+2. **Full lifecycle dashboard** — not just training, but experiment management + evaluation + comparison
+3. **Domain adaptation system** — pluggable domains with a built-in medical entity showcase (Chinese drug/hospital name normalization)
+4. **Honest evaluation** — difficulty-stratified metrics (easy/medium/hard) instead of one aggregate number
+5. **Executive summaries** — auto-generated Markdown reports with cost estimation and deployment recommendations
+
+---
+
+## 🖥️ Supported Models & Hardware
+
+### Model Compatibility
+
+| Model | NVIDIA VRAM (4-bit) | Apple Silicon 64GB (bf16) |
+|-------|---------------------|---------------------------|
+| Qwen3 0.6B | ~1.2 GB | ~1 GB |
+| Qwen3 1.7B | ~2.0 GB | ~2 GB |
+| Qwen3 4B | ~3.5 GB | ~4 GB |
+| Qwen3 8B | ~6.0 GB | ~8 GB |
+| Qwen3 14B | ⚠️ Needs 16GB+ | ~14 GB |
+| Llama 3.2 1B | ~1.8 GB | ~2 GB |
+| Llama 3.2 3B | ~4.5 GB | ~6 GB |
+| Qwen 0.5B / 1.5B | ~1.5 / ~2.3 GB | ~1 / ~3 GB |
+
+### Hardware Requirements (any one)
+
+- 🖥️ **NVIDIA GPU** — 8GB+ VRAM (RTX 4060 / 3060 / 4070 sufficient for ≤4B models)
+- 🍎 **Apple Silicon** — 16GB+ unified memory (M1/M2/M3/M4 Pro/Max/Ultra)
+- 💻 **CPU** — for testing/validation only (not recommended for real training)
+
+---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-**Hardware (one of):**
-- NVIDIA GPU with 8GB+ VRAM (RTX 4060, etc.)
-- Apple Silicon Mac with 16GB+ unified memory (M1/M2/M3/M4 Pro/Max/Ultra)
-- CPU (for testing/validation only, not recommended for actual training)
-
-**Software:**
-- Python 3.10+
-- CUDA 11.8+ (NVIDIA only)
-
-### Installation
+### Option 1: Dashboard (recommended)
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/4bit-QLoRA-post-training.git
+git clone https://github.com/Bensonluo/4bit-QLoRA-post-training.git
 cd 4bit-QLoRA-post-training
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python -m venv venv && source venv/bin/activate
+pip install -e ".[ui]"        # Installs MLflow + Streamlit + Plotly
 
-# Install base dependencies
-pip install -r requirements.txt
-
-# Install with UI support (MLflow + Streamlit + Plotly)
-pip install -e ".[ui]"
-```
-
-### Start the Dashboard
-
-```bash
 # Launch MLflow + Streamlit dashboard
 python scripts/launch_dashboard.py
-
-# Or launch Streamlit only
-streamlit run ui/app.py
 ```
 
-Open http://localhost:8501 to access the dashboard.
+Open http://localhost:8501 → pick a preset → click **Start Training**.
 
-### Quick CLI Test
+### Option 2: Try the Live Dashboard
+
+Don't want to install? **[Try the dashboard online →](https://benluo.art/qlora-dashboard/)**
+
+### Option 3: CLI training
 
 ```bash
-# Quick training test (5-10 minutes)
+# Quick validation run (5–10 min)
 python scripts/train_quick_test.py
 
 # Medical entity domain training
-python scripts/train_medical_entity.py --poc    # 8GB GPU
+python scripts/train_medical_entity.py --poc    # 8GB NVIDIA GPU
 python scripts/train_medical_entity.py --mac    # Apple Silicon
+python scripts/train_medical_entity.py          # 24GB GPU (full)
+
+# Custom dataset SFT
+python scripts/train_sft.py --train-file data/custom/my_data.jsonl
+
+# DPO preference optimization
+python scripts/train_dpo.py --quick-test
 ```
+
+> 💡 **In China?** Set HF mirror to avoid download timeouts:
+> ```bash
+> export HF_ENDPOINT=https://hf-mirror.com
+> ```
+
+---
+
+## 📊 Dashboard Tour
+
+Four pages covering the full ML lifecycle:
+
+| Page | What you do there |
+|------|-------------------|
+| 🧪 **Training Lab** | Pick preset (⚡ Quick / 🔥 Standard / 🚀 Full) → configure hyperparams → launch → watch live loss curves |
+| 📈 **Experiments** | Browse all MLflow runs, filter by status/model, compare params, view metric diffs |
+| 🎯 **Evaluation** | Domain-specific charts: accuracy by difficulty, entity type breakdown, calibration curves |
+| ⚖️ **Model Comparison** | Side-by-side metric deltas, auto-generated executive summary, cost estimation |
+
+```bash
+pip install -e ".[ui]"
+streamlit run ui/app.py
+```
+
+---
+
+## 🏥 Domain Adaptation
+
+Domains are self-contained modules under `domains/`:
+
+```
+domains/medical_entity/
+├── prepare_data.py    # Dataset preparation
+├── evaluate.py        # Domain-specific evaluation
+├── data/              # Train/val/test splits
+└── eval/              # Custom eval logic + reports
+```
+
+### Built-in: Chinese Medical Entity Matching
+
+Fine-tune Qwen3 to normalize drug names and hospital names — with **difficulty-stratified evaluation** (easy/medium/hard) and entity-type breakdown (drug, hospital, etc.).
+
+### Adding your own domain
+
+1. Add a dataset class in `src/data/`
+2. Add config in `config/domains/`
+3. Create `domains/your_domain/` with `prepare_data.py`, `evaluate.py`, `data/`
+4. Register a chart adapter in `ui/components/domain_adapters.py`
+
+---
 
 ## 📁 Project Structure
 
 ```
 4bit-QLoRA-post-training/
-├── config/                    # Configuration system
-│   ├── base.py              # Model, training, LoRA, logging configs
-│   ├── sft.py               # SFT-specific configs + presets
-│   ├── dpo.py               # DPO-specific configs + presets
-│   ├── models.yaml          # Model registry (VRAM, LoRA modules)
-│   └── domains/             # Domain-specific training presets
-│       └── medical_entity.py  # Qwen3 medical entity configs
-├── src/                       # Source code
-│   ├── models/              # Model loading, quantization, merging
-│   ├── data/                # Dataset loaders (Alpaca, Finance, Medical, DPO)
-│   ├── training/            # Trainers (SFT, Domain, DPO) + callbacks
-│   ├── evaluation/          # Metrics, generation, comparison
-│   ├── tracking/            # MLflow integration + training runner
-│   └── utils/               # Platform detection, logging, memory, remote
-├── ui/                        # Streamlit Dashboard
-│   ├── app.py               # Entry point (system status, quick actions)
-│   ├── config.py            # UI shared config
-│   ├── components/          # Reusable charts, filters, domain adapters
-│   └── pages/               # 4 dashboard pages
-│       ├── 00_Training_Lab.py      # Configure → Launch → Monitor
-│       ├── 01_Experiments.py       # Run history + comparison
-│       ├── 02_Evaluation.py        # Domain eval visualization
-│       └── 03_Model_Comparison.py  # Side-by-side deltas
-├── domains/                   # Self-contained domain modules
-│   └── medical_entity/      # Data, evaluation, reports
-├── scripts/                   # CLI scripts
-│   ├── train_quick_test.py  # Quick validation run
-│   ├── train_sft.py         # Generic SFT training
-│   ├── train_dpo.py         # DPO preference training
-│   ├── train_medical_entity.py  # Medical domain training
-│   ├── launch_dashboard.py  # Start MLflow + Streamlit
-│   ├── merge_lora.py        # Merge adapters into base model
-│   └── evaluate.py          # Model evaluation
-├── outputs/                   # Training outputs + MLflow tracking (gitignored)
-├── notebooks/                 # Educational Jupyter notebooks
-├── docs/                      # Theory + tutorials
-└── tests/                     # Unit and integration tests
+├── config/                 # Configs + presets + model registry
+│   ├── base.py             # Model / training / LoRA / logging configs
+│   ├── sft.py  dpo.py      # Technique-specific presets
+│   ├── models.yaml         # VRAM table + LoRA target modules
+│   └── domains/            # Domain training presets
+├── src/
+│   ├── models/             # Loading, quantization, merging
+│   ├── data/               # Alpaca / Finance / Medical / DPO loaders
+│   ├── training/           # SFT + Domain + DPO trainers + callbacks
+│   ├── evaluation/         # Metrics, generation, comparison
+│   ├── tracking/           # MLflow integration + runner
+│   └── utils/              # Platform detection, logging, memory
+├── ui/                     # Streamlit dashboard
+│   ├── app.py              # Entry point
+│   ├── components/         # Reusable charts, filters, adapters
+│   └── pages/              # 4 dashboard pages
+├── domains/                # Self-contained domain modules
+├── scripts/                # CLI entry points (train/eval/merge)
+├── notebooks/              # Educational Jupyter notebooks
+├── docs/                   # Theory + tutorials
+└── tests/                  # Unit + integration tests
 ```
 
-## 🖥️ Dashboard
+---
 
-The Streamlit dashboard provides a visual interface for the entire training lifecycle.
+## 🛠️ Configuration Examples
 
-### Pages
+### Training Presets
 
-| Page | Purpose |
-|---|---|
-| **Training Lab** | Configure hyperparameters, select presets (Quick/Standard/Full), launch training, monitor live loss curves |
-| **Experiments** | Browse all MLflow runs, filter by status/model/experiment, compare metrics, view parameter diffs |
-| **Evaluation** | Domain-specific evaluation charts (accuracy by difficulty, entity type breakdown, calibration curves) |
-| **Model Comparison** | Side-by-side metric comparison with deltas, executive summary, cost estimation |
+```python
+# config/sft.py
+QUICK_TEST = TrainingConfig(
+    model_name="Qwen/Qwen3-0.6B",
+    lora_r=16, lora_alpha=32,
+    max_samples=100, num_epochs=1,
+)
 
-### Dashboard Quick Start
-
-```bash
-pip install -e ".[ui]"
-streamlit run ui/app.py
+STANDARD = TrainingConfig(
+    model_name="Qwen/Qwen3-4B",
+    lora_r=32, lora_alpha=64,
+    max_samples=5000, num_epochs=3,
+)
 ```
 
-- Select a preset (⚡ Quick Test / 🔥 Standard / 🚀 Full Run) in the Training Lab
-- Click **Start Training** — the run appears in the Activity tab with live loss curves
-- Switch to **Experiments** to see all historical runs
-- Run a domain evaluation and view results in **Evaluation**
+### Environment Variables
 
-## 🎓 Learning Outcomes
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HF_ENDPOINT` | Hugging Face mirror (China) | `https://huggingface.co` |
+| `CUDA_VISIBLE_DEVICES` | GPU selection | `0` |
+| `MLFLOW_TRACKING_URI` | MLflow server | `file:./outputs/mlruns` |
 
-### Technical Skills
-- **QLoRA**: 4-bit quantization + Low-Rank Adaptation
-- **Cross-Platform ML**: Platform abstraction layer (CUDA/MPS/CPU)
-- **MLOps**: MLflow experiment tracking, Streamlit dashboards
-- **Domain Adaptation**: Extensible domain system with evaluation pipelines
-- **DPO**: Direct Preference Optimization for alignment
-
-### Production Practices
-- Clean, modular code architecture
-- Comprehensive testing (unit + integration)
-- Documentation-driven development
-- Error handling and edge cases
-
-## 📊 Performance
-
-### Hardware Optimization
-
-| Model | VRAM (4-bit, NVIDIA) | Apple Silicon 64GB (bf16) |
-|-------|----------------------|---------------------------|
-| Qwen 0.5B | ~1.5 GB | ~1 GB |
-| Qwen 1.5B | ~2.3 GB | ~3 GB |
-| Qwen3 0.6B | ~1.2 GB | ~1 GB |
-| Qwen3 1.7B | ~2.0 GB | ~2 GB |
-| Qwen3 4B | ~3.5 GB | ~4 GB |
-| Llama 3.2 1B | ~1.8 GB | ~2 GB |
-| Llama 3.2 3B | ~4.5 GB | ~6 GB |
-| Qwen3 8B | ~6.0 GB | ~8 GB |
-| Qwen3 14B | OOM (needs 16GB+) | ~14 GB |
-
-### Training Results
-
-**Quick Test (Qwen 1.5B, 100 samples, 1 epoch, MPS)**:
-- Training time: ~82 seconds
-- Status: Successful
-
-**Medical Entity POC (Qwen3-4B, 4-bit, RTX 4060 8GB)**:
-- Training time: ~15-30 min/epoch
-- VRAM usage: ~5-6 GB
-- Status: Successful
-
-## 🔧 Configuration Examples
-
-### Medical Entity Domain (Qwen3)
-
-```bash
-# POC on 8GB GPU
-python scripts/train_medical_entity.py --poc
-
-# Full training on 24GB GPU
-python scripts/train_medical_entity.py
-
-# Apple Silicon (14B bf16, needs 64GB)
-python scripts/train_medical_entity.py --mac
-```
-
-### Custom Dataset SFT
-
-```bash
-# Add your data
-cat > data/custom/my_data.jsonl << 'EOF'
-{"instruction": "Your question", "input": "", "output": "Your answer"}
-EOF
-
-# Train
-python scripts/train_sft.py --train-file data/custom/my_data.jsonl
-```
-
-### DPO Preference Training
-
-```bash
-# Quick test (100 samples, 1 epoch)
-python scripts/train_dpo.py --quick-test
-
-# Finance-specific DPO with auto-filtering
-python scripts/train_dpo.py --auto-filter --max-samples 5000
-```
-
-## 🏥 Domain Adaptation System
-
-Domains are self-contained modules under `domains/`. Each domain includes:
-
-- `prepare_data.py` — Dataset preparation
-- `evaluate.py` — Domain-specific evaluation
-- `data/` — Train/validation/test splits
-- `eval/` — Custom evaluation logic and reports
-
-### Built-in Domain: Medical Entity
-
-Chinese medical entity matching with difficulty filtering (easy/medium/hard) and entity type breakdown (drug, hospital, etc.).
-
-### Adding a New Domain
-
-1. Create dataset class in `src/data/`
-2. Create config in `config/domains/`
-3. Create domain directory under `domains/` with `prepare_data.py`, `evaluate.py`, `data/`
-4. Register a chart adapter in `ui/components/domain_adapters.py`
+---
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+<details>
+<summary><b>Common issues</b></summary>
 
 **Out of memory on 8GB VRAM**
 ```bash
-# Reduce sequence length or model size
-python scripts/train_medical_entity.py --poc  # Uses Qwen3-4B
+python scripts/train_medical_entity.py --poc  # Uses Qwen3-4B with reduced seq length
 ```
 
-**Model downloads stuck**
+**Model downloads stuck (China)**
 ```bash
-# Use Hugging Face mirror (China)
 export HF_ENDPOINT=https://hf-mirror.com
 ```
 
-**MLflow not connecting**
+**Apple Silicon slower than expected**
+- Check Activity Monitor → GPU History
+- Ensure MPS is available: `python -c "import torch; print(torch.backends.mps.is_available())"`
+- Use bf16 (default); fp32 will be ~3× slower
+
+**MLflow UI not loading**
 ```bash
-# Ensure MLflow is installed
 pip install mlflow
+python scripts/launch_dashboard.py  # Starts both MLflow + Streamlit
 ```
+
+</details>
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Cross-platform training (NVIDIA / Apple Silicon / CPU)
+- [x] SFT + DPO + Domain Adaptation
+- [x] Streamlit dashboard (4 pages)
+- [x] MLflow experiment tracking
+- [x] Medical entity domain showcase
+- [x] Difficulty-stratified evaluation
+- [ ] GRPO (Group Relative Policy Optimization)
+- [ ] vLLM deployment integration
+- [ ] More domains: legal, finance, code
+
+---
 
 ## 🤝 Contributing
 
-This is a portfolio project, but suggestions welcome!
+Portfolio project, but PRs welcome — especially:
+- 🎯 New domain adapters (legal, finance, code, etc.)
+- 🍎 Apple Silicon performance optimizations
+- 📊 New evaluation metrics or visualizations
+- 🐛 Bug fixes with a failing test
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+---
 
-## 📝 License
+## 📜 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+[MIT](LICENSE) — free for personal and commercial use.
 
-## 🙏 Acknowledgments
+If this project helped you fine-tune on budget hardware, please ⭐ star the repo.
 
-- [Hugging Face](https://huggingface.co/) — Transformers, PEFT, TRL libraries
-- [Qwen Team](https://github.com/QwenLM/Qwen) — Qwen2.5 and Qwen3 models
-- [Tim Dettmers](https://github.com/TimDettmers/bitsandbytes) — bitsandbytes
-- [Microsoft Research](https://www.microsoft.com/en-us/research/) — QLoRA paper
-- [Edward Hu](https://github.com/hiyouga/LoRA) — LoRA paper
-- [MLflow](https://mlflow.org/) — Experiment tracking
-- [Streamlit](https://streamlit.io/) — Dashboard framework
+---
 
-## 📧 Contact
+## 📬 Contact
 
-- **GitHub**: [bensonluo](https://github.com/Bensonluo)
-- **Email**: luopengllpp@yahoo.com
+- 💼 **Portfolio**: [benluo.art](https://benluo.art)
+- 🐙 **GitHub**: [@Bensonluo](https://github.com/Bensonluo)
+- 💬 **Issues**: [GitHub Issues](https://github.com/Bensonluo/4bit-QLoRA-post-training/issues)
+
+---
+
+## 🇨🇳 中文说明
+
+**LLM 后训练框架** — 在消费级硬件上微调 0.6B–14B 大模型。
+
+### 核心亮点
+
+- **跨平台训练**:自动检测 NVIDIA GPU(4-bit QLoRA)/ Apple Silicon(bf16 MPS)/ CPU
+- **三种后训练技术**:SFT(监督微调)、DPO(直接偏好优化)、领域适配
+- **Streamlit 全生命周期面板**:配置 → 训练 → 监控 → 评估 → 对比,4 个页面
+- **MLflow 实验追踪**:自动记录指标、参数对比、运行历史
+- **领域适配系统**:内置医疗实体匹配示范(中文药品名/医院名归一化)
+- **难度分层评测**:简单/中等/困难三档,带置信度校准
+- **执行摘要自动生成**:Markdown 报告 + 成本估算 + 部署建议
+- **Qwen3 全系列支持**:0.6B / 1.7B / 4B / 8B / 14B,LoRA r=16–64
+
+### 快速开始
+
+```bash
+git clone https://github.com/Bensonluo/4bit-QLoRA-post-training.git
+cd 4bit-QLoRA-post-training
+pip install -e ".[ui]"
+python scripts/launch_dashboard.py
+# 打开 http://localhost:8501
+```
+
+### 显存参考
+
+| 模型 | NVIDIA 4-bit | Apple Silicon 64GB |
+|------|-------------|--------------------|
+| Qwen3-4B | ~3.5 GB | ~4 GB |
+| Qwen3-8B | ~6.0 GB | ~8 GB |
+| Qwen3-14B | 需 16GB+ | ~14 GB |
+
+> 💡 国内用户加镜像:`export HF_ENDPOINT=https://hf-mirror.com`
+
+---
+
+<details>
+<summary>🎬 Demo Recording Guide (for maintainers)</summary>
+
+### How to record the hero GIF
+
+1. **Tool**: [Kap](https://getkap.co/) (Mac) or [licecap](https://www.cockos.com/licecap/) (cross-platform)
+2. **Content** (~30s):
+   - 0-5s: Open dashboard, show system status (auto-detected platform)
+   - 5-15s: Pick a preset in Training Lab, click Start Training
+   - 15-20s: Show live loss curve updating
+   - 20-30s: Switch to Model Comparison, show side-by-side deltas
+3. **Save to**: `docs/assets/dashboard.gif` (keep under 5MB)
+4. **Update**: Replace the placeholder `<img>` in the hero section
+
+</details>
+
+<!--
+RECORDING_TODO:
+1. Record dashboard.gif → docs/assets/dashboard.gif
+2. Replace placeholder img tag in hero section
+3. Verify Live Dashboard URL (benluo.art/qlora-dashboard/) returns 200
+-->
