@@ -63,7 +63,7 @@ It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT
 |:---:|:---:|:---:|
 | SFT + DPO + Domain Adapt | MLflow + **Model Registry** ⭐ | Difficulty-stratified |
 | Cross-platform auto-detect | Live loss curves | Multi-model comparison |
-| **DDP + DeepSpeed ZeRO** ⭐ | Run diff viewer + lineage | Confidence calibration |
+| **FSDP + DeepSpeed** ⭐ | Run diff viewer + lineage | Confidence calibration |
 
 | 🍎 Apple Silicon | 🖥️ NVIDIA | 📋 Reporting |
 |:---:|:---:|:---:|
@@ -74,7 +74,7 @@ It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT
 | 📈 Stats | | |
 |:---:|:---:|:---:|
 | **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **3** post-training techniques |
-| **4** dashboard pages | **5+** model families | **DDP + ZeRO 1/2/3** distributed |
+| **4** dashboard pages | **5+** model families | **FSDP + DeepSpeed + DDP** distributed |
 
 </div>
 
