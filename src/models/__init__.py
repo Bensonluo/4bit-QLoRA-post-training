@@ -11,6 +11,7 @@ from src.models.merger import (
     compare_models_before_after,
     export_to_gguf,
     load_merged_model,
+    merge_adapter_to_dir,
     merge_lora_into_base,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "load_base_model_for_dpo",
     # Merging
     "merge_lora_into_base",
+    "merge_adapter_to_dir",
     "load_merged_model",
     "export_to_gguf",
     "compare_models_before_after",

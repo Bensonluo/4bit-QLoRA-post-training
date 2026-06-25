@@ -25,6 +25,8 @@ class PlatformInfo:
     supports_bf16: bool
     total_memory_gb: float
     description: str
+    # 🆕 Distributed: number of visible GPUs (CUDA only)
+    gpu_count: int = 1
 
 
 def detect_platform() -> PlatformInfo:
@@ -42,15 +44,21 @@ def detect_platform() -> PlatformInfo:
         is_mps = False
         supports_quantization = True
         supports_bf16 = torch.cuda.is_bf16_supported()
+        # 🆕 Count visible GPUs for distributed training decisions
+        gpu_count = torch.cuda.device_count()
         total_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
         gpu_name = torch.cuda.get_device_name(0)
-        description = f"NVIDIA {gpu_name} ({total_memory_gb:.1f}GB VRAM)"
+        if gpu_count > 1:
+            description = f"{gpu_count}× NVIDIA {gpu_name} ({total_memory_gb:.1f}GB VRAM each)"
+        else:
+            description = f"NVIDIA {gpu_name} ({total_memory_gb:.1f}GB VRAM)"
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = "mps"
         is_cuda = False
         is_mps = True
         supports_quantization = False
         supports_bf16 = True  # Apple Silicon supports bf16 computation
+        gpu_count = 1
         total_memory_gb = _get_apple_memory_gb()
         description = f"Apple Silicon ({total_memory_gb:.1f}GB unified memory)"
     else:
@@ -59,6 +67,7 @@ def detect_platform() -> PlatformInfo:
         is_mps = False
         supports_quantization = False
         supports_bf16 = False
+        gpu_count = 0
         total_memory_gb = 0.0
         description = "CPU only (no GPU acceleration)"
 
@@ -71,6 +80,7 @@ def detect_platform() -> PlatformInfo:
         supports_bf16=supports_bf16,
         total_memory_gb=total_memory_gb,
         description=description,
+        gpu_count=gpu_count,
     )
 
 

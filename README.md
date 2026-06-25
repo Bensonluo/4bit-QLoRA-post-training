@@ -29,6 +29,8 @@
 - [Key Highlights](#-key-highlights)
 - [Supported Models & Hardware](#-supported-models--hardware)
 - [Quick Start](#-quick-start)
+- [Distributed Training (FSDP / DeepSpeed)](#-distributed-training-fsdp--deepspeed)
+- [Model Registry (Lifecycle & Lineage)](#-model-registry-lifecycle--lineage)
 - [Dashboard Tour](#-dashboard-tour)
 - [Domain Adaptation](#-domain-adaptation)
 - [Project Structure](#-project-structure)
@@ -59,20 +61,20 @@ It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT
 
 | 🚀 Training | 📊 Tracking | 🎯 Evaluation |
 |:---:|:---:|:---:|
-| SFT + DPO + Domain Adapt | MLflow auto-logging | Difficulty-stratified |
+| SFT + DPO + Domain Adapt | MLflow + **Model Registry** ⭐ | Difficulty-stratified |
 | Cross-platform auto-detect | Live loss curves | Multi-model comparison |
-| LoRA r=16–64 | Run diff viewer | Confidence calibration |
+| **DDP + DeepSpeed ZeRO** ⭐ | Run diff viewer + lineage | Confidence calibration |
 
 | 🍎 Apple Silicon | 🖥️ NVIDIA | 📋 Reporting |
 |:---:|:---:|:---:|
 | bf16 via MPS | 4-bit QLoRA | Markdown exec summary |
 | Up to 14B on 64GB | 84% VRAM savings | Cost estimation |
-| Zero-config detect | 8GB VRAM compatible | Deploy recommendations |
+| Zero-config detect | Multi-GPU scale-out | Deploy recommendations |
 
 | 📈 Stats | | |
 |:---:|:---:|:---:|
 | **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **3** post-training techniques |
-| **4** dashboard pages | **5+** model families | **3** platforms supported |
+| **4** dashboard pages | **5+** model families | **DDP + ZeRO 1/2/3** distributed |
 
 </div>
 
@@ -152,6 +154,101 @@ python scripts/train_dpo.py --quick-test
 > ```bash
 > export HF_ENDPOINT=https://hf-mirror.com
 > ```
+
+---
+
+## 🌐 Distributed Training (FSDP / DeepSpeed)
+
+Scale from a single GPU to multi-GPU with **zero training-loop changes**, using the **industry-standard 2026 stack**: FSDP (PyTorch-native) in bf16 full precision, with DeepSpeed for scale-beyond.
+
+### One-liner launches
+
+```bash
+# FSDP — the PyTorch-native DEFAULT for multi-GPU LLM training (what Meta uses for Llama)
+./scripts/launch/train_fsdp.sh 4 Qwen/Qwen3-1.7B
+
+# DDP — plain replication, the simple baseline
+./scripts/launch/train_ddp.sh 4 Qwen/Qwen3-1.7B
+
+# DeepSpeed ZeRO-3 + offload — extreme scale (70B+, CPU/NVMe offload)
+torchrun --nproc_per_node=8 scripts/train_sft_distributed.py \
+    --model-name Qwen/Qwen3-72B --distributed-preset zero_stage_3_offload --quantization-bits 0
+```
+
+### Strategy at a glance
+
+| Strategy | Shards | When to use |
+|----------|--------|-------------|
+| **FSDP full_shard** ⭐ | params + grads + optimizer | **DEFAULT** — standard multi-GPU, PyTorch-native |
+| FSDP sharded_grad_scaled | grads + optimizer only | Lighter sharding (≈ ZeRO-2) |
+| DDP | Nothing (full copy/GPU) | Simple baseline; model fits on one GPU |
+| DeepSpeed ZeRO-2 | optimizer + gradients | Same idea as FSDP, via DeepSpeed |
+| DeepSpeed ZeRO-3 + offload | everything (+ CPU/NVMe) | Extreme scale beyond FSDP |
+
+> **2026 practice**: run FSDP in **bf16 full precision** (`--quantization-bits 0`). Full-parameter sharding (FSDP full_shard / ZeRO-3) is the standard; QLoRA is reserved for genuinely memory-tight single-GPU scenarios. The launcher warns if you combine full sharding with 4-bit quantization.
+
+### Benchmark it
+
+```bash
+./scripts/launch/benchmark_distributed.sh Qwen/Qwen3-1.7B 4
+```
+
+Runs single-GPU → DDP → FSDP → ZeRO-2 → ZeRO-3 and logs throughput + memory. Paste (sanitized) results into [`benchmark/README.md`](benchmark/README.md).
+
+📖 **Full guide**: [`docs/distributed_training_guide.md`](docs/distributed_training_guide.md) — FSDP vs DeepSpeed, strategy selection, QLoRA caveats, multi-node setup, troubleshooting.
+
+---
+
+## 🗂️ Model Registry (Lifecycle & Lineage)
+
+Close the loop after fine-tuning: **merge → register → stage → trace**. Every registered model version links back to the exact training run that produced it (params + metrics), so you always know which model is in Production and why.
+
+### Automatic registration
+
+Flip two config flags and the trainer does the rest:
+
+```python
+LoggingConfig(
+    use_mlflow=True,                # tracking must be on
+    register_model=True,            # 🆕 auto-register after training
+    registry_model_name="Qwen3-1.7B-QLoRA",
+    merge_before_register=True,     # merge LoRA into base before logging
+    registry_stage="Staging",
+)
+```
+
+After `save_model()`, the trainer automatically: (1) merges the adapter into the base, (2) logs the merged model to MLflow, (3) registers it as a new version, (4) stages it. Registration failures never fail the training run.
+
+### Manual registration (no retraining)
+
+```bash
+# Merge a previously-trained adapter
+python scripts/merge_adapter.py \
+    --adapter-dir outputs/sft/run-xxx \
+    --output-dir outputs/merged/run-xxx
+
+# Register it
+python scripts/registry_cli.py register \
+    --model-dir outputs/merged/run-xxx \
+    --name Qwen3-1.7B-QLoRA
+```
+
+### Manage the lifecycle
+
+```bash
+# List all versions + stages
+python scripts/registry_cli.py list
+
+# Promote to Production
+python scripts/registry_cli.py transition \
+    --model-name Qwen3-1.7B-QLoRA --version 3 --stage Production
+
+# Trace a version back to its training (params + metrics)
+python scripts/registry_cli.py info \
+    --model-name Qwen3-1.7B-QLoRA --version 3
+```
+
+📖 **Full guide**: [`docs/model_registry_guide.md`](docs/model_registry_guide.md) — lifecycle, lineage, troubleshooting. Includes 3 tracking bug fixes (DPO callback mount, double-write removal, lineage link).
 
 ---
 

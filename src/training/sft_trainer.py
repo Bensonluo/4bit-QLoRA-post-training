@@ -18,7 +18,8 @@ from src.models import load_model_and_tokenizer, print_model_info
 from src.data import AlpacaDataset, FinanceDataset
 from src.utils import set_seed, setup_logging, setup_wandb, setup_tensorboard, log_metrics, log_gpu_memory, console
 from src.utils.platform_utils import get_platform
-from src.tracking import get_tracker, MLflowTrainCallback
+from src.tracking import get_tracker, MLflowTrainCallback, register_trained_model
+from src.training.distributed import get_distributed_info
 
 
 class MemoryCallback(TrainerCallback):
@@ -84,14 +85,18 @@ class SFTTrainer:
         self._tracker = get_tracker(logging_config)
 
     def _get_report_to(self) -> list[str]:
-        """Determine reporting backends based on logging config."""
+        """Determine reporting backends based on logging config.
+
+        NOTE: MLflow is intentionally NOT added here. We use our own
+        `MLflowTrainCallback` (mounted in setup_trainer) for finer control over
+        what gets logged. Adding "mlflow" here would activate HF's built-in
+        MLflowCallback too, causing double writes.
+        """
         backends = []
         if self.logging_config.use_wandb:
             backends.append("wandb")
         if self.logging_config.use_tensorboard:
             backends.append("tensorboard")
-        if self.logging_config.use_mlflow:
-            backends.append("mlflow")
         return backends if backends else ["none"]
 
     def prepare_model(self):
@@ -204,8 +209,11 @@ class SFTTrainer:
         """Setup Hugging Face Trainer."""
         console.print("\n[bold cyan]=== Setting Up Trainer ===[/bold cyan]\n")
 
-        # Training arguments
-        training_args = TrainingArguments(
+        # 🆕 Detect distributed context (torchrun/accelerate set LOCAL_RANK/WORLD_SIZE).
+        dist_info = get_distributed_info()
+
+        # Training arguments — build as a dict first so we can conditionally inject DeepSpeed.
+        training_kwargs = dict(
             output_dir=self.training_config.output_dir,
             num_train_epochs=self.training_config.num_epochs,
             per_device_train_batch_size=self.training_config.batch_size,
@@ -237,6 +245,35 @@ class SFTTrainer:
             dataloader_num_workers=0,
             dataloader_pin_memory=False,
         )
+
+        # 🆕 Inject distributed strategy: FSDP (PyTorch-native, default) or DeepSpeed.
+        # HF Trainer natively understands both `fsdp=`/`fsdp_config=` and `deepspeed=`.
+        # Exactly one is set — TrainingConfig.__post_init__ enforces mutual exclusion.
+        if self.training_config.fsdp:
+            training_kwargs["fsdp"] = self.training_config.fsdp
+            if self.training_config.fsdp_config:
+                training_kwargs["fsdp_config"] = self.training_config.fsdp_config
+            console.print(
+                f"[green]✓ FSDP enabled: {self.training_config.fsdp}[/green]"
+            )
+        elif self.training_config.deepspeed_config:
+            training_kwargs["deepspeed"] = self.training_config.deepspeed_config
+            console.print(
+                f"[green]✓ DeepSpeed config injected: {self.training_config.deepspeed_config}[/green]"
+            )
+
+        if dist_info.is_distributed:
+            strategy = (
+                self.training_config.fsdp
+                or os.path.basename(self.training_config.deepspeed_config or "")
+                or "DDP"
+            )
+            console.print(
+                f"[cyan]Distributed training engaged: world_size={dist_info.world_size}, "
+                f"strategy={strategy}[/cyan]"
+            )
+
+        training_args = TrainingArguments(**training_kwargs)
 
         # Data collator
         data_collator = DataCollatorForLanguageModeling(
@@ -308,6 +345,16 @@ class SFTTrainer:
             console.print(f"\n[cyan]Saving model to: {self.training_config.output_dir}[/cyan]")
             self.trainer.save_model()
             self.tokenizer.save_pretrained(self.training_config.output_dir)
+
+            # 🆕 Register to MLflow Model Registry (no-op unless register_model=True).
+            # This closes the lineage loop: model version ← run ← params + metrics.
+            register_trained_model(
+                adapter_dir=self.training_config.output_dir,
+                tracker=self._tracker,
+                logging_config=self.logging_config,
+                base_model_name=self.model_config.name,
+                model_config=self.model_config,
+            )
 
             # Log final metrics
             metrics = train_result.metrics

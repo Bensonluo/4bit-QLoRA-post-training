@@ -9,6 +9,89 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 from src.utils.logging import console
 
 
+def merge_adapter_to_dir(
+    adapter_dir: str,
+    output_dir: str,
+    base_model_name: Optional[str] = None,
+    dtype: str = "bfloat16",
+) -> str:
+    """Merge a saved LoRA adapter directory into the base model, writing the result to disk.
+
+    This is the disk-based counterpart to `merge_lora_into_base` (which operates on an
+    in-memory model). Use this after training has finished and the adapter has been
+    saved — e.g. to prepare a model for MLflow Model Registry.
+
+    The base model name is resolved from the adapter's `adapter_config.json` unless
+    `base_model_name` is given explicitly.
+
+    Args:
+        adapter_dir: Directory containing the saved adapter (adapter_config.json + weights).
+        output_dir: Where to write the merged model + tokenizer.
+        base_model_name: Override the base model id (otherwise read from adapter config).
+        dtype: Precision of the merged weights ("bfloat16" / "float16" / "float32").
+
+    Returns:
+        The absolute output_dir (suitable to pass straight into mlflow.log_artifacts).
+    """
+    import torch
+
+    console.print("\n[bold cyan]Merging LoRA adapter into base model[/bold cyan]")
+    console.print(f"  Adapter: {adapter_dir}")
+    console.print(f"  Output:  {output_dir}")
+    console.print(f"  Dtype:   {dtype}")
+
+    torch_dtype = {
+        "bfloat16": torch.bfloat16,
+        "float16": torch.float16,
+        "float32": torch.float32,
+    }.get(dtype, torch.bfloat16)
+
+    try:
+        from peft import AutoPeftModelForCausalLM
+    except ImportError as e:
+        raise RuntimeError(
+            "AutoPeftModelForCausalLM requires `peft>=0.7`. Install with: pip install -U peft"
+        ) from e
+
+    # AutoPeftModel reads the base model id from adapter_config.json automatically.
+    load_kwargs = {"torch_dtype": torch_dtype}
+    if base_model_name:
+        # Explicit override — AutoPeftModel still needs the adapter dir as the first arg.
+        load_kwargs["adapter_dir"] = adapter_dir
+        # Load base separately then attach adapter to honor the override.
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from peft import PeftModel as _PeftModel
+
+        console.print(f"[cyan]Loading base model: {base_model_name}[/cyan]")
+        base = AutoModelForCausalLM.from_pretrained(base_model_name, torch_dtype=torch_dtype)
+        console.print(f"[cyan]Attaching adapter from: {adapter_dir}[/cyan]")
+        model = _PeftModel.from_pretrained(base, adapter_dir)
+        tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+    else:
+        console.print("[cyan]Loading AutoPeftModel (base resolved from adapter_config.json)...[/cyan]")
+        model = AutoPeftModelForCausalLM.from_pretrained(adapter_dir, torch_dtype=torch_dtype)
+        # Tokenizer lives alongside the adapter (trainer.save_model saves it there).
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(adapter_dir)
+
+    # Merge adapter weights into the base and drop the PEFT wrapper.
+    if isinstance(model, PeftModel):
+        console.print("[cyan]Merging adapters...[/cyan]")
+        model = model.merge_and_unload()
+        console.print("[green]✓ Adapters merged[/green]")
+    else:
+        console.print("[yellow]⚠ Model is not a PeftModel — saving as-is[/yellow]")
+
+    out = Path(output_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    console.print(f"[cyan]Saving merged model to: {out}[/cyan]")
+    model.save_pretrained(out, safe_serialization=True)
+    tokenizer.save_pretrained(out)
+
+    console.print(f"[green]✓ Merged model saved to: {out}[/green]\n")
+    return str(out)
+
+
 def merge_lora_into_base(
     model: PreTrainedModel,
     adapter_path: str,

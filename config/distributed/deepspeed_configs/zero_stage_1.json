@@ -1,0 +1,17 @@
+{
+  "_comment": "DeepSpeed ZeRO Stage 1 — shards optimizer states only. Best when model fits per-GPU but optimizer state (Adam = 2x params) does not. Safe with QLoRA (params untouched).",
+
+  "bf16": {
+    "enabled": "auto"
+  },
+  "zero_optimization": {
+    "stage": 1,
+    "reduce_bucket_size": "auto"
+  },
+  "gradient_accumulation_steps": "auto",
+  "gradient_clipping": "auto",
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "steps_per_print": 20,
+  "wall_clock_breakdown": false
+}

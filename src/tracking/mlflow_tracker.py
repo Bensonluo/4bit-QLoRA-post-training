@@ -38,6 +38,26 @@ class _NoOpTracker:
     def log_artifact(self, *_: Any) -> None:
         pass
 
+    def log_artifacts(self, *_: Any, **__: Any) -> None:
+        """No-op batch artifact logging (Registry path uses this)."""
+        pass
+
+    def log_model(self, *_: Any, **__: Any) -> Any:
+        """No-op model logging — returns None so callers can branch on the result."""
+        return None
+
+    def register_model(self, *_: Any, **__: Any) -> Any:
+        """No-op model registration."""
+        return None
+
+    def transition_model_stage(self, *_: Any, **__: Any) -> None:
+        """No-op stage transition."""
+        pass
+
+    def search_model_versions(self, *_: Any, **__: Any) -> list[dict[str, Any]]:
+        """No-op — empty list of model versions."""
+        return []
+
     def end_run(self) -> None:
         pass
 
@@ -104,6 +124,113 @@ class MLflowTracker:
         if not self._active:
             return
         self._mlflow.log_artifact(path)
+
+    def log_artifacts(self, local_dir: str, artifact_path: Optional[str] = None) -> None:
+        """Log an entire directory of artifacts under the current run.
+
+        Used to attach the merged-model output directory to a run for lineage.
+        """
+        if not self._active:
+            return
+        self._mlflow.log_artifacts(local_dir, artifact_path=artifact_path)
+
+    def log_model(
+        self,
+        model_dir: str,
+        artifact_path: str = "model",
+        registered_model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Log a merged HuggingFace model dir as an MLflow model artifact.
+
+        Uses mlflow.transformers flavor so the model can later be loaded via
+        `mlflow.pyfunc.load_model` for serving, or registered to the Model Registry.
+
+        Args:
+            model_dir: Directory containing the merged model (config.json + safetensors + tokenizer).
+            artifact_path: Path under the run where the model is logged.
+            registered_model_name: If given, also creates a Registry entry in one call
+                (uses mlflow's implicit-registration path). Leave None to log only;
+                call register_model() separately for explicit staging control.
+
+        Returns:
+            model_uri like "runs:/<run_id>/model", or None if inactive.
+        """
+        if not self._active:
+            return None
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        # Load the merged model + tokenizer, then let MLflow log them via the
+        # transformers flavor (preserves architecture + tokenizer for pyfunc loading).
+        # device_map=None keeps it on CPU during logging — cheap and avoids GPU OOM.
+        model = AutoModelForCausalLM.from_pretrained(model_dir, device_map=None)
+        tokenizer = AutoTokenizer.from_pretrained(model_dir)
+
+        components = {"model": model, "tokenizer": tokenizer}
+        kwargs: dict[str, Any] = {"artifact_path": artifact_path}
+        if registered_model_name:
+            kwargs["registered_model_name"] = registered_model_name
+
+        # mlflow.transformers.log_model returns a ModelInfo with .model_uri.
+        model_info = self._mlflow.transformers.log_model(transformers_model=components, **kwargs)
+        return getattr(model_info, "model_uri", None) or f"runs:/{self._current_run_id()}/{artifact_path}"
+
+    def register_model(self, model_uri: str, name: str) -> Optional[dict[str, Any]]:
+        """Register a logged model artifact to the Model Registry as a new version.
+
+        Args:
+            model_uri: URI of the logged model, e.g. "runs:/<run_id>/model".
+            name: Registered model name. Created if it doesn't exist.
+
+        Returns:
+            Dict {'name', 'version', 'current_stage'}, or None if inactive.
+        """
+        if not self._active:
+            return None
+        mv = self._mlflow.register_model(model_uri=model_uri, name=name)
+        return {
+            "name": mv.name,
+            "version": mv.version,
+            "current_stage": mv.current_status if hasattr(mv, "current_status") else "None",
+            "run_id": getattr(mv, "run_id", None),
+            "source": mv.source,
+        }
+
+    def transition_model_stage(self, name: str, version: str, stage: str) -> None:
+        """Move a model version to a new stage: Staging / Production / Archived."""
+        if not self._active:
+            return
+        client = self._mlflow.tracking.MlflowClient()
+        client.transition_model_version_stage(
+            name=name, version=version, stage=stage, archive_existing_versions=False
+        )
+
+    def search_model_versions(self, name: Optional[str] = None) -> list[dict[str, Any]]:
+        """List model versions, optionally filtered by registered model name."""
+        if not self._active:
+            return []
+        client = self._mlflow.tracking.MlflowClient()
+        if name:
+            versions = client.search_model_versions(f"name='{name}'")
+        else:
+            versions = client.search_model_versions()
+        return [
+            {
+                "name": v.name,
+                "version": v.version,
+                "current_stage": v.current_stage,
+                "run_id": v.run_id,
+                "creation_timestamp": v.creation_timestamp,
+                "status": v.status,
+            }
+            for v in versions
+        ]
+
+    def _current_run_id(self) -> Optional[str]:
+        """Return the active run id (best-effort)."""
+        if not self._active:
+            return None
+        run = self._mlflow.active_run()
+        return run.info.run_id if run else None
 
     def end_run(self) -> None:
         if not self._active:

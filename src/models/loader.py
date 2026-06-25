@@ -20,6 +20,10 @@ from src.models.base import print_model_info
 from src.utils.logging import console
 from src.utils.platform_utils import get_platform, get_torch_dtype
 
+# NOTE: `get_distributed_info` is imported lazily inside load_model() to avoid a
+# circular import (src.models.loader → src.training.distributed → src.training
+# → src.models). It's a stdlib-env helper, so deferring the import has no cost.
+
 # bitsandbytes is only available on CUDA
 _BITSANDBYTES_AVAILABLE = False
 try:
@@ -111,9 +115,17 @@ def load_model(
         Loaded model
     """
     platform_info = get_platform()
+    # Lazy import to avoid circular dependency (see module-level note).
+    from src.training.distributed import get_distributed_info
+    dist_info = get_distributed_info()  # 🆕 detect torchrun/accelerate context
 
     console.print(f"\n[bold cyan]Loading model: {config.name}[/bold cyan]")
     console.print(f"  Platform: {platform_info.description}")
+    if dist_info.is_distributed:
+        console.print(
+            f"  [yellow]Distributed mode: rank {dist_info.rank}/{dist_info.world_size} "
+            f"(local_rank={dist_info.local_rank})[/yellow]"
+        )
     console.print(f"  Flash Attention: {config.use_flash_attention}")
     console.print(f"  Data Type: {config.torch_dtype}\n")
 
@@ -128,7 +140,17 @@ def load_model(
 
     # Platform-specific device and quantization
     if platform_info.is_cuda:
-        model_kwargs["device_map"] = config.device_map
+        # 🆕 CRITICAL: under DDP/DeepSpeed each rank must hold a full model copy on its
+        # own GPU. `device_map="auto"` would instead shard the model across GPUs as a
+        # pipeline (model-parallel), which is incompatible with DDP/ZeRO. Pin to local_rank.
+        if dist_info.is_distributed:
+            model_kwargs["device_map"] = {"": dist_info.local_rank}
+            console.print(
+                f"[yellow]Device pinned to GPU {dist_info.local_rank} "
+                f"(DDP/DeepSpeed expects one full copy per rank)[/yellow]"
+            )
+        else:
+            model_kwargs["device_map"] = config.device_map
 
         if config.quantization_bits in (4, 8):
             model_kwargs["quantization_config"] = _get_quantization_config(

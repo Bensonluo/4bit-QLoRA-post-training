@@ -27,6 +27,9 @@ class ModelConfig:
     max_length: int = 512
     device_map: str = "auto"
     torch_dtype: str = "bfloat16"
+    # 🆕 Precision used when merging LoRA adapter back into the base model for
+    # registration. Defaults to bf16 (full-precision merge for best quality).
+    merge_dtype: str = "bfloat16"
 
     def __post_init__(self):
         """Validate configuration and auto-adjust for platform."""
@@ -136,6 +139,28 @@ class TrainingConfig:
     bf16: bool = True
     max_grad_norm: float = 1.0
     seed: int = 42
+    # 🆕 Distributed training fields (all default to off — single-GPU behavior is unchanged).
+    #
+    # Resource-unconstrained, industry-standard 2026 stack:
+    #   - FSDP (PyTorch-native) is the DEFAULT multi-GPU strategy. Prefer bf16 full
+    #     precision + FSDP over QLoRA + DeepSpeed when GPU memory allows.
+    #   - DeepSpeed remains available for cases needing CPU/NVMe offload.
+    #
+    # Exactly one of (deepspeed_config, fsdp) should be set. The CLI resolver in
+    # config.distributed.resolve_distributed_config() enforces mutual exclusion.
+    #
+    # FSDP: HF Trainer `fsdp=` string. Set to "full_shard" (params+grads+optim
+    #   sharded, ≈ ZeRO-3) or "sharded_grad_scaled" (≈ ZeRO-2).
+    fsdp: Optional[str] = None
+    # FSDP auto-wrap config dict (transformer_layer_cls_to_wrap, min_num_params, ...).
+    # Built by config.distributed when an FSDP preset is selected.
+    fsdp_config: Optional[dict] = None
+    # Path to a DeepSpeed JSON config. When set, HF Trainer is launched with
+    # `deepspeed=<path>` and torchrun is expected to wrap the process.
+    deepspeed_config: Optional[str] = None
+    # Whether to auto-derive `per_device_train_batch_size` from world_size (kept total
+    # effective batch constant). Off by default — explicit per-device batch is clearer.
+    auto_scale_batch: bool = False
 
     def __post_init__(self):
         """Validate configuration."""
@@ -151,10 +176,27 @@ class TrainingConfig:
         if self.fp16 and self.bf16:
             raise ValueError("Cannot enable both fp16 and bf16")
 
+        # FSDP and DeepSpeed are mutually exclusive (both try to own sharding).
+        if self.fsdp and self.deepspeed_config:
+            raise ValueError(
+                "Cannot enable both fsdp and deepspeed_config — pick one sharding strategy."
+            )
+
     @property
     def effective_batch_size(self) -> int:
         """Calculate effective batch size including gradient accumulation."""
         return self.batch_size * self.gradient_accumulation_steps
+
+    @property
+    def is_distributed(self) -> bool:
+        """True when a sharding strategy (FSDP/DeepSpeed) is configured OR torchrun is active."""
+        import os
+
+        return (
+            os.environ.get("WORLD_SIZE", "1") != "1"
+            or self.deepspeed_config is not None
+            or self.fsdp is not None
+        )
 
 
 @dataclass
@@ -219,6 +261,14 @@ class LoggingConfig:
     mlflow_tracking_uri: str = "./outputs/mlruns"
     mlflow_experiment_name: str = "qlora-post-training"
     mlflow_run_name: Optional[str] = None
+    # 🆕 Model Registry configuration (all default off — backward compatible).
+    # When register_model=True AND use_mlflow=True, training auto-merges the LoRA
+    # adapter into the base model and registers it to the MLflow Model Registry,
+    # creating a model version with lineage back to the training run.
+    register_model: bool = False
+    registry_model_name: Optional[str] = None  # defaults to model name if None
+    merge_before_register: bool = True          # merge adapter into base before logging
+    registry_stage: str = "Staging"             # initial stage: Staging/Production/Archived
 
 
 @dataclass

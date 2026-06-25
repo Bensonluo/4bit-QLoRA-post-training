@@ -20,7 +20,8 @@ from src.models import load_model_and_tokenizer
 from src.data.loaders import PreferenceDataset
 from src.utils import set_seed, console, setup_logging
 from src.utils.platform_utils import get_platform
-from src.tracking import get_tracker, MLflowTrainCallback
+from src.tracking import get_tracker, MLflowTrainCallback, register_trained_model
+from src.training.distributed import get_distributed_info
 
 
 class DPOTrainer:
@@ -179,6 +180,9 @@ class DPOTrainer:
         """Setup TRL DPO trainer."""
         console.print("[bold cyan]=== Setting Up DPO Trainer ===[/bold cyan]\n")
 
+        # 🆕 Detect distributed context.
+        dist_info = get_distributed_info()
+
         # TRL DPO configuration
         trl_dpo_config = TRLDPOConfig(
             beta=self.dpo_config.beta,
@@ -191,8 +195,8 @@ class DPOTrainer:
             padding_value=self.dpo_config.padding_value,
         )
 
-        # Training arguments
-        training_args = TrainingArguments(
+        # Training arguments — build as dict to allow conditional DeepSpeed injection.
+        training_kwargs = dict(
             output_dir=self.training_config.output_dir,
             num_train_epochs=self.training_config.num_epochs,
             per_device_train_batch_size=self.training_config.batch_size,
@@ -215,7 +219,31 @@ class DPOTrainer:
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             remove_unused_columns=False,
+            ddp_find_unused_parameters=False,
         )
+
+        # 🆕 Inject distributed strategy. DPO holds policy + ref model simultaneously,
+        # so memory pressure ~2× SFT — FSDP full_shard (or ZeRO-3 + offload) is the
+        # typical choice to fit both. See docs/distributed_training_guide.md.
+        if self.training_config.fsdp:
+            training_kwargs["fsdp"] = self.training_config.fsdp
+            if self.training_config.fsdp_config:
+                training_kwargs["fsdp_config"] = self.training_config.fsdp_config
+            console.print(
+                f"[green]✓ FSDP enabled (DPO): {self.training_config.fsdp}[/green]"
+            )
+        elif self.training_config.deepspeed_config:
+            training_kwargs["deepspeed"] = self.training_config.deepspeed_config
+            console.print(
+                f"[green]✓ DeepSpeed config injected (DPO): {self.training_config.deepspeed_config}[/green]"
+            )
+
+        if dist_info.is_distributed:
+            console.print(
+                f"[cyan]Distributed DPO engaged: world_size={dist_info.world_size}[/cyan]"
+            )
+
+        training_args = TrainingArguments(**training_kwargs)
 
         console.print("[green]✓ DPO Trainer configured[/green]")
         console.print(f"  Beta: {trl_dpo_config.beta}")
@@ -225,6 +253,9 @@ class DPOTrainer:
         console.print()
 
         # Create DPO trainer
+        # 🩺 FIX: previously MLflowTrainCallback was instantiated but never passed to
+        # TRLDPOTrainer, so DPO step metrics never reached MLflow. Mount it now so
+        # DPO and SFT have parity in tracking.
         self.trainer = TRLDPOTrainer(
             model=self.model,
             ref_model=self.ref_model,
@@ -233,6 +264,7 @@ class DPOTrainer:
             train_dataset=self.train_dataset,
             eval_dataset=self.eval_dataset,
             tokenizer=self.tokenizer,
+            callbacks=[MLflowTrainCallback(self._tracker)],
             **trl_dpo_config.__dict__,
         )
 
@@ -270,6 +302,20 @@ class DPOTrainer:
 
         try:
             self.trainer.train()
+
+            # Explicitly save model + tokenizer (TRL auto-saves, but be explicit so the
+            # adapter dir is populated for the registration step below).
+            self.trainer.save_model()
+            self.tokenizer.save_pretrained(self.training_config.output_dir)
+
+            # 🆕 Register to MLflow Model Registry (no-op unless register_model=True).
+            register_trained_model(
+                adapter_dir=self.training_config.output_dir,
+                tracker=self._tracker,
+                logging_config=self.logging_config,
+                base_model_name=self.model_config.name,
+                model_config=self.model_config,
+            )
 
             console.print("\n[bold green]✅ DPO Training Complete![/bold green]")
             console.print(f"[cyan]Model saved to: {self.training_config.output_dir}[/cyan]\n")
