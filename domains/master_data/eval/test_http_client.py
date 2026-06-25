@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """单条测试 http.client 调用 LM Studio 本地模型."""
 
+import http.client
 import json
 import time
-import http.client
 
 
 def call_model_http_client(messages, model_name, base_url, max_tokens=2048, think=False):

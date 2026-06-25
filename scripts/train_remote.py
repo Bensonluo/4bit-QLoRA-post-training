@@ -11,10 +11,8 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Optional, List
 
 import typer
-from rich.console import Console
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -42,7 +40,7 @@ def main(
         "-s",
         help="Training script to execute",
     ),
-    args: List[str] = typer.Argument(
+    args: list[str] = typer.Argument(
         None,
         help="Arguments to pass to training script",
     ),
@@ -56,7 +54,7 @@ def main(
         "--data-path",
         help="Local data path to sync",
     ),
-    sync_back: Optional[str] = typer.Option(
+    sync_back: str | None = typer.Option(
         None,
         "--sync-back",
         help="Sync outputs back after training (path on remote)",
@@ -65,7 +63,8 @@ def main(
         False,
         "--dry-run",
         help="Show command without executing",
-    ):
+    ),
+):
     """Execute training on remote machine."""
 
     console.print("\n[bold cyan]=== Remote Training Executor ===[/bold cyan]\n")
@@ -116,10 +115,10 @@ def main(
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Remote training interrupted[/yellow]")
-        raise typer.Exit(130)
+        raise typer.Exit(130) from None
     except Exception as e:
         console.print(f"\n[red]✗ Remote training failed: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -148,7 +147,7 @@ def test_connection(
         )
 
         if result.returncode == 0:
-            console.print(f"\n[bold]Remote GPU:[/bold]")
+            console.print("\n[bold]Remote GPU:[/bold]")
             console.print(result.stdout.strip())
         else:
             console.print("[yellow]Could not query GPU (nvidia-smi not available?)[/yellow]")

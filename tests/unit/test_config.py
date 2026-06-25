@@ -1,15 +1,24 @@
 """Unit tests for configuration."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from config.base import ModelConfig, TrainingConfig, LoRAConfig
+
+from config.base import LoRAConfig, ModelConfig, TrainingConfig
 
 
 def test_model_config():
     """Test ModelConfig creation and validation."""
-    config = ModelConfig(
-        name="Qwen/Qwen2.5-1.5B-Instruct",
-        quantization_bits=4,
-    )
+    mock_platform = MagicMock()
+    mock_platform.is_cuda = True
+    mock_platform.is_mps = False
+    mock_platform.device = "cuda"
+
+    with patch("src.utils.platform_utils.get_platform", return_value=mock_platform):
+        config = ModelConfig(
+            name="Qwen/Qwen2.5-1.5B-Instruct",
+            quantization_bits=4,
+        )
 
     assert config.name == "Qwen/Qwen2.5-1.5B-Instruct"
     assert config.quantization_bits == 4

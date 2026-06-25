@@ -18,6 +18,7 @@ Usage:
     python scripts/train_dpo.py --resume outputs/dpo/checkpoint-1000
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -26,10 +27,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import argparse
-from config.dpo import DPOTrainingConfig, FINANCE_DPO_CONFIG
-from src.training.dpo_trainer import run_dpo_training
-from src.utils.logging import console
+from config.dpo import FINANCE_DPO_CONFIG  # noqa: E402
+from src.training.dpo_trainer import run_dpo_training  # noqa: E402
+from src.utils.logging import console  # noqa: E402
 
 
 def parse_args():
@@ -196,7 +196,7 @@ def apply_args_to_config(config, args):
     if args.config:
         console.print(f"[cyan]Loading config from: {args.config}[/cyan]")
         import yaml
-        from config.dpo import DPOTrainingConfig
+
         with open(args.config) as f:
             cfg_dict = yaml.safe_load(f)
         # Apply YAML values to config sub-objects

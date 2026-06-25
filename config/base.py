@@ -1,7 +1,6 @@
 """Configuration base classes for QLoRA post-training."""
 
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional
 
 
 @dataclass
@@ -77,7 +76,7 @@ class LoRAConfig:
     r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
-    target_modules: List[str] = field(
+    target_modules: list[str] = field(
         default_factory=lambda: ["q_proj", "v_proj", "k_proj", "o_proj"]
     )
     bias: str = "none"
@@ -151,13 +150,13 @@ class TrainingConfig:
     #
     # FSDP: HF Trainer `fsdp=` string. Set to "full_shard" (params+grads+optim
     #   sharded, ≈ ZeRO-3) or "sharded_grad_scaled" (≈ ZeRO-2).
-    fsdp: Optional[str] = None
+    fsdp: str | None = None
     # FSDP auto-wrap config dict (transformer_layer_cls_to_wrap, min_num_params, ...).
     # Built by config.distributed when an FSDP preset is selected.
-    fsdp_config: Optional[dict] = None
+    fsdp_config: dict | None = None
     # Path to a DeepSpeed JSON config. When set, HF Trainer is launched with
     # `deepspeed=<path>` and torchrun is expected to wrap the process.
-    deepspeed_config: Optional[str] = None
+    deepspeed_config: str | None = None
     # Whether to auto-derive `per_device_train_batch_size` from world_size (kept total
     # effective batch constant). Off by default — explicit per-device batch is clearer.
     auto_scale_batch: bool = False
@@ -216,11 +215,11 @@ class DataConfig:
 
     dataset_name: str = "yahma/alpaca-cleaned"
     dataset_split: str = "train"
-    max_samples: Optional[int] = None
+    max_samples: int | None = None
     validation_split: float = 0.1
     preprocessing_num_workers: int = 4
-    train_file: Optional[str] = None
-    validation_file: Optional[str] = None
+    train_file: str | None = None
+    validation_file: str | None = None
     format: str = "alpaca"
 
     def __post_init__(self):
@@ -251,8 +250,8 @@ class LoggingConfig:
 
     use_wandb: bool = False
     wandb_project: str = "qlora-post-training"
-    wandb_entity: Optional[str] = None
-    wandb_run_name: Optional[str] = None
+    wandb_entity: str | None = None
+    wandb_run_name: str | None = None
     use_tensorboard: bool = True
     log_dir: str = "./outputs/logs"
     log_memory: bool = True
@@ -260,13 +259,13 @@ class LoggingConfig:
     use_mlflow: bool = False
     mlflow_tracking_uri: str = "./outputs/mlruns"
     mlflow_experiment_name: str = "qlora-post-training"
-    mlflow_run_name: Optional[str] = None
+    mlflow_run_name: str | None = None
     # 🆕 Model Registry configuration (all default off — backward compatible).
     # When register_model=True AND use_mlflow=True, training auto-merges the LoRA
     # adapter into the base model and registers it to the MLflow Model Registry,
     # creating a model version with lineage back to the training run.
     register_model: bool = False
-    registry_model_name: Optional[str] = None  # defaults to model name if None
+    registry_model_name: str | None = None  # defaults to model name if None
     merge_before_register: bool = True          # merge adapter into base before logging
     registry_stage: str = "Staging"             # initial stage: Staging/Production/Archived
 

@@ -1,6 +1,5 @@
 """Base model classes and utilities."""
 
-from typing import Optional, Tuple
 
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
@@ -57,7 +56,7 @@ class BaseModelHandler:
         return cls(model, tokenizer)
 
 
-def get_model_size(model: PreTrainedModel) -> Tuple[int, str]:
+def get_model_size(model: PreTrainedModel) -> tuple[int, str]:
     """Get model size in parameters.
 
     Args:

@@ -3,8 +3,8 @@
 from config.base import (
     DataConfig,
     DPOConfig,
-    LoRAConfig,
     LoggingConfig,
+    LoRAConfig,
     ModelConfig,
     TrainingConfig,
 )

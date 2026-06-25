@@ -5,7 +5,7 @@ import json
 import time
 from pathlib import Path
 
-from mlx_lm import load, generate
+from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
@@ -55,7 +55,7 @@ def main() -> None:
 
         print(f"[输出] ({latency:.1f}s):")
         print(response)
-        print(f"\n[期望]:")
+        print("\n[期望]:")
         print(messages[2]["content"])
 
 

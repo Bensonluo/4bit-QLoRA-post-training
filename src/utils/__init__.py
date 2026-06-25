@@ -25,7 +25,7 @@ from src.utils.memory import (
     optimize_memory,
     print_vram_usage,
 )
-from src.utils.platform_utils import get_platform, detect_platform, recommend_settings
+from src.utils.platform_utils import detect_platform, get_platform, recommend_settings
 from src.utils.seed import get_seed, set_seed
 
 __all__ = [

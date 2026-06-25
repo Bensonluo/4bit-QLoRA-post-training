@@ -1,11 +1,10 @@
 """Model comparison utilities."""
 
-from typing import Dict
-
+import torch
 from datasets import Dataset
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedTokenizer
 
-from src.evaluation.metrics import compute_perplexity, compute_accuracy
+from src.evaluation.metrics import compute_perplexity
 from src.utils import console
 
 
@@ -14,7 +13,7 @@ def compare_models(
     base_model_path: str,
     dataset: Dataset,
     tokenizer: PreTrainedTokenizer,
-) -> Dict[str, Dict]:
+) -> dict[str, dict]:
     """Compare fine-tuned model with base model.
 
     Args:
@@ -36,8 +35,8 @@ def compare_models(
         tuned_model, _ = load_merged_model(model_path)
     except Exception:
         # Try loading with adapters
-        from src.models import load_model_and_tokenizer
         from config.base import ModelConfig
+        from src.models import load_model_and_tokenizer
         config = ModelConfig(name=model_path)
         tuned_model, _ = load_model_and_tokenizer(config)
 
@@ -63,7 +62,7 @@ def compare_models(
     # tuned_acc = compute_accuracy(tuned_model, dataset, tokenizer)
     # base_acc = compute_accuracy(base_model, dataset, tokenizer)
 
-    console.print(f"\n[green]✓ Comparison complete[/green]")
+    console.print("\n[green]✓ Comparison complete[/green]")
 
     return comparison
 
@@ -95,7 +94,6 @@ def side_by_side_generation(
 
     for i, prompt in enumerate(prompts, 1):
         from rich.table import Table
-        from rich.panel import Panel
 
         console.print(f"\n[bold cyan]Prompt {i}:[/bold cyan] {prompt}\n")
 

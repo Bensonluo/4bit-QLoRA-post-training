@@ -7,10 +7,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+import pandas as pd
 import streamlit as st
 
-from ui.config import DOMAINS_DIR, MLFLOW_TRACKING_URI
-from ui.components.domain_adapters import load_eval_data, list_domains, get_domain_display_name
+from ui.components.domain_adapters import get_domain_display_name, list_domains, load_eval_data
+from ui.config import DOMAINS_DIR
 
 st.set_page_config(page_title="Model Comparison", page_icon="⚖️", layout="wide")
 st.title("⚖️ Model Comparison")
@@ -146,7 +147,6 @@ latency_b = model_b.get("avg_latency_ms", 0)
 tp_a = model_a.get("throughput_per_sec", 1)
 tp_b = model_b.get("throughput_per_sec", 1)
 
-import pandas as pd
 cost_df = pd.DataFrame({
     "Metric": ["Avg Latency", "Throughput", "Time for 1M samples", "Deployment", "Data Security"],
     model_a_name: [

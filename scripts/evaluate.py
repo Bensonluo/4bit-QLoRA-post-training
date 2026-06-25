@@ -7,19 +7,18 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
-from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.base import ModelConfig
-from src.models import load_merged_model, load_model_and_tokenizer
 from src.data import AlpacaDataset, FinanceDataset
-from src.evaluation import compute_perplexity, generate_samples, compare_models
+from src.evaluation import compare_models, compute_perplexity, generate_samples
+from src.models import load_merged_model, load_model_and_tokenizer
 from src.utils import console
 
 app = typer.Typer(
@@ -55,12 +54,12 @@ def main(
         "-g",
         help="Number of test generations",
     ),
-    compare_with: Optional[str] = typer.Option(
+    compare_with: str | None = typer.Option(
         None,
         "--compare-with",
         help="Compare with base model (path or HF name)",
     ),
-    output_file: Optional[str] = typer.Option(
+    output_file: str | None = typer.Option(
         None,
         "--output",
         "-o",

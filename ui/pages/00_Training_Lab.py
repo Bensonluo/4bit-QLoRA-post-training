@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -10,11 +11,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import streamlit as st
 import yaml
 
-from ui.config import MODEL_OPTIONS, CONFIGS_DIR, PROJECT_ROOT
-from ui.components.charts import make_metric_timeseries
 from src.utils.platform_utils import get_platform
+from ui.components.charts import make_metric_timeseries
+from ui.config import CONFIGS_DIR, MODEL_OPTIONS, PROJECT_ROOT
 
 st.set_page_config(page_title="Training Lab", page_icon="🏋️", layout="wide")
+
+
+def _validate_run_name(name: str) -> str | None:
+    """Return error message if run_name is unsafe for filesystem use."""
+    if not name:
+        return "Run name cannot be empty."
+    if len(name) > 128:
+        return "Run name too long (max 128 characters)."
+    if name.startswith((".", "-")):
+        return "Run name cannot start with '.' or '-'."
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", name):
+        return "Run name may only contain letters, digits, underscores, and hyphens."
+    return None
 
 platform = get_platform()
 if platform.is_cuda:
@@ -169,6 +183,11 @@ with tab_configure:
         st.caption(f"Estimated VRAM: **~{vram_gb:.1f} GB**")
 
     if submitted:
+        error = _validate_run_name(run_name)
+        if error:
+            st.error(error)
+            st.stop()
+
         CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
         config_path = CONFIGS_DIR / f"{run_name}.yaml"
         with open(config_path, "w") as f:
@@ -234,6 +253,7 @@ with tab_activity:
                 # Live loss from MLflow
                 try:
                     import mlflow
+
                     from ui.config import MLFLOW_TRACKING_URI
                     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
                     runs = mlflow.search_runs(

@@ -150,7 +150,7 @@ def main():
         "generic_groups_sample": {k: v for i, (k, v) in enumerate(multi_form.items()) if i < 20},
     }
 
-    print(f"\n知识库统计:")
+    print("\n知识库统计:")
     print(f"  总药物实体: {metadata['total_drugs']}")
     print(f"  不同通用名: {metadata['unique_generic_names']}")
     print(f"  多剂型通用名: {metadata['multi_form_generics']}")

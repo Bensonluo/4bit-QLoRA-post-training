@@ -7,10 +7,8 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
-from rich.console import Console
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -106,7 +104,7 @@ def main(
 
     except Exception as e:
         console.print(f"\n[red]✗ Merge failed: {e}[/red]\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

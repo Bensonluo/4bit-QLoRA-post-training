@@ -7,16 +7,15 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datasets import load_dataset
+
 from src.utils import console
 
 app = typer.Typer(
@@ -45,7 +44,7 @@ def main(
         "--split",
         help="Dataset split to download",
     ),
-    num_samples: Optional[int] = typer.Option(
+    num_samples: int | None = typer.Option(
         None,
         "--num-samples",
         "-n",
@@ -121,7 +120,7 @@ def main(
 
     except Exception as e:
         console.print(f"\n[red]✗ Download failed: {e}[/red]\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()

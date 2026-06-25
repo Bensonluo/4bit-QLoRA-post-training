@@ -3,7 +3,6 @@
 用于评测对比。
 """
 
-import json
 import random
 
 from domains.medical_entity.eval.runner import BaseModel
@@ -424,7 +423,7 @@ class RealFinetunedModel(BaseModel):
                     base = cfg.get("base_model_name_or_path", cfg.get("_name_or_path"))
                     break
         if not base:
-            raise ValueError(f"无法确定 base model，请通过 base_model 参数指定")
+            raise ValueError("无法确定 base model，请通过 base_model 参数指定")
 
         self._tokenizer = AutoTokenizer.from_pretrained(base, trust_remote_code=True)
         if self._tokenizer.pad_token is None:

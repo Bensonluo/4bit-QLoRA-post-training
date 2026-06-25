@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 
 def log_eval_to_mlflow(json_path: str | Path, experiment_name: str = "domain-evaluation") -> None:

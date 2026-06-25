@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import plotly.graph_objects as go
+
 from ui.config import CHART_COLORS
 
 

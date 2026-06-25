@@ -12,10 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 
 from config.domains.medical_entity import PRESETS
@@ -34,12 +32,12 @@ def main(
     mac_small: bool = typer.Option(False, "--mac-small", help="Mac 64GB (Qwen3-4B, 对比用)"),
     mac_35_4b: bool = typer.Option(False, "--mac-35-4b", help="Mac 64GB (Qwen3.5-4B, 微调)"),
     poc: bool = typer.Option(False, "--poc", help="POC 模式 (4B, 8GB VRAM)"),
-    model_name: Optional[str] = typer.Option(None, "--model-name", "-m", help="覆盖模型名"),
-    epochs: Optional[int] = typer.Option(None, "--epochs", "-e", help="训练轮数（默认用 preset 配置）"),
-    lr: Optional[float] = typer.Option(None, "--lr", help="学习率（默认用 preset 配置）"),
-    output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="输出目录"),
-    resume_from: Optional[str] = typer.Option(None, "--resume-from", help="从 checkpoint 恢复训练"),
-    save_steps: Optional[int] = typer.Option(None, "--save-steps", help="保存和评估间隔步数（0=关闭eval）"),
+    model_name: str | None = typer.Option(None, "--model-name", "-m", help="覆盖模型名"),
+    epochs: int | None = typer.Option(None, "--epochs", "-e", help="训练轮数（默认用 preset 配置）"),
+    lr: float | None = typer.Option(None, "--lr", help="学习率（默认用 preset 配置）"),
+    output_dir: str | None = typer.Option(None, "--output-dir", "-o", help="输出目录"),
+    resume_from: str | None = typer.Option(None, "--resume-from", help="从 checkpoint 恢复训练"),
+    save_steps: int | None = typer.Option(None, "--save-steps", help="保存和评估间隔步数（0=关闭eval）"),
 ):
     """训练医疗实体匹配模型"""
 

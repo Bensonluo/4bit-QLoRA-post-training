@@ -15,6 +15,7 @@ st.title("📊 Experiments")
 try:
     import mlflow
     import pandas as pd
+
     from ui.config import MLFLOW_TRACKING_URI
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 except ImportError:

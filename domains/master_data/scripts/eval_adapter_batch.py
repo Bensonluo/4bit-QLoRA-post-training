@@ -6,7 +6,7 @@ import random
 import time
 from pathlib import Path
 
-from mlx_lm import load, generate
+from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent

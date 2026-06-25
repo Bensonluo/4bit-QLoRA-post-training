@@ -1,6 +1,5 @@
 """Data preprocessing utilities."""
 
-from typing import Dict, List, Optional
 
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
@@ -16,7 +15,7 @@ class DataCollator:
         tokenizer: PreTrainedTokenizer,
         padding: str = "max_length",
         max_length: int = 512,
-        pad_to_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
     ):
         """Initialize data collator.
 
@@ -31,7 +30,7 @@ class DataCollator:
         self.max_length = max_length
         self.pad_to_multiple_of = pad_to_multiple_of
 
-    def __call__(self, features: List[Dict]) -> Dict[str, List]:
+    def __call__(self, features: list[dict]) -> dict[str, list]:
         """Collate features into a batch.
 
         Args:
@@ -56,7 +55,7 @@ class DataCollator:
 
         return batch
 
-    def _pad_sequences(self, sequences: List[List[int]]) -> List[List[int]]:
+    def _pad_sequences(self, sequences: list[list[int]]) -> list[list[int]]:
         """Pad sequences to same length.
 
         Args:
@@ -146,11 +145,11 @@ def format_instruction(
 
 
 def tokenize_function(
-    examples: Dict[str, List],
+    examples: dict[str, list],
     tokenizer: PreTrainedTokenizer,
     max_length: int = 512,
     text_column: str = "text",
-) -> Dict:
+) -> dict:
     """Tokenize a batch of examples.
 
     Args:
@@ -170,7 +169,7 @@ def tokenize_function(
     )
 
 
-def compute_statistics(dataset: Dataset) -> Dict:
+def compute_statistics(dataset: Dataset) -> dict:
     """Compute dataset statistics.
 
     Args:

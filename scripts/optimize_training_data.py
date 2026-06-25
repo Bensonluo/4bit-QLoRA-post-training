@@ -2,8 +2,8 @@
 
 import json
 import random
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 SEED = 42
 random.seed(SEED)
@@ -80,7 +80,6 @@ def main():
         kb = json.load(f)
     drugs = kb["drugs"]
     generic_groups = kb.get("generic_groups", {})
-    code_to_drug = {d["code"]: d for d in drugs}
     print(f"知识库: {len(drugs)} 种药品, {len(generic_groups)} 个通用名分组")
 
     with open(TRAIN_PATH) as f:

@@ -4,17 +4,17 @@ This module provides functions to run training on remote machines (e.g., Windows
 while keeping data processing and development on the local machine (e.g., Mac).
 """
 
+import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 
 def execute_on_remote(
     host: str,
     command: str,
     capture_output: bool = False,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
 ) -> subprocess.CompletedProcess:
     """Execute a command on a remote machine via SSH.
 
@@ -27,7 +27,7 @@ def execute_on_remote(
     Returns:
         CompletedProcess with return code and output
     """
-    full_command = f"ssh {host} '{command}'"
+    full_command = f"ssh {shlex.quote(host)} {shlex.quote(command)}"
 
     if capture_output:
         result = subprocess.run(
@@ -50,9 +50,9 @@ def execute_on_remote(
 def train_on_remote(
     host: str,
     script_path: str,
-    args: List[str],
+    args: list[str],
     sync_data: bool = True,
-    data_path: Optional[str] = None,
+    data_path: str | None = None,
 ) -> None:
     """Execute training script on remote machine.
 
@@ -84,7 +84,7 @@ def train_on_remote(
             print(f"Warning: Data path not found: {data_full_path}")
         else:
             # Create remote directory
-            execute_on_remote(host, f"mkdir -p {data_path}")
+            execute_on_remote(host, f"mkdir -p {shlex.quote(data_path)}")
 
             # Sync data using rsync over SSH
             rsync_cmd = [
@@ -101,7 +101,12 @@ def train_on_remote(
 
     # Build remote command
     # Activate virtual environment and run script
-    remote_cmd = f"cd {project_root} && source venv/bin/activate && python {script_path} {' '.join(args)}"
+    quoted_args = " ".join(shlex.quote(arg) for arg in args)
+    remote_cmd = (
+        f"cd {shlex.quote(str(project_root))} "
+        f"&& source venv/bin/activate "
+        f"&& python {shlex.quote(script_path)} {quoted_args}"
+    )
 
     print(f"\n{'='*60}")
     print(f"Executing training on {host}")
@@ -180,7 +185,7 @@ class RemoteExecutor:
         self,
         host: str,
         auto_sync: bool = True,
-        data_path: Optional[str] = None,
+        data_path: str | None = None,
     ):
         """Initialize remote executor.
 
@@ -208,8 +213,8 @@ class RemoteExecutor:
     def train(
         self,
         script_path: str,
-        args: List[str],
-        sync_back: Optional[str] = None,
+        args: list[str],
+        sync_back: str | None = None,
     ) -> None:
         """Run training on remote.
 
@@ -229,7 +234,7 @@ class RemoteExecutor:
         if sync_back:
             self.sync_outputs(sync_back)
 
-    def sync_outputs(self, remote_path: str, local_path: Optional[str] = None) -> None:
+    def sync_outputs(self, remote_path: str, local_path: str | None = None) -> None:
         """Sync outputs from remote to local.
 
         Args:

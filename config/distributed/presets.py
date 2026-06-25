@@ -27,7 +27,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Directory holding the JSON configs (DeepSpeed + FSDP auto-wrap settings).
 _CONFIGS_DIR = Path(__file__).parent / "deepspeed_configs"
@@ -92,9 +92,9 @@ class ResolvedDistributedConfig:
     """
 
     preset: DistributedPreset
-    deepspeed_config: Optional[str] = None
-    fsdp: Optional[str] = None
-    fsdp_config: Optional[Dict[str, Any]] = None
+    deepspeed_config: str | None = None
+    fsdp: str | None = None
+    fsdp_config: dict[str, Any] | None = None
 
     @property
     def is_distributed(self) -> bool:
@@ -110,7 +110,7 @@ class ResolvedDistributedConfig:
 # FSDP auto-wrap config: wrap by transformer_layer_cls so FSDP shards per layer
 # group. HF Trainer merges this with its own defaults. Adjust transformer_layer_names
 # per model family — common defaults cover Llama/Qwen/Mistral architecture.
-def _default_fsdp_wrap_config() -> Dict[str, Any]:
+def _default_fsdp_wrap_config() -> dict[str, Any]:
     """Default FSDP auto-wrap config (transformer-layer-based wrapping)."""
     return {
         # Wrap at the decoder-block granularity. For Llama/Qwen/Mistral-style
@@ -152,10 +152,10 @@ def _deepspeed_path(preset: DistributedPreset) -> str:
 
 
 def resolve_distributed_config(
-    preset_name: Optional[str] = None,
+    preset_name: str | None = None,
     *,
-    deepspeed_path: Optional[str] = None,
-    fsdp_mode: Optional[str] = None,
+    deepspeed_path: str | None = None,
+    fsdp_mode: str | None = None,
 ) -> ResolvedDistributedConfig:
     """Resolve a distributed strategy from a preset name or explicit overrides.
 
@@ -224,7 +224,7 @@ def resolve_distributed_config(
 
 
 # Back-compat shim for the previous single-purpose API.
-def get_deepspeed_config_path(preset: DistributedPreset) -> Optional[str]:
+def get_deepspeed_config_path(preset: DistributedPreset) -> str | None:
     """Legacy helper: return DeepSpeed JSON path for a preset, or None for non-DS presets."""
     if not preset.is_deepspeed:
         return None
@@ -232,9 +232,9 @@ def get_deepspeed_config_path(preset: DistributedPreset) -> Optional[str]:
 
 
 def resolve_deepspeed_config(
-    preset_name: Optional[str] = None,
-    explicit_path: Optional[str] = None,
-) -> Optional[str]:
+    preset_name: str | None = None,
+    explicit_path: str | None = None,
+) -> str | None:
     """Legacy helper: resolve a DeepSpeed JSON path (None for DDP/FSDP)."""
     resolved = resolve_distributed_config(
         preset_name=preset_name,

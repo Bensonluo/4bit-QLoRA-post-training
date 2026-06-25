@@ -5,7 +5,6 @@ Supports:
 - Apple Silicon (MPS): bf16/fp16 without quantization
 """
 
-from typing import Optional, Tuple
 
 import torch
 from transformers import (
@@ -195,7 +194,7 @@ def load_model(
 
 def load_model_and_tokenizer(
     config: ModelConfig,
-) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
+) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Load model and tokenizer with platform-aware configuration.
 
     This is the main entry point for loading models for training.
@@ -226,7 +225,7 @@ def load_model_and_tokenizer(
 
 def load_base_model_for_dpo(
     config: ModelConfig,
-) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
+) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Load base model for DPO training.
 
     DPO requires a reference model that stays frozen during training.

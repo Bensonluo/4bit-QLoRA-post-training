@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
@@ -26,8 +25,8 @@ class MedicalEntityDataset(BaseDataset):
     def __init__(
         self,
         data_path: str,
-        max_samples: Optional[int] = None,
-        difficulty_filter: Optional[str] = None,
+        max_samples: int | None = None,
+        difficulty_filter: str | None = None,
     ):
         self.difficulty_filter = difficulty_filter
         super().__init__(data_path, max_samples)

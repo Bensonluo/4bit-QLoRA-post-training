@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Any, Optional
 
 import streamlit as st
-import plotly.graph_objects as go
 
-from ui.config import DOMAINS_DIR, CHART_COLORS
-from ui.components.charts import make_grouped_bar, make_calibration_chart, make_scatter_plot
+from ui.components.charts import make_grouped_bar, make_scatter_plot
+from ui.config import DOMAINS_DIR
 
 
 class DomainChartAdapter(ABC):
@@ -138,7 +135,7 @@ def register_adapter(adapter: DomainChartAdapter) -> None:
     _REGISTRY[adapter.domain_name] = adapter
 
 
-def get_adapter(domain: str) -> Optional[DomainChartAdapter]:
+def get_adapter(domain: str) -> DomainChartAdapter | None:
     return _REGISTRY.get(domain)
 
 

@@ -7,13 +7,11 @@ Supports:
 
 import gc
 import subprocess
-import sys
-from typing import Dict, Optional
 
 from src.utils.platform_utils import get_platform
 
 
-def get_vram_usage() -> Dict[str, float]:
+def get_vram_usage() -> dict[str, float]:
     """Get GPU memory usage statistics (works on both CUDA and MPS).
 
     Returns:
@@ -113,7 +111,7 @@ def clear_cache() -> None:
 def optimize_memory(
     gradient_checkpointing: bool = True,
     use_flash_attention: bool = True,
-) -> Dict[str, bool]:
+) -> dict[str, bool]:
     """Get recommended memory optimization settings.
 
     Args:
@@ -173,7 +171,7 @@ def optimize_memory(
     return optimizations
 
 
-def check_remote_gpu(host: str = "windows") -> Dict[str, any]:
+def check_remote_gpu(host: str = "windows") -> dict[str, any]:
     """Check GPU status on remote machine via SSH.
 
     This is useful when using Mac for development and remote Windows/ Linux for training.
@@ -243,7 +241,7 @@ def estimate_model_vram(
     lora_r: int = 16,
     batch_size: int = 1,
     max_length: int = 512,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Estimate VRAM usage for a model configuration.
 
     Args:

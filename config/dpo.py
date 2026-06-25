@@ -4,8 +4,12 @@ DPO trains on preference pairs to align models with human preferences
 without training a separate reward model.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
+
+from config.base import LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 
 
 @dataclass
@@ -103,7 +107,7 @@ class PreferenceDataConfig:
 
     dataset_name: str = "HuggingFaceH4/argilla-dpo-mix-7k"
     split: str = "train"
-    max_samples: Optional[int] = 5000  # Start with smaller dataset
+    max_samples: int | None = 5000  # Start with smaller dataset
     validation_split: float = 0.1
     format: str = "preference"
     auto_filter: bool = False
@@ -124,13 +128,13 @@ class DPOTrainingConfig:
 
     def __init__(
         self,
-        model_config: Optional['ModelConfig'] = None,
-        training_config: Optional['TrainingConfig'] = None,
-        lora_config: Optional['LoRAConfig'] = None,
-        dpo_config: Optional[DPOConfig] = None,
-        data_config: Optional[PreferenceDataConfig] = None,
-        reference_config: Optional[ReferenceModelConfig] = None,
-        logging_config: Optional['LoggingConfig'] = None,
+        model_config: ModelConfig | None = None,
+        training_config: TrainingConfig | None = None,
+        lora_config: LoRAConfig | None = None,
+        dpo_config: DPOConfig | None = None,
+        data_config: PreferenceDataConfig | None = None,
+        reference_config: ReferenceModelConfig | None = None,
+        logging_config: LoggingConfig | None = None,
     ):
         """Initialize DPO training configuration.
 
@@ -143,8 +147,6 @@ class DPOTrainingConfig:
             reference_config: Reference model configuration
             logging_config: Logging configuration
         """
-        from config.base import ModelConfig, TrainingConfig, LoRAConfig, LoggingConfig
-
         self.model_config = model_config or ModelConfig(
             name="Qwen/Qwen2.5-1.5B-Instruct",
             quantization_bits=4,

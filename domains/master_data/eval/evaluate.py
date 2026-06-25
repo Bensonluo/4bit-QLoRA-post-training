@@ -23,7 +23,6 @@ import json
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 from rich.console import Console
 from rich.table import Table
@@ -57,6 +56,7 @@ def extract_ground_truth(sample: dict) -> list[dict]:
 def call_model(messages: list[dict], model_name: str, base_url: str, max_tokens: int = 2048) -> tuple[str, float]:
     """Call model API and return (response_text, latency_ms)."""
     import os
+
     from openai import OpenAI
 
     is_local = "localhost" in base_url or "127.0.0.1" in base_url
@@ -312,8 +312,8 @@ def evaluate_model(
     samples: list[dict],
     concurrency: int = 1,
     log_every: int = 50,
-    adapter_path: Optional[str] = None,
-    mlx_model_id: Optional[str] = None,
+    adapter_path: str | None = None,
+    mlx_model_id: str | None = None,
 ) -> EvalResult:
     """Evaluate a model on a task with optional concurrency."""
     result = EvalResult(model_name=model_name, task=task)

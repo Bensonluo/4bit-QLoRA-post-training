@@ -6,7 +6,7 @@
     python scripts/train_medical_entity.py           # 24GB GPU 完整训练
 """
 
-from config.base import DataConfig, LoRAConfig, LoggingConfig, ModelConfig, TrainingConfig
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from config.sft import SFTConfig
 
 DOMAIN_ROOT = "domains/medical_entity"

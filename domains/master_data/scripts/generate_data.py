@@ -437,12 +437,12 @@ def generate_inst_pairs(kb: list[dict], n: int) -> list[dict]:
         seen_codes = {target["code"]}
         seen_names = {target.get("standard_name", "")}
 
-        def dedup(pool):
+        def dedup(pool, _seen_codes=seen_codes, _seen_names=seen_names):
             out = []
             for x in pool:
-                if x["code"] not in seen_codes and x.get("standard_name", "") not in seen_names:
-                    seen_codes.add(x["code"])
-                    seen_names.add(x.get("standard_name", ""))
+                if x["code"] not in _seen_codes and x.get("standard_name", "") not in _seen_names:
+                    _seen_codes.add(x["code"])
+                    _seen_names.add(x.get("standard_name", ""))
                     out.append(x)
             return out
 
@@ -889,7 +889,7 @@ def main():
     with open(raw_dir / "prod_train_pairs.json", "w") as f:
         json.dump(prod_train, f, ensure_ascii=False, indent=2)
 
-    print(f"\n=== 完成 ===")
+    print("\n=== 完成 ===")
     print(f"训练: {len(train_all)} 条 (机构 {len(inst_train_msgs)} + 产品 {len(prod_train_msgs)})")
     print(f"评测: 机构 {len(inst_eval_msgs)} + 产品 {len(prod_eval_msgs)} = {len(inst_eval_msgs) + len(prod_eval_msgs)} 条")
 
@@ -903,7 +903,7 @@ def main():
         for a in p["answers"]:
             prod_grades[a.get("match_grade", "D")] += 1
     prod_total = sum(prod_grades.values())
-    print(f"产品训练等级分布: " + " ".join(f"{k}={v}({v/prod_total:.1%})" for k, v in sorted(prod_grades.items())))
+    print("产品训练等级分布: " + " ".join(f"{k}={v}({v/prod_total:.1%})" for k, v in sorted(prod_grades.items())))
 
 
 if __name__ == "__main__":

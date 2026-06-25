@@ -32,7 +32,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -41,8 +40,8 @@ from rich.panel import Panel
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
-from config.distributed import DistributedPreset, resolve_distributed_config
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
+from config.distributed import resolve_distributed_config
 from src.training import run_sft_training
 from src.training.distributed import get_distributed_info
 
@@ -82,7 +81,7 @@ def main(
         "-d",
         help="Dataset name or path",
     ),
-    max_samples: Optional[int] = typer.Option(
+    max_samples: int | None = typer.Option(
         None,
         "--max-samples",
         "-n",
@@ -117,7 +116,7 @@ def main(
     lora_alpha: int = typer.Option(32, "--lora-alpha", help="LoRA alpha"),
     lora_dropout: float = typer.Option(0.05, "--lora-dropout", help="LoRA dropout"),
     # 🆕 Distributed arguments
-    distributed_preset: Optional[str] = typer.Option(
+    distributed_preset: str | None = typer.Option(
         None,
         "--distributed-preset",
         "-p",
@@ -128,12 +127,12 @@ def main(
             "Mutually exclusive with --deepspeed-config / --fsdp-mode."
         ),
     ),
-    deepspeed_config: Optional[str] = typer.Option(
+    deepspeed_config: str | None = typer.Option(
         None,
         "--deepspeed-config",
         help="Direct path to a DeepSpeed JSON (overrides --distributed-preset).",
     ),
-    fsdp_mode: Optional[str] = typer.Option(
+    fsdp_mode: str | None = typer.Option(
         None,
         "--fsdp-mode",
         help=(
@@ -146,7 +145,7 @@ def main(
     wandb_project: str = typer.Option(
         "qlora-post-training", "--wandb-project", help="W&B project name"
     ),
-    wandb_run_name: Optional[str] = typer.Option(None, "--wandb-run-name", help="W&B run name"),
+    wandb_run_name: str | None = typer.Option(None, "--wandb-run-name", help="W&B run name"),
     seed: int = typer.Option(42, "--seed", help="Random seed"),
 ):
     """Run distributed SFT training with QLoRA (launch via torchrun)."""

@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
 import streamlit as st
 
 from ui.config import DOMAINS_DIR
 
 
-def experiment_filter(label: str = "Experiment") -> Optional[str]:
+def experiment_filter(label: str = "Experiment") -> str | None:
     """Dropdown of MLflow experiments."""
     try:
         import mlflow
+
         from ui.config import MLFLOW_TRACKING_URI
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         experiments = mlflow.search_experiments()
@@ -26,12 +24,13 @@ def experiment_filter(label: str = "Experiment") -> Optional[str]:
 
 
 def run_multi_select(
-    experiment_name: Optional[str] = None,
+    experiment_name: str | None = None,
     label: str = "Select Runs",
 ) -> list[str]:
     """Multi-select runs from an experiment."""
     try:
         import mlflow
+
         from ui.config import MLFLOW_TRACKING_URI
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         if experiment_name:
@@ -57,7 +56,7 @@ def metric_selector(
     return st.sidebar.selectbox(label, available_metrics, index=0)
 
 
-def domain_filter(label: str = "Domain") -> Optional[str]:
+def domain_filter(label: str = "Domain") -> str | None:
     """Dropdown of available domains (scans domains/ dir)."""
     if not DOMAINS_DIR.exists():
         return None

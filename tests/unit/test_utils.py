@@ -1,7 +1,6 @@
 """Unit tests for utility functions."""
 
-import pytest
-from src.utils import set_seed, estimate_model_vram
+from src.utils import estimate_model_vram, set_seed
 
 
 def test_set_seed():

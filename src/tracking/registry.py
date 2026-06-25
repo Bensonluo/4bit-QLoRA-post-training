@@ -17,7 +17,7 @@ already logged the training params (model config, hyperparams) and metrics
 
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from typing import Any
 
 from config.base import LoggingConfig
 from src.models.merger import merge_adapter_to_dir
@@ -31,9 +31,9 @@ def register_trained_model(
     adapter_dir: str,
     tracker: TrackerLike,
     logging_config: LoggingConfig,
-    base_model_name: Optional[str] = None,
+    base_model_name: str | None = None,
     model_config: Any = None,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """End-to-end registration of a just-trained adapter to the Model Registry.
 
     Steps (all optional via config):

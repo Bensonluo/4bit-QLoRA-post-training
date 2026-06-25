@@ -1,6 +1,5 @@
 """Qualitative evaluation through text generation."""
 
-from typing import List, Dict
 
 import torch
 from datasets import Dataset
@@ -17,7 +16,7 @@ def generate_samples(
     max_length: int = 256,
     temperature: float = 0.7,
     top_p: float = 0.9,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """Generate text samples from model.
 
     Args:
@@ -138,6 +137,6 @@ def interactive_generation(
         if response.startswith(formatted_prompt):
             response = response[len(formatted_prompt):]
 
-        console.print(f"\n[bold green]Response:[/bold green]")
+        console.print("\n[bold green]Response:[/bold green]")
         console.print(response)
         console.print()

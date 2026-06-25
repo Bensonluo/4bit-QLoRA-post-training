@@ -13,7 +13,6 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = DOMAIN_ROOT / "data" / "results"
@@ -28,7 +27,7 @@ class EvalResult:
     ground_truth_code: str
     predicted_name: str
     predicted_code: str
-    predicted_index: Optional[int]
+    predicted_index: int | None
     confidence: float
     difficulty: str
     entity_type: str

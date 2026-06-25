@@ -9,7 +9,7 @@ DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -43,13 +43,13 @@ def main():
     print(f"重复 query 涉及样本数: {sum(duplicates.values())}")
 
     # 分析重复的模式
-    print(f"\n重复次数分布:")
+    print("\n重复次数分布:")
     dup_dist = Counter(duplicates.values())
     for times in sorted(dup_dist.keys()):
         print(f"  重复 {times} 次: {dup_dist[times]} 个 query")
 
     # 看一个具体例子
-    print(f"\n一个重复 query 的示例:")
+    print("\n一个重复 query 的示例:")
     for q, count in sorted(duplicates.items(), key=lambda x: -x[1])[:1]:
         print(f"  Query: {q}")
         print(f"  出现 {count} 次，位置: {query_items[q]}")
@@ -110,13 +110,13 @@ def main():
                             easy_examples.append((q, candidates[i]))
                             if len(easy_examples) >= 20:
                                 break
-                except:
+                except Exception:
                     pass
                 break
         if len(easy_examples) >= 20:
             break
 
-    print(f"\nD 级候选示例 (输入 vs 候选):")
+    print("\nD 级候选示例 (输入 vs 候选):")
     for q, cand in easy_examples[:15]:
         print(f"  输入: {q[:40]}")
         print(f"  候选: {cand[:40]}")

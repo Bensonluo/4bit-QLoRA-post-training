@@ -3,7 +3,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -13,7 +13,7 @@ console = Console()
 
 
 def setup_logging(
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
     level: str = "INFO",
     use_rich: bool = True,
 ) -> logging.Logger:
@@ -67,9 +67,9 @@ def setup_logging(
 
 def setup_wandb(
     project: str,
-    config: Dict[str, Any],
-    entity: Optional[str] = None,
-    run_name: Optional[str] = None,
+    config: dict[str, Any],
+    entity: str | None = None,
+    run_name: str | None = None,
     enabled: bool = True,
 ):
     """Initialize Weights & Biases logging.
@@ -123,8 +123,8 @@ def setup_tensorboard(log_dir: str, enabled: bool = True) -> None:
 
 
 def log_metrics(
-    metrics: Dict[str, float],
-    step: Optional[int] = None,
+    metrics: dict[str, float],
+    step: int | None = None,
     prefix: str = "",
     wandb_run=None,
 ) -> None:
@@ -207,7 +207,7 @@ def print_table(headers: list, rows: list, title: str = "") -> None:
     console.print(table)
 
 
-def print_training_summary(config: Dict[str, Any]) -> None:
+def print_training_summary(config: dict[str, Any]) -> None:
     """Print training configuration summary.
 
     Args:

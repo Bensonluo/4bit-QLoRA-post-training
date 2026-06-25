@@ -50,7 +50,7 @@ def run_lora_training(config_path: Path) -> None:
 
 def update_config_model_path(config_path: Path, model_path: str) -> None:
     """更新配置文件中的模型路径。"""
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     cfg["model"] = model_path

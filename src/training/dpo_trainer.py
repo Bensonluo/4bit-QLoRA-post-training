@@ -5,23 +5,20 @@ memory optimizations for 8GB VRAM.
 """
 
 import os
-from typing import Optional
 
-import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer
-
-from transformers.trainer import Trainer, TrainingArguments
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from trl import DPOConfig as TRLDPOConfig, DPOTrainer as TRLDPOTrainer
+from transformers.trainer import TrainingArguments
+from trl import DPOConfig as TRLDPOConfig
+from trl import DPOTrainer as TRLDPOTrainer
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
-from config.dpo import DPOConfig, ReferenceModelConfig, PreferenceDataConfig, DPOTrainingConfig
-from src.models import load_model_and_tokenizer
+from config.base import LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
+from config.dpo import DPOConfig, PreferenceDataConfig, ReferenceModelConfig
 from src.data.loaders import PreferenceDataset
-from src.utils import set_seed, console, setup_logging
-from src.utils.platform_utils import get_platform
-from src.tracking import get_tracker, MLflowTrainCallback, register_trained_model
+from src.models import load_model_and_tokenizer
+from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
 from src.training.distributed import get_distributed_info
+from src.utils import console, set_seed, setup_logging
+from src.utils.platform_utils import get_platform
 
 
 class DPOTrainer:

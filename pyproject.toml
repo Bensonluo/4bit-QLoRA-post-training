@@ -96,6 +96,7 @@ where = ["src"]
 target-version = "py310"
 line-length = 100
 indent-width = 4
+extend-exclude = ["notebooks/*.ipynb"]
 
 [tool.ruff.lint]
 select = [
@@ -111,6 +112,9 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
+    "B905",  # zip() without strict= (common in data/ML code; lengths are paired by construction)
+    "C408",  # dict() calls used heavily for Plotly kwargs (idiomatic there)
+    "C401",  # unnecessary generators in set() calls (style-only, low value for this codebase)
 ]
 
 [tool.ruff.format]

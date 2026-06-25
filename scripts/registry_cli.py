@@ -31,7 +31,6 @@ Examples:
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -51,7 +50,7 @@ app = typer.Typer(
 console = Console()
 
 
-def _get_tracker(tracking_uri: Optional[str] = None):
+def _get_tracker(tracking_uri: str | None = None):
     """Build a LoggingConfig and fetch the tracker."""
     cfg = LoggingConfig(use_mlflow=True)
     if tracking_uri:
@@ -61,10 +60,10 @@ def _get_tracker(tracking_uri: Optional[str] = None):
 
 @app.command()
 def list(
-    model_name: Optional[str] = typer.Option(
+    model_name: str | None = typer.Option(
         None, "--model-name", "-m", help="Filter to one registered model name"
     ),
-    tracking_uri: Optional[str] = typer.Option(
+    tracking_uri: str | None = typer.Option(
         None, "--tracking-uri", help="MLflow tracking URI (default: ./outputs/mlruns)"
     ),
 ):
@@ -106,7 +105,7 @@ def list(
 def info(
     model_name: str = typer.Option(..., "--model-name", "-m"),
     version: str = typer.Option(..., "--version", "-v"),
-    tracking_uri: Optional[str] = typer.Option(None, "--tracking-uri"),
+    tracking_uri: str | None = typer.Option(None, "--tracking-uri"),
 ):
     """Deep-inspect a model version: shows lineage run, params, and metrics."""
     tracker = _get_tracker(tracking_uri)
@@ -123,7 +122,7 @@ def info(
         mv = client.get_model_version(model_name, version)
     except Exception as e:
         console.print(f"[red]✗ Version not found: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(Panel.fit(
         f"[bold cyan]{model_name} v{version}[/bold cyan]\n"
@@ -158,7 +157,7 @@ def transition(
     model_name: str = typer.Option(..., "--model-name", "-m"),
     version: str = typer.Option(..., "--version", "-v"),
     stage: str = typer.Option(..., "--stage", "-s", help="Staging / Production / Archived"),
-    tracking_uri: Optional[str] = typer.Option(None, "--tracking-uri"),
+    tracking_uri: str | None = typer.Option(None, "--tracking-uri"),
 ):
     """Transition a model version to a new stage."""
     if stage not in ("Staging", "Production", "Archived"):
@@ -179,7 +178,7 @@ def register(
     model_dir: str = typer.Option(..., "--model-dir", "-d", help="Merged model directory"),
     name: str = typer.Option(..., "--name", "-n", help="Registered model name"),
     stage: str = typer.Option("Staging", "--stage", "-s"),
-    tracking_uri: Optional[str] = typer.Option(None, "--tracking-uri"),
+    tracking_uri: str | None = typer.Option(None, "--tracking-uri"),
 ):
     """Register an already-merged model directory as a new model version.
 
@@ -197,7 +196,7 @@ def register(
         raise typer.Exit(1)
 
     console.print(f"[cyan]Logging {model_dir} to a new MLflow run...[/cyan]")
-    with tracker._mlflow.start_run(run_name=f"register-{name}") as run:
+    with tracker._mlflow.start_run(run_name=f"register-{name}") as _run:
         tracker.log_params({"registered_via": "registry_cli", "source_dir": model_dir})
         model_uri = tracker.log_model(model_dir=model_dir, artifact_path="model")
         if not model_uri:

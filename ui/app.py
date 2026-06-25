@@ -36,14 +36,14 @@ with status_cols[0]:
 
 with status_cols[1]:
     try:
-        import plotly
+        import plotly  # noqa: F401
         st.success("Plotly", icon="✅")
     except ImportError:
         st.error("Plotly", icon="❌")
 
 with status_cols[2]:
     try:
-        import transformers
+        import transformers  # noqa: F401
         st.success("Transformers", icon="✅")
     except ImportError:
         st.warning("Transformers", icon="⚠️")
@@ -125,7 +125,6 @@ st.subheader("Recent Activity")
 
 try:
     import mlflow
-    import pandas as pd
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     all_exps = mlflow.search_experiments()
     if all_exps:

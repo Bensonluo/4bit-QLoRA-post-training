@@ -1,10 +1,10 @@
 """SFT (Supervised Fine-Tuning) specific configurations."""
 
-import yaml
 from pathlib import Path
-from typing import Optional
 
-from config.base import DataConfig, LoRAConfig, LoggingConfig, ModelConfig, TrainingConfig
+import yaml
+
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 
 
 class SFTConfig:
@@ -12,11 +12,11 @@ class SFTConfig:
 
     def __init__(
         self,
-        model: Optional[ModelConfig] = None,
-        lora: Optional[LoRAConfig] = None,
-        training: Optional[TrainingConfig] = None,
-        data: Optional[DataConfig] = None,
-        logging: Optional[LoggingConfig] = None,
+        model: ModelConfig | None = None,
+        lora: LoRAConfig | None = None,
+        training: TrainingConfig | None = None,
+        data: DataConfig | None = None,
+        logging: LoggingConfig | None = None,
     ):
         """Initialize SFT configuration.
 
@@ -47,7 +47,7 @@ class SFTConfig:
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found: {path}")
 
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_dict = yaml.safe_load(f)
 
         return cls(

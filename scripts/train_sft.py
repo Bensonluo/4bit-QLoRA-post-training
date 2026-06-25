@@ -5,19 +5,17 @@ Usage:
     python scripts/train_sft.py --model-name Qwen/Qwen2.5-1.5B-Instruct --dataset finance-alpaca
 """
 
-import os
+# Add parent directory to path for imports
+import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 
-# Add parent directory to path for imports
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from config.sft import FINANCE_SFT_CONFIG
 from src.training import run_sft_training
 
@@ -58,7 +56,7 @@ def main(
         "-d",
         help="Dataset name or path",
     ),
-    max_samples: Optional[int] = typer.Option(
+    max_samples: int | None = typer.Option(
         None,
         "--max-samples",
         "-n",
@@ -135,7 +133,7 @@ def main(
         "--wandb-project",
         help="W&B project name",
     ),
-    wandb_run_name: Optional[str] = typer.Option(
+    wandb_run_name: str | None = typer.Option(
         None,
         "--wandb-run-name",
         help="W&B run name",
@@ -147,7 +145,7 @@ def main(
         "--seed",
         help="Random seed",
     ),
-    config_file: Optional[str] = typer.Option(
+    config_file: str | None = typer.Option(
         None,
         "--config",
         "-c",

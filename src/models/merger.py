@@ -1,7 +1,6 @@
 """Utilities for merging LoRA adapters into base models."""
 
 from pathlib import Path
-from typing import Optional
 
 from peft import PeftModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -12,7 +11,7 @@ from src.utils.logging import console
 def merge_adapter_to_dir(
     adapter_dir: str,
     output_dir: str,
-    base_model_name: Optional[str] = None,
+    base_model_name: str | None = None,
     dtype: str = "bfloat16",
 ) -> str:
     """Merge a saved LoRA adapter directory into the base model, writing the result to disk.
@@ -59,8 +58,8 @@ def merge_adapter_to_dir(
         # Explicit override — AutoPeftModel still needs the adapter dir as the first arg.
         load_kwargs["adapter_dir"] = adapter_dir
         # Load base separately then attach adapter to honor the override.
-        from transformers import AutoModelForCausalLM, AutoTokenizer
         from peft import PeftModel as _PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         console.print(f"[cyan]Loading base model: {base_model_name}[/cyan]")
         base = AutoModelForCausalLM.from_pretrained(base_model_name, torch_dtype=torch_dtype)
@@ -96,7 +95,7 @@ def merge_lora_into_base(
     model: PreTrainedModel,
     adapter_path: str,
     output_path: str,
-    tokenizer: Optional[PreTrainedTokenizer] = None,
+    tokenizer: PreTrainedTokenizer | None = None,
 ) -> PreTrainedModel:
     """Merge LoRA adapters into base model.
 
@@ -158,7 +157,7 @@ def export_to_gguf(
     """
     import subprocess
 
-    console.print(f"\n[bold cyan]Exporting to GGUF format[/bold cyan]")
+    console.print("\n[bold cyan]Exporting to GGUF format[/bold cyan]")
     console.print(f"  Model: {model_path}")
     console.print(f"  Output: {output_path}")
     console.print(f"  Quantization: {quantization}\n")
@@ -195,7 +194,7 @@ def load_merged_model(
     Returns:
         Loaded merged model
     """
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM
 
     console.print(f"[cyan]Loading merged model from: {model_path}[/cyan]")
 

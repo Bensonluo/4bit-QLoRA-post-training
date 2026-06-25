@@ -2,7 +2,6 @@
 """Launch the QLoRA Dashboard (MLflow + Streamlit)."""
 
 import os
-import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -70,20 +69,20 @@ def main(
         console.print("[yellow]Press Ctrl+C to stop all services.[/yellow]\n")
 
         # Wait for any process to exit
-        for name, proc in processes:
+        for _name, proc in processes:
             proc.wait()
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Shutting down...[/yellow]")
     finally:
-        for name, proc in processes:
+        for _name, proc in processes:
             if proc.poll() is None:
                 proc.terminate()
                 try:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-                console.print(f"[dim]  Stopped {name}[/dim]")
+                console.print(f"[dim]  Stopped {_name}[/dim]")
         console.print("[green]Done.[/green]")
 
 

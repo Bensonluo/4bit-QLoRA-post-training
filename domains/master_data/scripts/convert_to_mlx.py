@@ -10,7 +10,7 @@ random.seed(42)
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
 def main():
-    with open(DOMAIN_ROOT / "data" / "train" / "train.json", "r", encoding="utf-8") as f:
+    with open(DOMAIN_ROOT / "data" / "train" / "train.json", encoding="utf-8") as f:
         data = json.load(f)
 
     random.shuffle(data)

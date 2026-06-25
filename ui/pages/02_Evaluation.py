@@ -9,13 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
-from ui.config import DOMAINS_DIR, MLFLOW_TRACKING_URI
 from ui.components.domain_adapters import (
-    list_domains,
     get_adapter,
     get_domain_display_name,
+    list_domains,
     load_eval_data,
 )
+from ui.config import DOMAINS_DIR, MLFLOW_TRACKING_URI
 
 st.set_page_config(page_title="Evaluation", page_icon="🎯", layout="wide")
 st.title("🎯 Evaluation Results")

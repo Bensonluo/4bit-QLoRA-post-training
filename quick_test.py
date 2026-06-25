@@ -2,14 +2,14 @@
 """Quick training test without Flash Attention."""
 
 import sys
+
 sys.path.insert(0, '.')
 
 import os
+
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
-from src.models import load_model_and_tokenizer
-from src.data import AlpacaDataset
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.training.sft_trainer import SFTTrainer
 
 print('='*60)
@@ -85,12 +85,12 @@ try:
     trainer.setup_trainer()
     trainer.train()
     trainer.evaluate()
-    
+
     print()
     print('='*60)
     print('✅ TRAINING COMPLETE!')
     print('='*60)
-    
+
 except Exception as e:
     print()
     print('='*60)

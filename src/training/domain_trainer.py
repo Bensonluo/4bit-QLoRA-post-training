@@ -1,8 +1,7 @@
 """Domain adaptation trainer (extends SFT with domain-specific features)."""
 
-from typing import Optional
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.training.sft_trainer import SFTTrainer
 from src.utils import console
 

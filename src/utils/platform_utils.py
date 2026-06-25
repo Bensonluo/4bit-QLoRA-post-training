@@ -8,7 +8,6 @@ Automatically detects and configures for the available hardware:
 
 import platform
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 
@@ -100,7 +99,7 @@ def _get_apple_memory_gb() -> float:
     return 0.0
 
 
-def get_torch_dtype(dtype_str: str, platform_info: Optional[PlatformInfo] = None) -> torch.dtype:
+def get_torch_dtype(dtype_str: str, platform_info: PlatformInfo | None = None) -> torch.dtype:
     """Get torch dtype, adjusting for platform capabilities.
 
     Falls back from bf16 to float16 on platforms that don't support bf16.
@@ -117,7 +116,7 @@ def get_torch_dtype(dtype_str: str, platform_info: Optional[PlatformInfo] = None
     return torch.float32
 
 
-def recommend_settings(platform_info: Optional[PlatformInfo] = None) -> dict:
+def recommend_settings(platform_info: PlatformInfo | None = None) -> dict:
     """Recommend training settings based on detected platform.
 
     Returns:
@@ -173,7 +172,7 @@ def recommend_settings(platform_info: Optional[PlatformInfo] = None) -> dict:
 
 
 # Singleton — compute once
-_platform: Optional[PlatformInfo] = None
+_platform: PlatformInfo | None = None
 
 
 def get_platform() -> PlatformInfo:

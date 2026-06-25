@@ -1,7 +1,6 @@
 """Reproducibility utilities for random seed setting."""
 
 import random
-from typing import Optional
 
 import numpy as np
 import torch

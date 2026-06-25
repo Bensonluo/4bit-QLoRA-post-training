@@ -2,24 +2,30 @@
 
 import os
 from pathlib import Path
-from typing import Optional
 
-import torch
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
+    DataCollatorForLanguageModeling,
     Trainer,
     TrainingArguments,
-    DataCollatorForLanguageModeling,
 )
 from transformers.trainer_callback import TrainerCallback
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
-from src.models import load_model_and_tokenizer, print_model_info
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.data import AlpacaDataset, FinanceDataset
-from src.utils import set_seed, setup_logging, setup_wandb, setup_tensorboard, log_metrics, log_gpu_memory, console
-from src.utils.platform_utils import get_platform
-from src.tracking import get_tracker, MLflowTrainCallback, register_trained_model
+from src.models import load_model_and_tokenizer
+from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
 from src.training.distributed import get_distributed_info
+from src.utils import (
+    console,
+    log_gpu_memory,
+    log_metrics,
+    set_seed,
+    setup_logging,
+    setup_tensorboard,
+    setup_wandb,
+)
+from src.utils.platform_utils import get_platform
 
 
 class MemoryCallback(TrainerCallback):

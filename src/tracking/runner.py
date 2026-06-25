@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -16,7 +15,7 @@ import yaml
 class TrainingRunner:
     """Launch and monitor training runs from the Streamlit UI."""
 
-    def __init__(self, project_root: Optional[str] = None):
+    def __init__(self, project_root: str | None = None):
         self.project_root = Path(project_root or ".")
         self._active: dict[str, subprocess.Popen] = {}
         self._configs_dir = self.project_root / "outputs" / "configs"
@@ -104,7 +103,7 @@ class TrainingRunner:
             return "running"
         return "finished" if ret == 0 else "failed"
 
-    def get_log_path(self, run_id: str) -> Optional[Path]:
+    def get_log_path(self, run_id: str) -> Path | None:
         meta = self._run_meta.get(run_id)
         if meta:
             return Path(meta["log_path"])
@@ -148,7 +147,7 @@ class TrainingRunner:
         """Return all run_ids (active + completed) from persisted meta."""
         return list(self._run_meta.keys())
 
-    def get_run_info(self, run_id: str) -> Optional[dict]:
+    def get_run_info(self, run_id: str) -> dict | None:
         return self._run_meta.get(run_id)
 
     def _cleanup_finished(self) -> None:

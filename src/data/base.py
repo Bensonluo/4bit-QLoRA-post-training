@@ -1,7 +1,6 @@
 """Base dataset classes for different training formats."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
 
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
@@ -13,7 +12,7 @@ class BaseDataset(ABC):
     def __init__(
         self,
         data_path: str,
-        max_samples: Optional[int] = None,
+        max_samples: int | None = None,
     ):
         """Initialize dataset.
 

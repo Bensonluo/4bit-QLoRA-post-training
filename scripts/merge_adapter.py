@@ -97,7 +97,7 @@ def main(
         dtype=dtype,
     )
 
-    console.print(f"\n[bold green]✓ Merge complete![/bold green]")
+    console.print("\n[bold green]✓ Merge complete![/bold green]")
     console.print(f"[cyan]Merged model at: {merged_path}[/cyan]")
     console.print(
         "\n[dim]Next: register with `python scripts/registry_cli.py register "

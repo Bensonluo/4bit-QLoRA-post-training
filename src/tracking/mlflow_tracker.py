@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from config.base import LoggingConfig
 
@@ -92,10 +92,10 @@ class MLflowTracker:
 
     def start_run(
         self,
-        run_name: Optional[str] = None,
-        config: Optional[dict[str, Any]] = None,
-        tags: Optional[dict[str, str]] = None,
-    ) -> Optional[str]:
+        run_name: str | None = None,
+        config: dict[str, Any] | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> str | None:
         """Start an MLflow run and optionally log config params."""
         if not self._active:
             return None
@@ -107,7 +107,7 @@ class MLflowTracker:
             self._mlflow.set_tags(tags)
         return run.info.run_id
 
-    def log_metrics(self, metrics: dict[str, float], step: Optional[int] = None) -> None:
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         if not self._active:
             return
         self._mlflow.log_metrics(metrics, step=step)
@@ -125,7 +125,7 @@ class MLflowTracker:
             return
         self._mlflow.log_artifact(path)
 
-    def log_artifacts(self, local_dir: str, artifact_path: Optional[str] = None) -> None:
+    def log_artifacts(self, local_dir: str, artifact_path: str | None = None) -> None:
         """Log an entire directory of artifacts under the current run.
 
         Used to attach the merged-model output directory to a run for lineage.
@@ -138,8 +138,8 @@ class MLflowTracker:
         self,
         model_dir: str,
         artifact_path: str = "model",
-        registered_model_name: Optional[str] = None,
-    ) -> Optional[str]:
+        registered_model_name: str | None = None,
+    ) -> str | None:
         """Log a merged HuggingFace model dir as an MLflow model artifact.
 
         Uses mlflow.transformers flavor so the model can later be loaded via
@@ -174,7 +174,7 @@ class MLflowTracker:
         model_info = self._mlflow.transformers.log_model(transformers_model=components, **kwargs)
         return getattr(model_info, "model_uri", None) or f"runs:/{self._current_run_id()}/{artifact_path}"
 
-    def register_model(self, model_uri: str, name: str) -> Optional[dict[str, Any]]:
+    def register_model(self, model_uri: str, name: str) -> dict[str, Any] | None:
         """Register a logged model artifact to the Model Registry as a new version.
 
         Args:
@@ -204,13 +204,15 @@ class MLflowTracker:
             name=name, version=version, stage=stage, archive_existing_versions=False
         )
 
-    def search_model_versions(self, name: Optional[str] = None) -> list[dict[str, Any]]:
+    def search_model_versions(self, name: str | None = None) -> list[dict[str, Any]]:
         """List model versions, optionally filtered by registered model name."""
         if not self._active:
             return []
         client = self._mlflow.tracking.MlflowClient()
         if name:
-            versions = client.search_model_versions(f"name='{name}'")
+            # Escape single quotes in the filter string to avoid injection.
+            escaped = name.replace("'", "''")
+            versions = client.search_model_versions(f"name='{escaped}'")
         else:
             versions = client.search_model_versions()
         return [
@@ -225,7 +227,7 @@ class MLflowTracker:
             for v in versions
         ]
 
-    def _current_run_id(self) -> Optional[str]:
+    def _current_run_id(self) -> str | None:
         """Return the active run id (best-effort)."""
         if not self._active:
             return None
@@ -240,7 +242,7 @@ class MLflowTracker:
         except Exception:
             pass
 
-    def search_runs(self, experiment_name: Optional[str] = None) -> list[dict[str, Any]]:
+    def search_runs(self, experiment_name: str | None = None) -> list[dict[str, Any]]:
         """Return runs as list of dicts for dashboard consumption."""
         if not self._active:
             return []
@@ -260,10 +262,10 @@ class MLflowTracker:
         return runs.to_dict("records") if hasattr(runs, "to_dict") else []
 
 
-_tracker_instance: Optional[MLflowTracker] = None
+_tracker_instance: MLflowTracker | None = None
 
 
-def get_tracker(logging_config: Optional[LoggingConfig] = None) -> MLflowTracker | _NoOpTracker:
+def get_tracker(logging_config: LoggingConfig | None = None) -> MLflowTracker | _NoOpTracker:
     """Factory: returns a singleton tracker, or a no-op if mlflow disabled."""
     global _tracker_instance
 

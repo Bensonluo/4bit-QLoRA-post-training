@@ -1,6 +1,5 @@
 """Dataset loaders for various data formats."""
 
-from typing import Optional, Dict, Any
 
 from datasets import Dataset, load_dataset
 
@@ -32,7 +31,7 @@ class AlpacaDataset(BaseDataset):
             try:
                 dataset = load_dataset("json", data_files=self.data_path, split="train")
             except Exception as e2:
-                raise RuntimeError(f"Failed to load dataset: {e2}")
+                raise RuntimeError(f"Failed to load dataset: {e2}") from None
 
         # Limit samples if specified
         if self.max_samples and len(dataset) > self.max_samples:
@@ -164,7 +163,7 @@ class PreferenceDataset(BaseDataset):
             try:
                 dataset = load_dataset("json", data_files=self.data_path, split="train")
             except Exception as e2:
-                raise RuntimeError(f"Failed to load dataset: {e2}")
+                raise RuntimeError(f"Failed to load dataset: {e2}") from None
 
         if self.max_samples and len(dataset) > self.max_samples:
             dataset = dataset.select(range(self.max_samples))
@@ -235,7 +234,7 @@ class PreferenceDataset(BaseDataset):
 def load_custom_dataset(
     file_path: str,
     format_type: str = "alpaca",
-    max_samples: Optional[int] = None,
+    max_samples: int | None = None,
 ) -> Dataset:
     """Load custom dataset from local file.
 

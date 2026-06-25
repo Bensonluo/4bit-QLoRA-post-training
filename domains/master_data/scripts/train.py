@@ -17,13 +17,11 @@ from dataclasses import dataclass
 
 import torch
 import typer
-from datasets import load_dataset
 from peft import LoraConfig, TaskType, get_peft_model
 from rich.console import Console
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
     TrainingArguments,
 )
 from trl import SFTTrainer
@@ -128,7 +126,7 @@ def main(
     if save_steps is not None:
         config.save_steps = save_steps
 
-    console.print(f"\n[bold]主数据匹配训练[/bold]")
+    console.print("\n[bold]主数据匹配训练[/bold]")
     console.print(f"  模式: {preset}")
     console.print(f"  模型: {config.model_name}")
     console.print(f"  LoRA: r={config.lora_r}, alpha={config.lora_alpha}")

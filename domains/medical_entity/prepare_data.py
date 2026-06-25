@@ -12,7 +12,6 @@
 
 import json
 import random
-import re
 import sys
 from pathlib import Path
 
@@ -79,7 +78,6 @@ def add_noise(text: str) -> str:
     """对文本注入 1-2 个字符噪声（替换/删除/插入）。"""
     if len(text) < 3:
         return text
-    ops = []
     chars = list(text)
     n_ops = random.choice([1, 1, 2])
     for _ in range(n_ops):

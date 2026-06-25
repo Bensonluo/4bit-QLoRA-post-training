@@ -14,8 +14,8 @@ Or on Windows via SSH:
 Expected runtime: 2-3 hours on RTX 4060
 """
 
-import sys
 import os
+import sys
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -23,18 +23,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 # Set Hugging Face mirror for China (required for fast downloads)
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
-from src.models import load_model_and_tokenizer
-from src.data import FinanceDataset
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.training.sft_trainer import SFTTrainer
-from src.utils import set_seed, console, setup_logging
+from src.utils import console, set_seed
 
 
 def main():
     """Run complete finance domain training."""
-    
+
     console.print("\n[bold cyan]=== Finance Domain Training ===[/bold cyan]\n")
-    
+
     # Model configuration - Qwen 1.5B with 4-bit quantization
     model_config = ModelConfig(
         name="Qwen/Qwen2.5-1.5B-Instruct",
@@ -43,7 +41,7 @@ def main():
         max_length=1024,
         torch_dtype="bfloat16",
     )
-    
+
     # Training configuration - optimized for 8GB VRAM
     training_config = TrainingConfig(
         output_dir="./outputs/finance-sft",
@@ -57,7 +55,7 @@ def main():
         bf16=True,
         seed=42,
     )
-    
+
     # LoRA configuration
     lora_config = LoRAConfig(
         r=16,
@@ -67,7 +65,7 @@ def main():
         bias="none",
         task_type="CAUSAL_LM",
     )
-    
+
     # Data configuration
     data_config = DataConfig(
         dataset_name="yahma/alpaca-cleaned",
@@ -75,7 +73,7 @@ def main():
         validation_split=0.1,
         format="alpaca",
     )
-    
+
     # Logging configuration
     logging_config = LoggingConfig(
         use_wandb=False,
@@ -84,7 +82,7 @@ def main():
         log_memory=True,
         console_level="INFO",
     )
-    
+
     # Print configuration summary
     console.print("[bold]Configuration:[/bold]")
     console.print(f"  Model: {model_config.name}")
@@ -95,10 +93,10 @@ def main():
     console.print(f"  Gradient checkpointing: {training_config.gradient_checkpointing}")
     console.print(f"  LoRA rank: {lora_config.r}")
     console.print()
-    
+
     # Set random seed for reproducibility
     set_seed(training_config.seed)
-    
+
     # Create trainer
     trainer = SFTTrainer(
         model_config=model_config,
@@ -107,7 +105,7 @@ def main():
         data_config=data_config,
         logging_config=logging_config,
     )
-    
+
     # Run training
     try:
         trainer.prepare_model()
@@ -115,10 +113,10 @@ def main():
         trainer.setup_trainer()
         trainer.train()
         trainer.evaluate()
-        
+
         console.print("\n[bold green]✅ Training Complete![/bold green]")
         console.print(f"[cyan]Model saved to: {training_config.output_dir}[/cyan]\n")
-        
+
     except KeyboardInterrupt:
         console.print("\n[yellow]Training interrupted by user[/yellow]")
         raise

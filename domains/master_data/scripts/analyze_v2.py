@@ -9,7 +9,7 @@ DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -42,7 +42,7 @@ def analyze_products(data, name):
     total_d = 0
     d_examples = []
 
-    for idx, item in enumerate(data):
+    for _idx, item in enumerate(data):
         messages = item["messages"]
         query = extract_query(messages)
         if not query:
@@ -56,7 +56,7 @@ def analyze_products(data, name):
             if m["role"] == "assistant":
                 try:
                     labels = json.loads(m["content"])
-                except:
+                except Exception:
                     continue
 
                 # 从 user msg 提取 candidates
@@ -94,7 +94,7 @@ def analyze_products(data, name):
     print(f"  Medium (共同字符=1): {d_medium} ({d_medium/total_d*100:.1f}%)")
     print(f"  Easy (完全无关): {d_easy} ({d_easy/total_d*100:.1f}%)")
 
-    print(f"\nEasy D 级示例:")
+    print("\nEasy D 级示例:")
     for qc, cc, sim, common in d_examples:
         print(f"  '{qc}' vs '{cc}' -> Jaccard={sim:.2f}, 共同字符={common}")
 
@@ -120,7 +120,7 @@ def analyze_institutions(data, name):
     print(f"重复率: {sum(duplicates.values())/len(queries)*100:.1f}%")
 
     if duplicates:
-        print(f"\n重复次数 top 10:")
+        print("\n重复次数 top 10:")
         for q, c in sorted(duplicates.items(), key=lambda x: -x[1])[:10]:
             print(f"  重复 {c} 次: {q[:60]}")
 

@@ -1,12 +1,10 @@
 """Custom training callbacks."""
 
 import time
-from typing import Optional
 
 from transformers import TrainerCallback
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 
-from src.utils import console, log_metrics
+from src.utils import console
 
 
 class ProgressCallback(TrainerCallback):
@@ -22,7 +20,7 @@ class ProgressCallback(TrainerCallback):
         """Called when training begins."""
         self.start_time = time.time()
         console.print(f"\n[green]{'='*60}[/green]")
-        console.print(f"[bold green]Training Started[/bold green]")
+        console.print("[bold green]Training Started[/bold green]")
         console.print(f"[green]{'='*60}[/green]\n")
 
     def on_step_end(self, args, state, control, **kwargs):
@@ -46,7 +44,7 @@ class ProgressCallback(TrainerCallback):
         """Called when training ends."""
         elapsed = time.time() - self.start_time
         console.print(f"\n[green]{'='*60}[/green]")
-        console.print(f"[bold green]Training Complete[/bold green]")
+        console.print("[bold green]Training Complete[/bold green]")
         console.print(f"[green]Total time: {elapsed/60:.1f} minutes[/green]")
         console.print(f"[green]{'='*60}[/green]\n")
 
@@ -84,7 +82,7 @@ class EarlyStoppingCallback(TrainerCallback):
     def __init__(
         self,
         early_stopping_patience: int = 3,
-        early_stopping_threshold: Optional[float] = 0.0,
+        early_stopping_threshold: float | None = 0.0,
     ):
         """Initialize early stopping callback.
 
@@ -133,7 +131,7 @@ class EarlyStoppingCallback(TrainerCallback):
 
             # Check if should stop
             if self.early_stopping_counter >= self.early_stopping_patience:
-                console.print(f"\n[red]Early stopping triggered![/red]")
+                console.print("\n[red]Early stopping triggered![/red]")
                 control.should_training_stop = True
 
 

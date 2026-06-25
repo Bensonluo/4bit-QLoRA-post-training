@@ -20,8 +20,8 @@ Or on Windows:
     python scripts/train_quick_test.py
 """
 
-import sys
 import os
+import sys
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -29,11 +29,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 # Set Hugging Face mirror (required in China)
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
-from config.base import ModelConfig, TrainingConfig, LoRAConfig, DataConfig, LoggingConfig
-from src.models import load_model_and_tokenizer
-from src.data import AlpacaDataset
+from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.training.sft_trainer import SFTTrainer
-from src.utils import set_seed, console
+from src.utils import console, set_seed
 
 
 def main():

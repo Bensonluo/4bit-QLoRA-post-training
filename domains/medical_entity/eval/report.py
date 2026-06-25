@@ -15,7 +15,7 @@ RESULTS_DIR = DOMAIN_ROOT / "data" / "results"
 def generate_comparison_table(reports: list[EvalReport]) -> str:
     """生成 Markdown 对比表格"""
     lines = []
-    lines.append(f"# 医疗实体匹配模型对比评测报告")
+    lines.append("# 医疗实体匹配模型对比评测报告")
     lines.append(f"\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     # 总览表
@@ -100,7 +100,7 @@ def generate_executive_summary(reports: list[EvalReport]) -> str:
 
     lines = [
         "# 执行摘要：精调模型 vs 现有方案\n",
-        f"## 核心结论",
+        "## 核心结论",
         f"- 精调模型 **Overall Accuracy: {ours.accuracy():.1%}** vs {theirs.model_name} **{theirs.accuracy():.1%}**，"
         f"提升 **{acc_diff:+.1f}%**",
         f"- 困难样本（错别字/口语化）准确率提升 **{hard_diff:+.1f}%**",
@@ -118,13 +118,13 @@ def generate_executive_summary(reports: list[EvalReport]) -> str:
     lines.extend([
         "",
         "## 成本估算\n",
-        f"| 指标 | 现有方案 | 精调模型 |",
-        f"|---|---|---|",
+        "| 指标 | 现有方案 | 精调模型 |",
+        "|---|---|---|",
         f"| 单条延迟 | {theirs.avg_latency():.0f}ms | {ours.avg_latency():.0f}ms |",
         f"| 吞吐量 | {theirs.throughput():.0f}条/秒 | {ours.throughput():.0f}条/秒 |",
         f"| 日处理100万条 | 需要 {1000000/theirs.throughput()/3600:.1f}小时 | 需要 {1000000/ours.throughput()/3600:.1f}小时 |",
-        f"| 部署方式 | API依赖 | 本地GPU |",
-        f"| 数据安全 | 出域 | 不出域 |",
+        "| 部署方式 | API依赖 | 本地GPU |",
+        "| 数据安全 | 出域 | 不出域 |",
     ])
 
     return "\n".join(lines)

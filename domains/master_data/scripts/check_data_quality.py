@@ -3,7 +3,7 @@
 
 import json
 import random
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 random.seed(42)
@@ -12,7 +12,7 @@ DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -76,7 +76,6 @@ def check_dataset(data, name, train_queries=None):
     prod_count = 0
     candidate_counts = Counter()
     label_counts = Counter()
-    position_distribution = Counter()
     true_positions = []
 
     # 机构：true 位置
@@ -89,7 +88,6 @@ def check_dataset(data, name, train_queries=None):
     dup_queries = []
 
     # 一眼假检测
-    easy_negatives = 0  # 核心名完全不相关的候选
     total_candidates = 0
 
     for idx, item in enumerate(data):
@@ -152,7 +150,7 @@ def check_dataset(data, name, train_queries=None):
             issues.append(f"[{idx}] 没有找到 true/A 标签")
 
         # 检查一眼假候选
-        for cand in candidates:
+        for _cand in candidates:
             if is_inst:
                 # 机构：简单判断，如果候选和 query 完全不在一个城市
                 pass  # 比较复杂，暂不自动判断
@@ -161,15 +159,15 @@ def check_dataset(data, name, train_queries=None):
                 pass  # 需要更复杂的逻辑
 
     # 2. 输出统计
-    print(f"\n[基本统计]")
+    print("\n[基本统计]")
     print(f"  机构样本: {inst_count} ({inst_count/len(data)*100:.1f}%)")
     print(f"  产品样本: {prod_count} ({prod_count/len(data)*100:.1f}%)")
 
-    print(f"\n[候选数量分布]")
+    print("\n[候选数量分布]")
     for k in sorted(candidate_counts.keys()):
         print(f"  {k} 个候选: {candidate_counts[k]} 条 ({candidate_counts[k]/len(data)*100:.1f}%)")
 
-    print(f"\n[正确答案位置分布]")
+    print("\n[正确答案位置分布]")
     pos_dist = Counter(true_positions)
     for i in range(max(pos_dist.keys()) + 1 if pos_dist else 0):
         print(f"  位置 {i}: {pos_dist.get(i, 0)} 条 ({pos_dist.get(i, 0)/len(data)*100:.1f}%)")
@@ -181,7 +179,7 @@ def check_dataset(data, name, train_queries=None):
             issues.append(f"位置偏差警告: {first_pos_ratio*100:.1f}% 的正确答案在位置 0")
         print(f"  位置 0 占比: {first_pos_ratio*100:.1f}%")
 
-    print(f"\n[产品匹配等级分布]")
+    print("\n[产品匹配等级分布]")
     for grade in ["A", "B", "D"]:
         print(f"  {grade}级: {prod_grade_counts.get(grade, 0)} ({prod_grade_counts.get(grade, 0)/max(prod_count,1)*100:.1f}%)")
 
@@ -199,7 +197,7 @@ def check_dataset(data, name, train_queries=None):
             for q in list(overlap)[:5]:
                 print(f"  - {q[:50]}...")
         else:
-            print(f"\n[与训练集重叠] 0 条 ✅")
+            print("\n[与训练集重叠] 0 条 ✅")
 
     # 5. 输出问题
     if issues:
@@ -209,7 +207,7 @@ def check_dataset(data, name, train_queries=None):
         if len(issues) > 20:
             print(f"  ... 还有 {len(issues)-20} 个问题")
     else:
-        print(f"\n[质量问题] 0 个 ✅")
+        print("\n[质量问题] 0 个 ✅")
 
     return all_queries, issues
 
@@ -225,7 +223,7 @@ def check_hardness(data, name):
     hard_count = 0  # 近似候选
     total = 0
 
-    for idx, item in enumerate(data):
+    for _idx, item in enumerate(data):
         messages = item.get("messages", [])
         query, candidates = extract_query_and_candidates(messages)
         labels = extract_labels(messages)
@@ -291,7 +289,7 @@ def check_hardness(data, name):
     print(f"  Easy (一眼假): {easy_count} ({easy_count/total*100:.1f}%)")
 
     if easy_count / total > 0.3:
-        print(f"  ⚠️ Easy 候选占比过高 (>30%)")
+        print("  ⚠️ Easy 候选占比过高 (>30%)")
 
 
 def main():
@@ -308,7 +306,7 @@ def main():
     eval_inst_data = load_json(eval_inst_path) if eval_inst_path.exists() else []
     eval_prod_data = load_json(eval_prod_path) if eval_prod_path.exists() else []
 
-    print(f"\n数据集大小:")
+    print("\n数据集大小:")
     print(f"  训练集: {len(train_data)} 条")
     print(f"  评测-机构: {len(eval_inst_data)} 条")
     print(f"  评测-产品: {len(eval_prod_data)} 条")
@@ -339,7 +337,7 @@ def main():
     if cross_overlap:
         print(f"\n[评测集交叉重叠] 机构和产品评测集有 {len(cross_overlap)} 条重复 query ⚠️")
     else:
-        print(f"\n[评测集交叉重叠] 0 条 ✅")
+        print("\n[评测集交叉重叠] 0 条 ✅")
 
     # 候选硬度分析
     check_hardness(train_data[:500], "训练集 (前500条抽样)")
