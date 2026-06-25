@@ -32,7 +32,7 @@ def compare_models(
     from src.models import load_merged_model
 
     try:
-        tuned_model, _ = load_merged_model(model_path)
+        tuned_model = load_merged_model(model_path)
     except Exception:
         # Try loading with adapters
         from config.base import ModelConfig
@@ -41,7 +41,7 @@ def compare_models(
         tuned_model, _ = load_model_and_tokenizer(config)
 
     console.print(f"[cyan]Loading base model: {base_model_path}[/cyan]")
-    base_model, _ = load_merged_model(base_model_path)
+    base_model = load_merged_model(base_model_path)
 
     comparison = {}
 
@@ -70,7 +70,7 @@ def compare_models(
 def side_by_side_generation(
     model_path: str,
     base_model_path: str,
-    prompts: list,
+    prompts: list[str],
     tokenizer: PreTrainedTokenizer,
     max_length: int = 256,
 ) -> None:
@@ -86,8 +86,8 @@ def side_by_side_generation(
     from src.models import load_merged_model
 
     # Load models
-    tuned_model, _ = load_merged_model(model_path)
-    base_model, _ = load_merged_model(base_model_path)
+    tuned_model = load_merged_model(model_path)
+    base_model = load_merged_model(base_model_path)
 
     tuned_model.eval()
     base_model.eval()
@@ -101,7 +101,7 @@ def side_by_side_generation(
         inputs = tokenizer(prompt, return_tensors="pt").to(base_model.device)
 
         with torch.no_grad():
-            base_outputs = base_model.generate(
+            base_outputs = base_model.generate(  # type: ignore[operator]
                 **inputs,
                 max_length=max_length,
                 temperature=0.7,
@@ -112,7 +112,7 @@ def side_by_side_generation(
 
         # Generate with tuned model
         with torch.no_grad():
-            tuned_outputs = tuned_model.generate(
+            tuned_outputs = tuned_model.generate(  # type: ignore[operator]
                 **inputs,
                 max_length=max_length,
                 temperature=0.7,
@@ -126,9 +126,11 @@ def side_by_side_generation(
         table.add_column("Base Model", style="yellow")
         table.add_column("Fine-tuned Model", style="green")
 
-        table.add_row(
-            base_response[:500] + "..." if len(base_response) > 500 else base_response,
-            tuned_response[:500] + "..." if len(tuned_response) > 500 else tuned_response,
-        )
+        base_resp: str = base_response if isinstance(base_response, str) else str(base_response)
+        tuned_resp: str = tuned_response if isinstance(tuned_response, str) else str(tuned_response)
+        base_display = base_resp[:500] + "..." if len(base_resp) > 500 else base_resp
+        tuned_display = tuned_resp[:500] + "..." if len(tuned_resp) > 500 else tuned_resp
+
+        table.add_row(base_display, tuned_display)
 
         console.print(table)

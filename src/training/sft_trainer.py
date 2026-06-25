@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
@@ -12,7 +13,7 @@ from transformers import (
 from transformers.trainer_callback import TrainerCallback
 
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
-from src.data import AlpacaDataset, FinanceDataset
+from src.data import AlpacaDataset, BaseDataset, FinanceDataset
 from src.models import load_model_and_tokenizer
 from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
 from src.training.distributed import get_distributed_info
@@ -31,7 +32,7 @@ from src.utils.platform_utils import get_platform
 class MemoryCallback(TrainerCallback):
     """Callback to log GPU memory usage during training."""
 
-    def __init__(self, log_steps: int = 100):
+    def __init__(self, log_steps: int = 100) -> None:
         """Initialize memory callback.
 
         Args:
@@ -40,7 +41,7 @@ class MemoryCallback(TrainerCallback):
         super().__init__()
         self.log_steps = log_steps
 
-    def on_step_end(self, args, state, control, **kwargs):
+    def on_step_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
         """Log memory at end of step."""
         if state.global_step % self.log_steps == 0:
             log_gpu_memory(state.global_step, wandb_run=None)
@@ -57,7 +58,7 @@ class SFTTrainer:
         lora_config: LoRAConfig,
         data_config: DataConfig,
         logging_config: LoggingConfig,
-    ):
+    ) -> None:
         """Initialize SFT trainer.
 
         Args:
@@ -83,9 +84,9 @@ class SFTTrainer:
         )
 
         # Model and tokenizer (loaded later)
-        self.model = None
-        self.tokenizer = None
-        self.trainer = None
+        self.model: Any = None
+        self.tokenizer: Any = None
+        self.trainer: Trainer | None = None
 
         # MLflow tracker (no-op if use_mlflow=False)
         self._tracker = get_tracker(logging_config)
@@ -105,7 +106,7 @@ class SFTTrainer:
             backends.append("tensorboard")
         return backends if backends else ["none"]
 
-    def prepare_model(self):
+    def prepare_model(self) -> None:
         """Load model and apply LoRA adapters."""
         console.print("\n[bold cyan]=== Preparing Model ===[/bold cyan]\n")
 
@@ -142,11 +143,12 @@ class SFTTrainer:
         console.print(f"[green]✓ Trainable parameters: {trainable_params:,} ({trainable_percent:.2f}%)[/green]")
         console.print(f"[green]✓ Total parameters: {total_params:,}[/green]")
 
-    def prepare_data(self):
+    def prepare_data(self) -> None:
         """Load and prepare dataset."""
         console.print("\n[bold cyan]=== Preparing Data ===[/bold cyan]\n")
 
         # Choose dataset type based on config
+        dataset: BaseDataset
         if "finance" in self.data_config.dataset_name.lower() or self.data_config.dataset_name == "yahma/alpaca-cleaned":
             dataset = FinanceDataset(
                 data_path=self.data_config.dataset_name,
@@ -176,7 +178,7 @@ class SFTTrainer:
         console.print(f"[green]✓ Train samples: {len(self.train_dataset):,}[/green]")
 
         # Load separate validation file if no split was done
-        _val_dataset_obj = None
+        _val_dataset_obj: BaseDataset | None = None
         if self.eval_dataset is None and self.data_config.validation_file:
             val_path = Path(self.data_config.validation_file)
             if val_path.exists():
@@ -211,15 +213,15 @@ class SFTTrainer:
                     max_length=self.model_config.max_length,
                 )
 
-    def setup_trainer(self):
+    def setup_trainer(self) -> None:
         """Setup Hugging Face Trainer."""
         console.print("\n[bold cyan]=== Setting Up Trainer ===[/bold cyan]\n")
 
-        # 🆕 Detect distributed context (torchrun/accelerate set LOCAL_RANK/WORLD_SIZE).
+        # Detect distributed context (torchrun/accelerate set LOCAL_RANK/WORLD_SIZE).
         dist_info = get_distributed_info()
 
         # Training arguments — build as a dict first so we can conditionally inject DeepSpeed.
-        training_kwargs = dict(
+        training_kwargs: dict[str, Any] = dict(
             output_dir=self.training_config.output_dir,
             num_train_epochs=self.training_config.num_epochs,
             per_device_train_batch_size=self.training_config.batch_size,
@@ -252,7 +254,7 @@ class SFTTrainer:
             dataloader_pin_memory=False,
         )
 
-        # 🆕 Inject distributed strategy: FSDP (PyTorch-native, default) or DeepSpeed.
+        # Inject distributed strategy: FSDP (PyTorch-native, default) or DeepSpeed.
         # HF Trainer natively understands both `fsdp=`/`fsdp_config=` and `deepspeed=`.
         # Exactly one is set — TrainingConfig.__post_init__ enforces mutual exclusion.
         if self.training_config.fsdp:
@@ -302,7 +304,7 @@ class SFTTrainer:
         console.print(f"  Effective batch size: {self.training_config.effective_batch_size}")
         console.print(f"  Training steps: {len(self.train_dataset) // self.training_config.effective_batch_size * self.training_config.num_epochs}\n")
 
-    def train(self, resume_from_checkpoint: str | None = None):
+    def train(self, resume_from_checkpoint: str | None = None) -> Any:
         """Run training."""
         if resume_from_checkpoint:
             console.print(f"\n[bold green]=== Resuming Training from {resume_from_checkpoint} ===[/bold green]\n")
@@ -345,6 +347,7 @@ class SFTTrainer:
 
         # Train
         try:
+            assert self.trainer is not None
             train_result = self.trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
             # Save final model
@@ -352,7 +355,7 @@ class SFTTrainer:
             self.trainer.save_model()
             self.tokenizer.save_pretrained(self.training_config.output_dir)
 
-            # 🆕 Register to MLflow Model Registry (no-op unless register_model=True).
+            # Register to MLflow Model Registry (no-op unless register_model=True).
             # This closes the lineage loop: model version ← run ← params + metrics.
             register_trained_model(
                 adapter_dir=self.training_config.output_dir,
@@ -379,10 +382,11 @@ class SFTTrainer:
                 wandb_run.finish()
             self._tracker.end_run()
 
-    def evaluate(self):
+    def evaluate(self) -> dict[str, float]:
         """Evaluate model."""
         console.print("\n[bold cyan]=== Evaluating Model ===[/bold cyan]\n")
 
+        assert self.trainer is not None
         metrics = self.trainer.evaluate()
 
         console.print("[green]Evaluation Results:[/green]")

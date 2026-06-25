@@ -7,6 +7,7 @@ Supports:
 
 import gc
 import subprocess
+from typing import Any
 
 from src.utils.platform_utils import get_platform
 
@@ -111,7 +112,7 @@ def clear_cache() -> None:
 def optimize_memory(
     gradient_checkpointing: bool = True,
     use_flash_attention: bool = True,
-) -> dict[str, bool]:
+) -> dict[str, Any]:
     """Get recommended memory optimization settings.
 
     Args:
@@ -171,7 +172,7 @@ def optimize_memory(
     return optimizations
 
 
-def check_remote_gpu(host: str = "windows") -> dict[str, any]:
+def check_remote_gpu(host: str = "windows") -> dict[str, Any]:
     """Check GPU status on remote machine via SSH.
 
     This is useful when using Mac for development and remote Windows/ Linux for training.

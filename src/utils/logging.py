@@ -35,7 +35,7 @@ def setup_logging(
 
     # Console handler
     if use_rich:
-        console_handler = RichHandler(
+        console_handler: logging.Handler = RichHandler(
             console=console,
             show_time=True,
             show_path=False,
@@ -71,7 +71,7 @@ def setup_wandb(
     entity: str | None = None,
     run_name: str | None = None,
     enabled: bool = True,
-):
+) -> Any:
     """Initialize Weights & Biases logging.
 
     Args:
@@ -126,7 +126,7 @@ def log_metrics(
     metrics: dict[str, float],
     step: int | None = None,
     prefix: str = "",
-    wandb_run=None,
+    wandb_run: Any = None,
 ) -> None:
     """Log training metrics.
 
@@ -152,7 +152,7 @@ def log_metrics(
         wandb_run.log(metrics, step=step)
 
 
-def log_gpu_memory(step: int, wandb_run=None) -> None:
+def log_gpu_memory(step: int, wandb_run: Any = None) -> None:
     """Log GPU memory usage.
 
     Args:

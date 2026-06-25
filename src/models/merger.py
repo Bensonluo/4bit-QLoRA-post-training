@@ -1,6 +1,7 @@
 """Utilities for merging LoRA adapters into base models."""
 
 from pathlib import Path
+from typing import Any
 
 from peft import PeftModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -39,11 +40,12 @@ def merge_adapter_to_dir(
     console.print(f"  Output:  {output_dir}")
     console.print(f"  Dtype:   {dtype}")
 
-    torch_dtype = {
+    torch_dtype_map: dict[str, Any] = {
         "bfloat16": torch.bfloat16,
         "float16": torch.float16,
         "float32": torch.float32,
-    }.get(dtype, torch.bfloat16)
+    }
+    torch_dtype = torch_dtype_map.get(dtype, torch.bfloat16)
 
     try:
         from peft import AutoPeftModelForCausalLM
@@ -138,7 +140,7 @@ def merge_lora_into_base(
 
     console.print(f"[green]✓ Merged model saved to: {output_path}[/green]\n")
 
-    return merged_model
+    return merged_model  # type: ignore[no-any-return]
 
 
 def export_to_gguf(

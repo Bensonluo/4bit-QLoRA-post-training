@@ -40,6 +40,7 @@ def generate_samples(
         example = dataset[i]
 
         # Extract prompt
+        prompt: str = ""
         if "instruction" in example:
             prompt = f"### Instruction:\n{example['instruction']}\n\n### Response:\n"
         elif "prompt" in example:
@@ -56,7 +57,7 @@ def generate_samples(
 
         # Generate
         with torch.no_grad():
-            outputs = model.generate(
+            outputs = model.generate(  # type: ignore[operator]
                 **inputs,
                 max_length=max_length,
                 temperature=temperature,
@@ -67,7 +68,8 @@ def generate_samples(
             )
 
         # Decode
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        _decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        response: str = _decoded if isinstance(_decoded, str) else str(_decoded)
 
         # Remove prompt from response
         if response.startswith(prompt):
@@ -121,7 +123,7 @@ def interactive_generation(
         console.print("[cyan]Generating...[/cyan]")
 
         with torch.no_grad():
-            outputs = model.generate(
+            outputs = model.generate(  # type: ignore[operator]
                 **inputs,
                 max_length=max_length,
                 temperature=0.7,
@@ -134,7 +136,7 @@ def interactive_generation(
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
         # Remove prompt
-        if response.startswith(formatted_prompt):
+        if isinstance(response, str) and response.startswith(formatted_prompt):
             response = response[len(formatted_prompt):]
 
         console.print("\n[bold green]Response:[/bold green]")

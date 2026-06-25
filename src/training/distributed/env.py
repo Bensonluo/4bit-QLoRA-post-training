@@ -15,7 +15,9 @@ can write one code path for both single-GPU and multi-GPU.
 
 import functools
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 
@@ -70,7 +72,7 @@ def is_rank_zero() -> bool:
     return get_distributed_info().is_main_process
 
 
-def rank_zero_only(func):
+def rank_zero_only(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator: only run `func` on rank 0; no-op on other ranks.
 
     Useful for wrapping expensive logging or one-time setup that would otherwise
@@ -78,7 +80,7 @@ def rank_zero_only(func):
     """
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if is_rank_zero():
             return func(*args, **kwargs)
         return None

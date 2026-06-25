@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def execute_on_remote(
@@ -29,6 +30,7 @@ def execute_on_remote(
     """
     full_command = f"ssh {shlex.quote(host)} {shlex.quote(command)}"
 
+    result: subprocess.CompletedProcess[Any]
     if capture_output:
         result = subprocess.run(
             full_command,
@@ -206,7 +208,12 @@ class RemoteExecutor:
         print(f"Connected to {self.host}")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
         """Cleanup after training."""
         print(f"\nRemote execution on {self.host} finished")
 

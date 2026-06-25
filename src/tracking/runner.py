@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -23,10 +24,11 @@ class TrainingRunner:
         self._meta_file = self.project_root / "outputs" / ".run_meta.json"
         self._run_meta: dict[str, dict] = self._load_meta()
 
-    def _load_meta(self) -> dict[str, dict]:
+    def _load_meta(self) -> dict[str, Any]:
         if self._meta_file.exists():
             try:
-                return json.loads(self._meta_file.read_text())
+                data: dict[str, Any] = json.loads(self._meta_file.read_text())
+                return data
             except (json.JSONDecodeError, OSError):
                 pass
         return {}

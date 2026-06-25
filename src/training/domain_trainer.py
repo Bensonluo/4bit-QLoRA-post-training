@@ -2,6 +2,7 @@
 
 
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
+from src.data.base import BaseDataset
 from src.training.sft_trainer import SFTTrainer
 from src.utils import console
 
@@ -23,7 +24,7 @@ class DomainAdaptationTrainer(SFTTrainer):
         data_config: DataConfig,
         logging_config: LoggingConfig,
         domain_name: str = "finance",
-    ):
+    ) -> None:
         """Initialize domain adaptation trainer.
 
         Args:
@@ -43,7 +44,7 @@ class DomainAdaptationTrainer(SFTTrainer):
         )
         self.domain_name = domain_name
 
-    def prepare_data(self):
+    def prepare_data(self) -> None:
         """Load and prepare domain-specific dataset."""
         console.print(f"\n[bold cyan]=== Preparing {self.domain_name.title()} Domain Data ===[/bold cyan]\n")
 
@@ -51,7 +52,7 @@ class DomainAdaptationTrainer(SFTTrainer):
         if self.domain_name == "finance":
             from src.data import FinanceDataset
 
-            dataset = FinanceDataset(
+            dataset: BaseDataset = FinanceDataset(
                 data_path=self.data_config.dataset_name,
                 max_samples=self.data_config.max_samples,
             )

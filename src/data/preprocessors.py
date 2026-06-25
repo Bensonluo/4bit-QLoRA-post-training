@@ -1,6 +1,8 @@
 """Data preprocessing utilities."""
 
 
+from typing import Any
+
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
 
@@ -16,7 +18,7 @@ class DataCollator:
         padding: str = "max_length",
         max_length: int = 512,
         pad_to_multiple_of: int | None = None,
-    ):
+    ) -> None:
         """Initialize data collator.
 
         Args:
@@ -30,7 +32,7 @@ class DataCollator:
         self.max_length = max_length
         self.pad_to_multiple_of = pad_to_multiple_of
 
-    def __call__(self, features: list[dict]) -> dict[str, list]:
+    def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
         """Collate features into a batch.
 
         Args:
@@ -42,7 +44,7 @@ class DataCollator:
         # Get all keys from first feature
         keys = features[0].keys()
 
-        batch = {}
+        batch: dict[str, Any] = {}
         for key in keys:
             # Collect values for this key
             values = [f[key] for f in features]
@@ -145,11 +147,11 @@ def format_instruction(
 
 
 def tokenize_function(
-    examples: dict[str, list],
+    examples: dict[str, list[Any]],
     tokenizer: PreTrainedTokenizer,
     max_length: int = 512,
     text_column: str = "text",
-) -> dict:
+) -> dict[str, Any]:
     """Tokenize a batch of examples.
 
     Args:
@@ -161,15 +163,16 @@ def tokenize_function(
     Returns:
         Tokenized batch
     """
-    return tokenizer(
+    tokenized: dict[str, Any] = tokenizer(
         examples[text_column],
         truncation=True,
         max_length=max_length,
         padding="max_length",
     )
+    return tokenized
 
 
-def compute_statistics(dataset: Dataset) -> dict:
+def compute_statistics(dataset: Dataset) -> dict[str, Any]:
     """Compute dataset statistics.
 
     Args:
@@ -178,7 +181,7 @@ def compute_statistics(dataset: Dataset) -> dict:
     Returns:
         Dictionary with statistics
     """
-    stats = {
+    stats: dict[str, Any] = {
         "num_samples": len(dataset),
         "columns": dataset.column_names,
     }

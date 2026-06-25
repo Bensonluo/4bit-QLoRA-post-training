@@ -1,6 +1,7 @@
 """Base dataset classes for different training formats."""
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
@@ -13,7 +14,7 @@ class BaseDataset(ABC):
         self,
         data_path: str,
         max_samples: int | None = None,
-    ):
+    ) -> None:
         """Initialize dataset.
 
         Args:
@@ -22,7 +23,7 @@ class BaseDataset(ABC):
         """
         self.data_path = data_path
         self.max_samples = max_samples
-        self.dataset = None
+        self.dataset: Any = None
 
     @abstractmethod
     def load(self) -> Dataset:
@@ -54,7 +55,7 @@ class BaseDataset(ABC):
         self,
         validation_split: float = 0.1,
         seed: int = 42,
-    ) -> tuple[Dataset, Dataset]:
+    ) -> tuple[Any, Any]:
         """Split dataset into train and validation.
 
         Args:

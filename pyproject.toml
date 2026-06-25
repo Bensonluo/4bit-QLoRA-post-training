@@ -147,6 +147,8 @@ module = [
     "mlflow.*",
     "streamlit.*",
     "plotly.*",
+    "datasets.*",
+    "yaml",
 ]
 ignore_missing_imports = true
 

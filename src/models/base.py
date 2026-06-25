@@ -11,7 +11,7 @@ class BaseModelHandler:
         self,
         model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer,
-    ):
+    ) -> None:
         """Initialize model handler.
 
         Args:
@@ -53,7 +53,7 @@ class BaseModelHandler:
         model = AutoModelForCausalLM.from_pretrained(model_path)
         tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-        return cls(model, tokenizer)
+        return cls(model, tokenizer)  # type: ignore[arg-type]
 
 
 def get_model_size(model: PreTrainedModel) -> tuple[int, str]:

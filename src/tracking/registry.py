@@ -112,7 +112,10 @@ def register_trained_model(
 
         # Step 3: Register as a new model version.
         console.print(f"[cyan]Registering to '{registry_name}'...[/cyan]")
-        version_info = tracker.register_model(model_uri=model_uri, name=registry_name)
+        _version_info: dict[str, Any] | None = tracker.register_model(
+            model_uri=model_uri, name=registry_name
+        )
+        version_info = _version_info
         if not version_info:
             console.print("[yellow]⚠ register_model returned no version — aborting[/yellow]")
             return None

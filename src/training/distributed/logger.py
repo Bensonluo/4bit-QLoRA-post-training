@@ -22,10 +22,10 @@ class _RankZeroConsole:
     e.g., `console.status(...)` still works on rank 0 (and is skipped elsewhere).
     """
 
-    def __init__(self, real_console: Any):
+    def __init__(self, real_console: Any) -> None:
         self._real = real_console
 
-    def print(self, *args, **kwargs):
+    def print(self, *args: Any, **kwargs: Any) -> Any:
         if is_rank_zero():
             return self._real.print(*args, **kwargs)
         return None
@@ -39,7 +39,7 @@ class _RankZeroConsole:
         attr = getattr(self._real, name)
         if callable(attr):
 
-            def _noop(*_args, **_kwargs):
+            def _noop(*_args: Any, **_kwargs: Any) -> Any:
                 return None
 
             return _noop

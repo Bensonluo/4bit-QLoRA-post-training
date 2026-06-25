@@ -5,6 +5,7 @@ memory optimizations for 8GB VRAM.
 """
 
 import os
+from typing import Any
 
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers.trainer import TrainingArguments
@@ -70,15 +71,15 @@ class DPOTrainer:
         )
 
         # Models and tokenizer (loaded later)
-        self.model = None
-        self.ref_model = None
-        self.tokenizer = None
-        self.trainer = None
+        self.model: Any = None
+        self.ref_model: Any = None
+        self.tokenizer: Any = None
+        self.trainer: Any = None
 
         # MLflow tracker (no-op if use_mlflow=False)
         self._tracker = get_tracker(logging_config)
 
-    def prepare_models(self):
+    def prepare_models(self) -> None:
         """Load main model, reference model, and tokenizer."""
         console.print("\n[bold cyan]=== Preparing Models ===[/bold cyan]\n")
 
@@ -111,7 +112,7 @@ class DPOTrainer:
 
         # Load reference model
         console.print(f"\n[cyan]Loading reference model: {self.reference_config.name}[/cyan]")
-        self.ref_model, _ = load_model_and_tokenizer(self.reference_config)
+        self.ref_model, _ = load_model_and_tokenizer(self.reference_config)  # type: ignore[arg-type]
 
         # Freeze reference model
         console.print("[cyan]Freezing reference model...[/cyan]")
@@ -123,7 +124,7 @@ class DPOTrainer:
 
         console.print()
 
-    def prepare_data(self):
+    def prepare_data(self) -> None:
         """Load and prepare preference dataset."""
         console.print("[bold cyan]=== Preparing Preference Data ===[/bold cyan]\n")
 
@@ -152,7 +153,7 @@ class DPOTrainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
 
-    def _filter_finance(self, dataset):
+    def _filter_finance(self, dataset: Any) -> Any:
         """Filter dataset for finance content."""
         finance_keywords = [
             "stock", "investment", "finance", "financial", "trading",
@@ -161,7 +162,7 @@ class DPOTrainer:
             "currency", "crypto", "earnings", "revenue", "profit",
         ]
 
-        def is_finance_related(example):
+        def is_finance_related(example: dict[str, Any]) -> bool:
             text = (
                 example.get("prompt", "") +
                 " " +
@@ -173,11 +174,11 @@ class DPOTrainer:
 
         return dataset.filter(is_finance_related)
 
-    def setup_trainer(self):
+    def setup_trainer(self) -> None:
         """Setup TRL DPO trainer."""
         console.print("[bold cyan]=== Setting Up DPO Trainer ===[/bold cyan]\n")
 
-        # 🆕 Detect distributed context.
+        # Detect distributed context.
         dist_info = get_distributed_info()
 
         # TRL DPO configuration
@@ -193,7 +194,7 @@ class DPOTrainer:
         )
 
         # Training arguments — build as dict to allow conditional DeepSpeed injection.
-        training_kwargs = dict(
+        training_kwargs: dict[str, Any] = dict(
             output_dir=self.training_config.output_dir,
             num_train_epochs=self.training_config.num_epochs,
             per_device_train_batch_size=self.training_config.batch_size,
@@ -219,7 +220,7 @@ class DPOTrainer:
             ddp_find_unused_parameters=False,
         )
 
-        # 🆕 Inject distributed strategy. DPO holds policy + ref model simultaneously,
+        # Inject distributed strategy. DPO holds policy + ref model simultaneously,
         # so memory pressure ~2× SFT — FSDP full_shard (or ZeRO-3 + offload) is the
         # typical choice to fit both. See docs/distributed_training_guide.md.
         if self.training_config.fsdp:
@@ -250,7 +251,7 @@ class DPOTrainer:
         console.print()
 
         # Create DPO trainer
-        # 🩺 FIX: previously MLflowTrainCallback was instantiated but never passed to
+        # FIX: previously MLflowTrainCallback was instantiated but never passed to
         # TRLDPOTrainer, so DPO step metrics never reached MLflow. Mount it now so
         # DPO and SFT have parity in tracking.
         self.trainer = TRLDPOTrainer(
@@ -265,7 +266,7 @@ class DPOTrainer:
             **trl_dpo_config.__dict__,
         )
 
-    def train(self):
+    def train(self) -> None:
         """Run DPO training."""
         console.print("\n[bold green]=== Starting DPO Training ===[/bold green]\n")
 
@@ -297,6 +298,7 @@ class DPOTrainer:
                 },
             )
 
+        assert self.trainer is not None
         try:
             self.trainer.train()
 
@@ -305,7 +307,7 @@ class DPOTrainer:
             self.trainer.save_model()
             self.tokenizer.save_pretrained(self.training_config.output_dir)
 
-            # 🆕 Register to MLflow Model Registry (no-op unless register_model=True).
+            # Register to MLflow Model Registry (no-op unless register_model=True).
             register_trained_model(
                 adapter_dir=self.training_config.output_dir,
                 tracker=self._tracker,
@@ -326,11 +328,12 @@ class DPOTrainer:
                 wandb.finish()
             self._tracker.end_run()
 
-    def evaluate(self):
+    def evaluate(self) -> dict[str, float]:
         """Evaluate DPO-trained model."""
         console.print("\n[bold cyan]=== Evaluating DPO Model ===[/bold cyan]\n")
 
-        metrics = self.trainer.evaluate()
+        assert self.trainer is not None
+        metrics: dict[str, float] = self.trainer.evaluate()
 
         console.print("[green]Evaluation Results:[/green]")
         for key, value in metrics.items():

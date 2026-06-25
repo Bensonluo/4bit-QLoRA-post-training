@@ -42,7 +42,7 @@ class DPOConfig:
     label_smoothing: float = 0.0
     padding_value: int = -100
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate DPO configuration."""
         if self.beta <= 0:
             raise ValueError("beta must be positive")
@@ -83,7 +83,7 @@ class ReferenceModelConfig:
     device_map: str = "auto"
     torch_dtype: str = "bfloat16"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate reference model configuration."""
         if self.quantization_bits not in [4, 8]:
             raise ValueError("quantization_bits must be 4 or 8")
@@ -113,7 +113,7 @@ class PreferenceDataConfig:
     auto_filter: bool = False
     preprocess_num_workers: int = 4
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate preference data configuration."""
         if not 0 <= self.validation_split < 1:
             raise ValueError("validation_split must be between 0 and 1")

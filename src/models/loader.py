@@ -6,6 +6,8 @@ Supports:
 """
 
 
+from typing import Any
+
 import torch
 from transformers import (
     AutoModelForCausalLM,
@@ -63,12 +65,12 @@ def load_tokenizer(
 
     console.print(f"[green]✓ Tokenizer loaded (vocab_size={tokenizer.vocab_size})[/green]")
 
-    return tokenizer
+    return tokenizer  # type: ignore[return-value]
 
 
 def _get_quantization_config(
     quantization_bits: int = 4,
-):
+) -> Any:
     """Get bitsandbytes quantization config (CUDA only).
 
     Args:
@@ -185,7 +187,7 @@ def load_model(
 
     # Move to MPS after loading (MPS doesn't support device_map)
     if platform_info.is_mps:
-        model = model.to("mps")
+        model = model.to("mps")  # type: ignore[arg-type]
 
     console.print(f"[green]✓ Model loaded successfully on {platform_info.device}![/green]\n")
 

@@ -83,7 +83,7 @@ class MLflowTracker:
             self._mlflow = mlflow
             self._active = True
         except ImportError:
-            self._mlflow = None  # type: ignore[assignment]
+            self._mlflow = None  # type: ignore[assignment,unused-ignore]
             self._active = False
 
     @property
@@ -105,7 +105,8 @@ class MLflowTracker:
             self._mlflow.log_params(flat)
         if tags:
             self._mlflow.set_tags(tags)
-        return run.info.run_id
+        run_id: str | None = run.info.run_id
+        return run_id
 
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         if not self._active:

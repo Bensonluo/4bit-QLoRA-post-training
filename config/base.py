@@ -19,18 +19,18 @@ class ModelConfig:
     """
 
     name: str = "Qwen/Qwen2.5-1.5B-Instruct"
-    quantization_bits: int = 4
+    quantization_bits: int | None = 4
     load_in_8bit: bool = False
     trust_remote_code: bool = True
     use_flash_attention: bool = True
     max_length: int = 512
-    device_map: str = "auto"
+    device_map: str | None = "auto"
     torch_dtype: str = "bfloat16"
     # 🆕 Precision used when merging LoRA adapter back into the base model for
     # registration. Defaults to bf16 (full-precision merge for best quality).
     merge_dtype: str = "bfloat16"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration and auto-adjust for platform."""
         if self.quantization_bits not in [4, 8, None]:
             raise ValueError("quantization_bits must be 4, 8, or None")
@@ -82,7 +82,7 @@ class LoRAConfig:
     bias: str = "none"
     task_type: str = "CAUSAL_LM"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         if self.r <= 0:
             raise ValueError("LoRA rank r must be positive")
@@ -161,7 +161,7 @@ class TrainingConfig:
     # effective batch constant). Off by default — explicit per-device batch is clearer.
     auto_scale_batch: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         if self.batch_size <= 0:
             raise ValueError("batch_size must be positive")
@@ -222,7 +222,7 @@ class DataConfig:
     validation_file: str | None = None
     format: str = "alpaca"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         if not 0 <= self.validation_split < 1:
             raise ValueError("validation_split must be between 0 and 1")
@@ -290,7 +290,7 @@ class DPOConfig:
     reference_model_free: bool = False
     loss_type: str = "sigmoid"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         if self.beta <= 0:
             raise ValueError("beta must be positive")

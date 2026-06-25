@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 try:
     from transformers.trainer_callback import TrainerCallback
 except ImportError:
@@ -15,11 +17,11 @@ class MLflowTrainCallback(TrainerCallback):
     Delegates all MLflow calls to the tracker (which no-ops if disabled).
     """
 
-    def __init__(self, tracker) -> None:
+    def __init__(self, tracker: Any) -> None:
         super().__init__()
         self._tracker = tracker
 
-    def on_train_begin(self, args, state, control, **kwargs):
+    def on_train_begin(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
         model = kwargs.get("model")
         if model is not None:
             trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -31,7 +33,7 @@ class MLflowTrainCallback(TrainerCallback):
             })
         return control
 
-    def on_log(self, args, state, control, logs=None, **kwargs):
+    def on_log(self, args: Any, state: Any, control: Any, logs: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         if logs is None or not self._tracker.active:
             return control
         step = state.global_step
@@ -43,7 +45,7 @@ class MLflowTrainCallback(TrainerCallback):
             self._tracker.log_metrics(metrics, step=step)
         return control
 
-    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+    def on_evaluate(self, args: Any, state: Any, control: Any, metrics: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         if metrics is None or not self._tracker.active:
             return control
         eval_metrics: dict[str, float] = {}

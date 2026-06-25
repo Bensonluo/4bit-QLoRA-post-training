@@ -1,7 +1,10 @@
 """Dataset loaders for various data formats."""
 
 
+from typing import Any
+
 from datasets import Dataset, load_dataset
+from transformers import PreTrainedTokenizer
 
 from src.data.base import BaseDataset
 from src.utils.logging import console
@@ -45,7 +48,7 @@ class AlpacaDataset(BaseDataset):
 
     def format_for_training(
         self,
-        tokenizer,
+        tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
     ) -> Dataset:
         """Format Alpaca dataset for SFT training."""
@@ -76,7 +79,7 @@ class AlpacaDataset(BaseDataset):
 {output}"""
 
             # Tokenize
-            tokenized = tokenizer(
+            tokenized: dict[str, Any] = tokenizer(
                 prompt,
                 truncation=True,
                 max_length=max_length,
@@ -175,7 +178,7 @@ class PreferenceDataset(BaseDataset):
 
     def format_for_training(
         self,
-        tokenizer,
+        tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
     ) -> Dataset:
         """Format preference dataset for DPO training."""

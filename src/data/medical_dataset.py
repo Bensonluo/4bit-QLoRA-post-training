@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
@@ -27,7 +28,7 @@ class MedicalEntityDataset(BaseDataset):
         data_path: str,
         max_samples: int | None = None,
         difficulty_filter: str | None = None,
-    ):
+    ) -> None:
         self.difficulty_filter = difficulty_filter
         super().__init__(data_path, max_samples)
 
@@ -37,7 +38,7 @@ class MedicalEntityDataset(BaseDataset):
             raise FileNotFoundError(f"数据文件不存在: {self.data_path}")
 
         with open(data_path) as f:
-            data = json.load(f)
+            data: list[dict[str, Any]] = json.load(f)
 
         if self.difficulty_filter:
             data = [
@@ -56,8 +57,8 @@ class MedicalEntityDataset(BaseDataset):
         self,
         tokenizer: PreTrainedTokenizer,
         max_length: int = 1024,
-    ) -> Dataset:
-        def tokenize_fn(examples):
+    ) -> Any:
+        def tokenize_fn(examples: dict[str, list]) -> dict[str, Any]:
             prompts = []
             for inst, inp, out in zip(
                 examples["instruction"], examples["input"], examples["output"]
@@ -65,12 +66,16 @@ class MedicalEntityDataset(BaseDataset):
                 prompt = f"### Instruction:\n{inst}\n\n### Input:\n{inp}\n\n### Response:\n{out}"
                 prompts.append(prompt)
 
-            return tokenizer(
+            tokenized: dict[str, Any] = tokenizer(
                 prompts,
                 truncation=True,
                 max_length=max_length,
                 padding="max_length",
             )
+            return tokenized
+
+        if self.dataset is None:
+            self.load()
 
         self.dataset = self.dataset.map(
             tokenize_fn,
