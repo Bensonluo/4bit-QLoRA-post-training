@@ -281,3 +281,28 @@ def get_tracker(logging_config: LoggingConfig | None = None) -> MLflowTracker | 
         experiment_name=getattr(logging_config, "mlflow_experiment_name", "qlora-post-training"),
     )
     return _tracker_instance
+
+    def log_dataset(
+        self,
+        dataset_path: str,
+        dataset_name: str,
+        version: str,
+        context: str = "training",
+    ) -> None:
+        """Log dataset lineage information as params/artifacts.
+
+        Args:
+            dataset_path: Local path to the dataset.
+            dataset_name: Registered dataset name.
+            version: Dataset version id.
+            context: Dataset context (training/validation/test).
+        """
+        if not self._active:
+            return
+        self._mlflow.log_params(
+            {
+                f"dataset.{context}.name": dataset_name,
+                f"dataset.{context}.version": version,
+                f"dataset.{context}.path": dataset_path,
+            }
+        )

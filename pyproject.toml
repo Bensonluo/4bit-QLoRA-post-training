@@ -79,8 +79,10 @@ all = [
 train-sft = "scripts.train_sft:app"
 train-domain = "scripts.train_domain:app"
 train-dpo = "scripts.train_dpo:app"
+train-grpo = "scripts.train_grpo:app"
 merge-lora = "scripts.merge_lora:app"
 evaluate-model = "scripts.evaluate:app"
+run-flywheel = "scripts.run_flywheel_iteration:app"
 download-data = "scripts.download_data:app"
 qlora-dashboard = "scripts.launch_dashboard:app"
 
