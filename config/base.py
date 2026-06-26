@@ -227,9 +227,9 @@ class DataConfig:
         if not 0 <= self.validation_split < 1:
             raise ValueError("validation_split must be between 0 and 1")
 
-        if self.format not in ["alpaca", "chat", "sharegpt", "dpo"]:
+        if self.format not in ["alpaca", "chat", "sharegpt", "dpo", "grpo"]:
             raise ValueError(
-                'format must be one of: "alpaca", "chat", "sharegpt", "dpo"'
+                'format must be one of: "alpaca", "chat", "sharegpt", "dpo", "grpo"'
             )
 
 
