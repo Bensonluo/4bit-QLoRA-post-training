@@ -1,4 +1,8 @@
 data/results/
-outputs/
+outputs/*
+!outputs/adapters-gemma-26b/
+outputs/adapters-gemma-26b/*
+!outputs/adapters-gemma-26b/adapters.safetensors
+!outputs/adapters-gemma-26b/adapter_config.json
 __pycache__/
 *.pyc
