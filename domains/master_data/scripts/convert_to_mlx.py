@@ -9,6 +9,7 @@ random.seed(42)
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
+
 def main():
     with open(DOMAIN_ROOT / "data" / "train" / "train.json", encoding="utf-8") as f:
         data = json.load(f)
@@ -32,6 +33,7 @@ def main():
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     print(f"MLX data converted: {len(train_data)} train + {len(valid_data)} valid")
+
 
 if __name__ == "__main__":
     main()

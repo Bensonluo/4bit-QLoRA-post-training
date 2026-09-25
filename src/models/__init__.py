@@ -12,6 +12,7 @@ from src.models.merger import (
     export_to_gguf,
     load_merged_model,
     merge_adapter_to_dir,
+    merge_adapters_weighted,
     merge_lora_into_base,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     # Merging
     "merge_lora_into_base",
     "merge_adapter_to_dir",
+    "merge_adapters_weighted",
     "load_merged_model",
     "export_to_gguf",
     "compare_models_before_after",

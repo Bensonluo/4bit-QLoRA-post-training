@@ -13,6 +13,7 @@ def experiment_filter(label: str = "Experiment") -> str | None:
         import mlflow
 
         from ui.config import MLFLOW_TRACKING_URI
+
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         experiments = mlflow.search_experiments()
         exp_names = [e.name for e in experiments]
@@ -32,6 +33,7 @@ def run_multi_select(
         import mlflow
 
         from ui.config import MLFLOW_TRACKING_URI
+
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         if experiment_name:
             exp = mlflow.get_experiment_by_name(experiment_name)
@@ -61,7 +63,8 @@ def domain_filter(label: str = "Domain") -> str | None:
     if not DOMAINS_DIR.exists():
         return None
     domains = [
-        d.name for d in DOMAINS_DIR.iterdir()
+        d.name
+        for d in DOMAINS_DIR.iterdir()
         if d.is_dir() and not d.name.startswith("_") and d.name != "__pycache__"
     ]
     if not domains:

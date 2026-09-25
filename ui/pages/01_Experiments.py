@@ -13,19 +13,19 @@ st.set_page_config(page_title="Experiments", page_icon="📊", layout="wide")
 st.title("📊 Experiments")
 
 try:
-    import mlflow
+    import mlflow  # noqa: F401  (still needed: delete_run + metric history)
     import pandas as pd
 
     from ui.config import MLFLOW_TRACKING_URI
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    from ui.queries import fetch_experiments, fetch_runs
 except ImportError:
     st.error("Install mlflow to use this page: `pip install mlflow`")
     st.stop()
 
-# Fetch all runs
-all_experiments = mlflow.search_experiments()
-exp_ids = [e.experiment_id for e in all_experiments]
-runs = mlflow.search_runs(experiment_ids=exp_ids, order_by=["start_time DESC"])
+# Fetch all runs (cached 30s — see ui/queries.py)
+all_experiments = fetch_experiments(MLFLOW_TRACKING_URI)
+exp_id_by_name = {name: eid for eid, name in all_experiments}
+runs = fetch_runs(MLFLOW_TRACKING_URI)
 
 if runs.empty:
     st.info("No experiments found. Start training from the Training Lab.")
@@ -58,16 +58,23 @@ with st.expander("🔍 Filters", expanded=False):
         statuses = runs["status"].unique().tolist() if "status" in runs.columns else []
         selected_status = st.multiselect("Status", statuses, default=statuses)
     with f2:
-        model_vals = runs["params.model.name"].dropna().unique().tolist() if "params.model.name" in runs.columns else []
+        model_vals = (
+            runs["params.model.name"].dropna().unique().tolist()
+            if "params.model.name" in runs.columns
+            else []
+        )
         selected_models = st.multiselect("Model", model_vals, default=[])
     with f3:
-        exp_names = [e.name for e in all_experiments]
+        exp_names = [name for _, name in all_experiments]
         selected_exps = st.multiselect("Experiment", exp_names, default=exp_names)
 
     if selected_status and "status" in runs.columns:
         runs = runs[runs["status"].isin(selected_status)]
     if selected_models and "params.model.name" in runs.columns:
         runs = runs[runs["params.model.name"].isin(selected_models)]
+    if selected_exps and "experiment_id" in runs.columns:
+        wanted_ids = [exp_id_by_name[n] for n in selected_exps if n in exp_id_by_name]
+        runs = runs[runs["experiment_id"].isin(wanted_ids)]
 
 st.subheader(f"All Runs ({len(runs)})")
 
@@ -88,9 +95,9 @@ display_map = {
 display_cols = {k: v for k, v in display_map.items() if k in runs.columns}
 if display_cols:
     df_display = runs[list(display_cols.keys())].rename(columns=display_cols)
-    st.dataframe(df_display, width='stretch', hide_index=True)
+    st.dataframe(df_display, width="stretch", hide_index=True)
 else:
-    st.dataframe(runs.head(20), width='stretch', hide_index=True)
+    st.dataframe(runs.head(20), width="stretch", hide_index=True)
 
 st.divider()
 
@@ -113,10 +120,14 @@ if len(selected) >= 2:
             models = selected_runs[run_name_col].tolist()
             metrics_data = {}
             for mc in compare_metrics:
-                metrics_data[mc.replace("metrics.", "")] = selected_runs[mc].fillna(0).tolist()
+                # None (not 0.0) for missing metrics — never fabricate data points.
+                metrics_data[mc.replace("metrics.", "")] = [
+                    None if pd.isna(v) else float(v) for v in selected_runs[mc].tolist()
+                ]
             from ui.components.charts import make_bar_comparison
+
             fig = make_bar_comparison(models, metrics_data, "Metric Comparison")
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, width="stretch")
 
     # Param diff
     param_cols = [c for c in runs.columns if c.startswith("params.")]
@@ -129,7 +140,7 @@ if len(selected) >= 2:
                     diff_data[pc.replace("params.", "")] = vals
             if diff_data:
                 diff_df = pd.DataFrame(diff_data, index=selected_runs[run_name_col].tolist())
-                st.dataframe(diff_df.T, width='stretch')
+                st.dataframe(diff_df.T, width="stretch")
             else:
                 st.info("All selected runs have identical parameters.")
 
@@ -144,28 +155,45 @@ if selected_run:
     run_id = run_row["run_id"]
 
     d1, d2 = st.columns(2)
-    with d1:
-        with st.expander("Parameters"):
-            params = {k.replace("params.", ""): v for k, v in run_row.items() if k.startswith("params.")}
-            if params:
-                st.dataframe(pd.DataFrame(list(params.items()), columns=["Parameter", "Value"]), width='stretch', hide_index=True)
-    with d2:
-        with st.expander("Metrics"):
-            metrics = {k.replace("metrics.", ""): v for k, v in run_row.items() if k.startswith("metrics.")}
-            if metrics:
-                st.dataframe(pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"]), width='stretch', hide_index=True)
+    with d1, st.expander("Parameters"):
+        params = {
+            k.replace("params.", ""): v for k, v in run_row.items() if k.startswith("params.")
+        }
+        if params:
+            st.dataframe(
+                pd.DataFrame(list(params.items()), columns=["Parameter", "Value"]),
+                width="stretch",
+                hide_index=True,
+            )
+    with d2, st.expander("Metrics"):
+        metrics = {
+            k.replace("metrics.", ""): v for k, v in run_row.items() if k.startswith("metrics.")
+        }
+        if metrics:
+            st.dataframe(
+                pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"]),
+                width="stretch",
+                hide_index=True,
+            )
 
-    with st.expander("Loss Curve"):
+    with st.expander("Metric Curve"):
         try:
-            loss_history = mlflow.get_metric_history(run_id, "loss")
-            if loss_history:
-                from ui.components.charts import make_metric_timeseries
-                steps = [m.step for m in loss_history]
-                values = [m.value for m in loss_history]
-                fig = make_metric_timeseries({selected_run: list(zip(steps, values))}, "loss")
-                st.plotly_chart(fig, width='stretch')
+            from ui.queries import fetch_metric_history_by_run_id
+
+            metric_names = [
+                c.replace("metrics.", "") for c in runs.columns if c.startswith("metrics.")
+            ]
+            if metric_names:
+                default_idx = metric_names.index("loss") if "loss" in metric_names else 0
+                chosen = st.selectbox("Metric", metric_names, index=default_idx)
+                history = fetch_metric_history_by_run_id(MLFLOW_TRACKING_URI, run_id, chosen)
+                if history:
+                    from ui.components.charts import make_metric_timeseries
+
+                    fig = make_metric_timeseries({selected_run: history}, chosen)
+                    st.plotly_chart(fig, width="stretch")
         except Exception as e:
-            st.warning(f"Could not load loss history: {e}")
+            st.warning(f"Could not load metric history: {e}")
 
     # Single run delete
     if st.button("🗑 Delete This Run", type="secondary"):

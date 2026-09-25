@@ -1,6 +1,5 @@
 """Dataset loaders for various data formats."""
 
-
 from typing import Any
 
 from datasets import Dataset, load_dataset
@@ -92,7 +91,9 @@ class AlpacaDataset(BaseDataset):
             return tokenized
 
         console.print("[cyan]Formatting dataset for training...[/cyan]")
-        formatted_dataset = self.dataset.map(format_prompt, remove_columns=self.dataset.column_names)
+        formatted_dataset = self.dataset.map(
+            format_prompt, remove_columns=self.dataset.column_names
+        )
         console.print("[green]✓ Dataset formatted[/green]")
 
         return formatted_dataset
@@ -105,10 +106,27 @@ class FinanceDataset(AlpacaDataset):
     """
 
     FINANCE_KEYWORDS = [
-        "stock", "investment", "finance", "financial", "trading",
-        "portfolio", "dividend", "market", "economy", "business",
-        "money", "capital", "asset", "fund", "equity", "bond",
-        "currency", "crypto", "bitcoin", "earnings", "revenue",
+        "stock",
+        "investment",
+        "finance",
+        "financial",
+        "trading",
+        "portfolio",
+        "dividend",
+        "market",
+        "economy",
+        "business",
+        "money",
+        "capital",
+        "asset",
+        "fund",
+        "equity",
+        "bond",
+        "currency",
+        "crypto",
+        "bitcoin",
+        "earnings",
+        "revenue",
     ]
 
     def load(self) -> Dataset:
@@ -129,14 +147,15 @@ class FinanceDataset(AlpacaDataset):
 
     def _filter_finance(self, dataset: Dataset) -> Dataset:
         """Filter dataset to only include finance-related examples."""
+
         def is_finance_related(example: dict) -> bool:
             """Check if example is finance-related."""
             text = (
-                example.get("instruction", "") +
-                " " +
-                example.get("input", "") +
-                " " +
-                example.get("output", "")
+                example.get("instruction", "")
+                + " "
+                + example.get("input", "")
+                + " "
+                + example.get("output", "")
             ).lower()
 
             return any(keyword in text for keyword in self.FINANCE_KEYWORDS)
@@ -228,7 +247,9 @@ class PreferenceDataset(BaseDataset):
             }
 
         console.print("[cyan]Formatting preference dataset...[/cyan]")
-        formatted_dataset = self.dataset.map(format_preference, remove_columns=self.dataset.column_names)
+        formatted_dataset = self.dataset.map(
+            format_preference, remove_columns=self.dataset.column_names
+        )
         console.print("[green]✓ Dataset formatted[/green]")
 
         return formatted_dataset

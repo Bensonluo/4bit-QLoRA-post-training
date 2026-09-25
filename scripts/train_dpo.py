@@ -27,16 +27,48 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.dpo import FINANCE_DPO_CONFIG  # noqa: E402
+import yaml  # noqa: E402
+
+from config.base import LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig  # noqa: E402
+from config.dpo import (  # noqa: E402
+    FINANCE_DPO_CONFIG,
+    DPOConfig,
+    DPOTrainingConfig,
+    PreferenceDataConfig,
+    ReferenceModelConfig,
+)
 from src.training.dpo_trainer import run_dpo_training  # noqa: E402
 from src.utils.logging import console  # noqa: E402
 
 
+def _load_config_from_yaml(path: str) -> DPOTrainingConfig:
+    """Load DPO config from a YAML file with the standard section layout.
+
+    Sections (all optional; omitted ones fall back to preset defaults):
+        model / training / lora / dpo / reference / data / logging.
+    Matches the layout written by the Training Lab UI and train_grpo.py.
+    """
+    config_path = Path(path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+
+    with open(config_path) as f:
+        data = yaml.safe_load(f)
+
+    return DPOTrainingConfig(
+        model_config=ModelConfig(**data.get("model", {})),
+        training_config=TrainingConfig(**data.get("training", {})),
+        lora_config=LoRAConfig(**data.get("lora", {})),
+        dpo_config=DPOConfig(**data.get("dpo", {})),
+        reference_config=ReferenceModelConfig(**data.get("reference", {})),
+        data_config=PreferenceDataConfig(**data.get("data", {})),
+        logging_config=LoggingConfig(**data.get("logging", {})),
+    )
+
+
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="DPO training script for preference optimization"
-    )
+    parser = argparse.ArgumentParser(description="DPO training script for preference optimization")
 
     # Mode selection
     parser.add_argument(
@@ -281,6 +313,9 @@ def main():
     if args.quick_test:
         config = FINANCE_DPO_CONFIG
         console.print("[yellow]Using FINANCE_DPO_CONFIG with quick test overrides[/yellow]\n")
+    elif args.config:
+        config = _load_config_from_yaml(args.config)
+        console.print(f"[cyan]Loaded config from: {args.config}[/cyan]\n")
     else:
         config = FINANCE_DPO_CONFIG
         console.print("[yellow]Using FINANCE_DPO_CONFIG[/yellow]\n")

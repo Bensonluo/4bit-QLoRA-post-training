@@ -53,7 +53,9 @@ def extract_ground_truth(sample: dict) -> list[dict]:
 # ════════════════════════════════════════════
 # Model Inference
 # ════════════════════════════════════════════
-def call_model(messages: list[dict], model_name: str, base_url: str, max_tokens: int = 2048) -> tuple[str, float]:
+def call_model(
+    messages: list[dict], model_name: str, base_url: str, max_tokens: int = 2048
+) -> tuple[str, float]:
     """Call model API and return (response_text, latency_ms)."""
     import os
 
@@ -98,7 +100,9 @@ def call_model(messages: list[dict], model_name: str, base_url: str, max_tokens:
     return text.strip(), latency
 
 
-def call_model_mlx(messages: list[dict], model, tokenizer, max_tokens: int = 2048) -> tuple[str, float]:
+def call_model_mlx(
+    messages: list[dict], model, tokenizer, max_tokens: int = 2048
+) -> tuple[str, float]:
     """Call MLX local model with adapter and return (response_text, latency_ms)."""
     from mlx_lm import generate
     from mlx_lm.sample_utils import make_sampler
@@ -122,6 +126,7 @@ def call_model_mlx(messages: list[dict], model, tokenizer, max_tokens: int = 204
 def parse_json_array(text: str) -> list[dict]:
     """Parse JSON array from model response, handling reasoning text before/after."""
     import re
+
     # Try extracting from code block first
     m = re.search(r"```(?:json)?\s*(\[[\s\S]*?\])\s*```", text)
     if m:
@@ -186,7 +191,11 @@ class EvalResult:
         return self.prod_grade_correct / self.total_candidates if self.total_candidates else 0
 
     def prod_core_name_accuracy(self) -> float:
-        return self.prod_core_name_correct / self.prod_core_name_total if self.prod_core_name_total else 0
+        return (
+            self.prod_core_name_correct / self.prod_core_name_total
+            if self.prod_core_name_total
+            else 0
+        )
 
     def avg_latency(self) -> float:
         return sum(self.latencies) / len(self.latencies) if self.latencies else 0
@@ -205,8 +214,11 @@ def _eval_one_sample(
     ground_truth = extract_ground_truth(sample)
 
     result = {
-        "latency": 0, "total_samples": 1, "parse_failure": 0,
-        "total_candidates": 0, "candidates": [],
+        "latency": 0,
+        "total_samples": 1,
+        "parse_failure": 0,
+        "total_candidates": 0,
+        "candidates": [],
     }
 
     try:
@@ -223,7 +235,11 @@ def _eval_one_sample(
         for gt_item in ground_truth:
             result["total_candidates"] += 1
             gt_idx = gt_item.get("index", 0)
-            pred_item = next((p for p in predicted if p.get("index") == gt_idx), None) if predicted else None
+            pred_item = (
+                next((p for p in predicted if p.get("index") == gt_idx), None)
+                if predicted
+                else None
+            )
             result["candidates"].append({"gt": gt_item, "pred": pred_item})
 
     except Exception as e:
@@ -251,11 +267,12 @@ def _merge_sample(result: EvalResult, sample_result: dict, task: str):
         # Pred best = matched=true with highest confidence
         conf_order = {"High": 3, "Medium": 2, "Low": 1}
         pred_matches = [
-            c for c in sample_result["candidates"]
-            if c["pred"] and c["pred"].get("matched")
+            c for c in sample_result["candidates"] if c["pred"] and c["pred"].get("matched")
         ]
         if pred_matches:
-            pred_best = max(pred_matches, key=lambda c: conf_order.get(c["pred"].get("confidence", "Low"), 0))
+            pred_best = max(
+                pred_matches, key=lambda c: conf_order.get(c["pred"].get("confidence", "Low"), 0)
+            )
             pred_best_idx = pred_best["pred"].get("index")
         else:
             pred_best_idx = None
@@ -264,12 +281,21 @@ def _merge_sample(result: EvalResult, sample_result: dict, task: str):
     elif task == "product":
         grade_score = {"A": 95, "B": 75, "D": 0}
         # GT best = highest grade score
-        gt_best = max(sample_result["candidates"], key=lambda c: grade_score.get(c["gt"].get("match_grade", "D"), 0))
+        gt_best = max(
+            sample_result["candidates"],
+            key=lambda c: grade_score.get(c["gt"].get("match_grade", "D"), 0),
+        )
         gt_best_idx = gt_best["gt"].get("index")
         # Pred best = highest grade score among valid predictions
-        valid_preds = [c for c in sample_result["candidates"] if c["pred"] and c["pred"].get("match_grade") in grade_score]
+        valid_preds = [
+            c
+            for c in sample_result["candidates"]
+            if c["pred"] and c["pred"].get("match_grade") in grade_score
+        ]
         if valid_preds:
-            pred_best = max(valid_preds, key=lambda c: grade_score.get(c["pred"].get("match_grade", "D"), 0))
+            pred_best = max(
+                valid_preds, key=lambda c: grade_score.get(c["pred"].get("match_grade", "D"), 0)
+            )
             pred_best_idx = pred_best["pred"].get("index")
         else:
             pred_best_idx = None
@@ -324,18 +350,23 @@ def evaluate_model(
     mlx_tokenizer = None
     if adapter_path:
         from mlx_lm import load
-        console.print(f"[dim]加载 MLX 模型: {mlx_model_id or model_name} + adapter: {adapter_path}[/dim]")
+
+        console.print(
+            f"[dim]加载 MLX 模型: {mlx_model_id or model_name} + adapter: {adapter_path}[/dim]"
+        )
         mlx_model, mlx_tokenizer = load(mlx_model_id or model_name, adapter_path=adapter_path)
 
     if concurrency > 1 and not adapter_path:
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
-            futures = {pool.submit(_eval_one_sample, s, model_name, base_url, task): i for i, s in enumerate(samples)}
-            completed = 0
-            for future in as_completed(futures):
+            futures = {
+                pool.submit(_eval_one_sample, s, model_name, base_url, task): i
+                for i, s in enumerate(samples)
+            }
+            for completed, future in enumerate(as_completed(futures), start=1):
                 sample_result = future.result()
                 _merge_sample(result, sample_result, task)
-                completed += 1
                 if completed % log_every == 0:
                     _print_progress(result, model_name, completed, total, task)
     else:
@@ -352,13 +383,25 @@ def evaluate_model(
 
 def _print_progress(result: EvalResult, model_name: str, done: int, total: int, task: str):
     if task == "institution":
-        acc = (result.inst_tp + result.inst_tn) / result.total_candidates * 100 if result.total_candidates else 0
+        acc = (
+            (result.inst_tp + result.inst_tn) / result.total_candidates * 100
+            if result.total_candidates
+            else 0
+        )
         top1 = result.top1_correct / result.top1_total * 100 if result.top1_total else 0
-        print(f"  [{model_name}] {done}/{total} acc={acc:.1f}% top1={top1:.1f}% parse_fail={result.parse_failures}")
+        print(
+            f"  [{model_name}] {done}/{total} acc={acc:.1f}% top1={top1:.1f}% parse_fail={result.parse_failures}"
+        )
     else:
-        acc = result.prod_grade_correct / result.total_candidates * 100 if result.total_candidates else 0
+        acc = (
+            result.prod_grade_correct / result.total_candidates * 100
+            if result.total_candidates
+            else 0
+        )
         top1 = result.top1_correct / result.top1_total * 100 if result.top1_total else 0
-        print(f"  [{model_name}] {done}/{total} grade_acc={acc:.1f}% top1={top1:.1f}% parse_fail={result.parse_failures}")
+        print(
+            f"  [{model_name}] {done}/{total} grade_acc={acc:.1f}% top1={top1:.1f}% parse_fail={result.parse_failures}"
+        )
 
 
 def print_results(results: list[EvalResult]):
@@ -378,7 +421,11 @@ def print_results(results: list[EvalResult]):
         table.add_column("解析失败", justify="right")
         table.add_column("平均延迟", justify="right")
 
-        for r in sorted(inst_results, key=lambda x: x.top1_correct / x.top1_total if x.top1_total else 0, reverse=True):
+        for r in sorted(
+            inst_results,
+            key=lambda x: x.top1_correct / x.top1_total if x.top1_total else 0,
+            reverse=True,
+        ):
             top1 = r.top1_correct / r.top1_total if r.top1_total else 0
             table.add_row(
                 r.model_name,
@@ -406,18 +453,36 @@ def print_results(results: list[EvalResult]):
         table.add_column("解析失败", justify="right")
         table.add_column("平均延迟", justify="right")
 
-        for r in sorted(prod_results, key=lambda x: x.top1_correct / x.top1_total if x.top1_total else 0, reverse=True):
+        for r in sorted(
+            prod_results,
+            key=lambda x: x.top1_correct / x.top1_total if x.top1_total else 0,
+            reverse=True,
+        ):
             top1 = r.top1_correct / r.top1_total if r.top1_total else 0
             grades = r.prod_grade_details
-            a_acc = f"{grades.get('A', {}).get('correct', 0) / grades.get('A', {}).get('total', 1):.0%}" if grades.get('A') else "-"
-            b_acc = f"{grades.get('B', {}).get('correct', 0) / grades.get('B', {}).get('total', 1):.0%}" if grades.get('B') else "-"
-            d_acc = f"{grades.get('D', {}).get('correct', 0) / grades.get('D', {}).get('total', 1):.0%}" if grades.get('D') else "-"
+            a_acc = (
+                f"{grades.get('A', {}).get('correct', 0) / grades.get('A', {}).get('total', 1):.0%}"
+                if grades.get("A")
+                else "-"
+            )
+            b_acc = (
+                f"{grades.get('B', {}).get('correct', 0) / grades.get('B', {}).get('total', 1):.0%}"
+                if grades.get("B")
+                else "-"
+            )
+            d_acc = (
+                f"{grades.get('D', {}).get('correct', 0) / grades.get('D', {}).get('total', 1):.0%}"
+                if grades.get("D")
+                else "-"
+            )
             table.add_row(
                 r.model_name,
                 f"[bold]{top1:.1%}[/bold]",
                 f"{r.prod_accuracy():.1%}",
                 f"{r.prod_core_name_accuracy():.1%}",
-                a_acc, b_acc, d_acc,
+                a_acc,
+                b_acc,
+                d_acc,
                 f"{r.parse_failures}/{r.total_samples}",
                 f"{r.avg_latency():.0f}ms",
             )
@@ -432,12 +497,20 @@ def main():
 
     parser = argparse.ArgumentParser(description="主数据匹配评测")
     parser.add_argument("--local-model", type=str, help="LM Studio 本地模型名")
-    parser.add_argument("--local-base-url", type=str, default="http://127.0.0.1:1234/v1/", help="LM Studio URL")
+    parser.add_argument(
+        "--local-base-url", type=str, default="http://127.0.0.1:1234/v1/", help="LM Studio URL"
+    )
     parser.add_argument("--api-model", type=str, help="云端 API 模型名 (如 glm-5.1)")
     parser.add_argument("--api-base-url", type=str, default=None, help="云端 API URL")
-    parser.add_argument("--adapter-path", type=str, default=None, help="MLX LoRA adapter 路径（本地直接评测）")
-    parser.add_argument("--mlx-model-id", type=str, default=None, help="MLX 模型 ID（用于 --adapter-path 模式）")
-    parser.add_argument("--task", choices=["institution", "product", "both"], default="both", help="评测任务")
+    parser.add_argument(
+        "--adapter-path", type=str, default=None, help="MLX LoRA adapter 路径（本地直接评测）"
+    )
+    parser.add_argument(
+        "--mlx-model-id", type=str, default=None, help="MLX 模型 ID（用于 --adapter-path 模式）"
+    )
+    parser.add_argument(
+        "--task", choices=["institution", "product", "both"], default="both", help="评测任务"
+    )
     parser.add_argument("--max-samples", type=int, default=200, help="每个任务最大评测条数")
     parser.add_argument("--concurrency", type=int, default=3, help="本地模型并发数（默认3）")
     args = parser.parse_args()
@@ -459,10 +532,15 @@ def main():
         console.print(f"  评测 {len(data)} 条")
 
         if args.adapter_path:
-            model_id = args.mlx_model_id or args.local_model or "mlx-community/gemma-4-26b-a4b-it-4bit"
+            model_id = (
+                args.mlx_model_id or args.local_model or "mlx-community/gemma-4-26b-a4b-it-4bit"
+            )
             console.print(f"[yellow]评测: {model_id} + adapter ({task})[/yellow]")
             r = evaluate_model(
-                model_id, "", task, data,
+                model_id,
+                "",
+                task,
+                data,
                 adapter_path=args.adapter_path,
                 mlx_model_id=model_id,
             )
@@ -470,20 +548,29 @@ def main():
             console.print(f"  [green]✓ adapter {task} 完成[/green]")
 
         if args.local_model:
-            console.print(f"[yellow]评测: {args.local_model} ({task}, 并发={args.concurrency})[/yellow]")
-            r = evaluate_model(args.local_model, args.local_base_url, task, data, concurrency=args.concurrency)
+            console.print(
+                f"[yellow]评测: {args.local_model} ({task}, 并发={args.concurrency})[/yellow]"
+            )
+            r = evaluate_model(
+                args.local_model, args.local_base_url, task, data, concurrency=args.concurrency
+            )
             results.append(r)
             console.print(f"  [green]✓ {args.local_model} {task} 完成[/green]")
 
         if args.api_model:
             import os
+
             if args.api_base_url:
                 api_url = args.api_base_url
             elif "minimax" in args.api_model.lower():
                 api_url = "https://api.minimax.chat/v1/"
             else:
-                api_url = os.environ.get("LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
-            console.print(f"[yellow]评测: {args.api_model} ({task}, 并发={args.concurrency})[/yellow]")
+                api_url = os.environ.get(
+                    "LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/"
+                )
+            console.print(
+                f"[yellow]评测: {args.api_model} ({task}, 并发={args.concurrency})[/yellow]"
+            )
             r = evaluate_model(args.api_model, api_url, task, data, concurrency=args.concurrency)
             results.append(r)
             console.print(f"  [green]✓ {args.api_model} {task} 完成[/green]")
@@ -499,17 +586,31 @@ def main():
     results_json = []
     for r in results:
         d = {
-            "model": r.model_name, "task": r.task,
-            "total_samples": r.total_samples, "total_candidates": r.total_candidates,
-            "parse_failures": r.parse_failures, "avg_latency_ms": r.avg_latency(),
+            "model": r.model_name,
+            "task": r.task,
+            "total_samples": r.total_samples,
+            "total_candidates": r.total_candidates,
+            "parse_failures": r.parse_failures,
+            "avg_latency_ms": r.avg_latency(),
         }
         d["top1_accuracy"] = r.top1_correct / r.top1_total if r.top1_total else 0
         if r.task == "institution":
-            d.update({"accuracy": r.inst_accuracy(), "precision": r.inst_precision(),
-                       "recall": r.inst_recall(), "f1": r.inst_f1()})
+            d.update(
+                {
+                    "accuracy": r.inst_accuracy(),
+                    "precision": r.inst_precision(),
+                    "recall": r.inst_recall(),
+                    "f1": r.inst_f1(),
+                }
+            )
         else:
-            d.update({"grade_accuracy": r.prod_accuracy(), "core_name_accuracy": r.prod_core_name_accuracy(),
-                       "grade_details": r.prod_grade_details})
+            d.update(
+                {
+                    "grade_accuracy": r.prod_accuracy(),
+                    "core_name_accuracy": r.prod_core_name_accuracy(),
+                    "grade_details": r.prod_grade_details,
+                }
+            )
         results_json.append(d)
 
     with open(output_path, "w") as f:

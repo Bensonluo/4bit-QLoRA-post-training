@@ -1,6 +1,5 @@
 """Domain adaptation trainer (extends SFT with domain-specific features)."""
 
-
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.data.base import BaseDataset
 from src.training.sft_trainer import SFTTrainer
@@ -46,7 +45,9 @@ class DomainAdaptationTrainer(SFTTrainer):
 
     def prepare_data(self) -> None:
         """Load and prepare domain-specific dataset."""
-        console.print(f"\n[bold cyan]=== Preparing {self.domain_name.title()} Domain Data ===[/bold cyan]\n")
+        console.print(
+            f"\n[bold cyan]=== Preparing {self.domain_name.title()} Domain Data ===[/bold cyan]\n"
+        )
 
         # Use FinanceDataset for finance domain
         if self.domain_name == "finance":
@@ -74,8 +75,12 @@ class DomainAdaptationTrainer(SFTTrainer):
             seed=self.training_config.seed,
         )
 
-        console.print(f"[green]✓ {self.domain_name.title()} train samples: {len(self.train_dataset):,}[/green]")
-        console.print(f"[green]✓ {self.domain_name.title()} val samples: {len(self.eval_dataset):,}[/green]\n")
+        console.print(
+            f"[green]✓ {self.domain_name.title()} train samples: {len(self.train_dataset):,}[/green]"
+        )
+        console.print(
+            f"[green]✓ {self.domain_name.title()} val samples: {len(self.eval_dataset):,}[/green]\n"
+        )
 
         # Format for training
         self.train_dataset = dataset.format_for_training(
@@ -106,7 +111,9 @@ def run_domain_adaptation(
         logging_config: Logging configuration
         domain_name: Name of the domain
     """
-    console.print(f"\n[bold magenta]Starting {domain_name.title()} Domain Adaptation[/bold magenta]\n")
+    console.print(
+        f"\n[bold magenta]Starting {domain_name.title()} Domain Adaptation[/bold magenta]\n"
+    )
 
     trainer = DomainAdaptationTrainer(
         model_config=model_config,

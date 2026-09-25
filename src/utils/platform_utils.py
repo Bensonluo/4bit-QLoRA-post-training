@@ -6,10 +6,13 @@ Automatically detects and configures for the available hardware:
 - CPU fallback
 """
 
+import logging
 import platform
 from dataclasses import dataclass
 
 import torch
+
+logger = logging.getLogger("qlora")
 
 
 @dataclass(frozen=True)
@@ -94,8 +97,9 @@ def _get_apple_memory_gb() -> float:
         )
         if result.returncode == 0:
             return int(result.stdout.strip()) / 1024**3
-    except Exception:
-        pass
+    except Exception as exc:
+        # Non-critical probe — 0.0 makes downstream logic fall back gracefully.
+        logger.debug("sysctl memory probe failed: %s", exc)
     return 0.0
 
 

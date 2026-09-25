@@ -2,12 +2,12 @@
 
 from config.base import (
     DataConfig,
-    DPOConfig,
     LoggingConfig,
     LoRAConfig,
     ModelConfig,
     TrainingConfig,
 )
+from config.dpo import DPOConfig
 
 __all__ = [
     "ModelConfig",

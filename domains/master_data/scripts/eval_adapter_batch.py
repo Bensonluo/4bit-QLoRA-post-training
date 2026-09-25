@@ -27,6 +27,7 @@ def extract_ground_truth(sample: dict) -> list[dict]:
 
 def parse_json_array(text: str) -> list[dict]:
     import re
+
     m = re.search(r"```(?:json)?\s*(\[[\s\S]*?\])\s*```", text)
     if m:
         try:
@@ -78,11 +79,15 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
         input_messages = [m for m in sample["messages"] if m["role"] != "assistant"]
         ground_truth = extract_ground_truth(sample)
 
-        prompt = tokenizer.apply_chat_template(input_messages, tokenize=False, add_generation_prompt=True)
+        prompt = tokenizer.apply_chat_template(
+            input_messages, tokenize=False, add_generation_prompt=True
+        )
 
         t0 = time.time()
         try:
-            response = generate(model, tokenizer, prompt=prompt, max_tokens=1024, sampler=sampler, verbose=False)
+            response = generate(
+                model, tokenizer, prompt=prompt, max_tokens=1024, sampler=sampler, verbose=False
+            )
         except Exception as e:
             print(f"  ERROR at {idx + 1}: {e}")
             parse_failures += 1
@@ -99,7 +104,11 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
         if task == "institution":
             for gt_item in ground_truth:
                 gt_idx = gt_item.get("index", 0)
-                pred_item = next((p for p in predicted if p.get("index") == gt_idx), None) if predicted else None
+                pred_item = (
+                    next((p for p in predicted if p.get("index") == gt_idx), None)
+                    if predicted
+                    else None
+                )
 
                 gt_matched = gt_item.get("matched", False)
                 pred_matched = pred_item.get("matched", False) if pred_item else not gt_matched
@@ -119,7 +128,9 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
 
             pred_matches = [p for p in predicted if p.get("matched")]
             if pred_matches:
-                pred_best = max(pred_matches, key=lambda p: conf_order.get(p.get("confidence", "Low"), 0))
+                pred_best = max(
+                    pred_matches, key=lambda p: conf_order.get(p.get("confidence", "Low"), 0)
+                )
                 pred_best_idx = pred_best.get("index")
             else:
                 pred_best_idx = None
@@ -131,7 +142,9 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
                 total_cand = inst_tp + inst_tn + inst_fp + inst_fn
                 acc = (inst_tp + inst_tn) / total_cand * 100 if total_cand else 0
                 top1 = top1_correct / (idx + 1) * 100
-                print(f"  [{idx + 1}/{total}] acc={acc:.1f}% top1={top1:.1f}% parse_fail={parse_failures}")
+                print(
+                    f"  [{idx + 1}/{total}] acc={acc:.1f}% top1={top1:.1f}% parse_fail={parse_failures}"
+                )
 
         elif task == "product":
             grade_score = {"A": 95, "B": 75, "D": 0}
@@ -140,7 +153,9 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
 
             valid_preds = [p for p in predicted if p.get("match_grade") in grade_score]
             if valid_preds:
-                pred_best = max(valid_preds, key=lambda p: grade_score.get(p.get("match_grade", "D"), 0))
+                pred_best = max(
+                    valid_preds, key=lambda p: grade_score.get(p.get("match_grade", "D"), 0)
+                )
                 pred_best_idx = pred_best.get("index")
             else:
                 pred_best_idx = None
@@ -150,7 +165,11 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
 
             for gt_item in ground_truth:
                 gt_idx = gt_item.get("index", 0)
-                pred_item = next((p for p in predicted if p.get("index") == gt_idx), None) if predicted else None
+                pred_item = (
+                    next((p for p in predicted if p.get("index") == gt_idx), None)
+                    if predicted
+                    else None
+                )
 
                 gt_grade = gt_item.get("match_grade", "D")
                 pred_grade = pred_item.get("match_grade", "X") if pred_item else "X"
@@ -170,10 +189,14 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
                     prod_core_name_correct += 1
 
             if (idx + 1) % 50 == 0:
-                total_cand = sum(prod_grade_details.get(g, {}).get("total", 0) for g in ["A", "B", "D"])
+                total_cand = sum(
+                    prod_grade_details.get(g, {}).get("total", 0) for g in ["A", "B", "D"]
+                )
                 acc = prod_grade_correct / total_cand * 100 if total_cand else 0
                 top1 = top1_correct / (idx + 1) * 100
-                print(f"  [{idx + 1}/{total}] grade_acc={acc:.1f}% top1={top1:.1f}% parse_fail={parse_failures}")
+                print(
+                    f"  [{idx + 1}/{total}] grade_acc={acc:.1f}% top1={top1:.1f}% parse_fail={parse_failures}"
+                )
 
     # Final results
     print(f"\n{'=' * 60}")
@@ -196,17 +219,24 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
         print(f"解析失败: {parse_failures}/{total}")
 
         result = {
-            "model": model_id, "adapter": adapter_path, "task": task,
-            "total_samples": total, "parse_failures": parse_failures,
+            "model": model_id,
+            "adapter": adapter_path,
+            "task": task,
+            "total_samples": total,
+            "parse_failures": parse_failures,
             "avg_latency_ms": sum(latencies) / len(latencies) if latencies else 0,
             "top1_accuracy": top1_correct / total if total else 0,
-            "accuracy": acc / 100, "precision": precision / 100,
-            "recall": recall / 100, "f1": f1 / 100,
+            "accuracy": acc / 100,
+            "precision": precision / 100,
+            "recall": recall / 100,
+            "f1": f1 / 100,
         }
     else:
         total_cand = sum(prod_grade_details.get(g, {}).get("total", 0) for g in ["A", "B", "D"])
         acc = prod_grade_correct / total_cand * 100 if total_cand else 0
-        core_acc = prod_core_name_correct / prod_core_name_total * 100 if prod_core_name_total else 0
+        core_acc = (
+            prod_core_name_correct / prod_core_name_total * 100 if prod_core_name_total else 0
+        )
         top1 = top1_correct / total * 100 if total else 0
 
         print(f"Top-1: {top1:.1f}%")
@@ -215,15 +245,21 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
         for g in ["A", "B", "D"]:
             d = prod_grade_details.get(g, {"correct": 0, "total": 0})
             if d["total"] > 0:
-                print(f"  {g}级: {d['correct']}/{d['total']} = {d['correct'] / d['total'] * 100:.0f}%")
+                print(
+                    f"  {g}级: {d['correct']}/{d['total']} = {d['correct'] / d['total'] * 100:.0f}%"
+                )
         print(f"解析失败: {parse_failures}/{total}")
 
         result = {
-            "model": model_id, "adapter": adapter_path, "task": task,
-            "total_samples": total, "parse_failures": parse_failures,
+            "model": model_id,
+            "adapter": adapter_path,
+            "task": task,
+            "total_samples": total,
+            "parse_failures": parse_failures,
             "avg_latency_ms": sum(latencies) / len(latencies) if latencies else 0,
             "top1_accuracy": top1_correct / total if total else 0,
-            "grade_accuracy": acc / 100, "core_name_accuracy": core_acc / 100,
+            "grade_accuracy": acc / 100,
+            "core_name_accuracy": core_acc / 100,
             "grade_details": prod_grade_details,
         }
 
@@ -242,11 +278,14 @@ def evaluate_adapter(task: str, max_samples: int, model_id: str, adapter_path: s
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="批量评测 MLX LoRA adapter")
     parser.add_argument("--task", choices=["institution", "product", "both"], default="both")
     parser.add_argument("--max-samples", type=int, default=400)
     parser.add_argument("--model-id", type=str, default="mlx-community/gemma-4-26b-a4b-it-4bit")
-    parser.add_argument("--adapter-path", type=str, default="domains/master_data/outputs/adapters-gemma-26b")
+    parser.add_argument(
+        "--adapter-path", type=str, default="domains/master_data/outputs/adapters-gemma-26b"
+    )
     args = parser.parse_args()
 
     tasks = ["institution", "product"] if args.task == "both" else [args.task]

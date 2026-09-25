@@ -81,14 +81,16 @@ def main(
         )
         raise typer.Exit(1)
 
-    console.print(Panel.fit(
-        "[bold cyan]LoRA Adapter Merge[/bold cyan]\n"
-        f"Adapter: {adapter_dir}\n"
-        f"Output:  {output_dir}\n"
-        f"Base:    {base_model_name or '(auto from adapter_config.json)'}\n"
-        f"Dtype:   {dtype}",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]LoRA Adapter Merge[/bold cyan]\n"
+            f"Adapter: {adapter_dir}\n"
+            f"Output:  {output_dir}\n"
+            f"Base:    {base_model_name or '(auto from adapter_config.json)'}\n"
+            f"Dtype:   {dtype}",
+            border_style="cyan",
+        )
+    )
 
     merged_path = merge_adapter_to_dir(
         adapter_dir=adapter_dir,

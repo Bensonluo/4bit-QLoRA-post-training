@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from config.base import LoggingConfig
+
+logger = logging.getLogger("qlora")
 
 
 def _flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = ".") -> dict[str, Any]:
@@ -54,6 +57,14 @@ class _NoOpTracker:
         """No-op stage transition."""
         pass
 
+    def set_model_alias(self, *_: Any, **__: Any) -> None:
+        """No-op alias assignment."""
+        pass
+
+    def delete_model_alias(self, *_: Any, **__: Any) -> None:
+        """No-op alias removal."""
+        pass
+
     def search_model_versions(self, *_: Any, **__: Any) -> list[dict[str, Any]]:
         """No-op — empty list of model versions."""
         return []
@@ -63,6 +74,10 @@ class _NoOpTracker:
 
     def search_runs(self, **_: Any) -> list[dict[str, Any]]:
         return []
+
+    def log_dataset(self, *args: Any, **_: Any) -> None:
+        """No-op dataset lineage logging."""
+        pass
 
 
 _NO_OP = _NoOpTracker()
@@ -173,7 +188,10 @@ class MLflowTracker:
 
         # mlflow.transformers.log_model returns a ModelInfo with .model_uri.
         model_info = self._mlflow.transformers.log_model(transformers_model=components, **kwargs)
-        return getattr(model_info, "model_uri", None) or f"runs:/{self._current_run_id()}/{artifact_path}"
+        return (
+            getattr(model_info, "model_uri", None)
+            or f"runs:/{self._current_run_id()}/{artifact_path}"
+        )
 
     def register_model(self, model_uri: str, name: str) -> dict[str, Any] | None:
         """Register a logged model artifact to the Model Registry as a new version.
@@ -197,13 +215,38 @@ class MLflowTracker:
         }
 
     def transition_model_stage(self, name: str, version: str, stage: str) -> None:
-        """Move a model version to a new stage: Staging / Production / Archived."""
+        """Move a model version to a new stage: Staging / Production / Archived.
+
+        Deprecated upstream: MLflow has deprecated registry stages since 2.9.0
+        (removal announced for a future major release). Kept for compatibility
+        with existing configs and the file-store backend; prefer
+        :meth:`set_model_alias` for new lifecycle flows.
+        """
         if not self._active:
             return
         client = self._mlflow.tracking.MlflowClient()
         client.transition_model_version_stage(
             name=name, version=version, stage=stage, archive_existing_versions=False
         )
+
+    def set_model_alias(self, name: str, version: str, alias: str) -> None:
+        """Point a named alias (e.g. 'champion', 'challenger') at a model version.
+
+        Aliases replace deprecated registry stages (MLflow 2.9.0+). Convention:
+        ``champion`` = serving candidate, ``challenger`` = evaluation candidate.
+        Load by alias with ``models:/<name>@<alias>``.
+        """
+        if not self._active:
+            return
+        client = self._mlflow.tracking.MlflowClient()
+        client.set_registered_model_alias(name=name, alias=alias, version=version)
+
+    def delete_model_alias(self, name: str, alias: str) -> None:
+        """Remove an alias from a registered model (all versions stay intact)."""
+        if not self._active:
+            return
+        client = self._mlflow.tracking.MlflowClient()
+        client.delete_registered_model_alias(name=name, alias=alias)
 
     def search_model_versions(self, name: str | None = None) -> list[dict[str, Any]]:
         """List model versions, optionally filtered by registered model name."""
@@ -221,6 +264,7 @@ class MLflowTracker:
                 "name": v.name,
                 "version": v.version,
                 "current_stage": v.current_stage,
+                "aliases": list(getattr(v, "aliases", None) or []),
                 "run_id": v.run_id,
                 "creation_timestamp": v.creation_timestamp,
                 "status": v.status,
@@ -240,8 +284,10 @@ class MLflowTracker:
             return
         try:
             self._mlflow.end_run()
-        except Exception:
-            pass
+        except Exception as exc:
+            # Teardown is best-effort — never fail the training run on it,
+            # but keep the failure visible at debug level.
+            logger.debug("mlflow.end_run() failed during teardown: %s", exc)
 
     def search_runs(self, experiment_name: str | None = None) -> list[dict[str, Any]]:
         """Return runs as list of dicts for dashboard consumption."""
@@ -262,6 +308,31 @@ class MLflowTracker:
         runs = self._mlflow.search_runs(experiment_ids=[exp_id], run_view_type=ViewType.ALL)
         return runs.to_dict("records") if hasattr(runs, "to_dict") else []
 
+    def log_dataset(
+        self,
+        dataset_path: str,
+        dataset_name: str,
+        version: str,
+        context: str = "training",
+    ) -> None:
+        """Log dataset lineage information as params.
+
+        Args:
+            dataset_path: Local path to the dataset.
+            dataset_name: Registered dataset name.
+            version: Dataset version id.
+            context: Dataset context (training/validation/test).
+        """
+        if not self._active:
+            return
+        self._mlflow.log_params(
+            {
+                f"dataset.{context}.name": dataset_name,
+                f"dataset.{context}.version": version,
+                f"dataset.{context}.path": dataset_path,
+            }
+        )
+
 
 _tracker_instance: MLflowTracker | None = None
 
@@ -281,28 +352,3 @@ def get_tracker(logging_config: LoggingConfig | None = None) -> MLflowTracker | 
         experiment_name=getattr(logging_config, "mlflow_experiment_name", "qlora-post-training"),
     )
     return _tracker_instance
-
-    def log_dataset(
-        self,
-        dataset_path: str,
-        dataset_name: str,
-        version: str,
-        context: str = "training",
-    ) -> None:
-        """Log dataset lineage information as params/artifacts.
-
-        Args:
-            dataset_path: Local path to the dataset.
-            dataset_name: Registered dataset name.
-            version: Dataset version id.
-            context: Dataset context (training/validation/test).
-        """
-        if not self._active:
-            return
-        self._mlflow.log_params(
-            {
-                f"dataset.{context}.name": dataset_name,
-                f"dataset.{context}.version": version,
-                f"dataset.{context}.path": dataset_path,
-            }
-        )

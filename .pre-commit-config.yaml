@@ -1,6 +1,9 @@
+# Pre-commit gates. Tool revs are pinned to match the versions used locally
+# and in CI (see pyproject [project.optional-dependencies] dev) so the three
+# environments do not drift: ruff 0.15.20, mypy 2.1.0.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -12,17 +15,27 @@ repos:
       - id: debug-statements
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.9
+    rev: v0.15.20
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
+  # mypy runs from the project venv (language: system), NOT mirrors-mypy's
+  # isolated env: this repo's strict config needs the real ML stack — in an
+  # env without torch/trl every import resolves to Any, producing false
+  # "unused type: ignore" / "not valid as a type" errors that can never pass.
+  # Run from an activated venv (`source venv/bin/activate`), same as local
+  # `mypy src/` and the CI typecheck job.
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - types-pyyaml
-          - types-requests
-        args: [--ignore-missing-imports]
+        name: mypy (project venv)
+        entry: mypy
+        language: system
+        types: [python]
+        files: ^src/
+        # mypy must see the whole graph in ONE invocation — pre-commit splits
+        # non-serial hooks into parallel per-chunk processes, and the partial
+        # import graphs produce phantom errors (official fix per mypy #13916).
+        require_serial: true

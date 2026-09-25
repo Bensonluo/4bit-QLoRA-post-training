@@ -8,7 +8,20 @@ from abc import ABC, abstractmethod
 import streamlit as st
 
 from ui.components.charts import make_grouped_bar, make_scatter_plot
+from ui.components.format import fmt_num, fmt_pct
 from ui.config import DOMAINS_DIR
+
+
+def _entity_types_in(data: list[dict]) -> list[str]:
+    """Union of entity types across models, in first-seen order.
+
+    Entity types are an open taxonomy (drug, hospital, device, ...) — chart
+    axes and filters must follow the eval file instead of a hardcoded list.
+    """
+    seen: dict[str, None] = {}
+    for model_data in data:
+        seen.update(dict.fromkeys(model_data.get("accuracy_by_type") or {}))
+    return list(seen)
 
 
 class DomainChartAdapter(ABC):
@@ -42,13 +55,11 @@ class MedicalEntityAdapter(DomainChartAdapter):
         cols = st.columns(min(len(data), 4))
         for i, model_data in enumerate(data[:4]):
             with cols[i]:
-                acc = model_data.get("overall_accuracy", 0)
-                mrr = model_data.get("mrr", 0)
-                latency = model_data.get("avg_latency_ms", 0)
                 st.metric(
-                    label=model_data.get("model", f"Model {i+1}"),
-                    value=f"{acc:.1%}",
-                    delta=f"MRR: {mrr:.3f} | {latency:.0f}ms",
+                    label=model_data.get("model", f"Model {i + 1}"),
+                    value=fmt_pct(model_data.get("overall_accuracy")),
+                    delta=f"MRR: {fmt_num(model_data.get('mrr'))} | "
+                    f"{fmt_num(model_data.get('avg_latency_ms'))}ms",
                 )
 
     def render_detail(self, data: list[dict]) -> None:
@@ -66,27 +77,45 @@ class MedicalEntityAdapter(DomainChartAdapter):
             for d in data:
                 name = d.get("model", "")
                 acc = d.get("accuracy_by_difficulty", {})
-                values[name] = [acc.get(diff, 0) for diff in difficulties]
+                # Missing bucket → None (rendered as a gap), not a 0-height bar.
+                values[name] = [acc.get(diff) for diff in difficulties]
             fig = make_grouped_bar(difficulties, models, values, "Difficulty", "Accuracy")
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, width="stretch")
 
         with col2:
             st.subheader("Accuracy by Entity Type")
-            entity_types = ["drug", "hospital"]
-            values2 = {}
-            for d in data:
-                name = d.get("model", "")
-                acc = d.get("accuracy_by_type", {})
-                values2[name] = [acc.get(et, 0) for et in entity_types]
-            fig2 = make_grouped_bar(entity_types, models, values2, "Entity Type", "Accuracy")
-            st.plotly_chart(fig2, width='stretch')
+            entity_types = _entity_types_in(data)
+            if entity_types:
+                values2 = {}
+                for d in data:
+                    name = d.get("model", "")
+                    acc = d.get("accuracy_by_type", {})
+                    values2[name] = [acc.get(et) for et in entity_types]
+                fig2 = make_grouped_bar(entity_types, models, values2, "Entity Type", "Accuracy")
+                st.plotly_chart(fig2, width="stretch")
+            else:
+                st.info("No entity-type breakdown in the latest eval file.")
 
-        # Latency vs Accuracy scatter
+        # Latency vs Accuracy scatter — only models reporting BOTH metrics; a
+        # missing value would otherwise plot a fabricated (0, 0) point.
         st.subheader("Latency vs Accuracy")
-        latencies = [d.get("avg_latency_ms", 0) for d in data]
-        accuracies = [d.get("overall_accuracy", 0) for d in data]
-        fig3 = make_scatter_plot(latencies, accuracies, models, "Avg Latency (ms)", "Accuracy")
-        st.plotly_chart(fig3, width='stretch')
+        points = [
+            (d.get("avg_latency_ms"), d.get("overall_accuracy"), models[i])
+            for i, d in enumerate(data)
+        ]
+        points = [
+            (lat, acc, name)
+            for lat, acc, name in points
+            if isinstance(lat, (int, float)) and isinstance(acc, (int, float))
+        ]
+        if points:
+            latencies, accuracies, names = zip(*points)
+            fig3 = make_scatter_plot(
+                list(latencies), list(accuracies), list(names), "Avg Latency (ms)", "Accuracy"
+            )
+            st.plotly_chart(fig3, width="stretch")
+        else:
+            st.info("No model reports both latency and accuracy.")
 
     def render_error_analysis(self, data: list[dict]) -> None:
         st.subheader("Error Analysis")
@@ -103,9 +132,12 @@ class MedicalEntityAdapter(DomainChartAdapter):
                     ["All"] + ["easy", "medium", "hard"],
                     key=f"err_{model_name}_diff",
                 )
+                # Filter options follow the taxonomy present in THIS eval
+                # file's errors, not a hardcoded list.
+                entity_types_seen = sorted({e.get("entity_type", "") for e in errors} - {""})
                 entity_filter = st.selectbox(
                     "Filter by entity type",
-                    ["All"] + ["drug", "hospital"],
+                    ["All"] + entity_types_seen,
                     key=f"err_{model_name}_entity",
                 )
                 filtered = errors
@@ -122,7 +154,7 @@ class MedicalEntityAdapter(DomainChartAdapter):
                         f"Predicted: `{err.get('predicted_name', '')}` | "
                         f"Ground truth: `{err.get('ground_truth', '')}`"
                         f"</span> | "
-                        f"Confidence: {err.get('confidence', 0):.2f} | "
+                        f"Confidence: {fmt_num(err.get('confidence'))} | "
                         f"Difficulty: {err.get('difficulty', '')}",
                         unsafe_allow_html=True,
                     )

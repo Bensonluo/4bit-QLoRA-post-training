@@ -22,6 +22,7 @@ TEST_DIR = DOMAIN_ROOT / "data" / "test"
 @dataclass
 class EvalResult:
     """单条评测结果"""
+
     query: str
     ground_truth: str
     ground_truth_code: str
@@ -49,6 +50,7 @@ class EvalResult:
 @dataclass
 class EvalReport:
     """评测报告"""
+
     model_name: str
     results: list[EvalResult] = field(default_factory=list)
     total_time_ms: float = 0
@@ -110,7 +112,9 @@ class EvalReport:
             return 0.0
         return self.total / (self.total_time_ms / 1000)
 
-    def _filter(self, difficulty: str = None, entity_type: str = None, seen: bool = None) -> list[EvalResult]:
+    def _filter(
+        self, difficulty: str = None, entity_type: str = None, seen: bool = None
+    ) -> list[EvalResult]:
         filtered = self.results
         if difficulty:
             filtered = [r for r in filtered if r.difficulty == difficulty]
@@ -139,9 +143,13 @@ class EvalReport:
             },
             "accuracy_by_seen": {
                 "seen_count": len(seen_results),
-                "seen_accuracy": sum(1 for r in seen_results if r.correct) / len(seen_results) if seen_results else 0,
+                "seen_accuracy": sum(1 for r in seen_results if r.correct) / len(seen_results)
+                if seen_results
+                else 0,
                 "unseen_count": len(unseen_results),
-                "unseen_accuracy": sum(1 for r in unseen_results if r.correct) / len(unseen_results) if unseen_results else 0,
+                "unseen_accuracy": sum(1 for r in unseen_results if r.correct) / len(unseen_results)
+                if unseen_results
+                else 0,
             },
             "mrr": self.mrr(),
             "avg_confidence": self.avg_confidence(),
@@ -176,7 +184,13 @@ def load_test_data(path: str = None) -> list[dict]:
         return json.load(f)
 
 
-def run_evaluation(model: BaseModel, test_data: list[dict] = None, log_every: int = 50, concurrency: int = 1, train_codes: set[str] | None = None) -> EvalReport:
+def run_evaluation(
+    model: BaseModel,
+    test_data: list[dict] = None,
+    log_every: int = 50,
+    concurrency: int = 1,
+    train_codes: set[str] | None = None,
+) -> EvalReport:
     """运行完整评测"""
     if test_data is None:
         test_data = load_test_data()
@@ -229,6 +243,7 @@ def run_evaluation(model: BaseModel, test_data: list[dict] = None, log_every: in
 
     if concurrency > 1:
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             futures = {pool.submit(_eval_one, s): i for i, s in enumerate(test_data)}
             results = [None] * total
@@ -240,10 +255,14 @@ def run_evaluation(model: BaseModel, test_data: list[dict] = None, log_every: in
                     elapsed = time.time() - start
                     speed = completed[0] / elapsed
                     eta = (total - completed[0]) / speed if speed > 0 else 0
-                    acc_so_far = sum(1 for r in results[:completed[0]] if r and r.correct) / completed[0] * 100
+                    acc_so_far = (
+                        sum(1 for r in results[: completed[0]] if r and r.correct)
+                        / completed[0]
+                        * 100
+                    )
                     print(
                         f"  [{model.name}] {completed[0]}/{total} "
-                        f"({completed[0]/total*100:.0f}%) "
+                        f"({completed[0] / total * 100:.0f}%) "
                         f"acc={acc_so_far:.1f}% "
                         f"speed={speed:.1f}/s "
                         f"ETA={eta:.0f}s"
@@ -260,7 +279,7 @@ def run_evaluation(model: BaseModel, test_data: list[dict] = None, log_every: in
                 acc = report.correct_count / len(report.results) * 100
                 print(
                     f"  [{model.name}] {idx + 1}/{total} "
-                    f"({(idx+1)/total*100:.0f}%) "
+                    f"({(idx + 1) / total * 100:.0f}%) "
                     f"acc={acc:.1f}% "
                     f"speed={speed:.1f}/s "
                     f"ETA={eta:.0f}s"

@@ -109,6 +109,12 @@ def main(
     gradient_accumulation_steps: int = typer.Option(
         8, "--gradient-accumulation-steps", "-g", help="Gradient accumulation steps"
     ),
+    dcp_checkpoint: bool = typer.Option(
+        False,
+        "--dcp-checkpoint",
+        help="Also write a reshardable DCP checkpoint (output_dir/dcp) after training — "
+        "resume across different world sizes; HF-format artifacts are unchanged",
+    ),
     learning_rate: float = typer.Option(2e-4, "--learning-rate", "--lr", help="Learning rate"),
     warmup_ratio: float = typer.Option(0.03, "--warmup-ratio", help="Warmup ratio"),
     # LoRA arguments
@@ -169,14 +175,16 @@ def main(
             strategy_label = f"DeepSpeed ({dist_cfg.preset.value})"
         else:
             strategy_label = "Pure DDP (no sharding)"
-        console.print(Panel.fit(
-            "[bold cyan]Distributed SFT Training[/bold cyan]\n"
-            f"Model: {model_name}\n"
-            f"Dataset: {dataset}\n"
-            f"World size: {dist_info.world_size}\n"
-            f"Strategy: {strategy_label}",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                "[bold cyan]Distributed SFT Training[/bold cyan]\n"
+                f"Model: {model_name}\n"
+                f"Dataset: {dataset}\n"
+                f"World size: {dist_info.world_size}\n"
+                f"Strategy: {strategy_label}",
+                border_style="cyan",
+            )
+        )
         console.print()
 
         if not dist_info.is_distributed:
@@ -240,15 +248,16 @@ def main(
             dist_label = f"DeepSpeed {os.path.basename(training_config.deepspeed_config)}"
         else:
             dist_label = "DDP"
-        console.print(Panel.fit(
-            f"""[bold]Configuration:[/bold]
+        console.print(
+            Panel.fit(
+                f"""[bold]Configuration:[/bold]
 
 Model: {model_config.name}
-Quantization: {model_config.quantization_bits or 'none (full bf16)'}-bit
+Quantization: {model_config.quantization_bits or "none (full bf16)"}-bit
 World size: {dist_info.world_size}
 
 Dataset: {data_config.dataset_name}
-Max Samples: {data_config.max_samples or 'All'}
+Max Samples: {data_config.max_samples or "All"}
 
 Epochs: {training_config.num_epochs}
 Per-device BS: {training_config.batch_size}
@@ -260,15 +269,16 @@ Distributed: {dist_label}
 LoRA r: {lora_config.r}  alpha: {lora_config.lora_alpha}
 
 Output: {training_config.output_dir}""",
-            border_style="green",
-        ))
+                border_style="green",
+            )
+        )
         console.print()
         console.print("[yellow]Starting in 3s... (Ctrl+C to cancel)[/yellow]")
         time.sleep(3)
 
     # Run training — identical call to single-GPU; HF Trainer handles the rest.
     try:
-        run_sft_training(
+        trainer = run_sft_training(
             model_config=model_config,
             training_config=training_config,
             lora_config=lora_config,
@@ -278,6 +288,28 @@ Output: {training_config.output_dir}""",
         if is_rank0:
             console.print("\n[bold green]✓ Distributed training completed![/bold green]")
             console.print(f"[cyan]Model saved to: {output_dir}[/cyan]\n")
+        if dcp_checkpoint:
+            # Reshardable resume point, separate from the HF-format artifacts
+            # above (TorchTitan-style separation). All ranks must participate.
+            try:
+                from src.training.distributed.checkpoint import (
+                    finalize_dcp_save,
+                    save_dcp_checkpoint,
+                )
+
+                if is_rank0:
+                    console.print("[cyan]Writing DCP checkpoint (async)…[/cyan]")
+                future = save_dcp_checkpoint(
+                    trainer.model,
+                    f"{output_dir}/dcp",
+                    optimizer=trainer.optimizer,
+                )
+                finalize_dcp_save(future)
+                if is_rank0:
+                    console.print(f"[green]✓ DCP checkpoint: {output_dir}/dcp[/green]")
+            except Exception as e:  # noqa: BLE001 — training succeeded; DCP is best-effort
+                if is_rank0:
+                    console.print(f"[yellow]⚠ DCP checkpoint failed: {e}[/yellow]")
     except KeyboardInterrupt:
         if is_rank0:
             console.print("\n[yellow]Training interrupted[/yellow]")

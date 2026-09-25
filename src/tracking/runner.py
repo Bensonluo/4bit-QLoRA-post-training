@@ -7,10 +7,36 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Supported techniques → entry scripts. Kept in sync with ui/pages/00_Training_Lab.py.
+SCRIPTS = {
+    "sft": "scripts/train_sft.py",
+    "dpo": "scripts/train_dpo.py",
+    "grpo": "scripts/train_grpo.py",
+    "domain": "scripts/train_sft.py",
+}
+
+
+def _pid_alive(pid: int) -> bool:
+    """Best-effort process liveness check.
+
+    POSIX only — on Windows os.kill(pid, 0) would TERMINATE the process
+    (TerminateProcess with exit code 0), so we report not-alive there.
+    """
+    if os.name != "posix":
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists but owned by another user
+    return True
 
 
 class TrainingRunner:
@@ -26,11 +52,10 @@ class TrainingRunner:
 
     def _load_meta(self) -> dict[str, Any]:
         if self._meta_file.exists():
-            try:
+            # A corrupted meta file just means we start tracking afresh.
+            with suppress(json.JSONDecodeError, OSError):
                 data: dict[str, Any] = json.loads(self._meta_file.read_text())
                 return data
-            except (json.JSONDecodeError, OSError):
-                pass
         return {}
 
     def _save_meta(self) -> None:
@@ -51,12 +76,9 @@ class TrainingRunner:
         with open(config_path, "w") as f:
             yaml.dump(config_dict, f, default_flow_style=False)
 
-        script_map = {
-            "sft": "scripts/train_sft.py",
-            "dpo": "scripts/train_dpo.py",
-            "domain": "scripts/train_sft.py",
-        }
-        script = script_map.get(technique, "scripts/train_sft.py")
+        script = SCRIPTS.get(technique)
+        if script is None:
+            raise ValueError(f"Unknown technique: {technique!r}. Supported: {sorted(SCRIPTS)}")
         script_path = self.project_root / script
 
         env = os.environ.copy()
@@ -69,13 +91,16 @@ class TrainingRunner:
         log_path = self.project_root / "outputs" / "logs" / f"{run_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=open(log_path, "w"),
-            stderr=subprocess.STDOUT,
-            cwd=str(self.project_root),
-        )
+        # The child inherits the fd, so closing the parent's handle right
+        # after Popen is safe — and leaves no leaked file object behind.
+        with open(log_path, "w") as log_file:
+            proc = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(self.project_root),
+            )
 
         self._active[run_name] = proc
         self._run_meta[run_name] = {
@@ -95,14 +120,17 @@ class TrainingRunner:
             meta = self._run_meta.get(run_id)
             if not meta:
                 return "unknown"
-            # Check if log file has completion marker
-            log_path = Path(meta.get("log_path", ""))
-            if log_path.exists() and log_path.stat().st_size > 0:
-                return "finished"
+            if "returncode" in meta:
+                return "finished" if meta["returncode"] == 0 else "failed"
+            # UI restart: best-effort liveness via the recorded pid.
+            pid = meta.get("pid")
+            if pid is not None and _pid_alive(int(pid)):
+                return "running"
             return "unknown"
         ret = proc.poll()
         if ret is None:
             return "running"
+        self._record_exit(run_id, ret)
         return "finished" if ret == 0 else "failed"
 
     def get_log_path(self, run_id: str) -> Path | None:
@@ -130,20 +158,39 @@ class TrainingRunner:
             except subprocess.TimeoutExpired:
                 proc.kill()
 
+    def delete_run(self, run_id: str) -> None:
+        """Delete a run record: stop it if still running, then forget it.
+
+        Persisted artifacts (config YAML, log file, MLflow data) are kept —
+        deletion here only removes the local job record.
+
+        Raises:
+            KeyError: If the run_id is unknown.
+        """
+        if run_id not in self._run_meta:
+            raise KeyError(f"Unknown run: {run_id!r}")
+        proc = self._active.get(run_id)
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        self._active.pop(run_id, None)
+        del self._run_meta[run_id]
+        self._save_meta()
+
     def list_active(self) -> list[str]:
-        """Return run_ids of currently running processes."""
-        self._cleanup_finished()
-        active = [
-            rid for rid, proc in self._active.items()
-            if proc.poll() is None
-        ]
-        # Also include recently launched runs from persisted meta
-        for rid, meta in self._run_meta.items():
-            if rid not in self._active:
-                log_path = Path(meta.get("log_path", ""))
-                if log_path.exists():
-                    active.append(rid)
-        return active
+        """Return run_ids of currently running runs."""
+        return [rid for rid in self._run_meta if self.get_status(rid) == "running"]
+
+    def _record_exit(self, run_id: str, returncode: int | None) -> None:
+        """Persist exit code so status survives UI restarts."""
+        if returncode is None:
+            return
+        meta = self._run_meta.setdefault(run_id, {})
+        meta["returncode"] = returncode
+        self._save_meta()
 
     def list_all_runs(self) -> list[str]:
         """Return all run_ids (active + completed) from persisted meta."""
@@ -153,10 +200,9 @@ class TrainingRunner:
         return self._run_meta.get(run_id)
 
     def _cleanup_finished(self) -> None:
-        """Remove long-finished processes from tracking (keeps last 20)."""
-        finished = [
-            rid for rid, proc in self._active.items()
-            if proc.poll() is not None
-        ]
+        """Record exit codes, then drop old finished processes (keeps last 20)."""
+        finished = [rid for rid, proc in self._active.items() if proc.poll() is not None]
+        for rid in finished:
+            self._record_exit(rid, self._active[rid].returncode)
         for rid in finished[:-20]:
             del self._active[rid]

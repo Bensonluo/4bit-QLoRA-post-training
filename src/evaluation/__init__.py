@@ -1,6 +1,7 @@
 """Evaluation modules for model assessment."""
 
 from src.evaluation.comparisons import compare_models, side_by_side_generation
+from src.evaluation.harness import harness_available, run_harness_eval, summarize_results
 from src.evaluation.metrics import compute_accuracy, compute_perplexity
 from src.evaluation.qualitative import generate_samples, interactive_generation
 
@@ -14,4 +15,8 @@ __all__ = [
     # Comparisons
     "compare_models",
     "side_by_side_generation",
+    # lm-evaluation-harness (guarded option)
+    "harness_available",
+    "run_harness_eval",
+    "summarize_results",
 ]

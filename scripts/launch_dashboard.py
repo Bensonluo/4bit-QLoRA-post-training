@@ -38,11 +38,18 @@ def main(
             os.makedirs(tracking_uri_abs, exist_ok=True)
             p_mlflow = subprocess.Popen(
                 [
-                    sys.executable, "-m", "mlflow", "server",
-                    "--host", "0.0.0.0",
-                    "--port", str(mlflow_port),
-                    "--backend-store-uri", f"file://{tracking_uri_abs}",
-                    "--default-artifact-root", f"file://{tracking_uri_abs}/artifacts",
+                    sys.executable,
+                    "-m",
+                    "mlflow",
+                    "server",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    str(mlflow_port),
+                    "--backend-store-uri",
+                    f"file://{tracking_uri_abs}",
+                    "--default-artifact-root",
+                    f"file://{tracking_uri_abs}/artifacts",
                 ],
                 cwd=str(project_root),
             )
@@ -53,11 +60,17 @@ def main(
             console.print(f"[cyan]Starting Streamlit on port {port}...[/cyan]")
             p_streamlit = subprocess.Popen(
                 [
-                    sys.executable, "-m", "streamlit", "run",
+                    sys.executable,
+                    "-m",
+                    "streamlit",
+                    "run",
                     str(ui_path),
-                    "--server.port", str(port),
-                    "--server.headless", "true",
-                    "--browser.gatherUsageStats", "false",
+                    "--server.port",
+                    str(port),
+                    "--server.headless",
+                    "true",
+                    "--browser.gatherUsageStats",
+                    "false",
                 ],
                 cwd=str(project_root),
                 env={**os.environ, "MLFLOW_TRACKING_URI": f"http://localhost:{mlflow_port}"},

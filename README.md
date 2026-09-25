@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.1+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.4+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Transformers-yellow)](https://huggingface.co/)
 [![Qwen3](https://img.shields.io/badge/Qwen3-0.6B--14B-6D4AAE)](https://github.com/QwenLM/Qwen)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B)](https://streamlit.io/)
@@ -51,7 +51,7 @@ This project solves all of them:
 
 > 🔥 **Train Qwen3-4B in 8GB VRAM** with 4-bit QLoRA — or train **Qwen3-14B on Apple Silicon** in bf16 — with a Streamlit dashboard for the entire lifecycle and MLflow for experiment tracking.
 
-It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT, DPO, domain adaptation, evaluation, and side-by-side model comparison.
+It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT, DPO, GRPO, domain adaptation, evaluation, and side-by-side model comparison.
 
 ---
 
@@ -61,7 +61,7 @@ It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT
 
 | 🚀 Training | 📊 Tracking | 🎯 Evaluation |
 |:---:|:---:|:---:|
-| SFT + DPO + Domain Adapt | MLflow + **Model Registry** ⭐ | Difficulty-stratified |
+| SFT + DPO + GRPO + Domain | MLflow + **Model Registry** ⭐ | Difficulty-stratified |
 | Cross-platform auto-detect | Live loss curves | Multi-model comparison |
 | **FSDP + DeepSpeed** ⭐ | Run diff viewer + lineage | Confidence calibration |
 
@@ -73,7 +73,7 @@ It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT
 
 | 📈 Stats | | |
 |:---:|:---:|:---:|
-| **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **3** post-training techniques |
+| **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **4** post-training techniques |
 | **4** dashboard pages | **5+** model families | **FSDP + DeepSpeed + DDP** distributed |
 
 </div>
@@ -154,6 +154,23 @@ python scripts/train_dpo.py --quick-test
 > ```bash
 > export HF_ENDPOINT=https://hf-mirror.com
 > ```
+
+### CLI Commands
+
+After an editable install (`pip install -e ".[dev]"`), all ten console commands below are available on your PATH:
+
+| Command | Description |
+|---------|-------------|
+| `train-sft` | Supervised Fine-Tuning (SFT) with QLoRA |
+| `train-domain` | Domain-adaptation training (built-in: medical entity matching) |
+| `train-dpo` | DPO preference training on chosen/rejected pairs |
+| `train-grpo` | GRPO training with pluggable reward functions |
+| `merge-lora` | Merge a trained LoRA adapter into the base model |
+| `evaluate-model` | Evaluate fine-tuned models (perplexity, generation, comparison) |
+| `eval-harness` | Benchmark on public tasks via lm-evaluation-harness (`.[eval]` extra) |
+| `run-flywheel` | Run one iteration of the self-improving data flywheel |
+| `download-data` | Download and prepare datasets from Hugging Face or local sources |
+| `qlora-dashboard` | Launch the MLflow + Streamlit dashboard |
 
 ---
 
@@ -391,7 +408,7 @@ python scripts/launch_dashboard.py  # Starts both MLflow + Streamlit
 - [x] MLflow experiment tracking
 - [x] Medical entity domain showcase
 - [x] Difficulty-stratified evaluation
-- [ ] GRPO (Group Relative Policy Optimization)
+- [x] GRPO (Group Relative Policy Optimization)
 - [ ] vLLM deployment integration
 - [ ] More domains: legal, finance, code
 
@@ -430,7 +447,7 @@ If this project helped you fine-tune on budget hardware, please ⭐ star the rep
 ### 核心亮点
 
 - **跨平台训练**:自动检测 NVIDIA GPU(4-bit QLoRA)/ Apple Silicon(bf16 MPS)/ CPU
-- **三种后训练技术**:SFT(监督微调)、DPO(直接偏好优化)、领域适配
+- **四种后训练技术**:SFT(监督微调)、DPO(直接偏好优化)、GRPO(组相对策略优化,可插拔奖励)、领域适配
 - **Streamlit 全生命周期面板**:配置 → 训练 → 监控 → 评估 → 对比,4 个页面
 - **MLflow 实验追踪**:自动记录指标、参数对比、运行历史
 - **领域适配系统**:内置医疗实体匹配示范(中文药品名/医院名归一化)

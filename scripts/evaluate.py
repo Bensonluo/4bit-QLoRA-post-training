@@ -114,12 +114,14 @@ def main(
 
     # Print generations
     for i, gen in enumerate(generations, 1):
-        console.print(Panel.fit(
-            f"[bold]Sample {i}[/bold]\n\n"
-            f"[cyan]Prompt:[/cyan] {gen['prompt'][:200]}...\n\n"
-            f"[green]Response:[/green] {gen['response']}",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold]Sample {i}[/bold]\n\n"
+                f"[cyan]Prompt:[/cyan] {gen['prompt'][:200]}...\n\n"
+                f"[green]Response:[/green] {gen['response']}",
+                border_style="cyan",
+            )
+        )
         console.print()
 
     # Compare with base model if requested

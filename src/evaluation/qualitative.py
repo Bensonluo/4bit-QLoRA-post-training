@@ -1,6 +1,5 @@
 """Qualitative evaluation through text generation."""
 
-
 import torch
 from datasets import Dataset
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -73,12 +72,14 @@ def generate_samples(
 
         # Remove prompt from response
         if response.startswith(prompt):
-            response = response[len(prompt):]
+            response = response[len(prompt) :]
 
-        generations.append({
-            "prompt": prompt,
-            "response": response.strip(),
-        })
+        generations.append(
+            {
+                "prompt": prompt,
+                "response": response.strip(),
+            }
+        )
 
     console.print(f"[green]✓ Generated {len(generations)} samples[/green]")
 
@@ -137,7 +138,7 @@ def interactive_generation(
 
         # Remove prompt
         if isinstance(response, str) and response.startswith(formatted_prompt):
-            response = response[len(formatted_prompt):]
+            response = response[len(formatted_prompt) :]
 
         console.print("\n[bold green]Response:[/bold green]")
         console.print(response)

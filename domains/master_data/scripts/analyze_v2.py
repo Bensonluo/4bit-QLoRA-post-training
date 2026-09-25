@@ -2,8 +2,11 @@
 """精确分析数据质量 v2：正确区分 D 级中的 hard/easy。"""
 
 import json
+import logging
 from collections import Counter
 from pathlib import Path
+
+logger = logging.getLogger("qlora")
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,14 +33,14 @@ def jaccard(a, b):
 
 
 def analyze_products(data, name):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"=== 产品数据精确分析 {name} ===")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # D 级分层
-    d_hard = 0   # Jaccard >= 0.15 或共同字符 >= 2
+    d_hard = 0  # Jaccard >= 0.15 或共同字符 >= 2
     d_medium = 0  # 有一些关联但不够强
-    d_easy = 0   # 完全无关
+    d_easy = 0  # 完全无关
 
     total_d = 0
     d_examples = []
@@ -56,7 +59,8 @@ def analyze_products(data, name):
             if m["role"] == "assistant":
                 try:
                     labels = json.loads(m["content"])
-                except Exception:
+                except Exception as exc:
+                    logger.debug("跳过无法解析的 assistant 输出: %s", exc)
                     continue
 
                 # 从 user msg 提取 candidates
@@ -75,7 +79,9 @@ def analyze_products(data, name):
                         continue
                     if label.get("match_grade") == "D":
                         total_d += 1
-                        cand_core = candidates[i].split()[0] if " " in candidates[i] else candidates[i]
+                        cand_core = (
+                            candidates[i].split()[0] if " " in candidates[i] else candidates[i]
+                        )
                         sim = jaccard(query_core, cand_core)
                         common_chars = len(set(query_core) & set(cand_core))
 
@@ -90,9 +96,9 @@ def analyze_products(data, name):
                         break  # 只分析第一个 D 级，避免重复计数
 
     print(f"\n[D 级候选硬度分布] (总计 {total_d} 个)")
-    print(f"  Hard (Jaccard>=0.15 或共同字符>=2): {d_hard} ({d_hard/total_d*100:.1f}%)")
-    print(f"  Medium (共同字符=1): {d_medium} ({d_medium/total_d*100:.1f}%)")
-    print(f"  Easy (完全无关): {d_easy} ({d_easy/total_d*100:.1f}%)")
+    print(f"  Hard (Jaccard>=0.15 或共同字符>=2): {d_hard} ({d_hard / total_d * 100:.1f}%)")
+    print(f"  Medium (共同字符=1): {d_medium} ({d_medium / total_d * 100:.1f}%)")
+    print(f"  Easy (完全无关): {d_easy} ({d_easy / total_d * 100:.1f}%)")
 
     print("\nEasy D 级示例:")
     for qc, cc, sim, common in d_examples:
@@ -100,9 +106,9 @@ def analyze_products(data, name):
 
 
 def analyze_institutions(data, name):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"=== 机构数据精确分析 {name} ===")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     queries = []
     for item in data:
@@ -117,7 +123,7 @@ def analyze_institutions(data, name):
     print(f"唯一 query: {len(query_counts)}")
     print(f"重复 query 数: {len(duplicates)}")
     print(f"重复 query 涉及样本: {sum(duplicates.values())}")
-    print(f"重复率: {sum(duplicates.values())/len(queries)*100:.1f}%")
+    print(f"重复率: {sum(duplicates.values()) / len(queries) * 100:.1f}%")
 
     if duplicates:
         print("\n重复次数 top 10:")

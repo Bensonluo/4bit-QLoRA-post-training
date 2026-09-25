@@ -5,7 +5,7 @@ Supports:
 - Apple Silicon (MPS): bf16/fp16 without quantization
 """
 
-
+from contextlib import suppress
 from typing import Any
 
 import torch
@@ -27,11 +27,10 @@ from src.utils.platform_utils import get_platform, get_torch_dtype
 
 # bitsandbytes is only available on CUDA
 _BITSANDBYTES_AVAILABLE = False
-try:
+with suppress(ImportError):
     from transformers import BitsAndBytesConfig
+
     _BITSANDBYTES_AVAILABLE = True
-except ImportError:
-    pass
 
 
 def load_tokenizer(
@@ -118,6 +117,7 @@ def load_model(
     platform_info = get_platform()
     # Lazy import to avoid circular dependency (see module-level note).
     from src.training.distributed import get_distributed_info
+
     dist_info = get_distributed_info()  # 🆕 detect torchrun/accelerate context
 
     console.print(f"\n[bold cyan]Loading model: {config.name}[/bold cyan]")
@@ -154,9 +154,7 @@ def load_model(
             model_kwargs["device_map"] = config.device_map
 
         if config.quantization_bits in (4, 8):
-            model_kwargs["quantization_config"] = _get_quantization_config(
-                config.quantization_bits
-            )
+            model_kwargs["quantization_config"] = _get_quantization_config(config.quantization_bits)
             console.print(
                 f"[green]✓ {config.quantization_bits}-bit quantization enabled (CUDA/bitsandbytes)[/green]"
             )
@@ -175,7 +173,9 @@ def load_model(
         model_kwargs["attn_implementation"] = "flash_attention_2"
         console.print("[green]✓ Flash Attention 2 enabled[/green]")
     elif config.use_flash_attention:
-        console.print("[yellow]⚠ Flash Attention not available on this platform, using default[/yellow]")
+        console.print(
+            "[yellow]⚠ Flash Attention not available on this platform, using default[/yellow]"
+        )
 
     # Load model
     console.print("[cyan]Loading model (this may take a while)...[/cyan]")

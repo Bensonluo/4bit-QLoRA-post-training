@@ -37,7 +37,7 @@ class DataFlywheelPipeline:
         generation_policy: str = "",
         run_id: str | None = None,
         n_synthetic: int | None = None,
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         """Run one flywheel iteration.
 
         Args:
@@ -53,10 +53,12 @@ class DataFlywheelPipeline:
             n_synthetic: Number of synthetic items to generate.
 
         Returns:
-            Dict with dataset version ids:
+            Dict with dataset version ids and item counts:
                 {
                     "sft_dataset_version": str,
                     "dpo_dataset_version": str,
+                    "num_synthetic": int,
+                    "num_preferences": int,
                 }
         """
         input_hash = self._hash_seed(seed_data)
@@ -121,12 +123,17 @@ class DataFlywheelPipeline:
 
     @staticmethod
     def _hash_seed(seed_data: list[DatasetItem]) -> str:
-        """Compute deterministic hash of seed data."""
+        """Compute deterministic content hash of seed data.
+
+        Volatile fields (created_at) are excluded so that logically identical
+        seed lists hash identically across runs — the hash anchors lineage
+        provenance, not construction time.
+        """
         import hashlib
         import json
 
         content = json.dumps(
-            [item.to_dict() for item in seed_data],
+            [{k: v for k, v in item.to_dict().items() if k != "created_at"} for item in seed_data],
             sort_keys=True,
             ensure_ascii=False,
             default=str,

@@ -130,14 +130,18 @@ def main(
     console.print(f"  模式: {preset}")
     console.print(f"  模型: {config.model_name}")
     console.print(f"  LoRA: r={config.lora_r}, alpha={config.lora_alpha}")
-    console.print(f"  Batch: {config.batch_size} × {config.gradient_accumulation_steps} = {config.batch_size * config.gradient_accumulation_steps}")
+    console.print(
+        f"  Batch: {config.batch_size} × {config.gradient_accumulation_steps} = {config.batch_size * config.gradient_accumulation_steps}"
+    )
     console.print(f"  Epochs: {config.num_epochs}")
     console.print(f"  数据: {config.train_file}")
     console.print(f"  输出: {config.output_dir}")
     console.print(f"  恢复: {resume_from or '无'}\n")
 
     if not Path(config.train_file).exists():
-        console.print("[red]✗ 训练数据不存在，先运行: python domains/master_data/scripts/generate_data.py[/red]")
+        console.print(
+            "[red]✗ 训练数据不存在，先运行: python domains/master_data/scripts/generate_data.py[/red]"
+        )
         raise typer.Exit(1)
 
     # Load dataset
@@ -147,6 +151,7 @@ def main(
     console.print(f"  训练样本: {len(raw_data)} 条")
 
     from datasets import Dataset
+
     # 拆分验证集（100条）
     rng = random.Random(config.seed)
     rng.shuffle(raw_data)
@@ -164,6 +169,7 @@ def main(
 
     model_kwargs = {"trust_remote_code": True, "torch_dtype": torch.bfloat16}
     from src.utils.platform_utils import detect_platform
+
     platform = detect_platform()
     if platform.device == "mps":
         model_kwargs["device_map"] = {"": "mps"}
@@ -178,7 +184,15 @@ def main(
         r=config.lora_r,
         lora_alpha=config.lora_alpha,
         lora_dropout=config.lora_dropout,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "v_proj",
+            "k_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
     )
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()

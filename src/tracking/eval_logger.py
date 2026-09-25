@@ -34,8 +34,12 @@ def log_eval_to_mlflow(json_path: str | Path, experiment_name: str = "domain-eva
 
             # Core metrics
             for metric_key in [
-                "overall_accuracy", "mrr", "avg_confidence",
-                "avg_latency_ms", "throughput_per_sec", "total_time_sec",
+                "overall_accuracy",
+                "mrr",
+                "avg_confidence",
+                "avg_latency_ms",
+                "throughput_per_sec",
+                "total_time_sec",
             ]:
                 val = model_data.get(metric_key)
                 if isinstance(val, (int, float)):

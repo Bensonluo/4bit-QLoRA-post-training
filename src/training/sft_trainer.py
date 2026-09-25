@@ -1,10 +1,14 @@
 """Supervised Fine-Tuning (SFT) trainer with QLoRA."""
 
 import os
+import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import torch
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft.tuners.lora.loraga import preprocess_loraga
 from transformers import (
     DataCollatorForLanguageModeling,
     Trainer,
@@ -16,6 +20,7 @@ from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, Trai
 from src.data import AlpacaDataset, BaseDataset, FinanceDataset
 from src.models import load_model_and_tokenizer
 from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
+from src.training.callbacks import MFUCallback
 from src.training.distributed import get_distributed_info
 from src.utils import (
     console,
@@ -27,6 +32,25 @@ from src.utils import (
     setup_wandb,
 )
 from src.utils.platform_utils import get_platform
+
+# peft exports LoraGAConfig at the top level only in recent versions — import
+# from its defining module so this works across the supported peft range.
+from peft.tuners.lora.config import LoraGAConfig  # isort: skip
+
+
+def _dataset_class_for(dataset_name: str) -> type[BaseDataset]:
+    """Select the dataset class for a dataset name.
+
+    Shared by prepare_data (full training set) and LoRA-GA calibration
+    (a small slice) so both see the exact same data-formatting path.
+    """
+    if "finance" in dataset_name.lower() or dataset_name == "yahma/alpaca-cleaned":
+        return FinanceDataset
+    if "medical_entity" in dataset_name.lower():
+        from src.data.medical_dataset import MedicalEntityDataset
+
+        return MedicalEntityDataset
+    return AlpacaDataset
 
 
 class MemoryCallback(TrainerCallback):
@@ -122,17 +146,67 @@ class SFTTrainer:
             console.print("[cyan]Skipping k-bit preparation (not needed on this platform)[/cyan]")
 
         # Get LoRA configuration
-        lora_cfg = LoraConfig(
+        lora_kwargs: dict[str, Any] = dict(
             r=self.lora_config.r,
             lora_alpha=self.lora_config.lora_alpha,
             lora_dropout=self.lora_config.lora_dropout,
             target_modules=self.lora_config.target_modules,
             bias=self.lora_config.bias,
             task_type=self.lora_config.task_type,
+            use_dora=self.lora_config.use_dora,
+            use_rslora=self.lora_config.use_rslora,
+            init_lora_weights=self.lora_config.init_lora_weights,
         )
+        if self.lora_config.init_lora_weights == "loftq":
+            # peft hard-errors on loftq without the dict — inject it here.
+            lora_kwargs["loftq_config"] = {
+                "loftq_bits": self.lora_config.loftq_bits,
+                "loftq_iter": self.lora_config.loftq_iter,
+            }
+        # Per-module rank/alpha overrides and module exclusions (peft
+        # regex-keyed patterns; None = peft defaults, no-op).
+        if self.lora_config.rank_pattern is not None:
+            lora_kwargs["rank_pattern"] = self.lora_config.rank_pattern
+        if self.lora_config.alpha_pattern is not None:
+            lora_kwargs["alpha_pattern"] = self.lora_config.alpha_pattern
+        if self.lora_config.exclude_modules is not None:
+            lora_kwargs["exclude_modules"] = self.lora_config.exclude_modules
+        if self.lora_config.init_lora_weights == "lora_ga":
+            lora_kwargs["lora_ga_config"] = LoraGAConfig(
+                direction=self.lora_config.lora_ga_direction,
+                scale=self.lora_config.lora_ga_scale,
+                stable_gamma=self.lora_config.lora_ga_stable_gamma,
+            )
+        lora_cfg = LoraConfig(**lora_kwargs)
+
+        # LoRA-GA: peft consumes the gradient estimate ONLY if preprocess_loraga
+        # ran first — otherwise it silently falls back to gaussian init. Run it
+        # on a calibration slice of the (same) training data before get_peft_model.
+        if self.lora_config.init_lora_weights == "lora_ga":
+            if self.model_config.quantization_bits in (4, 8):
+                # Catches configs mutated after SFTConfig construction (the
+                # composite config validates this at build time too).
+                raise ValueError(
+                    "init_lora_weights='lora_ga' (LoRA-GA) requires a full-precision "
+                    f"base — quantization_bits={self.model_config.quantization_bits} "
+                    "is rejected by peft's gradient estimation. Use "
+                    "quantization_bits=None or a different init strategy."
+                )
+            console.print(
+                "[cyan]LoRA-GA: estimating full-finetuning gradient on calibration "
+                f"data ({self.lora_config.lora_ga_calibration_batches} batches)...[/cyan]"
+            )
+            preprocess_loraga(
+                self.model,
+                lora_cfg,
+                self._build_lora_ga_train_step(),
+                cache_file=self.lora_config.lora_ga_cache_file,
+            )
 
         # Apply LoRA
-        console.print(f"[cyan]Applying LoRA (r={self.lora_config.r}, alpha={self.lora_config.lora_alpha})...[/cyan]")
+        console.print(
+            f"[cyan]Applying LoRA (r={self.lora_config.r}, alpha={self.lora_config.lora_alpha})...[/cyan]"
+        )
         self.model = get_peft_model(self.model, lora_cfg)
 
         # Print trainable parameters
@@ -140,31 +214,69 @@ class SFTTrainer:
         total_params = sum(p.numel() for p in self.model.parameters())
         trainable_percent = 100 * trainable_params / total_params
 
-        console.print(f"[green]✓ Trainable parameters: {trainable_params:,} ({trainable_percent:.2f}%)[/green]")
+        console.print(
+            f"[green]✓ Trainable parameters: {trainable_params:,} ({trainable_percent:.2f}%)[/green]"
+        )
         console.print(f"[green]✓ Total parameters: {total_params:,}[/green]")
+
+    def _build_lora_ga_train_step(self) -> Callable[[], None]:
+        """Build the calibration callback peft's preprocess_loraga consumes.
+
+        Loads a small slice of the training data via the same dataset class
+        prepare_data would select, tokenizes it with the same tokenizer and
+        max_length, and returns a closure that runs forward+backward over
+        the calibration batches. peft accumulates the target-module weight
+        gradients and initializes A/B from their SVD (LoRA-GA,
+        arXiv:2407.05000).
+        """
+        dataset_cls = _dataset_class_for(self.data_config.dataset_name)
+        calib_dataset = dataset_cls(
+            data_path=self.data_config.dataset_name,
+            max_samples=self.lora_config.lora_ga_calibration_batches
+            * self.training_config.batch_size,
+        )
+        calib_dataset.load()
+        tokenized = calib_dataset.format_for_training(
+            self.tokenizer,
+            max_length=self.model_config.max_length,
+        )
+
+        # tokenize_function emits input_ids/attention_mask (no labels) — pass
+        # the input_ids as labels so the model computes shifted CE loss itself.
+        batch_size = max(1, self.training_config.batch_size)
+        batches: list[dict[str, Any]] = []
+        for start in range(0, len(tokenized), batch_size):
+            rows = tokenized[start : start + batch_size]
+            batches.append(
+                {
+                    key: torch.tensor([row[key] for row in rows], dtype=torch.long)
+                    for key in ("input_ids", "attention_mask")
+                    if key in rows[0]
+                }
+            )
+
+        model = self.model
+        device = next(model.parameters()).device
+
+        def train_step() -> None:
+            for batch in batches:
+                moved = {key: tensor.to(device) for key, tensor in batch.items()}
+                loss = model(**moved, labels=moved["input_ids"]).loss
+                loss.backward()
+
+        return train_step
 
     def prepare_data(self) -> None:
         """Load and prepare dataset."""
         console.print("\n[bold cyan]=== Preparing Data ===[/bold cyan]\n")
 
-        # Choose dataset type based on config
+        # Choose dataset type based on config (shared with LoRA-GA calibration)
         dataset: BaseDataset
-        if "finance" in self.data_config.dataset_name.lower() or self.data_config.dataset_name == "yahma/alpaca-cleaned":
-            dataset = FinanceDataset(
-                data_path=self.data_config.dataset_name,
-                max_samples=self.data_config.max_samples,
-            )
-        elif "medical_entity" in self.data_config.dataset_name.lower():
-            from src.data.medical_dataset import MedicalEntityDataset
-            dataset = MedicalEntityDataset(
-                data_path=self.data_config.dataset_name,
-                max_samples=self.data_config.max_samples,
-            )
-        else:
-            dataset = AlpacaDataset(
-                data_path=self.data_config.dataset_name,
-                max_samples=self.data_config.max_samples,
-            )
+        dataset_cls = _dataset_class_for(self.data_config.dataset_name)
+        dataset = dataset_cls(
+            data_path=self.data_config.dataset_name,
+            max_samples=self.data_config.max_samples,
+        )
 
         # Load dataset
         dataset.load()
@@ -220,28 +332,69 @@ class SFTTrainer:
         # Detect distributed context (torchrun/accelerate set LOCAL_RANK/WORLD_SIZE).
         dist_info = get_distributed_info()
 
+        # torch.compile cannot trace bitsandbytes 4/8-bit custom autograd ops —
+        # warn loudly instead of letting the run die deep inside Dynamo.
+        if self.training_config.torch_compile and self.model_config.quantization_bits in (4, 8):
+            warnings.warn(
+                "torch_compile=True is incompatible with bitsandbytes "
+                f"{self.model_config.quantization_bits}-bit quantization (Dynamo cannot "
+                "trace Params4bit/Linear4bit). Use the bf16 full-precision path "
+                "(quantization_bits=None) or disable torch_compile.",
+                stacklevel=2,
+            )
+
         # Training arguments — build as a dict first so we can conditionally inject DeepSpeed.
         training_kwargs: dict[str, Any] = dict(
             output_dir=self.training_config.output_dir,
+            # Opt-in Triton fused kernels (RMSNorm/RoPE/SwiGLU/fused CE) —
+            # ~20% throughput, up to 60% activation-memory reduction on
+            # supported CUDA models. Requires the optional [liger] extra.
+            use_liger_kernel=self.training_config.use_liger_kernel,
+            # NEFTune noisy embeddings (α/√(L·d)) — SFT-only regularizer;
+            # HF Trainer auto-disables the noise at eval. None = off.
+            neftune_noise_alpha=self.training_config.neftune_noise_alpha,
+            # Opt-in torch.compile — bf16 full-precision path only (see
+            # TrainingConfig.torch_compile docstring).
+            torch_compile=self.training_config.torch_compile,
             num_train_epochs=self.training_config.num_epochs,
             per_device_train_batch_size=self.training_config.batch_size,
             per_device_eval_batch_size=self.training_config.batch_size,
             gradient_accumulation_steps=self.training_config.gradient_accumulation_steps,
             learning_rate=self.training_config.learning_rate,
             weight_decay=self.training_config.weight_decay,
-            warmup_ratio=self.training_config.warmup_ratio,
+            # transformers >= 5.x: warmup_ratio merged into warmup_steps
+            # (a float value keeps ratio semantics).
+            warmup_steps=self.training_config.warmup_ratio,
             lr_scheduler_type=self.training_config.lr_scheduler_type,
             logging_steps=self.training_config.logging_steps,
             save_steps=self.training_config.save_steps,
             eval_steps=self.training_config.eval_steps,
             save_total_limit=self.training_config.save_total_limit,
             gradient_checkpointing=self.training_config.gradient_checkpointing,
+            # Non-reentrant checkpointing — PyTorch-recommended and the
+            # reliable path for frozen-base (LoRA/QLoRA) fine-tunes.
+            gradient_checkpointing_kwargs=(
+                {"use_reentrant": self.training_config.gradient_checkpointing_use_reentrant}
+                if self.training_config.gradient_checkpointing
+                else None
+            ),
+            # Periodic torch.cuda.empty_cache() — opt-in fragmentation relief
+            # for 8 GB cards with variable-length batches (None = off).
+            torch_empty_cache_steps=self.training_config.torch_empty_cache_steps,
+            # On OOM, auto-restart with halved batch size (ZeRO-3 excluded
+            # at config validation; see TrainingConfig).
+            auto_find_batch_size=self.training_config.auto_find_batch_size,
+            # Length-grouped sampling — padding-waste reduction for
+            # variable-length instruction data (opt-in).
+            train_sampling_strategy=self.training_config.train_sampling_strategy,
             fp16=self.training_config.fp16,
             bf16=self.training_config.bf16,
             max_grad_norm=self.training_config.max_grad_norm,
             report_to=self._get_report_to(),
             run_name=self.logging_config.wandb_run_name,
-            logging_dir=self.logging_config.log_dir if self.logging_config.use_tensorboard else None,
+            logging_dir=self.logging_config.log_dir
+            if self.logging_config.use_tensorboard
+            else None,
             save_strategy="steps",
             eval_strategy="steps" if self.eval_dataset is not None else "no",
             load_best_model_at_end=self.eval_dataset is not None,
@@ -261,9 +414,7 @@ class SFTTrainer:
             training_kwargs["fsdp"] = self.training_config.fsdp
             if self.training_config.fsdp_config:
                 training_kwargs["fsdp_config"] = self.training_config.fsdp_config
-            console.print(
-                f"[green]✓ FSDP enabled: {self.training_config.fsdp}[/green]"
-            )
+            console.print(f"[green]✓ FSDP enabled: {self.training_config.fsdp}[/green]")
         elif self.training_config.deepspeed_config:
             training_kwargs["deepspeed"] = self.training_config.deepspeed_config
             console.print(
@@ -281,6 +432,11 @@ class SFTTrainer:
                 f"strategy={strategy}[/cyan]"
             )
 
+        # Optional optimizer override (e.g. "paged_adamw_8bit" — the QLoRA-paper
+        # recipe: 8-bit states paged to CPU RAM to survive VRAM spikes).
+        if self.training_config.optim:
+            training_kwargs["optim"] = self.training_config.optim
+
         training_args = TrainingArguments(**training_kwargs)
 
         # Data collator
@@ -297,17 +453,36 @@ class SFTTrainer:
             train_dataset=self.train_dataset,
             eval_dataset=self.eval_dataset,
             data_collator=data_collator,
-            callbacks=[MemoryCallback(log_steps=self.training_config.logging_steps), MLflowTrainCallback(self._tracker)],
+            callbacks=[
+                MemoryCallback(log_steps=self.training_config.logging_steps),
+                MLflowTrainCallback(self._tracker),
+                MFUCallback(
+                    model_config=getattr(self.model, "config", None),
+                    seq_len=self.model_config.max_length,
+                    tokens_per_step=(
+                        self.training_config.batch_size
+                        * self.training_config.gradient_accumulation_steps
+                        * dist_info.world_size
+                        * self.model_config.max_length
+                    ),
+                    world_size=dist_info.world_size,
+                    peak_flops_per_device=self.training_config.peak_flops_per_device,
+                ),
+            ],
         )
 
         console.print("[green]✓ Trainer configured[/green]")
         console.print(f"  Effective batch size: {self.training_config.effective_batch_size}")
-        console.print(f"  Training steps: {len(self.train_dataset) // self.training_config.effective_batch_size * self.training_config.num_epochs}\n")
+        console.print(
+            f"  Training steps: {len(self.train_dataset) // self.training_config.effective_batch_size * self.training_config.num_epochs}\n"
+        )
 
     def train(self, resume_from_checkpoint: str | None = None) -> Any:
         """Run training."""
         if resume_from_checkpoint:
-            console.print(f"\n[bold green]=== Resuming Training from {resume_from_checkpoint} ===[/bold green]\n")
+            console.print(
+                f"\n[bold green]=== Resuming Training from {resume_from_checkpoint} ===[/bold green]\n"
+            )
         else:
             console.print("\n[bold green]=== Starting Training ===[/bold green]\n")
 
@@ -403,7 +578,7 @@ def run_sft_training(
     data_config: DataConfig,
     logging_config: LoggingConfig,
     resume_from_checkpoint: str | None = None,
-) -> None:
+) -> SFTTrainer:
     """Run complete SFT training pipeline.
 
     Args:
@@ -413,6 +588,10 @@ def run_sft_training(
         data_config: Data configuration
         logging_config: Logging configuration
         resume_from_checkpoint: Optional path to checkpoint for resuming
+
+    Returns:
+        The SFTTrainer after training — callers can post-process ``trainer.model``
+        (e.g. write a DCP checkpoint under FSDP) without re-instantiating it.
     """
     # Create trainer
     trainer = SFTTrainer(
@@ -434,6 +613,7 @@ def run_sft_training(
 
     # Train (Trainer runs final eval automatically if eval_dataset exists)
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    return trainer
 
 
 if __name__ == "__main__":
@@ -461,4 +641,5 @@ if __name__ == "__main__":
     except Exception as e:
         console.print(f"\n[red]✗ Test failed: {e}[/red]")
         import traceback
+
         traceback.print_exc()

@@ -89,7 +89,6 @@ def register_trained_model(
     try:
         # Step 1: Merge adapter into base model (default) OR use adapter dir as-is.
         if logging_config.merge_before_register:
-            merged_dir = f"{adapter_dir}/../merged_{registry_name}".replace("/../", "/")
             # Keep merged output adjacent to adapter for traceability, but in a clean dir.
             merged_dir = _resolve_merged_dir(adapter_dir, registry_name)
             model_dir = merge_adapter_to_dir(
@@ -146,8 +145,10 @@ def register_trained_model(
         # Registration failures should NOT fail the training run — the model is
         # already saved to disk. Log and return None.
         console.print(f"[red]✗ Registration failed: {e}[/red]")
-        console.print("[yellow]Model remains saved on disk; you can register manually via "
-                      "scripts/registry_cli.py[/yellow]")
+        console.print(
+            "[yellow]Model remains saved on disk; you can register manually via "
+            "scripts/registry_cli.py[/yellow]"
+        )
         return None
 
 

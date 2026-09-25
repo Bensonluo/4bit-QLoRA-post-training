@@ -33,6 +33,24 @@ class SFTConfig:
         self.data = data or DataConfig()
         self.logging = logging or LoggingConfig()
 
+        self._validate_lora_ga()
+
+    def _validate_lora_ga(self) -> None:
+        """Reject LoRA-GA init on quantized bases.
+
+        peft's preprocess_loraga hard-errors on quantized modules (LoRA-GA
+        needs full-precision gradients to estimate the fine-tuning
+        direction). Surfaces that constraint at config construction
+        instead of deep inside model preparation.
+        """
+        if self.lora.init_lora_weights == "lora_ga" and self.model.quantization_bits in (4, 8):
+            raise ValueError(
+                "init_lora_weights='lora_ga' (LoRA-GA) requires a full-precision base — "
+                f"quantization_bits={self.model.quantization_bits} is not supported "
+                "(peft needs full-precision gradients during calibration). "
+                "Use quantization_bits=None or a different init strategy."
+            )
+
     @classmethod
     def from_yaml(cls, path: str) -> "SFTConfig":
         """Load configuration from YAML file.
@@ -106,7 +124,15 @@ FINANCE_SFT_CONFIG = SFTConfig(
         r=16,
         lora_alpha=32,
         lora_dropout=0.05,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "v_proj",
+            "k_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
     ),
     training=TrainingConfig(
         output_dir="./outputs/finance-sft",

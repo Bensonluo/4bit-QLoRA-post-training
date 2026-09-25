@@ -95,7 +95,9 @@ def main(
 
     if dry_run:
         console.print("[yellow]Dry run - not executing[/yellow]")
-        console.print(f"[cyan]Command: ssh {host} 'cd {Path.cwd()} && python {script} {' '.join(args)}'[/cyan]")
+        console.print(
+            f"[cyan]Command: ssh {host} 'cd {Path.cwd()} && python {script} {' '.join(args)}'[/cyan]"
+        )
         return
 
     try:

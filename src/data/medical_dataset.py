@@ -42,15 +42,16 @@ class MedicalEntityDataset(BaseDataset):
 
         if self.difficulty_filter:
             data = [
-                d for d in data
-                if d.get("metadata", {}).get("difficulty") == self.difficulty_filter
+                d for d in data if d.get("metadata", {}).get("difficulty") == self.difficulty_filter
             ]
 
         if self.max_samples:
             data = data[: self.max_samples]
 
         self.dataset = Dataset.from_list(data)
-        console.print(f"[green]✓ 加载医疗实体数据: {len(self.dataset)} 条 ({data_path.name})[/green]")
+        console.print(
+            f"[green]✓ 加载医疗实体数据: {len(self.dataset)} 条 ({data_path.name})[/green]"
+        )
         return self.dataset
 
     def format_for_training(

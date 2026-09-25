@@ -63,15 +63,23 @@ def main():
     # 测试 1: 通过代理 1234
     print("=== 测试代理 1234 ===")
     for i in range(3):
-        text, lat = call_model_http_client(test_msg, "qwen/qwen3.6-27b", "http://127.0.0.1:1234/v1/")
-        print(f"  [{i+1}] status={'OK' if text else 'FAIL'} latency={lat:.0f}ms text={text[:60] if text else None}")
+        text, lat = call_model_http_client(
+            test_msg, "qwen/qwen3.6-27b", "http://127.0.0.1:1234/v1/"
+        )
+        print(
+            f"  [{i + 1}] status={'OK' if text else 'FAIL'} latency={lat:.0f}ms text={text[:60] if text else None}"
+        )
         time.sleep(0.5)
 
     # 测试 2: 直连 60415
     print("\n=== 测试直连 60415 ===")
     for i in range(3):
-        text, lat = call_model_http_client(test_msg, "qwen/qwen3.6-27b", "http://127.0.0.1:60415/v1/")
-        print(f"  [{i+1}] status={'OK' if text else 'FAIL'} latency={lat:.0f}ms text={text[:60] if text else None}")
+        text, lat = call_model_http_client(
+            test_msg, "qwen/qwen3.6-27b", "http://127.0.0.1:60415/v1/"
+        )
+        print(
+            f"  [{i + 1}] status={'OK' if text else 'FAIL'} latency={lat:.0f}ms text={text[:60] if text else None}"
+        )
         time.sleep(0.5)
 
 

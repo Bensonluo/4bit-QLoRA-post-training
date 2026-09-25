@@ -18,10 +18,10 @@ import os
 import sys
 
 # Add project root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Set Hugging Face mirror for China (required for fast downloads)
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.training.sft_trainer import SFTTrainer

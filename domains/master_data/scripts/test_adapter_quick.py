@@ -35,11 +35,13 @@ def main() -> None:
         if sample is None:
             continue
         messages = sample["messages"]
-        prompt = tokenizer.apply_chat_template(messages[:2], tokenize=False, add_generation_prompt=True)
+        prompt = tokenizer.apply_chat_template(
+            messages[:2], tokenize=False, add_generation_prompt=True
+        )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"【{name}匹配】输入：{messages[1]['content'][:100]}...")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         t0 = time.time()
         sampler = make_sampler(temp=0.1)

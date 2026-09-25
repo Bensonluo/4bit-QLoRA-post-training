@@ -24,10 +24,10 @@ import os
 import sys
 
 # Add project root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Set Hugging Face mirror (required in China)
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.training.sft_trainer import SFTTrainer
@@ -134,6 +134,7 @@ def main():
     except Exception as e:
         console.print(f"\n[red]Test failed: {e}[/red]\n")
         import traceback
+
         traceback.print_exc()
         raise
 

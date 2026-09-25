@@ -110,10 +110,10 @@ def train_on_remote(
         f"&& python {shlex.quote(script_path)} {quoted_args}"
     )
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Executing training on {host}")
     print(f"Command: {remote_cmd}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Execute on remote (stream output)
     result = execute_on_remote(host, remote_cmd, capture_output=False)
@@ -122,9 +122,9 @@ def train_on_remote(
         print(f"\nTraining failed with return code {result.returncode}")
         sys.exit(1)
     else:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Training completed successfully!")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
 
 def sync_from_remote(
@@ -169,7 +169,9 @@ def check_remote_connection(host: str = "windows") -> bool:
         True if connection successful, False otherwise
     """
     try:
-        result = execute_on_remote(host, "echo 'Connection successful'", capture_output=True, timeout=5)
+        result = execute_on_remote(
+            host, "echo 'Connection successful'", capture_output=True, timeout=5
+        )
         return result.returncode == 0
     except Exception:
         return False

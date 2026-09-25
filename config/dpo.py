@@ -7,9 +7,29 @@ without training a separate reward model.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
 from config.base import LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
+
+# Loss variants supported by TRL >= 1.0 DPOConfig. TRL takes loss_type as a
+# LIST (multiple losses combined via loss_weights); we expose a single
+# selection here and forward it as a one-element list in the trainer.
+DPO_LOSS_TYPES = (
+    "sigmoid",
+    "hinge",
+    "ipo",
+    "exo_pair",
+    "nca_pair",
+    "robust",
+    "bco_pair",
+    "sppo_hard",
+    "aot",
+    "aot_unpaired",
+    "apo_zero",
+    "apo_down",
+    "discopop",
+    "sft",
+    "sigmoid_norm",
+)
 
 
 @dataclass
@@ -24,39 +44,55 @@ class DPOConfig:
             - 0.1-0.2: Conservative (default)
             - 0.2-0.5: Moderate
             - 0.5-1.0: Aggressive
-        max_length: Maximum sequence length for DPO
-        max_prompt_length: Maximum prompt length
-        max_target_length: Maximum target length
-        reference_model_free: Whether to freeze reference model
-        loss_type: DPO loss function ("sigmoid", "hinge", "ipo", "pairwise")
+        max_length: Maximum sequence length for DPO (prompt + completion).
+            TRL >= 1.0 removed separate prompt/target truncation — this single
+            value governs truncation end to end.
+        loss_type: DPO loss function (see DPO_LOSS_TYPES for valid values)
         label_smoothing: Apply smoothing to labels
-        padding_value: Padding token ID
+        precompute_ref_log_probs: TRL memory optimization — compute reference
+            log-probs in one upfront pass so the reference model is not kept
+            in VRAM during the optimization loop (DPO otherwise needs roughly
+            two models' worth of memory). Trade-off: a one-time precompute
+            pass over the dataset before training starts.
+        activation_offloading: TRL memory optimization — offload activation
+            tensors to CPU RAM during the forward pass and bring them back
+            only for the backward pass (implemented via PyTorch
+            saved_tensors_hooks; CUDA streams overlap the transfers by
+            default). Significantly cuts PEAK VRAM at the cost of slightly
+            slower training. Complements precompute_ref_log_probs on 8 GB
+            cards: no resident ref model + offloaded activations. DPO-only —
+            TRL does not expose it on GRPOConfig and our SFT path uses plain
+            HF TrainingArguments (which lacks the field).
+
+    Note:
+        TRL's `sync_ref_model` (TR-DPO, arXiv:2404.09656 — EMA-style sync of
+        the reference to the policy every ref_model_sync_steps) is
+        deliberately NOT exposed: TRL hard-errors on `sync_ref_model=True`
+        with a PEFT policy, and this framework's DPO trainer always trains a
+        LoRA adapter. It also conflicts with precompute_ref_log_probs. Do
+        not forward it without first supporting full fine-tuning DPO.
+        TRL's `padding_free` (flattened padding-less forward) is likewise
+        NOT exposed: it requires FlashAttention 2/3 (absent on this repo's
+        8 GB RTX 4060 target), and TRL 1.4.0 hard-disables the feature
+        anyway ("temporarily unavailable after a refactor", silently
+        falling back to standard padding).
     """
 
     beta: float = 0.1
     max_length: int = 512
-    max_prompt_length: int = 128
-    max_target_length: int = 384
-    reference_model_free: bool = False
-    loss_type: Literal["sigmoid", "hinge", "ipo", "pairwise"] = "sigmoid"
+    loss_type: str = "sigmoid"
     label_smoothing: float = 0.0
-    padding_value: int = -100
+    precompute_ref_log_probs: bool = False
+    activation_offloading: bool = False
 
     def __post_init__(self) -> None:
         """Validate DPO configuration."""
         if self.beta <= 0:
             raise ValueError("beta must be positive")
 
-        if self.max_prompt_length + self.max_target_length > self.max_length:
+        if self.loss_type not in DPO_LOSS_TYPES:
             raise ValueError(
-                f"Prompt ({self.max_prompt_length}) + target "
-                f"({self.max_target_length}) exceeds max_length ({self.max_length})"
-            )
-
-        if self.loss_type not in ["sigmoid", "hinge", "ipo", "pairwise"]:
-            raise ValueError(
-                f"Invalid loss_type: {self.loss_type}. "
-                f"Must be one of: sigmoid, hinge, ipo, pairwise"
+                f"Invalid loss_type: {self.loss_type}. Must be one of: {', '.join(DPO_LOSS_TYPES)}"
             )
 
         if not 0 <= self.label_smoothing <= 1:
@@ -182,6 +218,14 @@ class DPOTrainingConfig:
         )
 
         self.logging_config = logging_config or LoggingConfig()
+
+        if self.lora_config.init_lora_weights == "lora_ga":
+            raise ValueError(
+                "init_lora_weights='lora_ga' (LoRA-GA) is not supported for DPO: the "
+                "technique calibrates adapters against a supervised (LM) loss gradient; "
+                "no validated calibration exists for preference losses. Use "
+                "another init strategy (e.g. 'pissa' or the default)."
+            )
 
     def __repr__(self) -> str:
         """Return string representation."""

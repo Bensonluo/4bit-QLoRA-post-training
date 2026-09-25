@@ -48,7 +48,6 @@ def main(
         "--max-length",
         help="Maximum sequence length",
     ),
-
     # Data arguments
     dataset: str = typer.Option(
         "yahma/alpaca-cleaned",
@@ -67,7 +66,6 @@ def main(
         "--validation-split",
         help="Fraction of data for validation",
     ),
-
     # Training arguments
     output_dir: str = typer.Option(
         "./outputs/sft",
@@ -104,7 +102,6 @@ def main(
         "--warmup-ratio",
         help="Warmup ratio",
     ),
-
     # LoRA arguments
     lora_r: int = typer.Option(
         16,
@@ -121,7 +118,6 @@ def main(
         "--lora-dropout",
         help="LoRA dropout",
     ),
-
     # Logging arguments
     use_wandb: bool = typer.Option(
         False,
@@ -138,7 +134,6 @@ def main(
         "--wandb-run-name",
         help="W&B run name",
     ),
-
     # Other arguments
     seed: int = typer.Option(
         42,
@@ -161,12 +156,12 @@ def main(
     """Run SFT training with QLoRA."""
 
     # Print header
-    console.print(Panel.fit(
-        "[bold cyan]QLoRA SFT Training[/bold cyan]\n"
-        f"Model: {model_name}\n"
-        f"Dataset: {dataset}",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]QLoRA SFT Training[/bold cyan]\nModel: {model_name}\nDataset: {dataset}",
+            border_style="cyan",
+        )
+    )
     console.print()
 
     # Load from config file if provided
@@ -252,15 +247,16 @@ def main(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Print configuration summary
-    console.print(Panel.fit(
-        f"""[bold]Configuration:[/bold]
+    console.print(
+        Panel.fit(
+            f"""[bold]Configuration:[/bold]
 
 Model: {model_config.name}
 Quantization: {model_config.quantization_bits}-bit
 Max Length: {model_config.max_length}
 
 Dataset: {data_config.dataset_name}
-Max Samples: {data_config.max_samples or 'All'}
+Max Samples: {data_config.max_samples or "All"}
 Validation Split: {data_config.validation_split}
 
 Epochs: {training_config.num_epochs}
@@ -275,13 +271,15 @@ LoRA dropout: {lora_config.lora_dropout}
 
 Output: {training_config.output_dir}
 Seed: {training_config.seed}""",
-        border_style="green",
-    ))
+            border_style="green",
+        )
+    )
     console.print()
 
     # Confirm
     console.print("[yellow]Starting training in 3 seconds... (Ctrl+C to cancel)[/yellow]")
     import time
+
     time.sleep(3)
 
     # Run training

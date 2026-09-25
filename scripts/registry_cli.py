@@ -8,7 +8,8 @@ Commands:
     list         — all registered models and their versions
     info         — deep inspect a version: lineage run, params, metrics
     register     — register an already-merged model dir as a new version
-    transition   — move a version to Staging / Production / Archived
+    transition   — move a version to Staging / Production / Archived (legacy)
+    alias        — set / remove a version alias (champion / challenger)
 
 Examples:
     # List everything
@@ -23,6 +24,15 @@ Examples:
     # Promote to Production
     python scripts/registry_cli.py transition \\
         --model-name Qwen3-1.7B-QLoRA --version 3 --stage Production
+
+    # Point the champion alias at version 3 (recommended over stages —
+    # stages are deprecated since MLflow 2.9.0)
+    python scripts/registry_cli.py alias \\
+        --model-name Qwen3-1.7B-QLoRA --version 3 --alias champion
+
+    # Remove an alias
+    python scripts/registry_cli.py alias \\
+        --model-name Qwen3-1.7B-QLoRA --alias challenger --remove
 
     # Register a merged dir manually
     python scripts/registry_cli.py register \\
@@ -82,6 +92,7 @@ def list(
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Version", style="white", justify="right")
     table.add_column("Stage", style="magenta")
+    table.add_column("Aliases", style="yellow")
     table.add_column("Run ID", style="dim")
     table.add_column("Status", style="green")
 
@@ -90,10 +101,12 @@ def list(
         stage_color = {"Production": "bold green", "Staging": "yellow", "Archived": "dim"}.get(
             stage, "white"
         )
+        aliases = ", ".join(v.get("aliases", [])) or "—"
         table.add_row(
             v.get("name", "?"),
             str(v.get("version", "?")),
             f"[{stage_color}]{stage}[/{stage_color}]",
+            aliases,
             (v.get("run_id") or "—")[:8],
             v.get("status", "?"),
         )
@@ -114,6 +127,7 @@ def info(
         raise typer.Exit(1)
 
     import mlflow
+
     if tracking_uri:
         mlflow.set_tracking_uri(tracking_uri)
 
@@ -124,15 +138,18 @@ def info(
         console.print(f"[red]✗ Version not found: {e}[/red]")
         raise typer.Exit(1) from None
 
-    console.print(Panel.fit(
-        f"[bold cyan]{model_name} v{version}[/bold cyan]\n"
-        f"Stage: {mv.current_stage}\n"
-        f"Status: {mv.status}\n"
-        f"Run ID: {mv.run_id or '—'}\n"
-        f"Source: {mv.source}\n"
-        f"Created: {mv.creation_timestamp}",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]{model_name} v{version}[/bold cyan]\n"
+            f"Stage: {mv.current_stage}\n"
+            f"Aliases: {', '.join(getattr(mv, 'aliases', None) or []) or '—'}\n"
+            f"Status: {mv.status}\n"
+            f"Run ID: {mv.run_id or '—'}\n"
+            f"Source: {mv.source}\n"
+            f"Created: {mv.creation_timestamp}",
+            border_style="cyan",
+        )
+    )
 
     if mv.run_id:
         run = client.get_run(mv.run_id)
@@ -146,7 +163,9 @@ def info(
             console.print("\n[bold]Lineage Run Metrics:[/bold]")
             metrics_table = Table(show_header=False, box=None)
             for k, v in sorted(run.data.metrics.items()):
-                metrics_table.add_row(f"[dim]{k}[/dim]", f"{v:.4f}" if isinstance(v, float) else str(v))
+                metrics_table.add_row(
+                    f"[dim]{k}[/dim]", f"{v:.4f}" if isinstance(v, float) else str(v)
+                )
             console.print(metrics_table)
     else:
         console.print("[yellow]\nNo lineage run attached.[/yellow]")
@@ -171,6 +190,38 @@ def transition(
 
     tracker.transition_model_stage(name=model_name, version=version, stage=stage)
     console.print(f"[green]✓ {model_name} v{version} → {stage}[/green]")
+
+
+@app.command()
+def alias(
+    model_name: str = typer.Option(..., "--model-name", "-m"),
+    version: str = typer.Option(None, "--version", "-v", help="Required unless --remove"),
+    alias_name: str = typer.Option(..., "--alias", "-a", help="e.g. champion / challenger"),
+    remove: bool = typer.Option(False, "--remove", help="Delete the alias instead of setting it"),
+    tracking_uri: str | None = typer.Option(None, "--tracking-uri"),
+):
+    """Set or remove a model version alias.
+
+    Aliases are the replacement for registry stages (deprecated since MLflow
+    2.9.0). Convention: champion = serving candidate, challenger = evaluation
+    candidate. Load by alias: models:/<name>@<alias>.
+    """
+    tracker = _get_tracker(tracking_uri)
+    if not tracker.active:
+        console.print("[red]✗ MLflow not active.[/red]")
+        raise typer.Exit(1)
+
+    if remove:
+        tracker.delete_model_alias(name=model_name, alias=alias_name)
+        console.print(f"[green]✓ removed alias '{alias_name}' from {model_name}[/green]")
+        return
+
+    if not version:
+        console.print("[red]✗ --version is required when setting an alias[/red]")
+        raise typer.Exit(1)
+
+    tracker.set_model_alias(name=model_name, version=version, alias=alias_name)
+    console.print(f"[green]✓ {model_name} v{version} → @{alias_name}[/green]")
 
 
 @app.command()
@@ -204,7 +255,9 @@ def register(
             raise typer.Exit(1)
         info = tracker.register_model(model_uri=model_uri, name=name)
         if stage != "None" and info:
-            tracker.transition_model_stage(name=info["name"], version=str(info["version"]), stage=stage)
+            tracker.transition_model_stage(
+                name=info["name"], version=str(info["version"]), stage=stage
+            )
             info["current_stage"] = stage
 
     console.print(

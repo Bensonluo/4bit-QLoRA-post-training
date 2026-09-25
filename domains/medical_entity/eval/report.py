@@ -31,7 +31,7 @@ def generate_comparison_table(reports: list[EvalReport]) -> str:
         ("平均置信度", lambda r: f"{r.avg_confidence():.2f}"),
         ("平均延迟 (ms)", lambda r: f"{r.avg_latency():.0f}"),
         ("吞吐量 (条/秒)", lambda r: f"{r.throughput():.1f}"),
-        ("总耗时 (秒)", lambda r: f"{r.total_time_ms/1000:.1f}"),
+        ("总耗时 (秒)", lambda r: f"{r.total_time_ms / 1000:.1f}"),
     ]
     for label, fn in metrics:
         row = f"| {label} | " + " | ".join(fn(r) for r in reports) + " |"
@@ -42,9 +42,11 @@ def generate_comparison_table(reports: list[EvalReport]) -> str:
     lines.append("| 难度 | " + " | ".join(r.model_name for r in reports) + " |")
     lines.append("|" + "|".join(["---"] * (len(reports) + 1)) + "|")
     for diff in ["easy", "medium", "hard"]:
-        row = f"| {diff} | " + " | ".join(
-            f"{r.accuracy(difficulty=diff):.1%}" for r in reports
-        ) + " |"
+        row = (
+            f"| {diff} | "
+            + " | ".join(f"{r.accuracy(difficulty=diff):.1%}" for r in reports)
+            + " |"
+        )
         lines.append(row)
 
     # 按实体类型
@@ -52,9 +54,11 @@ def generate_comparison_table(reports: list[EvalReport]) -> str:
     lines.append("| 类型 | " + " | ".join(r.model_name for r in reports) + " |")
     lines.append("|" + "|".join(["---"] * (len(reports) + 1)) + "|")
     for etype in ["drug", "hospital"]:
-        row = f"| {etype} | " + " | ".join(
-            f"{r.accuracy(entity_type=etype):.1%}" for r in reports
-        ) + " |"
+        row = (
+            f"| {etype} | "
+            + " | ".join(f"{r.accuracy(entity_type=etype):.1%}" for r in reports)
+            + " |"
+        )
         lines.append(row)
 
     # 置信度校准
@@ -90,9 +94,7 @@ def generate_executive_summary(reports: list[EvalReport]) -> str:
 
     # 找到精调模型和最佳 baseline
     ours = reports[-1]  # 最后一个假设是精调模型
-    theirs = max(
-        [r for r in reports if r != ours], key=lambda r: r.accuracy()
-    )
+    theirs = max([r for r in reports if r != ours], key=lambda r: r.accuracy())
 
     acc_diff = (ours.accuracy() - theirs.accuracy()) * 100
     hard_diff = (ours.accuracy(difficulty="hard") - theirs.accuracy(difficulty="hard")) * 100
@@ -113,19 +115,21 @@ def generate_executive_summary(reports: list[EvalReport]) -> str:
     for diff in ["easy", "medium", "hard"]:
         t = theirs.accuracy(difficulty=diff)
         o = ours.accuracy(difficulty=diff)
-        lines.append(f"| {diff} | {t:.1%} | {o:.1%} | {((o-t)*100):+.1f}% |")
+        lines.append(f"| {diff} | {t:.1%} | {o:.1%} | {((o - t) * 100):+.1f}% |")
 
-    lines.extend([
-        "",
-        "## 成本估算\n",
-        "| 指标 | 现有方案 | 精调模型 |",
-        "|---|---|---|",
-        f"| 单条延迟 | {theirs.avg_latency():.0f}ms | {ours.avg_latency():.0f}ms |",
-        f"| 吞吐量 | {theirs.throughput():.0f}条/秒 | {ours.throughput():.0f}条/秒 |",
-        f"| 日处理100万条 | 需要 {1000000/theirs.throughput()/3600:.1f}小时 | 需要 {1000000/ours.throughput()/3600:.1f}小时 |",
-        "| 部署方式 | API依赖 | 本地GPU |",
-        "| 数据安全 | 出域 | 不出域 |",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 成本估算\n",
+            "| 指标 | 现有方案 | 精调模型 |",
+            "|---|---|---|",
+            f"| 单条延迟 | {theirs.avg_latency():.0f}ms | {ours.avg_latency():.0f}ms |",
+            f"| 吞吐量 | {theirs.throughput():.0f}条/秒 | {ours.throughput():.0f}条/秒 |",
+            f"| 日处理100万条 | 需要 {1000000 / theirs.throughput() / 3600:.1f}小时 | 需要 {1000000 / ours.throughput() / 3600:.1f}小时 |",
+            "| 部署方式 | API依赖 | 本地GPU |",
+            "| 数据安全 | 出域 | 不出域 |",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -180,6 +184,7 @@ def save_results(reports: list[EvalReport], output_dir: str = None):
     # Log to MLflow if available
     try:
         from src.tracking.eval_logger import log_eval_to_mlflow
+
         log_eval_to_mlflow(output_dir / f"eval_detail_{timestamp}.json")
     except ImportError:
         pass

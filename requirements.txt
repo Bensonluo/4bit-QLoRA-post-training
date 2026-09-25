@@ -1,9 +1,13 @@
 # Core dependencies
-torch>=2.1.0
-transformers>=4.36.0
-peft>=0.7.0
+# torch 2.4.0 = first release with the complete DCP call surface we use
+# (async_save + no_dist kwarg); verified against 2.11.
+torch>=2.4.0
+transformers>=5.0
+# peft 0.19.0 first ships peft.tuners.lora.loraga (preprocess_loraga) and
+# LoraGAConfig — both imported at module load by src/training/sft_trainer.py.
+peft>=0.19.0
 bitsandbytes>=0.41.0; sys_platform == "linux" or (sys_platform == "win32" and platform_machine == "x86_64")
-trl>=0.7.10
+trl>=1.4.0
 accelerate>=0.25.0
 datasets>=2.15.0
 scipy>=1.10.0

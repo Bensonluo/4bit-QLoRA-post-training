@@ -14,6 +14,12 @@ Nothing here changes the training loop — it only informs *how* models are plac
 and *what* gets printed. All functions are safe to call in single-GPU / CPU mode.
 """
 
+from src.training.distributed.checkpoint import (
+    dcp_available,
+    finalize_dcp_save,
+    load_dcp_checkpoint,
+    save_dcp_checkpoint,
+)
 from src.training.distributed.env import (
     DistributedInfo,
     get_distributed_info,
@@ -30,4 +36,8 @@ __all__ = [
     "rank_zero_only",
     "setup_distributed",
     "get_rank_zero_console",
+    "dcp_available",
+    "save_dcp_checkpoint",
+    "load_dcp_checkpoint",
+    "finalize_dcp_save",
 ]

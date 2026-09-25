@@ -25,13 +25,58 @@ YYY_DIR = EXTERNAL_DIR / "yuanyanyao"
 # 常见剂型后缀（从 chinese-medical-kg 的 extract_generic_name_and_dosage 移植）
 DOSAGE_FORMS = sorted(
     [
-        "注射液", "注射剂", "针剂", "肠溶片", "肠溶胶囊", "缓释片", "缓释胶囊",
-        "控释片", "控释胶囊", "分散片", "咀嚼片", "泡腾片", "口含片", "舌下片",
-        "薄膜衣片", "糖衣片", "片", "片剂", "胶囊", "胶囊剂", "颗粒", "颗粒剂",
-        "散", "散剂", "丸", "丸剂", "栓", "栓剂", "软膏", "软膏剂", "乳膏",
-        "乳膏剂", "凝胶", "凝胶剂", "贴", "贴剂", "喷雾", "喷雾剂", "吸入",
-        "吸入剂", "滴眼液", "滴耳液", "滴鼻液", "溶液", "溶液剂", "混悬液",
-        "混悬剂", "乳剂", "糖浆", "糖浆剂", "口服液", "合剂",
+        "注射液",
+        "注射剂",
+        "针剂",
+        "肠溶片",
+        "肠溶胶囊",
+        "缓释片",
+        "缓释胶囊",
+        "控释片",
+        "控释胶囊",
+        "分散片",
+        "咀嚼片",
+        "泡腾片",
+        "口含片",
+        "舌下片",
+        "薄膜衣片",
+        "糖衣片",
+        "片",
+        "片剂",
+        "胶囊",
+        "胶囊剂",
+        "颗粒",
+        "颗粒剂",
+        "散",
+        "散剂",
+        "丸",
+        "丸剂",
+        "栓",
+        "栓剂",
+        "软膏",
+        "软膏剂",
+        "乳膏",
+        "乳膏剂",
+        "凝胶",
+        "凝胶剂",
+        "贴",
+        "贴剂",
+        "喷雾",
+        "喷雾剂",
+        "吸入",
+        "吸入剂",
+        "滴眼液",
+        "滴耳液",
+        "滴鼻液",
+        "溶液",
+        "溶液剂",
+        "混悬液",
+        "混悬剂",
+        "乳剂",
+        "糖浆",
+        "糖浆剂",
+        "口服液",
+        "合剂",
     ],
     key=len,
     reverse=True,
@@ -81,7 +126,7 @@ def load_yuanyanyao_brands() -> dict[str, list[str]]:
         if not generic:
             continue
         for field in ("brandName", "brandNameEn", "inn"):
-            val = (fm.get(field) or "")
+            val = fm.get(field) or ""
             if isinstance(val, str):
                 val = val.strip()
                 if val and val != generic:
@@ -130,12 +175,14 @@ def main():
             if b != standard_name:
                 variants.add(b)
 
-        drugs.append({
-            "standard_name": standard_name,
-            "code": code,
-            "generic_name": generic_name,
-            "variants": sorted(variants),
-        })
+        drugs.append(
+            {
+                "standard_name": standard_name,
+                "code": code,
+                "generic_name": generic_name,
+                "variants": sorted(variants),
+            }
+        )
         generic_groups[generic_name].append(standard_name)
 
     # 过滤：只保留有变体或通用名!=标准名的药物
@@ -157,7 +204,12 @@ def main():
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump({"metadata": metadata, "drugs": drugs, "generic_groups": multi_form}, f, ensure_ascii=False, indent=2)
+        json.dump(
+            {"metadata": metadata, "drugs": drugs, "generic_groups": multi_form},
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
 
     print(f"\n已保存: {OUTPUT_PATH} ({OUTPUT_PATH.stat().st_size / 1024 / 1024:.1f} MB)")
 

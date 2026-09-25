@@ -26,14 +26,18 @@ class MLflowTrainCallback(TrainerCallback):
         if model is not None:
             trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
             total = sum(p.numel() for p in model.parameters())
-            self._tracker.log_metrics({
-                "params/trainable": float(trainable),
-                "params/total": float(total),
-                "params/trainable_pct": 100.0 * trainable / total if total > 0 else 0.0,
-            })
+            self._tracker.log_metrics(
+                {
+                    "params/trainable": float(trainable),
+                    "params/total": float(total),
+                    "params/trainable_pct": 100.0 * trainable / total if total > 0 else 0.0,
+                }
+            )
         return control
 
-    def on_log(self, args: Any, state: Any, control: Any, logs: dict[str, Any] | None = None, **kwargs: Any) -> Any:
+    def on_log(
+        self, args: Any, state: Any, control: Any, logs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> Any:
         if logs is None or not self._tracker.active:
             return control
         step = state.global_step
@@ -45,7 +49,14 @@ class MLflowTrainCallback(TrainerCallback):
             self._tracker.log_metrics(metrics, step=step)
         return control
 
-    def on_evaluate(self, args: Any, state: Any, control: Any, metrics: dict[str, Any] | None = None, **kwargs: Any) -> Any:
+    def on_evaluate(
+        self,
+        args: Any,
+        state: Any,
+        control: Any,
+        metrics: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         if metrics is None or not self._tracker.active:
             return control
         eval_metrics: dict[str, float] = {}

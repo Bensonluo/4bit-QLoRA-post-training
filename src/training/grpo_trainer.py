@@ -6,11 +6,10 @@ Wraps TRL's GRPOTrainer and integrates with the project's QLoRA + tracking stack
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from typing import Any
 
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import TrainerCallback
+from transformers import PreTrainedModel, TrainerCallback
 from trl import GRPOConfig as TRLGRPOConfig
 from trl import GRPOTrainer as TRLGRPOTrainer
 
@@ -19,9 +18,13 @@ from src.data.grpo_dataset import GRPODataset
 from src.models import load_model_and_tokenizer
 from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
 from src.training.distributed import get_distributed_info
-from src.training.reward_engine import build_reward_functions
+from src.training.reward_engine import RewardFunction, build_reward_functions
 from src.utils import console, set_seed, setup_logging
 from src.utils.platform_utils import get_platform
+
+# Element type accepted by TRL GRPOTrainer's `reward_funcs` argument (functions
+# may also be given as model id strings or PreTrainedModel judge instances).
+TRLRewardFunc = str | PreTrainedModel | RewardFunction
 
 
 class MemoryCallback(TrainerCallback):
@@ -35,7 +38,7 @@ class MemoryCallback(TrainerCallback):
     def on_step_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
         """Log memory at end of step."""
         if state.global_step % self.log_steps == 0:
-            from src.utils.memory import log_gpu_memory
+            from src.utils import log_gpu_memory
 
             log_gpu_memory(state.global_step, wandb_run=None)
         return control
@@ -87,14 +90,32 @@ class GRPOTrainer:
             console.print("[cyan]Skipping k-bit preparation (not needed on this platform)[/cyan]")
 
         # Apply LoRA
-        lora_cfg = LoraConfig(
+        lora_kwargs: dict[str, Any] = dict(
             r=self.config.lora_config.r,
             lora_alpha=self.config.lora_config.lora_alpha,
             lora_dropout=self.config.lora_config.lora_dropout,
             target_modules=self.config.lora_config.target_modules,
             bias=self.config.lora_config.bias,
             task_type=self.config.lora_config.task_type,
+            use_dora=self.config.lora_config.use_dora,
+            use_rslora=self.config.lora_config.use_rslora,
+            init_lora_weights=self.config.lora_config.init_lora_weights,
         )
+        if self.config.lora_config.init_lora_weights == "loftq":
+            # peft hard-errors on loftq without the dict — inject it here.
+            lora_kwargs["loftq_config"] = {
+                "loftq_bits": self.config.lora_config.loftq_bits,
+                "loftq_iter": self.config.lora_config.loftq_iter,
+            }
+        # Per-module rank/alpha overrides and module exclusions (peft
+        # regex-keyed patterns; None = peft defaults, no-op).
+        if self.config.lora_config.rank_pattern is not None:
+            lora_kwargs["rank_pattern"] = self.config.lora_config.rank_pattern
+        if self.config.lora_config.alpha_pattern is not None:
+            lora_kwargs["alpha_pattern"] = self.config.lora_config.alpha_pattern
+        if self.config.lora_config.exclude_modules is not None:
+            lora_kwargs["exclude_modules"] = self.config.lora_config.exclude_modules
+        lora_cfg = LoraConfig(**lora_kwargs)
         console.print(
             f"[cyan]Applying LoRA (r={self.config.lora_config.r}, "
             f"alpha={self.config.lora_config.lora_alpha})...[/cyan]"
@@ -108,14 +129,14 @@ class GRPOTrainer:
             f"({trainable_params:,} trainable, {trainable_params / total_params:.2%})[/green]"
         )
 
-        # Load reference model (frozen) if different from policy
-        ref_config = self.config.reference_config or self.config.model_config
-        console.print(f"\n[cyan]Loading reference model: {ref_config.name}[/cyan]")
-        self.ref_model, _ = load_model_and_tokenizer(ref_config)
-
-        for param in self.ref_model.parameters():
-            param.requires_grad = False
-        console.print("[green]✓ Reference model loaded and frozen[/green]\n")
+        # Reference policy: TRL >= 1.4 manages it internally (adapter-disable
+        # path for PEFT policies, auto-created reference otherwise; see
+        # GRPOConfig.beta / sync_ref_model). Pre-loading a frozen copy would
+        # double VRAM usage for nothing, so reference_config is not loaded.
+        console.print(
+            "[cyan]Reference policy managed by TRL internally "
+            "(reference_config unused — saves ~1x model VRAM)[/cyan]\n"
+        )
 
     def prepare_data(self) -> None:
         """Load and prepare GRPO dataset."""
@@ -141,7 +162,7 @@ class GRPOTrainer:
             console.print(f"[green]✓ Validation samples: {len(self.eval_dataset):,}[/green]")
         console.print()
 
-    def _build_reward_funcs(self) -> list[Callable[..., list[float]]]:
+    def _build_reward_funcs(self) -> list[TRLRewardFunc]:
         """Build reward functions from config."""
         reward_kwargs: dict[str, Any] = {
             "judge_model": self.config.reward_config.judge_model,
@@ -157,7 +178,8 @@ class GRPOTrainer:
         )
 
         # Return only the functions; weights are handled by TRL's reward_weights arg.
-        return [fn for fn, _ in funcs_with_weights]
+        funcs: list[TRLRewardFunc] = [fn for fn, _ in funcs_with_weights]
+        return funcs
 
     def _build_grpo_config(self) -> TRLGRPOConfig:
         """Build TRL GRPOConfig from project config."""
@@ -167,19 +189,42 @@ class GRPOTrainer:
 
         kwargs: dict[str, Any] = dict(
             output_dir=training.output_dir,
+            # Opt-in Triton fused kernels — see SFTTrainer note ([liger] extra).
+            use_liger_kernel=training.use_liger_kernel,
+            # Opt-in torch.compile — bf16 full-precision path only (Dynamo
+            # cannot trace bitsandbytes 4-bit ops; see TrainingConfig).
+            torch_compile=training.torch_compile,
             num_train_epochs=training.num_epochs,
             per_device_train_batch_size=training.batch_size,
             per_device_eval_batch_size=training.batch_size,
             gradient_accumulation_steps=training.gradient_accumulation_steps,
             learning_rate=training.learning_rate,
             weight_decay=training.weight_decay,
-            warmup_ratio=training.warmup_ratio,
+            # transformers >= 5.x: warmup_ratio merged into warmup_steps
+            # (a float value keeps ratio semantics).
+            warmup_steps=training.warmup_ratio,
             lr_scheduler_type=training.lr_scheduler_type,
             logging_steps=training.logging_steps,
             save_steps=training.save_steps,
             eval_steps=training.eval_steps,
             save_total_limit=training.save_total_limit,
             gradient_checkpointing=training.gradient_checkpointing,
+            # Non-reentrant checkpointing — PyTorch-recommended and the
+            # reliable path for frozen-base (LoRA/QLoRA) fine-tunes.
+            gradient_checkpointing_kwargs=(
+                {"use_reentrant": training.gradient_checkpointing_use_reentrant}
+                if training.gradient_checkpointing
+                else None
+            ),
+            # Periodic torch.cuda.empty_cache() — opt-in fragmentation relief
+            # for 8 GB cards with variable-length batches (None = off).
+            torch_empty_cache_steps=training.torch_empty_cache_steps,
+            # On OOM, auto-restart with halved batch size (ZeRO-3 excluded
+            # at config validation; see TrainingConfig).
+            auto_find_batch_size=training.auto_find_batch_size,
+            # Length-grouped sampling — padding-waste reduction for
+            # variable-length prompts (opt-in).
+            train_sampling_strategy=training.train_sampling_strategy,
             fp16=training.fp16,
             bf16=training.bf16,
             max_grad_norm=training.max_grad_norm,
@@ -198,10 +243,30 @@ class GRPOTrainer:
             top_p=cfg.top_p,
             top_k=cfg.top_k,
             repetition_penalty=cfg.repetition_penalty,
+            # Min-p sampling floor (None = off). Config warns when combined
+            # with use_vllm — truncation biases the IS correction (#6789).
+            min_p=cfg.min_p,
+            # Escape-hatch sampling knobs TRL lacks first-class fields for;
+            # conflicting keys override the top-level params (TRL semantics).
+            generation_kwargs=cfg.generation_kwargs,
             use_vllm=cfg.use_vllm,
+            vllm_mode=cfg.vllm_mode,
+            vllm_gpu_memory_utilization=cfg.vllm_gpu_memory_utilization,
             scale_rewards=cfg.scale_rewards,
             num_iterations=cfg.num_iterations,
             epsilon=cfg.epsilon,
+            # DAPO Clip-Higher (arXiv:2503.14476): asymmetric clip range
+            # [epsilon, epsilon_high]; None → symmetric (TRL default).
+            epsilon_high=cfg.epsilon_high,
+            # DAPO Overlong Filtering: exclude max-length-truncated
+            # completions from the loss.
+            mask_truncated_completions=cfg.mask_truncated_completions,
+            # GSPO (arXiv:2507.18071): "sequence" computes importance
+            # ratios per sequence instead of per token.
+            importance_sampling_level=cfg.importance_sampling_level,
+            # Entropy-based token filtering (arXiv:2506.01939, Beyond the
+            # 80/20 Rule): 1.0 keeps all tokens; paper recommends 0.2.
+            top_entropy_quantile=cfg.top_entropy_quantile,
             loss_type=cfg.loss_type,
         )
 
@@ -228,6 +293,11 @@ class GRPOTrainer:
                 f"[cyan]Distributed GRPO engaged: world_size={dist_info.world_size}[/cyan]"
             )
 
+        # Optional optimizer override (e.g. "paged_adamw_8bit" — the QLoRA-paper
+        # recipe: 8-bit states paged to CPU RAM to survive VRAM spikes).
+        if training.optim:
+            kwargs["optim"] = training.optim
+
         return TRLGRPOConfig(**kwargs)
 
     def setup_trainer(self) -> None:
@@ -247,7 +317,6 @@ class GRPOTrainer:
 
         self.trainer = TRLGRPOTrainer(
             model=self.model,
-            ref_model=self.ref_model,
             reward_funcs=reward_funcs,
             args=grpo_args,
             train_dataset=self.train_dataset,

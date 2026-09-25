@@ -24,6 +24,7 @@ def get_vram_usage() -> dict[str, float]:
     """
     try:
         import torch
+
         platform_info = get_platform()
 
         if platform_info.is_cuda:
@@ -92,6 +93,7 @@ def clear_cache() -> None:
     """Clear GPU cache and run garbage collection."""
     try:
         import torch
+
         platform_info = get_platform()
 
         if platform_info.is_cuda:
@@ -163,9 +165,7 @@ def optimize_memory(
         )
     elif vram["total"] < 12:
         optimizations["gradient_checkpointing"] = True
-        optimizations["recommendation"] = (
-            "Medium VRAM. Using gradient checkpointing recommended."
-        )
+        optimizations["recommendation"] = "Medium VRAM. Using gradient checkpointing recommended."
     else:
         optimizations["recommendation"] = "High VRAM. Standard configuration fine."
 
@@ -185,7 +185,13 @@ def check_remote_gpu(host: str = "windows") -> dict[str, Any]:
     """
     try:
         result = subprocess.run(
-            ["ssh", host, "nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader"],
+            [
+                "ssh",
+                host,
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.free",
+                "--format=csv,noheader",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
@@ -278,10 +284,7 @@ def estimate_model_vram(
     lora_vram = (lora_r * 8 * 2 * 4) / (1024**3) * params  # Rough estimate
 
     # Training overhead (optimizer states, gradients)
-    if quantization_bits == 4:
-        overhead_vram = base_vram * 0.5
-    else:
-        overhead_vram = base_vram * 0.3
+    overhead_vram = base_vram * 0.5 if quantization_bits == 4 else base_vram * 0.3
 
     # Activation memory (sequence length and batch size dependent)
     activation_vram = (max_length / 512) * batch_size * 0.5

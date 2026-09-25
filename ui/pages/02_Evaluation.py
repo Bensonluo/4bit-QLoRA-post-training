@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from ui.components.domain_adapters import (
 )
 from ui.config import DOMAINS_DIR, MLFLOW_TRACKING_URI
 
+logger = logging.getLogger("qlora")
+
 st.set_page_config(page_title="Evaluation", page_icon="🎯", layout="wide")
 st.title("🎯 Evaluation Results")
 
@@ -24,10 +27,7 @@ st.title("🎯 Evaluation Results")
 
 domains = list_domains()
 if not domains and DOMAINS_DIR.exists():
-    domains = [
-        d.name for d in DOMAINS_DIR.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
-    ]
+    domains = [d.name for d in DOMAINS_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")]
 
 if not domains:
     st.info(
@@ -39,6 +39,7 @@ if not domains:
     with st.expander("📥 Import Historical Results"):
         if st.button("Scan & Import to MLflow"):
             from src.tracking.eval_logger import log_eval_to_mlflow
+
             imported = 0
             for domain_dir in DOMAINS_DIR.iterdir():
                 if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
@@ -72,19 +73,30 @@ data = load_eval_data(selected_domain)
 mlflow_data: list[dict] = []
 try:
     import mlflow
+
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     exp = mlflow.get_experiment_by_name("domain-evaluation")
     if exp:
         runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
         if not runs.empty:
             for _, row in runs.iterrows():
-                mlflow_data.append({
-                    "model": row.get("tags.model_name", row.get("tags.mlflow.runName", "unknown")),
-                    "source": "mlflow",
-                    **{k.replace("metrics.", ""): v for k, v in row.items() if k.startswith("metrics.")},
-                })
-except Exception:
-    pass
+                mlflow_data.append(
+                    {
+                        "model": row.get(
+                            "tags.model_name", row.get("tags.mlflow.runName", "unknown")
+                        ),
+                        "source": "mlflow",
+                        **{
+                            k.replace("metrics.", ""): v
+                            for k, v in row.items()
+                            if k.startswith("metrics.")
+                        },
+                    }
+                )
+except Exception as exc:
+    # MLflow is a secondary source — local eval files win, and a missing or
+    # unreachable store must not break the page. Keep it visible at debug.
+    logger.debug("MLflow eval-run import skipped: %s", exc)
 
 if not data and mlflow_data:
     data = mlflow_data
@@ -97,6 +109,7 @@ if not data:
     with st.expander("📥 Import Historical Results"):
         if st.button("Scan & Import"):
             from src.tracking.eval_logger import log_eval_to_mlflow
+
             imported = 0
             results_dir = DOMAINS_DIR / selected_domain / "data" / "results"
             if results_dir.exists():
@@ -127,7 +140,7 @@ else:
         with cols[i]:
             acc = model_data.get("overall_accuracy", 0)
             st.metric(
-                label=model_data.get("model", f"Model {i+1}"),
+                label=model_data.get("model", f"Model {i + 1}"),
                 value=f"{acc:.1%}" if acc else "N/A",
             )
 
@@ -157,6 +170,7 @@ st.divider()
 with st.expander("📥 Import Historical Results to MLflow"):
     if st.button("Scan & Import"):
         from src.tracking.eval_logger import log_eval_to_mlflow
+
         imported = 0
         for domain_dir in DOMAINS_DIR.iterdir():
             if not domain_dir.is_dir() or domain_dir.name.startswith("_"):

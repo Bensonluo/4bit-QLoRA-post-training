@@ -37,6 +37,7 @@ def compare_models(
         # Try loading with adapters
         from config.base import ModelConfig
         from src.models import load_model_and_tokenizer
+
         config = ModelConfig(name=model_path)
         tuned_model, _ = load_model_and_tokenizer(config)
 

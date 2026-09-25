@@ -11,6 +11,9 @@ import pandas as pd
 import streamlit as st
 
 from ui.components.domain_adapters import get_domain_display_name, list_domains, load_eval_data
+from ui.components.format import delta as _delta
+from ui.components.format import fmt_num as _fmt_num
+from ui.components.format import fmt_pct as _fmt_pct
 from ui.config import DOMAINS_DIR
 
 st.set_page_config(page_title="Model Comparison", page_icon="⚖️", layout="wide")
@@ -66,29 +69,29 @@ with st.container(border=True):
     a_cols = st.columns(len(comparison_metrics))
     for i, (label, key, is_pct) in enumerate(comparison_metrics):
         with a_cols[i]:
-            val = model_a.get(key, 0)
+            val = model_a.get(key)
             if is_pct:
-                st.metric(label, f"{val:.1%}")
+                st.metric(label, _fmt_pct(val))
             else:
-                fmt = ".3f" if abs(val) < 1 else ".1f"
-                st.metric(label, f"{val:{fmt}}")
+                st.metric(label, _fmt_num(val))
 
 # Delta row
-st.markdown("<div style='text-align:center;font-size:1.5rem;padding:0.5rem 0'>↓ Delta (B − A)</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='text-align:center;font-size:1.5rem;padding:0.5rem 0'>↓ Delta (B − A)</div>",
+    unsafe_allow_html=True,
+)
 
 with st.container(border=True):
     st.markdown(f"### {model_b_name}")
     b_cols = st.columns(len(comparison_metrics))
     for i, (label, key, is_pct) in enumerate(comparison_metrics):
         with b_cols[i]:
-            val_b = model_b.get(key, 0)
-            val_a = model_a.get(key, 0)
-            delta = val_b - val_a
+            val_b = model_b.get(key)
+            val_a = model_a.get(key)
             if is_pct:
-                st.metric(label, f"{val_b:.1%}", delta=f"{delta:+.1%}")
+                st.metric(label, _fmt_pct(val_b), delta=_delta(val_a, val_b, pct=True))
             else:
-                fmt = ".3f" if abs(val_b) < 1 else ".1f"
-                st.metric(label, f"{val_b:{fmt}}", delta=f"{delta:+{fmt}}")
+                st.metric(label, _fmt_num(val_b), delta=_delta(val_a, val_b, pct=False))
 
 st.divider()
 
@@ -104,10 +107,9 @@ with b1:
     diff_cols = st.columns(len(difficulties))
     for i, diff in enumerate(difficulties):
         with diff_cols[i]:
-            acc_a = model_a.get("accuracy_by_difficulty", {}).get(diff, 0)
-            acc_b = model_b.get("accuracy_by_difficulty", {}).get(diff, 0)
-            delta = acc_b - acc_a
-            st.metric(f"{diff.title()}", f"{acc_b:.1%}", delta=f"{delta:+.1%}")
+            acc_a = model_a.get("accuracy_by_difficulty", {}).get(diff)
+            acc_b = model_b.get("accuracy_by_difficulty", {}).get(diff)
+            st.metric(f"{diff.title()}", _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True))
 
 with b2:
     st.markdown("**Accuracy by Entity Type**")
@@ -115,10 +117,9 @@ with b2:
     ent_cols = st.columns(len(entity_types))
     for i, etype in enumerate(entity_types):
         with ent_cols[i]:
-            acc_a = model_a.get("accuracy_by_type", {}).get(etype, 0)
-            acc_b = model_b.get("accuracy_by_type", {}).get(etype, 0)
-            delta = acc_b - acc_a
-            st.metric(f"{etype.title()}", f"{acc_b:.1%}", delta=f"{delta:+.1%}")
+            acc_a = model_a.get("accuracy_by_type", {}).get(etype)
+            acc_b = model_b.get("accuracy_by_type", {}).get(etype)
+            st.metric(f"{etype.title()}", _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True))
 
 st.divider()
 
@@ -147,21 +148,29 @@ latency_b = model_b.get("avg_latency_ms", 0)
 tp_a = model_a.get("throughput_per_sec", 1)
 tp_b = model_b.get("throughput_per_sec", 1)
 
-cost_df = pd.DataFrame({
-    "Metric": ["Avg Latency", "Throughput", "Time for 1M samples", "Deployment", "Data Security"],
-    model_a_name: [
-        f"{latency_a:.0f} ms",
-        f"{tp_a:.0f} samples/s",
-        f"{1_000_000 / max(tp_a, 0.1) / 3600:.1f} hours",
-        "Local GPU" if latency_a > 0 else "N/A",
-        "On-premise",
-    ],
-    model_b_name: [
-        f"{latency_b:.0f} ms",
-        f"{tp_b:.0f} samples/s",
-        f"{1_000_000 / max(tp_b, 0.1) / 3600:.1f} hours",
-        "Local GPU" if latency_b > 0 else "N/A",
-        "On-premise",
-    ],
-})
-st.dataframe(cost_df, width='stretch', hide_index=True)
+cost_df = pd.DataFrame(
+    {
+        "Metric": [
+            "Avg Latency",
+            "Throughput",
+            "Time for 1M samples",
+            "Deployment",
+            "Data Security",
+        ],
+        model_a_name: [
+            f"{latency_a:.0f} ms",
+            f"{tp_a:.0f} samples/s",
+            f"{1_000_000 / max(tp_a, 0.1) / 3600:.1f} hours",
+            "Local GPU" if latency_a > 0 else "N/A",
+            "On-premise",
+        ],
+        model_b_name: [
+            f"{latency_b:.0f} ms",
+            f"{tp_b:.0f} samples/s",
+            f"{1_000_000 / max(tp_b, 0.1) / 3600:.1f} hours",
+            "Local GPU" if latency_b > 0 else "N/A",
+            "On-premise",
+        ],
+    }
+)
+st.dataframe(cost_df, width="stretch", hide_index=True)

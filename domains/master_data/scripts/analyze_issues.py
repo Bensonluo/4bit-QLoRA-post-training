@@ -2,8 +2,11 @@
 """深入分析数据质量问题根因。"""
 
 import json
+import logging
 from collections import Counter, defaultdict
 from pathlib import Path
+
+logger = logging.getLogger("qlora")
 
 DOMAIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -60,24 +63,32 @@ def main():
                     print(f"  位置 {pos} 的候选数: {m['content'].count('编码:')}")
                     break
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("问题 2: eval_institution 混入产品样本分析")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     eval_inst = load_json(DOMAIN_ROOT / "data" / "test" / "eval_institution.json")
     prod_like = []
     for idx, item in enumerate(eval_inst):
         q = extract_query(item["messages"])
-        if q and ("片" in q or "胶囊" in q or "注射液" in q or "颗粒" in q or "口服液" in q or "g" in q or "ml" in q):
+        if q and (
+            "片" in q
+            or "胶囊" in q
+            or "注射液" in q
+            or "颗粒" in q
+            or "口服液" in q
+            or "g" in q
+            or "ml" in q
+        ):
             prod_like.append((idx, q))
 
     print(f"\n产品-like 的 query 数量: {len(prod_like)}")
     for idx, q in prod_like[:10]:
         print(f"  [{idx}] {q}")
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("问题 3: Easy 候选分析")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # 随机抽 100 条产品样本，看 D 级候选的核心名
     prod_items = []
@@ -110,8 +121,8 @@ def main():
                             easy_examples.append((q, candidates[i]))
                             if len(easy_examples) >= 20:
                                 break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("跳过无法解析的样本输出: %s", exc)
                 break
         if len(easy_examples) >= 20:
             break
@@ -123,7 +134,9 @@ def main():
         # 判断是否一眼假
         q_core = q.split()[0] if q else ""
         c_core = cand.split()[0] if cand else ""
-        print(f"  核心名: '{q_core}' vs '{c_core}' -> {'一眼假' if q_core != c_core else '可能是hard'}")
+        print(
+            f"  核心名: '{q_core}' vs '{c_core}' -> {'一眼假' if q_core != c_core else '可能是hard'}"
+        )
         print()
 
 

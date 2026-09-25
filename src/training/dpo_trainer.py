@@ -8,7 +8,6 @@ import os
 from typing import Any
 
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers.trainer import TrainingArguments
 from trl import DPOConfig as TRLDPOConfig
 from trl import DPOTrainer as TRLDPOTrainer
 
@@ -17,6 +16,7 @@ from config.dpo import DPOConfig, PreferenceDataConfig, ReferenceModelConfig
 from src.data.loaders import PreferenceDataset
 from src.models import load_model_and_tokenizer
 from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
+from src.training.callbacks import MFUCallback
 from src.training.distributed import get_distributed_info
 from src.utils import console, set_seed, setup_logging
 from src.utils.platform_utils import get_platform
@@ -96,19 +96,39 @@ class DPOTrainer:
 
         # Apply LoRA
         console.print(f"[cyan]Applying LoRA (r={self.lora_config.r})...[/cyan]")
-        lora_cfg = LoraConfig(
+        lora_kwargs: dict[str, Any] = dict(
             r=self.lora_config.r,
             lora_alpha=self.lora_config.lora_alpha,
             lora_dropout=self.lora_config.lora_dropout,
             target_modules=self.lora_config.target_modules,
             bias=self.lora_config.bias,
             task_type=self.lora_config.task_type,
+            use_dora=self.lora_config.use_dora,
+            use_rslora=self.lora_config.use_rslora,
+            init_lora_weights=self.lora_config.init_lora_weights,
         )
+        if self.lora_config.init_lora_weights == "loftq":
+            # peft hard-errors on loftq without the dict — inject it here.
+            lora_kwargs["loftq_config"] = {
+                "loftq_bits": self.lora_config.loftq_bits,
+                "loftq_iter": self.lora_config.loftq_iter,
+            }
+        # Per-module rank/alpha overrides and module exclusions (peft
+        # regex-keyed patterns; None = peft defaults, no-op).
+        if self.lora_config.rank_pattern is not None:
+            lora_kwargs["rank_pattern"] = self.lora_config.rank_pattern
+        if self.lora_config.alpha_pattern is not None:
+            lora_kwargs["alpha_pattern"] = self.lora_config.alpha_pattern
+        if self.lora_config.exclude_modules is not None:
+            lora_kwargs["exclude_modules"] = self.lora_config.exclude_modules
+        lora_cfg = LoraConfig(**lora_kwargs)
         self.model = get_peft_model(self.model, lora_cfg)
 
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         total_params = sum(p.numel() for p in self.model.parameters())
-        console.print(f"[green]✓ Main model ready ({trainable_params:,} trainable params, {trainable_params/total_params:.2%})[/green]")
+        console.print(
+            f"[green]✓ Main model ready ({trainable_params:,} trainable params, {trainable_params / total_params:.2%})[/green]"
+        )
 
         # Load reference model
         console.print(f"\n[cyan]Loading reference model: {self.reference_config.name}[/cyan]")
@@ -156,19 +176,35 @@ class DPOTrainer:
     def _filter_finance(self, dataset: Any) -> Any:
         """Filter dataset for finance content."""
         finance_keywords = [
-            "stock", "investment", "finance", "financial", "trading",
-            "portfolio", "dividend", "market", "business",
-            "money", "capital", "asset", "fund", "equity", "bond",
-            "currency", "crypto", "earnings", "revenue", "profit",
+            "stock",
+            "investment",
+            "finance",
+            "financial",
+            "trading",
+            "portfolio",
+            "dividend",
+            "market",
+            "business",
+            "money",
+            "capital",
+            "asset",
+            "fund",
+            "equity",
+            "bond",
+            "currency",
+            "crypto",
+            "earnings",
+            "revenue",
+            "profit",
         ]
 
         def is_finance_related(example: dict[str, Any]) -> bool:
             text = (
-                example.get("prompt", "") +
-                " " +
-                example.get("chosen", "") +
-                " " +
-                example.get("rejected", "")
+                example.get("prompt", "")
+                + " "
+                + example.get("chosen", "")
+                + " "
+                + example.get("rejected", "")
             ).lower()
             return any(keyword in text for keyword in finance_keywords)
 
@@ -181,38 +217,58 @@ class DPOTrainer:
         # Detect distributed context.
         dist_info = get_distributed_info()
 
-        # TRL DPO configuration
-        trl_dpo_config = TRLDPOConfig(
-            beta=self.dpo_config.beta,
-            max_length=self.dpo_config.max_length,
-            max_prompt_length=self.dpo_config.max_prompt_length,
-            max_target_length=self.dpo_config.max_target_length,
-            reference_model_free=self.dpo_config.reference_model_free,
-            loss_type=self.dpo_config.loss_type,
-            label_smoothing=self.dpo_config.label_smoothing,
-            padding_value=self.dpo_config.padding_value,
-        )
-
-        # Training arguments — build as dict to allow conditional DeepSpeed injection.
+        # TRL >= 1.0: a single DPOConfig carries both standard training fields and
+        # DPO fields. max_prompt_length/max_target_length/padding_value/
+        # reference_model_free no longer exist; truncation is governed by
+        # max_length alone and loss_type is a list. Built as dict to allow
+        # conditional FSDP/DeepSpeed injection below.
         training_kwargs: dict[str, Any] = dict(
             output_dir=self.training_config.output_dir,
+            # Opt-in Triton fused kernels — see SFTTrainer note ([liger] extra).
+            use_liger_kernel=self.training_config.use_liger_kernel,
+            # Opt-in torch.compile — bf16 full-precision path only (Dynamo
+            # cannot trace bitsandbytes 4-bit ops; see TrainingConfig).
+            torch_compile=self.training_config.torch_compile,
             num_train_epochs=self.training_config.num_epochs,
             per_device_train_batch_size=self.training_config.batch_size,
             per_device_eval_batch_size=self.training_config.batch_size,
             gradient_accumulation_steps=self.training_config.gradient_accumulation_steps,
             learning_rate=self.training_config.learning_rate,
-            warmup_ratio=self.training_config.warmup_ratio,
+            # transformers >= 5.x: warmup_ratio merged into warmup_steps
+            # (a float value keeps ratio semantics).
+            warmup_steps=self.training_config.warmup_ratio,
             lr_scheduler_type=self.training_config.lr_scheduler_type,
             logging_steps=self.training_config.logging_steps,
             save_steps=self.training_config.save_steps,
             eval_steps=self.training_config.eval_steps,
             save_total_limit=self.training_config.save_total_limit,
             gradient_checkpointing=self.training_config.gradient_checkpointing,
+            # Non-reentrant checkpointing — PyTorch-recommended and the
+            # reliable path for frozen-base (LoRA/QLoRA) fine-tunes.
+            gradient_checkpointing_kwargs=(
+                {"use_reentrant": self.training_config.gradient_checkpointing_use_reentrant}
+                if self.training_config.gradient_checkpointing
+                else None
+            ),
+            # Periodic torch.cuda.empty_cache() — opt-in fragmentation relief
+            # for 8 GB cards with variable-length batches (None = off).
+            torch_empty_cache_steps=self.training_config.torch_empty_cache_steps,
+            # On OOM, auto-restart with halved batch size (ZeRO-3 excluded
+            # at config validation; see TrainingConfig).
+            auto_find_batch_size=self.training_config.auto_find_batch_size,
+            # Length-grouped sampling — padding-waste reduction for
+            # variable-length preference data (opt-in).
+            train_sampling_strategy=self.training_config.train_sampling_strategy,
             fp16=self.training_config.fp16,
             bf16=self.training_config.bf16,
             seed=self.training_config.seed,
             report_to=["tensorboard"] if self.logging_config.use_tensorboard else [],
-            logging_dir=self.logging_config.log_dir if self.logging_config.use_tensorboard else None,
+            logging_dir=self.logging_config.log_dir
+            if self.logging_config.use_tensorboard
+            else None,
+            # transformers >= 5.x validates that eval strategy matches save
+            # strategy when load_best_model_at_end=True — set it explicitly.
+            eval_strategy="steps",
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
@@ -227,9 +283,7 @@ class DPOTrainer:
             training_kwargs["fsdp"] = self.training_config.fsdp
             if self.training_config.fsdp_config:
                 training_kwargs["fsdp_config"] = self.training_config.fsdp_config
-            console.print(
-                f"[green]✓ FSDP enabled (DPO): {self.training_config.fsdp}[/green]"
-            )
+            console.print(f"[green]✓ FSDP enabled (DPO): {self.training_config.fsdp}[/green]")
         elif self.training_config.deepspeed_config:
             training_kwargs["deepspeed"] = self.training_config.deepspeed_config
             console.print(
@@ -241,7 +295,27 @@ class DPOTrainer:
                 f"[cyan]Distributed DPO engaged: world_size={dist_info.world_size}[/cyan]"
             )
 
-        training_args = TrainingArguments(**training_kwargs)
+        # Optional optimizer override (e.g. "paged_adamw_8bit" — the QLoRA-paper
+        # recipe: 8-bit states paged to CPU RAM to survive VRAM spikes).
+        if self.training_config.optim:
+            training_kwargs["optim"] = self.training_config.optim
+
+        # DPO-specific fields (forwarded into the same config object).
+        training_kwargs.update(
+            beta=self.dpo_config.beta,
+            max_length=self.dpo_config.max_length,
+            label_smoothing=self.dpo_config.label_smoothing,
+            loss_type=[self.dpo_config.loss_type],
+            # TRL memory optimization: reference log-probs computed in one
+            # upfront pass — ref model not resident during training (~halves
+            # model VRAM for DPO; see DPOConfig.precompute_ref_log_probs).
+            precompute_ref_log_probs=self.dpo_config.precompute_ref_log_probs,
+            # TRL memory optimization: activations offloaded to CPU RAM via
+            # saved_tensors_hooks — cuts peak VRAM, slightly slower steps.
+            activation_offloading=self.dpo_config.activation_offloading,
+        )
+
+        trl_dpo_config = TRLDPOConfig(**training_kwargs)
 
         console.print("[green]✓ DPO Trainer configured[/green]")
         console.print(f"  Beta: {trl_dpo_config.beta}")
@@ -250,29 +324,45 @@ class DPOTrainer:
         console.print(f"  Effective batch size: {self.training_config.effective_batch_size}")
         console.print()
 
-        # Create DPO trainer
-        # FIX: previously MLflowTrainCallback was instantiated but never passed to
-        # TRLDPOTrainer, so DPO step metrics never reached MLflow. Mount it now so
-        # DPO and SFT have parity in tracking.
+        # Create DPO trainer. TRL >= 1.0: config goes in `args`, tokenizer in
+        # `processing_class` — the old `beta`/`tokenizer` kwargs no longer exist.
+        # MLflowTrainCallback forwards step metrics so DPO tracking has parity
+        # with SFT.
         self.trainer = TRLDPOTrainer(
             model=self.model,
             ref_model=self.ref_model,
-            args=training_args,
-            beta=trl_dpo_config.beta,
+            args=trl_dpo_config,
             train_dataset=self.train_dataset,
             eval_dataset=self.eval_dataset,
-            tokenizer=self.tokenizer,
-            callbacks=[MLflowTrainCallback(self._tracker)],
-            **trl_dpo_config.__dict__,
+            processing_class=self.tokenizer,
+            callbacks=[
+                MLflowTrainCallback(self._tracker),
+                MFUCallback(
+                    model_config=getattr(self.model, "config", None),
+                    seq_len=self.dpo_config.max_length,
+                    # DPO batches count preference PAIRS — each pair carries
+                    # both chosen and rejected sequences.
+                    tokens_per_step=(
+                        2
+                        * self.training_config.batch_size
+                        * self.training_config.gradient_accumulation_steps
+                        * dist_info.world_size
+                        * self.dpo_config.max_length
+                    ),
+                    world_size=dist_info.world_size,
+                    peak_flops_per_device=self.training_config.peak_flops_per_device,
+                ),
+            ],
         )
 
-    def train(self) -> None:
+    def train(self) -> Any:
         """Run DPO training."""
         console.print("\n[bold green]=== Starting DPO Training ===[/bold green]\n")
 
         # Setup W&B
         if self.logging_config.use_wandb:
             import wandb
+
             wandb.init(
                 project=self.logging_config.wandb_project,
                 name=self.logging_config.wandb_run_name,
@@ -300,7 +390,7 @@ class DPOTrainer:
 
         assert self.trainer is not None
         try:
-            self.trainer.train()
+            train_result = self.trainer.train()
 
             # Explicitly save model + tokenizer (TRL auto-saves, but be explicit so the
             # adapter dir is populated for the registration step below).
@@ -318,6 +408,7 @@ class DPOTrainer:
 
             console.print("\n[bold green]✅ DPO Training Complete![/bold green]")
             console.print(f"[cyan]Model saved to: {self.training_config.output_dir}[/cyan]\n")
+            return train_result
 
         except Exception as e:
             console.print(f"\n[red]DPO training failed: {e}[/red]\n")
@@ -325,6 +416,7 @@ class DPOTrainer:
         finally:
             if self.logging_config.use_wandb:
                 import wandb
+
                 wandb.finish()
             self._tracker.end_run()
 

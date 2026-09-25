@@ -1,6 +1,5 @@
 """Data preprocessing utilities."""
 
-
 from typing import Any
 
 from datasets import Dataset
@@ -90,6 +89,16 @@ class DataCollator:
                 (0, pad_length),
                 value=self.tokenizer.pad_token_id,
             )
+
+        # Round up to the requested multiple (HF collator semantics).
+        if self.pad_to_multiple_of:
+            remainder = padded.size(1) % self.pad_to_multiple_of
+            if remainder:
+                padded = torch.nn.functional.pad(
+                    padded,
+                    (0, self.pad_to_multiple_of - remainder),
+                    value=self.tokenizer.pad_token_id,
+                )
 
         return padded.tolist()
 

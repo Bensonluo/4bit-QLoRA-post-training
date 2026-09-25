@@ -37,9 +37,14 @@ def build_candidate_text(candidates: list[dict], correct_idx: int) -> str:
     return "\n".join(lines)
 
 
-def find_replacement_candidates(query: str, drug_code: str, drugs: list[dict],
-                                 generic_groups: dict, exclude_codes: set,
-                                 max_replacements: int = 3) -> list[dict]:
+def find_replacement_candidates(
+    query: str,
+    drug_code: str,
+    drugs: list[dict],
+    generic_groups: dict,
+    exclude_codes: set,
+    max_replacements: int = 3,
+) -> list[dict]:
     replacements = []
     query_lower = query.lower()
 
@@ -48,7 +53,9 @@ def find_replacement_candidates(query: str, drug_code: str, drugs: list[dict],
             for form_name in forms:
                 form_drug = next((d for d in drugs if d["standard_name"] == form_name), None)
                 if form_drug and form_drug["code"] not in exclude_codes:
-                    replacements.append({"name": form_drug["standard_name"], "code": form_drug["code"]})
+                    replacements.append(
+                        {"name": form_drug["standard_name"], "code": form_drug["code"]}
+                    )
 
     for d in drugs:
         if d["code"] in exclude_codes:
@@ -62,13 +69,12 @@ def find_replacement_candidates(query: str, drug_code: str, drugs: list[dict],
     return replacements[:max_replacements]
 
 
-def filter_obvious_candidates(query: str, candidates: list[dict],
-                                min_overlap: int = 2) -> list[dict]:
+def filter_obvious_candidates(
+    query: str, candidates: list[dict], min_overlap: int = 2
+) -> list[dict]:
     filtered = []
     for c in candidates:
-        if char_overlap(query, c["name"]) >= min_overlap:
-            filtered.append(c)
-        elif len(query) <= 2:
+        if char_overlap(query, c["name"]) >= min_overlap or len(query) <= 2:
             filtered.append(c)
     return filtered
 
@@ -106,7 +112,9 @@ def main():
     # 过滤一眼假候选（对所有样本）
     def optimize_sample(sample: dict) -> dict | None:
         input_text = sample["input"]
-        query = input_text.split("输入实体: ")[1].split("\n")[0] if "输入实体: " in input_text else ""
+        query = (
+            input_text.split("输入实体: ")[1].split("\n")[0] if "输入实体: " in input_text else ""
+        )
         candidates = parse_candidates(input_text)
 
         correct_output = json.loads(sample["output"])
@@ -136,12 +144,15 @@ def main():
 
         cand_text = build_candidate_text(all_cands, new_correct_idx)
         new_input = f"输入实体: {query}\n候选:\n{cand_text}"
-        new_output = json.dumps({
-            "match_index": new_correct_idx,
-            "standard_name": correct_name,
-            "code": correct_code,
-            "confidence": correct_output.get("confidence", 0.95)
-        }, ensure_ascii=False)
+        new_output = json.dumps(
+            {
+                "match_index": new_correct_idx,
+                "standard_name": correct_name,
+                "code": correct_code,
+                "confidence": correct_output.get("confidence", 0.95),
+            },
+            ensure_ascii=False,
+        )
 
         return {
             "instruction": sample["instruction"],
@@ -212,23 +223,28 @@ def main():
 
             cand_text = build_candidate_text(all_cands, new_correct_idx)
             new_input = f"输入实体: {query}\n候选:\n{cand_text}"
-            new_output = json.dumps({
-                "match_index": new_correct_idx,
-                "standard_name": s["standard_name"],
-                "code": code,
-                "confidence": 0.95
-            }, ensure_ascii=False)
-
-            brand_train_samples.append({
-                "instruction": "从候选列表中选出与输入实体匹配的标准名称。输出JSON：{\"match_index\": 序号, \"standard_name\": \"标准名\", \"code\": \"编码\", \"confidence\": 置信度}",
-                "input": new_input,
-                "output": new_output,
-                "metadata": {
-                    "entity_type": s.get("entity_type", "drug"),
-                    "difficulty": "hard",
-                    "source": "brand_names",
+            new_output = json.dumps(
+                {
+                    "match_index": new_correct_idx,
+                    "standard_name": s["standard_name"],
+                    "code": code,
+                    "confidence": 0.95,
                 },
-            })
+                ensure_ascii=False,
+            )
+
+            brand_train_samples.append(
+                {
+                    "instruction": '从候选列表中选出与输入实体匹配的标准名称。输出JSON：{"match_index": 序号, "standard_name": "标准名", "code": "编码", "confidence": 置信度}',
+                    "input": new_input,
+                    "output": new_output,
+                    "metadata": {
+                        "entity_type": s.get("entity_type", "drug"),
+                        "difficulty": "hard",
+                        "source": "brand_names",
+                    },
+                }
+            )
 
     print(f"  补充 hard 样本: {len(brand_train_samples)} 条")
 
@@ -262,8 +278,8 @@ def main():
     random.shuffle(code_list)
     n = len(code_list)
     train_codes_final = set(code_list[: int(n * 0.8)])
-    val_codes_final = set(code_list[int(n * 0.8): int(n * 0.9)])
-    test_codes_final = set(code_list[int(n * 0.9):])
+    val_codes_final = set(code_list[int(n * 0.8) : int(n * 0.9)])
+    test_codes_final = set(code_list[int(n * 0.9) :])
 
     train_split, val_split, test_split = [], [], []
     for s in combined:
@@ -283,9 +299,21 @@ def main():
     print(f"  test: {len(test_split)} 条")
 
     # 断言零重叠
-    train_c = set(json.loads(s["output"]).get("code") for s in train_split if json.loads(s["output"]).get("code"))
-    val_c = set(json.loads(s["output"]).get("code") for s in val_split if json.loads(s["output"]).get("code"))
-    test_c = set(json.loads(s["output"]).get("code") for s in test_split if json.loads(s["output"]).get("code"))
+    train_c = set(
+        json.loads(s["output"]).get("code")
+        for s in train_split
+        if json.loads(s["output"]).get("code")
+    )
+    val_c = set(
+        json.loads(s["output"]).get("code")
+        for s in val_split
+        if json.loads(s["output"]).get("code")
+    )
+    test_c = set(
+        json.loads(s["output"]).get("code")
+        for s in test_split
+        if json.loads(s["output"]).get("code")
+    )
     assert not (train_c & val_c), f"train/val 重叠: {train_c & val_c}"
     assert not (train_c & test_c), f"train/test 重叠: {train_c & test_c}"
     print("  零重叠验证: PASS")
@@ -299,6 +327,7 @@ def main():
 
     # 备份原文件
     import shutil
+
     for path in [TRAIN_PATH, TEST_BRAND_PATH]:
         backup = path.with_suffix(path.suffix + ".bak")
         if not backup.exists():
@@ -319,14 +348,16 @@ def main():
         out = json.loads(s["output"])
         query = s["input"].split("输入实体: ")[1].split("\n")[0]
         candidates = parse_candidates(s["input"])
-        test_raw.append({
-            "query": query,
-            "standard_name": out.get("standard_name", ""),
-            "code": out.get("code", ""),
-            "entity_type": s.get("metadata", {}).get("entity_type", "drug"),
-            "difficulty": s.get("metadata", {}).get("difficulty", "hard"),
-            "candidates": candidates,
-        })
+        test_raw.append(
+            {
+                "query": query,
+                "standard_name": out.get("standard_name", ""),
+                "code": out.get("code", ""),
+                "entity_type": s.get("metadata", {}).get("entity_type", "drug"),
+                "difficulty": s.get("metadata", {}).get("difficulty", "hard"),
+                "candidates": candidates,
+            }
+        )
 
     with open(DOMAIN_ROOT / "test/test_raw.json", "w") as f:
         json.dump(test_raw, f, ensure_ascii=False, indent=2)

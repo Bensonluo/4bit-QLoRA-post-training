@@ -26,12 +26,19 @@ def convert_to_mlx(source_model: str, mlx_path: Path) -> None:
 
     print(f"[1/2] 正在转换 {source_model} -> MLX 4-bit...")
     cmd = [
-        sys.executable, "-m", "mlx_lm", "convert",
-        "--hf-path", source_model,
-        "--mlx-path", str(mlx_path),
+        sys.executable,
+        "-m",
+        "mlx_lm",
+        "convert",
+        "--hf-path",
+        source_model,
+        "--mlx-path",
+        str(mlx_path),
         "-q",
-        "--q-bits", "4",
-        "--dtype", "bfloat16",
+        "--q-bits",
+        "4",
+        "--dtype",
+        "bfloat16",
     ]
     subprocess.run(cmd, check=True)
     print("[1/2] 转换完成")
@@ -41,8 +48,12 @@ def run_lora_training(config_path: Path) -> None:
     """启动 LoRA 微调。"""
     print("[2/2] 开始 LoRA 微调...")
     cmd = [
-        sys.executable, "-m", "mlx_lm", "lora",
-        "--config", str(config_path),
+        sys.executable,
+        "-m",
+        "mlx_lm",
+        "lora",
+        "--config",
+        str(config_path),
     ]
     subprocess.run(cmd, check=True)
     print("[2/2] 训练完成")

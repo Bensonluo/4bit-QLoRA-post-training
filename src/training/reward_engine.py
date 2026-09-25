@@ -1,7 +1,9 @@
 """Pluggable reward engine for GRPO training.
 
 Reward functions follow the TRL convention:
-    func(prompts: list[str], completions: list[str], **kwargs) -> list[float]
+    func(prompts: list[str], completions: list[str], **kwargs) -> list[float | None]
+
+None entries are allowed by TRL >= 1.0 (skipped during reward aggregation).
 """
 
 from __future__ import annotations
@@ -12,7 +14,9 @@ from collections.abc import Callable
 from difflib import SequenceMatcher
 from typing import Any
 
-RewardFunction = Callable[..., list[float]]
+from src.data_flywheel.judge import JudgeClient, LocalJudgeClient
+
+RewardFunction = Callable[..., list[float | None]]
 
 _REWARD_REGISTRY: dict[str, RewardFunction] = {}
 
@@ -68,23 +72,18 @@ def build_reward_functions(
 def _bind_kwargs(func: RewardFunction, kwargs: dict[str, Any]) -> RewardFunction:
     """Bind keyword arguments that the function accepts.
 
-    Inspects the function signature and only passes through keys that are
-    accepted, plus any **kwargs catch-all.
+    Always returns a wrapper — even for functions with a ``**kwargs``
+    catch-all — so configured kwargs (judge_model, answer_key, ...) are
+    actually delivered. Runtime kwargs (dataset columns forwarded by TRL)
+    take precedence over bound config on name collisions.
     """
     import inspect
 
     sig = inspect.signature(func)
-    accepts_kwargs = any(
-        param.kind == inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values()
-    )
     accepted = set(sig.parameters.keys())
-
-    if accepts_kwargs:
-        return func
-
     filtered = {k: v for k, v in kwargs.items() if k in accepted}
 
-    def wrapped(*args: Any, **call_kwargs: Any) -> list[float]:
+    def wrapped(*args: Any, **call_kwargs: Any) -> list[float | None]:
         return func(*args, **{**filtered, **call_kwargs})
 
     return wrapped
@@ -98,7 +97,7 @@ def format_reward(
     required_tag: str | None = None,
     require_json: bool = False,
     **_: Any,
-) -> list[float]:
+) -> list[float | None]:
     """Reward completions that follow a required format.
 
     Args:
@@ -110,7 +109,7 @@ def format_reward(
     Returns:
         1.0 if format matches, 0.0 otherwise.
     """
-    scores: list[float] = []
+    scores: list[float | None] = []
     for completion in completions:
         score = 1.0
         text = completion.strip()
@@ -138,7 +137,7 @@ def accuracy_reward(
     case_sensitive: bool = False,
     normalize_whitespace: bool = True,
     **kwargs: Any,
-) -> list[float]:
+) -> list[float | None]:
     """Reward completions that match a reference answer.
 
     Args:
@@ -168,7 +167,7 @@ def accuracy_reward(
                 f"number of completions ({len(completions)})"
             )
 
-    scores: list[float] = []
+    scores: list[float | None] = []
     for completion, ref in zip(completions, answers):
         pred = _normalize_text(completion, case_sensitive, normalize_whitespace)
         target = _normalize_text(ref, case_sensitive, normalize_whitespace)
@@ -184,13 +183,13 @@ def length_reward(
     min_length: int = 10,
     max_length: int = 1024,
     **_: Any,
-) -> list[float]:
+) -> list[float | None]:
     """Reward completions whose length is within an acceptable range.
 
     Returns:
         1.0 if length is in range, linear penalty otherwise.
     """
-    scores: list[float] = []
+    scores: list[float | None] = []
     for completion in completions:
         length = len(completion.strip())
         if min_length <= length <= max_length:
@@ -208,7 +207,7 @@ def cosine_reward(
     reference: str | list[str] | None = None,
     reference_key: str = "reference",
     **kwargs: Any,
-) -> list[float]:
+) -> list[float | None]:
     """Reward completions by cosine-like string similarity to reference.
 
     Uses SequenceMatcher ratio as a lightweight proxy.
@@ -229,7 +228,7 @@ def cosine_reward(
                 f"number of completions ({len(completions)})"
             )
 
-    scores: list[float] = []
+    scores: list[float | None] = []
     for completion, ref in zip(completions, references):
         ratio = SequenceMatcher(None, completion.strip(), ref.strip()).ratio()
         scores.append(ratio)
@@ -245,31 +244,33 @@ def llm_judge_reward(
     judge_model: str | None = None,
     judge_prompt_template: str | None = None,
     **_: Any,
-) -> list[float]:
+) -> list[float | None]:
     """Reward completions using an LLM-as-a-Judge.
 
     Args:
         prompts: Original prompts.
         completions: Generated completions.
-        judge_client: Client object with a `judge(prompt, completion) -> float` method.
-        judge_model: Model identifier (used if no client provided).
-        judge_prompt_template: Optional custom prompt template.
+        judge_client: A JudgeClient instance (see src/data_flywheel/judge.py).
+        judge_model: Model identifier — lazy-builds a LocalJudgeClient when no
+            client is provided.
+        judge_prompt_template: Optional custom prompt template for the
+            LocalJudgeClient path.
 
     Returns:
         Normalized scores in [0.0, 1.0].
     """
-    if judge_client is not None:
-        return [
-            float(judge_client.judge(prompt, completion))
-            for prompt, completion in zip(prompts, completions)
-        ]
+    if judge_client is None:
+        if judge_model is None:
+            raise ValueError("Either judge_client or judge_model must be provided")
+        judge_client = LocalJudgeClient(
+            model_name=judge_model,
+            prompt_template=judge_prompt_template,
+        )
 
-    if judge_model is None:
-        raise ValueError("Either judge_client or judge_model must be provided")
-
-    # Fallback: return neutral scores if no client available.
-    # A real implementation would instantiate a local model or API client here.
-    return [0.5] * len(completions)
+    judge: JudgeClient = judge_client
+    return [
+        float(judge.judge(prompt, completion)) for prompt, completion in zip(prompts, completions)
+    ]
 
 
 def _normalize_text(text: str, case_sensitive: bool, normalize_whitespace: bool) -> str:

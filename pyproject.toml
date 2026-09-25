@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Benson Luo"}
 ]
 keywords = ["llm", "qlora", "fine-tuning", "transformers", "nlp"]
 classifiers = [
@@ -26,11 +26,17 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch>=2.1.0",
-    "transformers>=4.36.0",
-    "peft>=0.7.0",
+    # torch 2.4.0 = first release with the complete DCP call surface we use
+    # (async_save + no_dist kwarg); verified against 2.11.
+    "torch>=2.4.0",
+    # TRL 1.4 itself floors transformers>=4.56.2; >=5.0 is the line we test
+    # against (warmup_steps float-ratio semantics, eval_strategy validation).
+    "transformers>=5.0",
+    # peft 0.19.0 first ships peft.tuners.lora.loraga (preprocess_loraga) and
+    # LoraGAConfig — both imported at module load by src/training/sft_trainer.py.
+    "peft>=0.19.0",
     "bitsandbytes>=0.41.0",
-    "trl>=0.7.10",
+    "trl>=1.4.0",  # DPOConfig.loss_type list, processing_class, GRPO w/o ref_model kwarg
     "accelerate>=0.25.0",
     "datasets>=2.15.0",
     "scipy>=1.10.0",
@@ -71,28 +77,53 @@ ui = [
     "pandas>=2.1.0",
 ]
 
+# vLLM fast generation for GRPO — CUDA-only, heavy; opt-in by design so the
+# 8 GB consumer-GPU base install stays light (see config/grpo.py use_vllm).
+vllm = [
+    "vllm>=0.11.0",
+]
+
+# Liger fused Triton kernels (~20% throughput, ~60% activation-memory cut).
+# Opt-in via TrainingConfig.use_liger_kernel=True (see config/base.py).
+liger = [
+    "liger-kernel>=0.5.0",
+]
+
+# EleutherAI lm-evaluation-harness — industry-standard public benchmarks.
+# 0.4.10 (2026-01) split model backends into extras: [hf] reuses the pinned
+# torch/transformers/accelerate instead of adding version constraints.
+eval = [
+    "lm_eval[hf]>=0.4.10",
+]
+
 all = [
-    "qlora-post-training[dev,notebook,ui]",
+    "qlora-post-training[dev,notebook,ui,eval]",
 ]
 
 [project.scripts]
 train-sft = "scripts.train_sft:app"
-train-domain = "scripts.train_domain:app"
-train-dpo = "scripts.train_dpo:app"
+train-domain = "scripts.train_medical_entity:app"
+train-dpo = "scripts.train_dpo:main"
 train-grpo = "scripts.train_grpo:app"
 merge-lora = "scripts.merge_lora:app"
 evaluate-model = "scripts.evaluate:app"
 run-flywheel = "scripts.run_flywheel_iteration:app"
 download-data = "scripts.download_data:app"
+eval-harness = "scripts.eval_harness:app"
 qlora-dashboard = "scripts.launch_dashboard:app"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/4bit-QLoRA-post-training"
-Repository = "https://github.com/yourusername/4bit-QLoRA-post-training"
-Issues = "https://github.com/yourusername/4bit-QLoRA-post-training/issues"
+Homepage = "https://github.com/Bensonluo/4bit-QLoRA-post-training"
+Repository = "https://github.com/Bensonluo/4bit-QLoRA-post-training"
+Issues = "https://github.com/Bensonluo/4bit-QLoRA-post-training/issues"
 
+# The codebase imports as top-level `src.*`, `config.*`, `scripts.*` (e.g.
+# `from src.models import ...`), so all three roots must be packaged —
+# `where = ["src"]` alone installed inner package names only and broke every
+# console script when run outside the repo.
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["src*", "config*", "scripts*"]
 
 [tool.ruff]
 target-version = "py310"
@@ -109,6 +140,9 @@ select = [
     "B",   # flake8-bugbear
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
+    "SIM", # flake8-simplify (incl. SIM105 suppressible-exception, SIM117 nested-with)
+    "S110", # flake8-bandit: try-except-pass — silent failures must log or suppress explicitly
+    "S112", # flake8-bandit: try-except-continue
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
@@ -147,9 +181,9 @@ module = [
     "accelerate.*",
     "wandb.*",
     "mlflow.*",
-    "streamlit.*",
     "plotly.*",
     "datasets.*",
+    "lm_eval.*",
     "yaml",
 ]
 ignore_missing_imports = true

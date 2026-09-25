@@ -57,17 +57,24 @@ def extract_labels(messages):
 def is_institution(query, candidates):
     """判断是机构还是产品。"""
     # 通过 system prompt 判断更准确，但这里简单通过内容判断
-    if query and ("医院" in query or "诊所" in query or "药店" in query
-                  or "卫生" in query or "药房" in query or "社区" in query):
-        return True
-    return False
+    return bool(
+        query
+        and (
+            "医院" in query
+            or "诊所" in query
+            or "药店" in query
+            or "卫生" in query
+            or "药房" in query
+            or "社区" in query
+        )
+    )
 
 
 def check_dataset(data, name, train_queries=None):
     """检查单个数据集的质量。"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"=== 检查 {name} ({len(data)} 条) ===")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     issues = []
 
@@ -160,28 +167,32 @@ def check_dataset(data, name, train_queries=None):
 
     # 2. 输出统计
     print("\n[基本统计]")
-    print(f"  机构样本: {inst_count} ({inst_count/len(data)*100:.1f}%)")
-    print(f"  产品样本: {prod_count} ({prod_count/len(data)*100:.1f}%)")
+    print(f"  机构样本: {inst_count} ({inst_count / len(data) * 100:.1f}%)")
+    print(f"  产品样本: {prod_count} ({prod_count / len(data) * 100:.1f}%)")
 
     print("\n[候选数量分布]")
     for k in sorted(candidate_counts.keys()):
-        print(f"  {k} 个候选: {candidate_counts[k]} 条 ({candidate_counts[k]/len(data)*100:.1f}%)")
+        print(
+            f"  {k} 个候选: {candidate_counts[k]} 条 ({candidate_counts[k] / len(data) * 100:.1f}%)"
+        )
 
     print("\n[正确答案位置分布]")
     pos_dist = Counter(true_positions)
     for i in range(max(pos_dist.keys()) + 1 if pos_dist else 0):
-        print(f"  位置 {i}: {pos_dist.get(i, 0)} 条 ({pos_dist.get(i, 0)/len(data)*100:.1f}%)")
+        print(f"  位置 {i}: {pos_dist.get(i, 0)} 条 ({pos_dist.get(i, 0) / len(data) * 100:.1f}%)")
 
     # 检查位置偏差
     if len(true_positions) >= 10:
         first_pos_ratio = true_positions.count(0) / len(true_positions)
         if first_pos_ratio > 0.4:
-            issues.append(f"位置偏差警告: {first_pos_ratio*100:.1f}% 的正确答案在位置 0")
-        print(f"  位置 0 占比: {first_pos_ratio*100:.1f}%")
+            issues.append(f"位置偏差警告: {first_pos_ratio * 100:.1f}% 的正确答案在位置 0")
+        print(f"  位置 0 占比: {first_pos_ratio * 100:.1f}%")
 
     print("\n[产品匹配等级分布]")
     for grade in ["A", "B", "D"]:
-        print(f"  {grade}级: {prod_grade_counts.get(grade, 0)} ({prod_grade_counts.get(grade, 0)/max(prod_count,1)*100:.1f}%)")
+        print(
+            f"  {grade}级: {prod_grade_counts.get(grade, 0)} ({prod_grade_counts.get(grade, 0) / max(prod_count, 1) * 100:.1f}%)"
+        )
 
     # 3. 重复 query
     if dup_queries:
@@ -205,7 +216,7 @@ def check_dataset(data, name, train_queries=None):
         for issue in issues[:20]:
             print(f"  ⚠️ {issue}")
         if len(issues) > 20:
-            print(f"  ... 还有 {len(issues)-20} 个问题")
+            print(f"  ... 还有 {len(issues) - 20} 个问题")
     else:
         print("\n[质量问题] 0 个 ✅")
 
@@ -214,9 +225,9 @@ def check_dataset(data, name, train_queries=None):
 
 def check_hardness(data, name):
     """检查候选列表的'硬度'——有多少一眼假的候选。"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"=== 候选硬度分析 {name} ===")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     easy_count = 0  # 完全无关的候选
     medium_count = 0  # 有一定关联但明显不同
@@ -244,10 +255,38 @@ def check_hardness(data, name):
                 # 简单启发式：如果候选和 query 有较长的共同子串
                 # 或者候选包含 query 中的城市名
                 query_city = None
-                for city in ["北京", "上海", "广州", "深圳", "成都", "杭州", "武汉", "南京", "重庆", "西安",
-                             "天津", "长沙", "郑州", "苏州", "沈阳", "昆明", "济南", "哈尔滨", "长春",
-                             "石家庄", "贵阳", "南宁", "福州", "合肥", "南昌", "太原", "兰州", "海口",
-                             "银川", "西宁"]:
+                for city in [
+                    "北京",
+                    "上海",
+                    "广州",
+                    "深圳",
+                    "成都",
+                    "杭州",
+                    "武汉",
+                    "南京",
+                    "重庆",
+                    "西安",
+                    "天津",
+                    "长沙",
+                    "郑州",
+                    "苏州",
+                    "沈阳",
+                    "昆明",
+                    "济南",
+                    "哈尔滨",
+                    "长春",
+                    "石家庄",
+                    "贵阳",
+                    "南宁",
+                    "福州",
+                    "合肥",
+                    "南昌",
+                    "太原",
+                    "兰州",
+                    "海口",
+                    "银川",
+                    "西宁",
+                ]:
                     if city in query:
                         query_city = city
                         break
@@ -284,9 +323,9 @@ def check_hardness(data, name):
                     easy_count += 1
 
     print(f"\n[候选硬度分布] (总计 {total} 个候选)")
-    print(f"  Hard (近似/匹配): {hard_count} ({hard_count/total*100:.1f}%)")
-    print(f"  Medium (有一定关联): {medium_count} ({medium_count/total*100:.1f}%)")
-    print(f"  Easy (一眼假): {easy_count} ({easy_count/total*100:.1f}%)")
+    print(f"  Hard (近似/匹配): {hard_count} ({hard_count / total * 100:.1f}%)")
+    print(f"  Medium (有一定关联): {medium_count} ({medium_count / total * 100:.1f}%)")
+    print(f"  Easy (一眼假): {easy_count} ({easy_count / total * 100:.1f}%)")
 
     if easy_count / total > 0.3:
         print("  ⚠️ Easy 候选占比过高 (>30%)")
@@ -343,9 +382,9 @@ def main():
     check_hardness(train_data[:500], "训练集 (前500条抽样)")
 
     # 总结
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("检查总结")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     total_issues = len(train_issues) + len(inst_issues) + len(prod_issues)
     if total_issues == 0:
         print("✅ 所有检查通过，未发现质量问题")

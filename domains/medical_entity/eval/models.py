@@ -165,6 +165,7 @@ class LLMAPISimulator(BaseModel):
     def predict(self, query: str, candidates: list[dict]) -> dict:
         import hashlib
         import time
+
         time.sleep(self.avg_latency_ms / 1000 * random.uniform(0.5, 1.5))
 
         # 用 query hash 做确定性决策，避免小样本随机波动
@@ -227,10 +228,13 @@ class FinetunedModelSimulator(BaseModel):
     def predict(self, query: str, candidates: list[dict]) -> dict:
         import hashlib
         import time
-        time.sleep(random.uniform(
-            self.avg_latency_ms * 0.5 / 1000,
-            self.avg_latency_ms * 1.5 / 1000,
-        ))
+
+        time.sleep(
+            random.uniform(
+                self.avg_latency_ms * 0.5 / 1000,
+                self.avg_latency_ms * 1.5 / 1000,
+            )
+        )
 
         h = int(hashlib.md5(query.encode()).hexdigest()[:8], 16)
         ed_model = EditDistanceBaseline()
@@ -299,14 +303,20 @@ class RealLLMAPI(BaseModel):
 
         from openai import OpenAI
 
-        base_url = self._base_url or os.environ.get("LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
+        base_url = self._base_url or os.environ.get(
+            "LLM_API_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/"
+        )
 
         # Ollama 本地不需要 API key
         is_local = "localhost" in base_url or "127.0.0.1" in base_url
         if is_local:
             api_key = "ollama"
         else:
-            api_key = self._api_key or os.environ.get("ZHIPUAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            api_key = (
+                self._api_key
+                or os.environ.get("ZHIPUAI_API_KEY")
+                or os.environ.get("OPENAI_API_KEY")
+            )
             if not api_key:
                 raise ValueError("请设置 ZHIPUAI_API_KEY 或 OPENAI_API_KEY 环境变量")
 
@@ -331,7 +341,9 @@ class RealLLMAPI(BaseModel):
             "temperature": 0.0,
         }
         # GLM 思考模型关闭思考模式
-        if "glm" in self._model_name.lower() and any(v in self._model_name.lower() for v in ["4.7", "5"]):
+        if "glm" in self._model_name.lower() and any(
+            v in self._model_name.lower() for v in ["4.7", "5"]
+        ):
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
         # Qwen3 思考模型：API 参数 + prompt 末尾 /no_think 双保险
@@ -443,6 +455,7 @@ class RealFinetunedModel(BaseModel):
     @property
     def name(self) -> str:
         import pathlib
+
         return f"Fine-tuned ({pathlib.Path(self.model_path).name})"
 
     def predict(self, query: str, candidates: list[dict]) -> dict:
@@ -458,7 +471,7 @@ class RealFinetunedModel(BaseModel):
         )
         prompt = (
             "### Instruction:\n"
-            '从候选列表中选出与输入实体匹配的标准名称。'
+            "从候选列表中选出与输入实体匹配的标准名称。"
             '输出JSON：{"match_index": 序号, "standard_name": "标准名", '
             '"code": "编码", "confidence": 置信度}\n\n'
             "### Input:\n"
@@ -476,7 +489,7 @@ class RealFinetunedModel(BaseModel):
                 temperature=1.0,
             )
         response = self._tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+            outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
         latency = (time.time() - t0) * 1000
 
