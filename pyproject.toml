@@ -184,6 +184,7 @@ module = [
     "plotly.*",
     "datasets.*",
     "lm_eval.*",
+    "pandas.*",
     "yaml",
 ]
 ignore_missing_imports = true

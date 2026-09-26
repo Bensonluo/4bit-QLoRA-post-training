@@ -31,6 +31,7 @@
 - [Key Highlights](#-key-highlights)
 - [Supported Models & Hardware](#-supported-models--hardware)
 - [Quick Start](#-quick-start)
+- [Data Wizard (Guided Data Preparation)](#-data-wizard-guided-data-preparation)
 - [Distributed Training (FSDP / DeepSpeed)](#-distributed-training-fsdp--deepspeed)
 - [Model Registry (Lifecycle & Lineage)](#-model-registry-lifecycle--lineage)
 - [Dashboard Tour](#-dashboard-tour)
@@ -173,6 +174,38 @@ After an editable install (`pip install -e ".[dev]"`), all ten console commands 
 | `run-flywheel` | Run one iteration of the self-improving data flywheel |
 | `download-data` | Download and prepare datasets from Hugging Face or local sources |
 | `qlora-dashboard` | Launch the MLflow + Streamlit dashboard |
+
+---
+
+## 🧙 Data Wizard (Guided Data Preparation)
+
+Most fine-tuning projects die at step zero: turning a raw spreadsheet into a training set. The Data Wizard walks a non-ML engineer through it — import a CSV/Excel/JSONL of `alias → standard name` rows, and it handles candidate sampling, difficulty stratification, dedup, splitting, and quality checks:
+
+```bash
+# Step 1: see what the wizard would do (no files written)
+python scripts/data_wizard.py --input data/raw/drugs.csv --suggest
+
+# Step 2: generate train/val/test + quality report
+python scripts/data_wizard.py --input data/raw/drugs.xlsx --out-dir outputs/wizard/drugs
+
+# Override the auto-detected column mapping if needed
+python scripts/data_wizard.py --input drugs.csv \
+    --standard-col 标准名 --query-col 别名 --code-col 编码
+```
+
+**Built-in guardrails** (the expert judgment is baked in, not required from you):
+
+| Stage | What it does | Why it matters |
+|-------|--------------|----------------|
+| Column mapping | Auto-suggests which column is the alias / standard name / code | H2O LLM Studio-style import UX |
+| Candidate sampling | Builds multiple-choice lists with prefix hard-negatives, **randomly shuffled** | Prevents position-bias shortcut learning |
+| Entity-group split | All variants of one entity stay in the same split | Kills train/test leakage — the #1 silent metric killer |
+| 数据体检 (health checks) | 6 gates: leakage, duplicates, position bias, candidate counts, dropped rows, difficulty balance | Errors block export; warnings explain the risk + fix in plain language |
+| Difficulty stratification | easy / medium / hard by edit distance | Enables stratified evaluation later |
+
+Output: `train.json` / `val.json` / `test.json` in Alpaca format (drop-in compatible with `train-domain` and `MedicalEntityDataset`) plus a `wizard_report.json` with every check result. Exit code 0 = safe to train, 2 = fix first.
+
+New verticals plug in via `register_template()` — the medical entity template is the reference implementation.
 
 ---
 
