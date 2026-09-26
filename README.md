@@ -316,7 +316,7 @@ Five pages covering the full ML lifecycle — data prep through model management
 
 | Page | What you do there |
 |------|-------------------|
-| 🧪 **Training Lab** | Pick preset (⚡ Quick / 🔥 Standard / 🚀 Full) → configure hyperparams → launch → watch live loss curves; dataset pre-filled automatically when sent from Data Wizard |
+| 🧪 **Training Lab** | Pick preset (⚡ Quick / 🔥 Standard / 🚀 Full) → configure hyperparams → launch → watch live loss curves; dataset pre-filled automatically when sent from Data Wizard; submit-time **dataset preflight** blocks nonexistent paths / wrong formats (with a fix suggestion) before a single GPU-minute is wasted |
 | 📈 **Experiments** | Browse all MLflow runs, filter by status/model, compare params, view metric diffs |
 | 🎯 **Evaluation** | Domain-specific charts: accuracy by difficulty, entity type breakdown, calibration curves |
 | ⚖️ **Model Comparison** | Side-by-side metric deltas, auto-generated executive summary, cost estimation |

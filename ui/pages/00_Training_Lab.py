@@ -210,7 +210,10 @@ with tab_configure:
                 lora_dropout = st.slider("Dropout", 0.0, 0.3, 0.05, 0.01)
 
             run_name = st.text_input(
-                "Run Name", value=f"{model_name.split('/')[-1].lower()}-{epochs}ep"
+                "Run Name",
+                # 模型名里的 "." 换成 "-"：默认值必须能通过 _validate_run_name
+                # （字母数字下划线连字符），否则用户不改任何参数首跑就报错。
+                value=f"{model_name.split('/')[-1].lower().replace('.', '-')}-{epochs}ep",
             )
 
             if technique != "grpo":
@@ -372,6 +375,20 @@ with tab_configure:
         if error:
             st.error(error)
             st.stop()
+
+        # 数据集预检（SFT）：本地文件在启动前体检——坏路径/坏格式在这里拦下，
+        # 而不是让训练子进程下完模型后死在数据加载。HF 数据集名不做本地检查。
+        # DPO/GRPO 的数据契约不同（prompt/chosen/rejected 等），不做误导性校验。
+        if technique == "sft":
+            from src.data.preflight import check_dataset_for_sft
+
+            ds_errors, ds_insp = check_dataset_for_sft(dataset)
+            if ds_errors:
+                for msg in ds_errors:
+                    st.error(msg)
+                st.stop()
+            if ds_insp is not None:
+                st.toast(f"数据集体检通过：{ds_insp.fmt} 格式，{ds_insp.n_records} 条样本")
 
         CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
         config_path = CONFIGS_DIR / f"{run_name}.yaml"
