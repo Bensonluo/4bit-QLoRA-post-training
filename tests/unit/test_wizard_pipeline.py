@@ -71,7 +71,7 @@ class TestHappyPath:
         d = report.to_dict()
         assert d["template"] == "medical_entity"
         assert d["export"] is not None
-        assert len(d["checks"]) == 6
+        assert len(d["checks"]) == 7
 
     def test_dedup_removes_duplicate_queries(self, tmp_path) -> None:
         rows = DRUG_ROWS + [DRUG_ROWS[0]]  # 完全重复行

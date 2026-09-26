@@ -1,7 +1,7 @@
 """Data Wizard — 引导式数据准备：原始表格 → 质检过的训练集。
 
 面向不懂 ML 的工程师：上传 CSV/Excel/JSONL → 确认列映射 → 一键生成 →
-六项数据体检 → 预览/下载。所有逻辑复用 src/data/wizard（CLI 同源），
+七项数据体检 → 预览/下载。所有逻辑复用 src/data/wizard（CLI 同源），
 本页只做展示与交互。等价 CLI: python scripts/data_wizard.py --input ...
 """
 
@@ -47,8 +47,19 @@ DEMO_CSV = """标准名,别名,编码
 左氧氟沙星片,可乐必妥,Z10
 """
 
+DEMO_CSV_MD = """标准名,别名,编码,类型,规格
+保和堂(昌平区光明路店),保和堂大药房,P000001,机构,
+益民堂(海淀区中关村店),益民堂药房,P000002,机构,
+仁和药房(朝阳区望京店),仁和,P000003,机构,
+同济堂(浦东新区张江店),同济堂药房,P000004,机构,
+阿莫西林胶囊,阿莫仙,Z15020414,产品,0.25g*24片/盒
+阿莫西林颗粒,阿莫西林干混悬,Z15020415,产品,0.125g*12袋/盒
+布洛芬缓释胶囊,芬必得缓释,Z15020416,产品,0.3g*20粒/盒
+草果四味汤散,草果四味,Z15020417,产品,10g/袋
+"""
 
-def _load_bytes(name: str, data: bytes) -> None:
+
+def _load_bytes(name: str, data: bytes, template_hint: str) -> None:
     """上传/演示字节流 → 落临时文件 → 走真实 import_table 代码路径。"""
     try:
         tmp_dir = Path(tempfile.mkdtemp(prefix="tunesmith_wizard_"))
@@ -60,6 +71,7 @@ def _load_bytes(name: str, data: bytes) -> None:
         return
     st.session_state["wizard_table"] = table
     st.session_state["wizard_source"] = name
+    st.session_state["wizard_template"] = template_hint  # 演示数据自动切换对应模板
     st.session_state.pop("wizard_report", None)  # 新数据让旧报告失效
     st.rerun()
 
@@ -76,7 +88,11 @@ with up_col:
         help="CSV / Excel / JSONL，需要一列「标准名」和一列「查询/别名」。Excel 需要 openpyxl。",
     )
     if upload is not None:
-        _load_bytes(upload.name, upload.getvalue())
+        _load_bytes(
+            upload.name,
+            upload.getvalue(),
+            template_hint=st.session_state.get("wizard_template", "medical_entity"),
+        )
 with path_col:
     server_path = st.text_input(
         "或输入服务器上的文件路径",
@@ -94,8 +110,12 @@ with path_col:
             st.session_state.pop("wizard_report", None)
             st.rerun()
 with demo_col:
-    if st.button("🧪 试试演示数据"):
-        _load_bytes("demo_drugs.csv", DEMO_CSV.encode("utf-8"))
+    if st.button("🧪 医疗演示数据"):
+        _load_bytes("demo_drugs.csv", DEMO_CSV.encode("utf-8"), template_hint="medical_entity")
+    if st.button("🏭 主数据演示数据"):
+        _load_bytes(
+            "demo_master_data.csv", DEMO_CSV_MD.encode("utf-8"), template_hint="master_data"
+        )
 
 table: RawTable | None = st.session_state.get("wizard_table")
 if table is None:
@@ -119,7 +139,15 @@ try:
 except WizardError:
     suggested = FieldMapping(standard_name=table.columns[0] if table.columns else "")
 
-template_name = st.selectbox("垂类模板", available_templates(), index=0)
+template_names = available_templates()
+default_template = "medical_entity" if "medical_entity" in template_names else template_names[0]
+template_name = st.selectbox(
+    "垂类模板",
+    template_names,
+    index=template_names.index(default_template),
+    key="wizard_template",
+    help="医疗=Alpaca 选择题格式；主数据=机构+产品双任务 messages 格式。",
+)
 template = get_template(template_name)
 with st.expander("模板说明"):
     st.text(template.describe())
@@ -131,6 +159,7 @@ roles = [
     ("code", "标准编码", suggested.code),
     ("variants", "变体（一格多个，按 、;，| 切）", suggested.variants),
     ("entity_type", "实体类型", suggested.entity_type),
+    ("spec", "规格（产品任务）", suggested.spec),
 ]
 NONE_OPTION = "（不使用）"
 selected: dict[str, str | None] = {}
@@ -147,6 +176,7 @@ mapping_errors = FieldMapping(
     code=selected["code"],
     variants=selected["variants"],
     entity_type=selected["entity_type"],
+    spec=selected["spec"],
 ).validate(table.columns)
 
 st.divider()
@@ -193,6 +223,7 @@ if gen_col.button("🚀 生成训练集", type="primary", disabled=not ready):
                 code=selected["code"],
                 variants=selected["variants"],
                 entity_type=selected["entity_type"],
+                spec=selected["spec"],
             ),
             template=template_name,
             split_ratios=(float(r_train), float(r_val), float(r_test)),
@@ -265,10 +296,18 @@ except (OSError, json.JSONDecodeError) as exc:
     st.stop()
 for i, rec in enumerate(records[:3]):
     with st.expander(f"样本 {i + 1}（{split_choice}）"):
-        st.markdown(f"**instruction**\n\n{rec['instruction']}")
-        st.markdown(f"**input**\n\n```\n{rec['input']}\n```")
-        st.markdown(f"**output**\n\n```\n{rec['output']}\n```")
-        st.caption(f"metadata: {rec['metadata']}")
+        if "messages" in rec:
+            # messages chat 格式（主数据模板）：逐角色展示
+            _ROLE_ICON = {"system": "🧭 system", "user": "👤 user", "assistant": "🤖 assistant"}
+            for msg in rec["messages"]:
+                label = _ROLE_ICON.get(msg["role"], msg["role"])
+                st.markdown(f"**{label}**")
+                st.code(msg["content"], language=None)
+        else:
+            st.markdown(f"**instruction**\n\n{rec['instruction']}")
+            st.markdown(f"**input**\n\n```\n{rec['input']}\n```")
+            st.markdown(f"**output**\n\n```\n{rec['output']}\n```")
+            st.caption(f"metadata: {rec['metadata']}")
 if len(records) > 3:
     st.caption(f"…共 {len(records)} 条")
 
@@ -278,8 +317,15 @@ for col, name in zip((dl1, dl2, dl3, dl4), ("train", "val", "test", "wizard_repo
     if f.exists():
         col.download_button(f"⬇️ {name}.json", f.read_bytes(), file_name=f"{name}.json")
 
-st.info(
-    f"训练集就绪（Alpaca 格式，MedicalEntityDataset 兼容）。下一步在终端运行：\n\n"
-    f"`python scripts/train_sft.py -d {out_dir / 'train.json'}`\n\n"
-    f"或把 Training Lab 的数据路径指向 `{out_dir / 'train.json'}`。"
-)
+if template_name == "master_data":
+    st.info(
+        f"训练集就绪（messages 双任务格式，主数据训练脚本兼容）。下一步在终端运行：\n\n"
+        f"`python domains/master_data/scripts/train.py --train-file {out_dir / 'train.json'} --epochs 1`\n\n"
+        f"机构与产品样本已混排在同一训练集，system prompt 会告诉模型当前是哪个任务。"
+    )
+else:
+    st.info(
+        f"训练集就绪（Alpaca 格式，MedicalEntityDataset 兼容）。下一步在终端运行：\n\n"
+        f"`python scripts/train_sft.py -d {out_dir / 'train.json'}`\n\n"
+        f"或把 Training Lab 的数据路径指向 `{out_dir / 'train.json'}`。"
+    )

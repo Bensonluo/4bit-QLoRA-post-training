@@ -31,6 +31,7 @@ class FieldMapping:
     code: str | None = None
     variants: str | None = None
     entity_type: str | None = None
+    spec: str | None = None  # 规格列（产品匹配任务用）
     entity_type_default: str = "entity"
 
     def validate(self, columns: list[str]) -> list[str]:
@@ -46,6 +47,7 @@ class FieldMapping:
             ("code", self.code),
             ("variants", self.variants),
             ("entity_type", self.entity_type),
+            ("spec", self.spec),
         ):
             if col is not None and col not in known:
                 errors.append(f"{role} 列 '{col}' 不在表格列中（可用列: {columns}）。")

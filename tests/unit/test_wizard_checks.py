@@ -1,7 +1,8 @@
-"""数据向导体检层测试：六项检查的通过与失败分支。"""
+"""数据向导体检层测试：七项检查的通过与失败分支。"""
 
 from src.data.wizard.checks import (
     POSITION_DOMINANCE,
+    check_ambiguous_query,
     check_candidate_counts,
     check_difficulty_balance,
     check_dropped_rows,
@@ -110,6 +111,42 @@ class TestSplitLeakage:
         assert not check_split_leakage(splits).passed
 
 
+class TestAmbiguousQuery:
+    def test_unique_queries_pass(self) -> None:
+        splits = {"train": [sample("甲", "S1", "C1"), sample("乙", "S2", "C2")]}
+        r = check_ambiguous_query(splits)
+        assert r.passed
+        assert r.severity == "error"
+        assert "自洽" in r.message
+
+    def test_same_query_two_standards_fails(self) -> None:
+        # 连锁门店共用简称 → 同一查询指向多个分店，标签自相矛盾
+        splits = {
+            "train": [
+                sample("和平大药房", "和平大药房(一店)", "P1"),
+                sample("和平大药房", "和平大药房(二店)", "P2"),
+                sample("乙", "S2", "C2"),
+            ]
+        }
+        r = check_ambiguous_query(splits)
+        assert not r.passed
+        assert r.severity == "error"
+        assert "标签矛盾" in r.message
+        assert r.details["count"] == 1
+
+    def test_same_query_same_standard_across_splits_passes(self) -> None:
+        # 同一查询+同一实体出现在不同 split 是泄漏问题（另一项检查管），不算歧义
+        splits = {
+            "train": [sample("甲", "S1", "C1")],
+            "test": [sample("甲", "S1", "C1")],
+        }
+        assert check_ambiguous_query(splits).passed
+
+    def test_included_in_run_checks(self) -> None:
+        results = run_checks({"train": [sample()]}, [])
+        assert "ambiguous_query" in [r.check_id for r in results]
+
+
 class TestPositionBias:
     def make(self, label_index: int, n: int, split: str = "train"):
         return {split: [sample(f"q{i}", f"S{i}", label_index=label_index) for i in range(n)]}
@@ -206,6 +243,7 @@ class TestRunChecks:
         assert [r.check_id for r in results] == [
             "dropped_rows",
             "split_leakage",
+            "ambiguous_query",
             "position_bias",
             "candidate_counts",
             "duplicates",

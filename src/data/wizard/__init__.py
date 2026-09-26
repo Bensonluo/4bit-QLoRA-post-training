@@ -26,6 +26,7 @@ from src.data.wizard.templates import (
     get_template,
     register_template,
 )
+from src.data.wizard.templates_master_data import MasterDataTemplate  # noqa: F401  注册副作用
 
 __all__ = [
     # spec
@@ -40,6 +41,7 @@ __all__ = [
     "Candidate",
     "DomainTemplate",
     "MatchingSample",
+    "MasterDataTemplate",
     "register_template",
     "get_template",
     "available_templates",

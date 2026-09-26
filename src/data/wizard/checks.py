@@ -107,6 +107,31 @@ def check_split_leakage(
     )
 
 
+def check_ambiguous_query(
+    splits: dict[str, list[MatchingSample]],
+) -> CheckResult:
+    """同一查询指向多个不同标准实体 → error（标签自相矛盾，模型无从学起）。"""
+    query_map: dict[str, set[str]] = {}
+    for split in SPLITS:
+        for s in splits.get(split, []):
+            query_map.setdefault(s.query, set()).add(s.code or s.standard_name)
+    ambiguous = {q: stds for q, stds in query_map.items() if len(stds) > 1}
+    if not ambiguous:
+        return CheckResult(
+            "ambiguous_query", "error", True, "每个查询只指向一个标准实体，标注自洽。"
+        )
+    examples = "；".join(f"'{q}' → {len(stds)} 个实体" for q, stds in sorted(ambiguous.items())[:3])
+    return CheckResult(
+        "ambiguous_query",
+        "error",
+        False,
+        f"标签矛盾——同一查询指向多个不同标准实体（{examples}，共 {len(ambiguous)} 个查询）。"
+        "模型无法同时满足矛盾标注，常见于连锁门店/多分店共用同一简称。"
+        "修法：让查询值带上分店/规格等区分信息，或删除歧义别名后再生成。",
+        details={"count": len(ambiguous), "queries": sorted(ambiguous)[:20]},
+    )
+
+
 def check_position_bias(
     splits: dict[str, list[MatchingSample]],
 ) -> CheckResult:
@@ -205,6 +230,7 @@ def run_checks(
     return [
         check_dropped_rows(dropped),
         check_split_leakage(splits),
+        check_ambiguous_query(splits),
         check_position_bias(splits),
         check_candidate_counts(splits),
         check_duplicates(splits),

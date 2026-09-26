@@ -131,6 +131,7 @@ _ROLE_HINTS: dict[str, list[str]] = {
     "code": ["编码", "代码", "code", "编号"],
     "variants": ["变体", "别名集", "variants"],
     "entity_type": ["类型", "类别", "type", "category"],
+    "spec": ["规格", "spec"],
 }
 
 
@@ -142,7 +143,7 @@ def suggest_mapping(columns: list[str]) -> FieldMapping:
     """
     found: dict[str, str] = {}
     lowered = [c.lower() for c in columns]
-    for role in ("standard_name", "query", "code", "variants", "entity_type"):
+    for role in ("standard_name", "query", "code", "variants", "entity_type", "spec"):
         for hint in _ROLE_HINTS[role]:
             for col, col_l in zip(columns, lowered):
                 if col_l not in found.values() and hint in col_l:
@@ -160,4 +161,5 @@ def suggest_mapping(columns: list[str]) -> FieldMapping:
         code=found.get("code"),
         variants=found.get("variants"),
         entity_type=found.get("entity_type"),
+        spec=found.get("spec"),
     )

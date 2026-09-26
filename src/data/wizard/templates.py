@@ -28,6 +28,7 @@ class Candidate:
     name: str
     code: str | None
     label: bool  # True = 正确答案
+    spec: str | None = None  # 规格（产品匹配任务用，其余模板忽略）
 
 
 @dataclass

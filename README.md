@@ -200,7 +200,7 @@ python scripts/data_wizard.py --input drugs.csv \
 | Column mapping | Auto-suggests which column is the alias / standard name / code | H2O LLM Studio-style import UX |
 | Candidate sampling | Builds multiple-choice lists with prefix hard-negatives, **randomly shuffled** | Prevents position-bias shortcut learning |
 | Entity-group split | All variants of one entity stay in the same split | Kills train/test leakage — the #1 silent metric killer |
-| 数据体检 (health checks) | 6 gates: leakage, duplicates, position bias, candidate counts, dropped rows, difficulty balance | Errors block export; warnings explain the risk + fix in plain language |
+| 数据体检 (health checks) | 7 gates: leakage, ambiguous aliases (one query → multiple standards), duplicates, position bias, candidate counts, dropped rows, difficulty balance | Errors block export; warnings explain the risk + fix in plain language |
 | Difficulty stratification | easy / medium / hard by edit distance | Enables stratified evaluation later |
 
 Output: `train.json` / `val.json` / `test.json` in Alpaca format (drop-in compatible with `train-domain` and `MedicalEntityDataset`) plus a `wizard_report.json` with every check result. Exit code 0 = safe to train, 2 = fix first.
@@ -314,7 +314,7 @@ Five pages covering the full ML lifecycle — data prep through model management
 | 📈 **Experiments** | Browse all MLflow runs, filter by status/model, compare params, view metric diffs |
 | 🎯 **Evaluation** | Domain-specific charts: accuracy by difficulty, entity type breakdown, calibration curves |
 | ⚖️ **Model Comparison** | Side-by-side metric deltas, auto-generated executive summary, cost estimation |
-| 🧙 **Data Wizard** | Upload CSV/Excel/JSONL → confirm column mapping → one-click training-set generation with 6 quality checks (see above) |
+| 🧙 **Data Wizard** | Upload CSV/Excel/JSONL → confirm column mapping → one-click training-set generation with 7 quality checks (see above) |
 
 ```bash
 pip install -e ".[ui]"

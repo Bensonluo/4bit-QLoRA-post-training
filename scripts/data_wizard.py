@@ -49,6 +49,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--code-col", default=None, help="编码列（默认自动识别）")
     parser.add_argument("--variants-col", default=None, help="变体列（一格多个别名，默认自动识别）")
     parser.add_argument("--type-col", default=None, help="实体类型列（默认自动识别）")
+    parser.add_argument("--spec-col", default=None, help="规格列（产品匹配任务用，默认自动识别）")
     parser.add_argument("--candidates", type=int, default=8, help="每个样本的候选数（默认 8）")
     parser.add_argument(
         "--ratios",
@@ -79,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         code=args.code_col if args.code_col is not None else auto.code,
         variants=args.variants_col if args.variants_col is not None else auto.variants,
         entity_type=args.type_col if args.type_col is not None else auto.entity_type,
+        spec=args.spec_col if args.spec_col is not None else auto.spec,
     )
 
     console.print(f"[bold]模板:[/bold] {args.template}")
@@ -88,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     console.print(
         f"[bold]列映射:[/bold] standard={mapping.standard_name} | query={mapping.query} | "
         f"code={mapping.code} | variants={mapping.variants} | type={mapping.entity_type}"
+        f" | spec={mapping.spec}"
         + ("（未显式指定的项为自动识别）" if not args.standard_col else "")
     )
 
