@@ -316,7 +316,7 @@ Seven pages covering the full ML lifecycle — data prep through chatting with t
 
 | Page | What you do there |
 |------|-------------------|
-| 🧪 **Training Lab** | Pick preset (⚡ Quick / 🔥 Standard / 🚀 Full) → configure hyperparams → launch → watch live loss curves; dataset pre-filled automatically when sent from Data Wizard; submit-time **dataset preflight** blocks nonexistent paths / wrong formats (with a fix suggestion) before a single GPU-minute is wasted; a 🔍 **preview station** inspects any local dataset on demand (format + record count + first 3 samples) — no submit needed; finished runs show a 🧭 **next-steps panel** (evaluate with the wizard's test set → merge → register) instead of a dead-end ✅ |
+| 🧪 **Training Lab** | Pick preset (⚡ Quick / 🔥 Standard / 🚀 Full) → configure hyperparams → launch → watch live loss curves; dataset pre-filled automatically when sent from Data Wizard; submit-time **dataset preflight** blocks nonexistent paths / wrong formats (with a fix suggestion) before a single GPU-minute is wasted; a 🔍 **preview station** inspects any local dataset on demand (format + record count + first 3 samples) — no submit needed; finished runs show a 🧭 **next-steps panel** with a **one-click merge** button (adapter → standalone model in `outputs/merged/`, idempotent — already-merged runs show a ✅ and link straight to Chat) plus evaluate/register commands instead of a dead-end ✅ |
 | 📈 **Experiments** | Browse all MLflow runs, filter by status/model, compare params, view metric diffs |
 | 🎯 **Evaluation** | Domain-specific charts: accuracy by difficulty, entity type breakdown, calibration curves |
 | ⚖️ **Model Comparison** | Side-by-side metric deltas, auto-generated executive summary, cost estimation |

@@ -46,6 +46,17 @@ def _read_adapter_base(cfg_path: Path) -> str | None:
     return str(base) if base else None
 
 
+def looks_merged(d: Path) -> bool:
+    """目录是否是一个自包含的已合并模型（config + 权重、无 adapter 标志）。
+
+    Chat 页发现与 Training Lab 的「合并导出」幂等检测共用这一判定。
+    """
+    if not (d / "config.json").exists():
+        return False
+    has_weights = any(d.glob("*.safetensors")) or (d / "pytorch_model.bin").exists()
+    return has_weights and not (d / "adapter_config.json").exists()
+
+
 def discover_chat_models(project_root: Path, limit: int = 30) -> list[ChatModelOption]:
     """扫描 outputs/ 找可对话模型，按目录 mtime 新→旧排序，最多 limit 条。"""
     outputs = project_root / "outputs"
@@ -72,9 +83,7 @@ def discover_chat_models(project_root: Path, limit: int = 30) -> list[ChatModelO
     merged_root = outputs / "merged"
     if merged_root.is_dir():
         for d in sorted(p for p in merged_root.iterdir() if p.is_dir()):
-            has_cfg = (d / "config.json").exists()
-            has_weights = any(d.glob("*.safetensors")) or (d / "pytorch_model.bin").exists()
-            if has_cfg and has_weights:
+            if looks_merged(d):
                 resolved = d.resolve()
                 if resolved not in seen:
                     seen.add(resolved)

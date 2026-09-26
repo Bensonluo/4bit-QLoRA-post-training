@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from src.inference.chat_engine import generate_reply, stream_reply
-from src.inference.discovery import ChatModelOption, discover_chat_models
+from src.inference.discovery import ChatModelOption, discover_chat_models, looks_merged
 
 
 def _make_adapter(out_dir: Path, base: str | None = "Qwen/Qwen2.5-0.5B-Instruct") -> Path:
@@ -114,6 +114,48 @@ class TestChatModelOptionLabel:
     def test_merged_label_no_base(self) -> None:
         opt = ChatModelOption(kind="merged", path=Path("/x/outputs/merged/run"), base_model=None)
         assert opt.label == "📦 run"
+
+
+class TestLooksMerged:
+    """Training Lab 一键合并的幂等判定与 Chat 页发现共用 looks_merged。"""
+
+    def test_config_plus_safetensors_is_merged(self, tmp_path) -> None:
+        d = tmp_path / "merged"
+        d.mkdir()
+        (d / "config.json").write_text("{}", encoding="utf-8")
+        (d / "model.safetensors").write_bytes(b"x")
+        assert looks_merged(d) is True
+
+    def test_config_plus_pytorch_bin_is_merged(self, tmp_path) -> None:
+        d = tmp_path / "merged"
+        d.mkdir()
+        (d / "config.json").write_text("{}", encoding="utf-8")
+        (d / "pytorch_model.bin").write_bytes(b"x")
+        assert looks_merged(d) is True
+
+    def test_config_without_weights_not_merged(self, tmp_path) -> None:
+        d = tmp_path / "partial"
+        d.mkdir()
+        (d / "config.json").write_text("{}", encoding="utf-8")
+        assert looks_merged(d) is False
+
+    def test_weights_without_config_not_merged(self, tmp_path) -> None:
+        d = tmp_path / "orphan"
+        d.mkdir()
+        (d / "model.safetensors").write_bytes(b"x")
+        assert looks_merged(d) is False
+
+    def test_adapter_dir_with_config_and_weights_not_merged(self, tmp_path) -> None:
+        """adapter 目录也可能有 config.json——adapter_config.json 在则不是合并模型。"""
+        d = tmp_path / "adapter"
+        d.mkdir()
+        (d / "config.json").write_text("{}", encoding="utf-8")
+        (d / "model.safetensors").write_bytes(b"x")
+        (d / "adapter_config.json").write_text("{}", encoding="utf-8")
+        assert looks_merged(d) is False
+
+    def test_missing_dir_not_merged(self, tmp_path) -> None:
+        assert looks_merged(tmp_path / "nope") is False
 
 
 class _FakeStreamer:

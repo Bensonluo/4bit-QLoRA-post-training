@@ -62,12 +62,36 @@ def _render_next_steps(run_id: str, info: dict) -> None:
                 )
             else:
                 merged_dir = f"outputs/merged/{run_id}"
+                merged_path = PROJECT_ROOT / merged_dir
                 st.markdown("**合并导出 / 注册**")
-                st.code(
-                    f"python scripts/merge_adapter.py --adapter-dir {arts.output_dir} "
-                    f"--output-dir {merged_dir}",
-                    language="bash",
-                )
+                from src.inference.discovery import looks_merged
+
+                if looks_merged(merged_path):
+                    st.success(
+                        f"已合并：`{merged_dir}` —— 到 **💬 Chat** 页选 📦 `{run_id}` 直接对话，"
+                        f"或用下方命令注册进 Registry。"
+                    )
+                else:
+                    base_override = st.text_input(
+                        "底座路径覆盖（可选；adapter_config 记录的底座不在本机时填本地目录或 HF 名）",
+                        key=f"merge_base_{run_id}",
+                    )
+                    if st.button("📦 合并导出", key=f"merge_btn_{run_id}", type="primary"):
+                        from src.models.merger import merge_adapter_to_dir
+
+                        try:
+                            with st.spinner(
+                                "合并中：加载底座 → 合并 LoRA → 写盘（1.7B 约 1–3 分钟）…"
+                            ):
+                                merge_adapter_to_dir(
+                                    str(arts.output_dir),
+                                    str(merged_path),
+                                    base_model_name=base_override.strip() or None,
+                                )
+                            st.toast("合并完成", icon="📦")
+                            st.rerun()  # 重渲染为「已合并 ✅」状态
+                        except Exception as exc:
+                            st.error(f"合并失败：{exc or exc!r}")
                 model_tag = arts.model_name.split("/")[-1] if arts.model_name else "MyModel"
                 st.code(
                     f"python scripts/registry_cli.py register --model-dir {merged_dir} "
@@ -465,11 +489,15 @@ with tab_configure:
                                             st.markdown(f"**{label}**")
                                             st.code(str(msg["content"]), language=None)
                                     else:
-                                        st.markdown(f"**instruction**\n\n{rec.get('instruction', '')}")
-                                        st.markdown("**input**\n\n```\n"
-                                                    f"{rec.get('input', '')}\n```")
-                                        st.markdown("**output**\n\n```\n"
-                                                    f"{rec.get('output', '')}\n```")
+                                        st.markdown(
+                                            f"**instruction**\n\n{rec.get('instruction', '')}"
+                                        )
+                                        st.markdown(
+                                            f"**input**\n\n```\n{rec.get('input', '')}\n```"
+                                        )
+                                        st.markdown(
+                                            f"**output**\n\n```\n{rec.get('output', '')}\n```"
+                                        )
 
     if submitted:
         error = _validate_run_name(run_name)

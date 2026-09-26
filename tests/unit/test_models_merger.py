@@ -117,6 +117,31 @@ class TestMergeAdapterToDir:
         mock_tok_cls.from_pretrained.assert_called_once_with("Qwen/Qwen2.5-0.5B")
 
     @patch("transformers.AutoTokenizer")
+    @patch("transformers.AutoModelForCausalLM")
+    @patch("peft.PeftModel")
+    def test_tilde_paths_are_expanded_before_loading(
+        self,
+        mock_peft_cls: MagicMock,
+        mock_base_cls: MagicMock,
+        mock_tok_cls: MagicMock,
+        tmp_path: Any,
+        monkeypatch,
+    ) -> None:
+        """`~` 路径来自 UI 文本输入——HF 会把它当 repo id 拒绝，必须先展开（live bug 回归）。"""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        mock_peft_cls.from_pretrained.return_value = _fake_peft()
+
+        result = merge_adapter_to_dir("~/adapter", "~/merged", base_model_name="~/base-model")
+
+        mock_base_cls.from_pretrained.assert_called_once_with(
+            str(tmp_path / "base-model"), torch_dtype=torch.bfloat16
+        )
+        mock_peft_cls.from_pretrained.assert_called_once_with(
+            mock_base_cls.from_pretrained.return_value, str(tmp_path / "adapter")
+        )
+        assert result == str((tmp_path / "merged").resolve())
+
+    @patch("transformers.AutoTokenizer")
     @patch("peft.AutoPeftModelForCausalLM")
     def test_non_peft_model_saved_as_is(
         self, mock_auto_peft: MagicMock, mock_tok_cls: MagicMock, tmp_path: Any

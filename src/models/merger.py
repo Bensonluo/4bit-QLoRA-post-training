@@ -35,6 +35,14 @@ def merge_adapter_to_dir(
     """
     import torch
 
+    # `~` paths arrive straight from UI text inputs — HF treats them as repo ids
+    # and rejects them ("Repo id must be in the form 'name/repo_name'"), so expand
+    # before anything touches from_pretrained.
+    adapter_dir = str(Path(adapter_dir).expanduser())
+    output_dir = str(Path(output_dir).expanduser())
+    if base_model_name:
+        base_model_name = str(Path(base_model_name).expanduser())
+
     console.print("\n[bold cyan]Merging LoRA adapter into base model[/bold cyan]")
     console.print(f"  Adapter: {adapter_dir}")
     console.print(f"  Output:  {output_dir}")
