@@ -13,6 +13,7 @@ import pytest
 from src.data.preflight import (
     check_dataset_for_sft,
     inspect_dataset_file,
+    load_preview_records,
     looks_like_local_path,
 )
 
@@ -191,6 +192,35 @@ class TestCheckDatasetForSft:
         errors, _ = check_dataset_for_sft(str(f))
         assert len(errors) == 1
         assert "第 2 条" in errors[0]
+
+
+class TestLoadPreviewRecords:
+    def test_alpaca_preview_limited(self, tmp_path) -> None:
+        f = tmp_path / "train.json"
+        _write_json(f, ALPACA * 3)  # 6 条 → 预览只取 3
+        records, err = load_preview_records(f, limit=3)
+        assert err is None
+        assert len(records) == 3
+        assert records[0]["instruction"] == ALPACA[0]["instruction"]
+
+    def test_messages_preview(self, tmp_path) -> None:
+        f = tmp_path / "train.json"
+        _write_json(f, MESSAGES)
+        records, err = load_preview_records(f)
+        assert err is None
+        assert records[0]["messages"][0]["role"] == "system"
+
+    def test_missing_file_returns_error(self, tmp_path) -> None:
+        records, err = load_preview_records(tmp_path / "nope.json")
+        assert records == []
+        assert err is not None and "不存在" in err
+
+    def test_malformed_file_returns_first_error(self, tmp_path) -> None:
+        f = tmp_path / "train.jsonl"
+        f.write_text("{bad\n{also bad\n", encoding="utf-8")
+        records, err = load_preview_records(f)
+        assert records == []
+        assert err is not None and "第 1 行" in err
 
 
 @pytest.mark.unit

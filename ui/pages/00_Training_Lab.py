@@ -364,6 +364,67 @@ with tab_configure:
             vram_gb /= 0.35
         st.caption(f"Estimated VRAM: **~{vram_gb:.1f} GB**")
 
+    # ── 数据集体检与预览（LLaMA-Board「Preview dataset」式，提交前可主动查看）────
+    with st.expander("🔍 数据集体检与预览", expanded=False):
+        st.caption(
+            "不用先提交：填路径点「体检」，看格式识别、样本条数与前 3 条样本。"
+            "提交时仍会强制预检（坏路径/坏格式照样拦下）。"
+        )
+        pv1, pv2 = st.columns([3, 1])
+        with pv1:
+            pv_dataset = st.text_input(
+                "数据集路径（本地 .json/.jsonl）",
+                value=st.session_state.get("dataset_input", ""),
+                key="preflight_dataset_input",
+                placeholder="outputs/wizard/demo_drugs/train.json",
+            )
+        with pv2:
+            st.markdown("<div style='padding-top:1.55rem'></div>", unsafe_allow_html=True)
+            pv_check = st.button("🔍 体检", width="stretch")
+        if pv_check:
+            from src.data.preflight import check_dataset_for_sft, load_preview_records
+
+            pv_path = pv_dataset.strip()
+            if not pv_path:
+                st.warning("先填一个数据集路径（或直接提交，提交时也会强制预检）。")
+            else:
+                pv_errors, pv_insp = check_dataset_for_sft(pv_path)
+                if pv_insp is None:
+                    st.info(
+                        f"`{pv_path}` 按 HF 数据集名处理（无 .json/.jsonl 后缀），"
+                        f"本地不做检查，由训练时的加载器解析。"
+                    )
+                else:
+                    for msg in pv_errors:
+                        st.error(msg)
+                    if not pv_errors:
+                        st.success(
+                            f"体检通过：**{pv_insp.fmt}** 格式，{pv_insp.n_records} 条样本"
+                            f"（SFT 可直接训练）。"
+                        )
+                        pv_records, pv_err = load_preview_records(Path(pv_path), limit=3)
+                        if pv_err:
+                            st.error(f"预览读取失败：{pv_err}")
+                        else:
+                            for i, rec in enumerate(pv_records, 1):
+                                with st.expander(f"样本 {i} / {min(3, pv_insp.n_records)}"):
+                                    if "messages" in rec:
+                                        _ROLE_ICON = {
+                                            "system": "🧭 system",
+                                            "user": "👤 user",
+                                            "assistant": "🤖 assistant",
+                                        }
+                                        for msg in rec["messages"]:
+                                            label = _ROLE_ICON.get(msg["role"], msg["role"])
+                                            st.markdown(f"**{label}**")
+                                            st.code(str(msg["content"]), language=None)
+                                    else:
+                                        st.markdown(f"**instruction**\n\n{rec.get('instruction', '')}")
+                                        st.markdown("**input**\n\n```\n"
+                                                    f"{rec.get('input', '')}\n```")
+                                        st.markdown("**output**\n\n```\n"
+                                                    f"{rec.get('output', '')}\n```")
+
     if submitted:
         error = _validate_run_name(run_name)
         if not error and lr_error:

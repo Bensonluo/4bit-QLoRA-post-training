@@ -125,6 +125,16 @@ def inspect_dataset_file(path: Path) -> DatasetInspection:
     return DatasetInspection(fmt=fmt, n_records=len(records), errors=(), warnings=tuple(warnings))
 
 
+def load_preview_records(path: Path, limit: int = 3) -> tuple[list[dict], str | None]:
+    """读取前 limit 条记录供 UI 预览；返回 (records, error)。文件级失败返回 ([], 原因)。"""
+    if not path.exists():
+        return [], f"数据集文件不存在：{path}"
+    records, errors = _load_records(path)
+    if errors:
+        return [], errors[0]
+    return records[:limit], None
+
+
 def check_dataset_for_sft(dataset_name: str) -> tuple[list[str], DatasetInspection | None]:
     """Training Lab（SFT）提交时的预检入口。
 
