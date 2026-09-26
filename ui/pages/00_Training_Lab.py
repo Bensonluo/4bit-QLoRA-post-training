@@ -35,6 +35,51 @@ def _validate_run_name(name: str) -> str | None:
     return None
 
 
+def _render_next_steps(run_id: str, info: dict) -> None:
+    """训练完成 ≠ 终点：定位产物，给出评测/注册/导出的下一步动作。"""
+    from src.tracking.next_steps import summarize_run_artifacts
+
+    try:
+        arts = summarize_run_artifacts(Path(info.get("config_path", "")), PROJECT_ROOT)
+    except Exception as exc:  # 引导面板失败不应影响运行列表本身
+        logger.debug("next-steps summary failed for %s: %s", run_id, exc)
+        return
+    with st.expander("🧭 下一步"):
+        if arts.has_adapter and arts.output_dir is not None:
+            st.success(f"Adapter 就绪：`{arts.output_dir}`")
+            if arts.eval_sets.get("test"):
+                st.markdown("**评测**（Data Wizard 已备好 test 集）")
+                st.code(
+                    f"python scripts/evaluate.py --model-path {arts.output_dir} "
+                    f"--test-file {arts.eval_sets['test']}",
+                    language="bash",
+                )
+            if arts.registered_name:
+                st.info(
+                    f"已配置自动注册为 `{arts.registered_name}`（Staging）——"
+                    f"到 **Registry** 页查看版本、设置 champion/challenger 别名。"
+                )
+            else:
+                merged_dir = f"outputs/merged/{run_id}"
+                st.markdown("**合并导出 / 注册**")
+                st.code(
+                    f"python scripts/merge_adapter.py --adapter-dir {arts.output_dir} "
+                    f"--output-dir {merged_dir}",
+                    language="bash",
+                )
+                model_tag = arts.model_name.split("/")[-1] if arts.model_name else "MyModel"
+                st.code(
+                    f"python scripts/registry_cli.py register --model-dir {merged_dir} "
+                    f"--name {model_tag}-QLoRA",
+                    language="bash",
+                )
+        else:
+            st.warning(
+                f"输出目录中未找到 adapter：`{arts.output_dir}`。"
+                f"先看下方日志确认保存路径或失败原因，再决定重训或手动定位。"
+            )
+
+
 platform = get_platform()
 if platform.is_cuda:
     default_platform = "NVIDIA (CUDA)"
@@ -550,3 +595,7 @@ with tab_activity:
                 if logs:
                     with st.expander("Recent Logs"):
                         st.code(logs, language="log")
+
+                # 训练完成后的下一步引导（LlamaBoard Chat/Evaluate/Export 式收尾）
+                if status == "finished" and info:
+                    _render_next_steps(run_id, info)
