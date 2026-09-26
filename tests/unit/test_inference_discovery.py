@@ -6,11 +6,18 @@ mtime 排序、limit 截断、空 outputs、重模块零导入守卫。
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import queue
+import sys
 import time
+import types
 from pathlib import Path
 
+import pytest
+
+from src.inference.chat_engine import generate_reply, stream_reply
 from src.inference.discovery import ChatModelOption, discover_chat_models
 
 
@@ -107,6 +114,94 @@ class TestChatModelOptionLabel:
     def test_merged_label_no_base(self) -> None:
         opt = ChatModelOption(kind="merged", path=Path("/x/outputs/merged/run"), base_model=None)
         assert opt.label == "📦 run"
+
+
+class _FakeStreamer:
+    """镜像 transformers.TextIteratorStreamer 的最小 API（queue + stop 信号）。"""
+
+    stop_signal = None
+
+    def __init__(self, tokenizer, skip_prompt=False, timeout=None, **decode_kwargs):
+        self.text_queue = queue.Queue()
+        self.timeout = timeout
+
+    def on_finalized_text(self, text, stream_end=False):
+        self.text_queue.put(text)
+        if stream_end:
+            self.text_queue.put(self.stop_signal)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        value = self.text_queue.get(timeout=self.timeout)
+        if value == self.stop_signal:
+            raise StopIteration()
+        return value
+
+
+class _FakeModel:
+    def __init__(self, chunks: list[str] | None = None, error: Exception | None = None):
+        self.device = "cpu"
+        self._chunks = chunks
+        self._error = error
+
+    def generate(self, *args, **kwargs):
+        if self._error is not None:
+            raise self._error
+        streamer = kwargs["streamer"]
+        # 真实 generate 的最后一块文本随 stream_end=True 一起下发
+        for chunk in self._chunks[:-1]:
+            streamer.on_finalized_text(chunk)
+        streamer.on_finalized_text(self._chunks[-1], stream_end=True)
+
+
+class _FakeTensor:
+    def __init__(self, n: int):
+        self.shape = (1, n)
+
+    def to(self, device):
+        return self
+
+
+class _FakeTokenizer:
+    pad_token_id = 0
+
+    def apply_chat_template(self, messages, **kwargs):
+        return {"input_ids": _FakeTensor(7), "attention_mask": _FakeTensor(7)}
+
+
+class TestStreamReply:
+    def _patch_heavy(self, monkeypatch):
+        """stream_reply 在函数内 import torch / transformers——换成可控假件。"""
+        fake_transformers = types.ModuleType("transformers")
+        fake_transformers.TextIteratorStreamer = _FakeStreamer
+        monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+        fake_torch = types.SimpleNamespace(no_grad=lambda: contextlib.nullcontext())
+        monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    def test_stream_reply_yields_chunks_in_order(self, monkeypatch) -> None:
+        self._patch_heavy(monkeypatch)
+        model = _FakeModel(chunks=["你好", "，", "世界"])
+        out = list(stream_reply(model, _FakeTokenizer(), [{"role": "user", "content": "hi"}]))
+        assert out == ["你好", "，", "世界"]
+
+    def test_generate_reply_joins_chunks(self, monkeypatch) -> None:
+        self._patch_heavy(monkeypatch)
+        model = _FakeModel(chunks=["你好", "，", "世界"])
+        text = generate_reply(model, _FakeTokenizer(), [{"role": "user", "content": "hi"}])
+        assert text == "你好，世界"
+
+    def test_thread_death_raises_runtime_error_with_cause(self, monkeypatch) -> None:
+        """生成线程异常死掉时队列收不到停止信号——靠 timeout 打破并带出原因。"""
+        self._patch_heavy(monkeypatch)
+        model = _FakeModel(error=RuntimeError("boom"))
+        with pytest.raises(RuntimeError, match="boom"):
+            list(
+                stream_reply(
+                    model, _FakeTokenizer(), [{"role": "user", "content": "hi"}], timeout=0.3
+                )
+            )
 
 
 class TestNoHeavyImports:

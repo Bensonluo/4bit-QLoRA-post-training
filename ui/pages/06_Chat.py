@@ -145,18 +145,25 @@ if prompt:
     if system_prompt.strip():
         history = [{"role": "system", "content": system_prompt.strip()}] + history
 
-    from src.inference.chat_engine import generate_reply
+    from src.inference.chat_engine import stream_reply
 
+    # 流式渲染：st.write_stream 逐块打字机输出，返回值 = 完整回复文本
+    # （Streamlit 官方 chat 接法；后台线程 + TextIteratorStreamer 见 chat_engine）
     t0 = time.perf_counter()
+    with st.chat_message("user"):
+        st.markdown(prompt)
     try:
-        reply = generate_reply(
-            model,
-            tokenizer,
-            history,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            enable_thinking=thinking,
-        )
+        with st.chat_message("assistant"):
+            reply = st.write_stream(
+                stream_reply(
+                    model,
+                    tokenizer,
+                    history,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    enable_thinking=thinking,
+                )
+            )
     except Exception as exc:
         st.error(f"生成失败：{exc or exc!r}")  # 空消息异常（如 AttributeError）也要给出类型
         st.stop()

@@ -322,7 +322,7 @@ Seven pages covering the full ML lifecycle — data prep through chatting with t
 | ⚖️ **Model Comparison** | Side-by-side metric deltas, auto-generated executive summary, cost estimation |
 | 🗃️ **Model Registry** | Registered versions with lineage, champion/challenger aliases, legacy stage transitions |
 | 🧙 **Data Wizard** | Upload CSV/Excel/JSONL → confirm column mapping → one-click training-set generation with 7 quality checks (see above) → **send to Training Lab without touching a terminal** |
-| 💬 **Chat** | Talk to any training artifact — pick an adapter from `outputs/` (base model auto-read from `adapter_config.json`) or a merged model / any base, load it in-process (adapter merged on the fly), and chat with a chat-template generation loop; system prompt, temperature, thinking-mode controls included |
+| 💬 **Chat** | Talk to any training artifact — pick an adapter from `outputs/` (base model auto-read from `adapter_config.json`) or a merged model / any base, load it in-process (adapter merged on the fly), and chat with **token-by-token streaming** (first token in ~1s, not after the whole generation); system prompt, temperature, thinking-mode controls included |
 
 ```bash
 pip install -e ".[ui]"
