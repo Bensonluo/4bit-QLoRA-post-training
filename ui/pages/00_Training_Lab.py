@@ -146,6 +146,12 @@ with tab_configure:
         )
         technique = technique_label.lower()
 
+        # Registry 开关的兜底初值：GRPO 技术不渲染该区块（grpo_trainer 未实现自动注册），
+        # 预览/提交逻辑仍可安全引用这些变量
+        register_model = False
+        registry_name = ""
+        merge_before_register = True
+
         with st.form("training_config"):
             st.subheader("Model & Data")
             c1, c2 = st.columns([3, 1])
@@ -206,6 +212,28 @@ with tab_configure:
             run_name = st.text_input(
                 "Run Name", value=f"{model_name.split('/')[-1].lower()}-{epochs}ep"
             )
+
+            if technique != "grpo":
+                st.subheader("Registry")
+                reg1, reg2 = st.columns([1, 2])
+                with reg1:
+                    register_model = st.checkbox(
+                        "训练后自动注册",
+                        value=False,
+                        help="训练完成 → 合并 LoRA → 注册为 Registry 新版本（Staging）；"
+                        "注册失败不影响训练产物",
+                    )
+                with reg2:
+                    registry_name = st.text_input(
+                        "Registry 模型名",
+                        value=f"{model_name.split('/')[-1]}-QLoRA",
+                        help="同名注册追加新版本，之后可在 Registry 页用 champion/challenger 别名管理",
+                    )
+                    merge_before_register = st.checkbox(
+                        "注册前合并进底座",
+                        value=True,
+                        help="注册合并后的完整模型（推荐，可直接部署）；关闭则只注册 adapter",
+                    )
 
             if technique == "dpo":
                 st.subheader("DPO")
@@ -310,7 +338,17 @@ with tab_configure:
                 "max_samples": max_samples,
                 "validation_split": validation_split,
             },
-            "logging": {"use_mlflow": True, "use_tensorboard": False},
+            "logging": (
+                {
+                    "use_mlflow": True,
+                    "use_tensorboard": False,
+                    "register_model": True,
+                    "registry_model_name": registry_name.strip(),
+                    "merge_before_register": merge_before_register,
+                }
+                if register_model
+                else {"use_mlflow": True, "use_tensorboard": False}
+            ),
             **technique_sections,
         }
         st.code(yaml.dump(config_dict, default_flow_style=False), language="yaml")
@@ -329,6 +367,8 @@ with tab_configure:
             error = lr_error
         if not error and technique == "grpo" and not reward_funcs:
             error = "GRPO needs at least one reward function."
+        if not error and register_model and not registry_name.strip():
+            error = "Registry 模型名不能为空（或取消勾选自动注册）。"
         if error:
             st.error(error)
             st.stop()

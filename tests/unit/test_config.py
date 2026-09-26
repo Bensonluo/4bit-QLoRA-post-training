@@ -259,3 +259,40 @@ def test_peak_flops_per_device_validation() -> None:
         TrainingConfig(peak_flops_per_device=-1.0)
     with pytest.raises(ValueError, match="peak_flops_per_device"):
         TrainingConfig(peak_flops_per_device=0.0)
+
+
+def test_sft_from_yaml_parses_ui_registry_fields(tmp_path) -> None:
+    """UI 契约：Training Lab 写出的 registry 字段必须完整落到 LoggingConfig。
+
+    Training Lab 的 Config Preview 生成 logging 段（use_mlflow/register_model/
+    registry_model_name/merge_before_register），train_sft.py --config 经
+    SFTConfig.from_yaml 读取——此测试钉住该管道，防止任一侧字段漂移。
+    """
+    from config.sft import SFTConfig
+
+    yaml_text = (
+        "model:\n"
+        "  name: Qwen/Qwen2.5-0.5B-Instruct\n"
+        "lora:\n"
+        "  r: 8\n"
+        "training:\n"
+        "  num_epochs: 1\n"
+        "data:\n"
+        "  dataset_name: outputs/wizard/demo/train.json\n"
+        "logging:\n"
+        "  use_mlflow: true\n"
+        "  use_tensorboard: false\n"
+        "  register_model: true\n"
+        "  registry_model_name: TuneSmith-0.5B-QLoRA\n"
+        "  merge_before_register: true\n"
+    )
+    path = tmp_path / "ui_handoff.yaml"
+    path.write_text(yaml_text, encoding="utf-8")
+
+    config = SFTConfig.from_yaml(str(path))
+
+    assert config.logging.use_mlflow is True
+    assert config.logging.register_model is True
+    assert config.logging.registry_model_name == "TuneSmith-0.5B-QLoRA"
+    assert config.logging.merge_before_register is True
+    assert config.logging.registry_stage == "Staging"  # UI 不传 → 取默认

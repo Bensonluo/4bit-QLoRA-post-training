@@ -275,6 +275,8 @@ LoggingConfig(
 
 After `save_model()`, the trainer automatically: (1) merges the adapter into the base, (2) logs the merged model to MLflow, (3) registers it as a new version, (4) stages it. Registration failures never fail the training run.
 
+No YAML editing needed — the dashboard's **Training Lab → Registry** section sets the same flags with two clicks (SFT & DPO; the UI hides it for GRPO, whose trainer has no registration hook).
+
 ### Manual registration (no retraining)
 
 ```bash
