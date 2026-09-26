@@ -47,6 +47,7 @@ def _render_next_steps(run_id: str, info: dict) -> None:
     with st.expander("🧭 下一步"):
         if arts.has_adapter and arts.output_dir is not None:
             st.success(f"Adapter 就绪：`{arts.output_dir}`")
+            st.markdown(f"想先直观感受效果？到 **💬 Chat** 页选 `{arts.output_dir}` 直接对话。")
             if arts.eval_sets.get("test"):
                 st.markdown("**评测**（Data Wizard 已备好 test 集）")
                 st.code(
