@@ -333,8 +333,16 @@ if template_name == "master_data":
         f"机构与产品样本已混排在同一训练集，system prompt 会告诉模型当前是哪个任务。"
     )
 else:
-    st.info(
-        f"训练集就绪（Alpaca 格式，MedicalEntityDataset 兼容）。下一步在终端运行：\n\n"
-        f"`python scripts/train_sft.py -d {out_dir / 'train.json'}`\n\n"
-        f"或把 Training Lab 的数据路径指向 `{out_dir / 'train.json'}`。"
+    train_path = out_dir / "train.json"
+    if st.button("🏋️ 送去 Training Lab 训练", type="primary", use_container_width=True):
+        # 页内交接：预填 Training Lab 的数据集字段后跳转，全程不落终端
+        st.session_state["dataset_input"] = str(train_path)
+        st.session_state["wizard_handoff"] = {
+            "path": str(train_path),
+            "samples": report.split_counts.get("train", 0),
+        }
+        st.switch_page("pages/00_Training_Lab.py")
+    st.caption(
+        f"或走 CLI：`python scripts/train_sft.py -d {train_path}`"
+        f"（训练时 Validation Split 会从 train.json 内部再切验证集，向导导出的 val/test 供评测用）。"
     )

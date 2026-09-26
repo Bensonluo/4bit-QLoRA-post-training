@@ -110,6 +110,15 @@ tab_configure, tab_activity = st.tabs(["⚙️ Configure", "📋 Activity"])
 # ── Configure Tab ───────────────────────────────────────────────
 
 with tab_configure:
+    # 向导交接横幅：Data Wizard 点「送去训练」跳转而来时，dataset 字段已预填
+    handoff = st.session_state.pop("wizard_handoff", None)
+    if handoff:
+        st.success(
+            f"数据集已从 **Data Wizard** 预填：`{handoff['path']}`"
+            f"（train {handoff['samples']} 条，已通过 7 项数据体检）。"
+            f"确认下方参数后点 Start Training 即可。"
+        )
+
     col_form, col_preview = st.columns([2, 1])
 
     with col_form:
@@ -155,7 +164,12 @@ with tab_configure:
                 else:
                     st.badge("4-bit QLoRA", color="green")
 
-            dataset = st.text_input("Dataset (HF name or local path)", "yahma/alpaca-cleaned")
+            # key 模式：Data Wizard 交接时可从 session_state 预填（见 05_Data_Wizard 收尾）
+            dataset = st.text_input(
+                "Dataset (HF name or local path)",
+                value="yahma/alpaca-cleaned",
+                key="dataset_input",
+            )
             ds1, ds2, ds3 = st.columns(3)
             with ds1:
                 max_samples = st.number_input("Max Samples", 10, 100000, p_samples, 100)
