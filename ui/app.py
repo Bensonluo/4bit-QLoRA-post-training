@@ -1,4 +1,4 @@
-"""QLoRA Post-Training Lab — Dashboard Home."""
+"""TuneSmith — Dashboard Home."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ import streamlit as st
 from ui.config import MLFLOW_TRACKING_URI, PROJECT_ROOT
 
 st.set_page_config(
-    page_title="QLoRA Post-Training Lab",
-    page_icon="🧪",
+    page_title="TuneSmith — Post-Training Lab",
+    page_icon="🔨",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("🧪 QLoRA Post-Training Lab")
+st.title("🔨 TuneSmith")
 st.caption("Configure, train, evaluate, and compare models — all in one place.")
 
 # ── System Status Bar ───────────────────────────────────────────

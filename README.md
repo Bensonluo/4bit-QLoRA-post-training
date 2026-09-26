@@ -1,8 +1,10 @@
 <div align="center">
 
-# 4-bit QLoRA Post-Training Framework
+# TuneSmith 🔨
 
-**Fine-tune LLMs from 0.6B to 14B on consumer hardware. Cross-platform (NVIDIA GPU / Apple Silicon / CPU), with a full ML platform dashboard for config → train → monitor → evaluate.**
+**Desktop fine-tuning workbench for vertical-domain engineers: guided data prep → local fine-tuning (0.5B–14B on consumer hardware) → model lifecycle management. Cross-platform (NVIDIA GPU / Apple Silicon / CPU), powered by 4-bit QLoRA, with a full dashboard for config → train → monitor → evaluate → registry.**
+
+* formerly "4-bit QLoRA Post-Training Framework"
 
 [![Live Dashboard](https://img.shields.io/badge/LIVE-DASHBOARD-brightgreen?style=for-the-badge&logo=vercel)](https://benluo.art/qlora-dashboard/)
 [![GitHub stars](https://img.shields.io/github/stars/Bensonluo/4bit-QLoRA-post-training?style=for-the-badge)](https://github.com/Bensonluo/4bit-QLoRA-post-training/stargazers)

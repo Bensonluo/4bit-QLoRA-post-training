@@ -3,16 +3,16 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "qlora-post-training"
+name = "tunesmith"
 version = "0.1.0"
-description = "4-bit QLoRA Post-Training Framework for LLMs"
+description = "TuneSmith — Desktop fine-tuning workbench: guided data prep, local fine-tuning (0.5B-10B on consumer hardware), model lifecycle management"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Benson Luo"}
 ]
-keywords = ["llm", "qlora", "fine-tuning", "transformers", "nlp"]
+keywords = ["llm", "qlora", "fine-tuning", "lora", "transformers", "nlp", "domain-adaptation", "mlflow"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
