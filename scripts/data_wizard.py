@@ -60,6 +60,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="切分比例（默认 0.8 0.1 0.1）",
     )
     parser.add_argument("--seed", type=int, default=42, help="随机种子（同种子同产出）")
+    parser.add_argument(
+        "--noise-augment",
+        action="store_true",
+        help="噪音增强：每个样本追加一条带错别字/漏字的查询副本（标签不变，难度重估）",
+    )
     parser.add_argument("--keep-duplicates", action="store_true", help="不去重（默认去重）")
     return parser
 
@@ -107,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             template=args.template,
             split_ratios=(r_train, r_val, r_test),
             n_candidates=args.candidates,
+            noise_augment=args.noise_augment,
             dedup=not args.keep_duplicates,
             seed=args.seed,
         )

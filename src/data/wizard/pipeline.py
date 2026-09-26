@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.data.wizard.augment import augment_samples
 from src.data.wizard.checks import CheckResult, run_checks
 from src.data.wizard.exporter import (
     ExportReport,
@@ -38,6 +39,7 @@ class WizardReport:
     total_rows: int
     built_samples: int
     dedup_removed: int
+    augmented: int = 0
     dropped_rows: list[RowIssue] = field(default_factory=list)
     split_counts: dict[str, int] = field(default_factory=dict)
     checks: list[CheckResult] = field(default_factory=list)
@@ -53,9 +55,11 @@ class WizardReport:
 
     def summary_lines(self) -> list[str]:
         """人类可读的运行摘要（Rich console 打印用）。"""
+        noise_note = f"，噪音增强 +{self.augmented}" if self.augmented else ""
         lines = [
             f"模板: {self.template} | 来源: {self.source} | 原始行: {self.total_rows}",
-            f"生成样本: {self.built_samples}（去重去除 {self.dedup_removed}，跳过行 {len(self.dropped_rows)}）",
+            f"生成样本: {self.built_samples}（去重去除 {self.dedup_removed}{noise_note}，"
+            f"跳过行 {len(self.dropped_rows)}）",
         ]
         if self.split_counts:
             lines.append("切分: " + " | ".join(f"{k}={v}" for k, v in self.split_counts.items()))
@@ -75,6 +79,7 @@ class WizardReport:
             "total_rows": self.total_rows,
             "built_samples": self.built_samples,
             "dedup_removed": self.dedup_removed,
+            "augmented": self.augmented,
             "dropped_rows": [{"row": d.row, "reason": d.reason} for d in self.dropped_rows],
             "split_counts": self.split_counts,
             "checks": [
@@ -108,6 +113,9 @@ class WizardPipeline:
         built: BuildResult = self.template.build_samples(table, self.spec.mapping, self.spec)
 
         samples = built.samples
+        augmented = 0
+        if self.spec.noise_augment:
+            samples, augmented = augment_samples(samples, self.spec)
         if self.spec.dedup:
             samples, removed = dedup_samples(samples)
         else:
@@ -119,6 +127,7 @@ class WizardPipeline:
             total_rows=len(table.rows),
             built_samples=len(samples) + removed,
             dedup_removed=removed,
+            augmented=augmented,
             dropped_rows=built.dropped,
         )
         if not samples:

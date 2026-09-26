@@ -191,6 +191,9 @@ python scripts/data_wizard.py --input data/raw/drugs.xlsx --out-dir outputs/wiza
 # Override the auto-detected column mapping if needed
 python scripts/data_wizard.py --input drugs.csv \
     --standard-col 标准名 --query-col 别名 --code-col 编码
+
+# Typo-robustness copies (corrupted query + unchanged answer, one per sample)
+python scripts/data_wizard.py --input drugs.csv --noise-augment
 ```
 
 **Built-in guardrails** (the expert judgment is baked in, not required from you):
@@ -202,6 +205,7 @@ python scripts/data_wizard.py --input drugs.csv \
 | Entity-group split | All variants of one entity stay in the same split | Kills train/test leakage — the #1 silent metric killer |
 | 数据体检 (health checks) | 7 gates: leakage, ambiguous aliases (one query → multiple standards), duplicates, position bias, candidate counts, dropped rows, difficulty balance | Errors block export; warnings explain the risk + fix in plain language |
 | Difficulty stratification | easy / medium / hard by edit distance | Enables stratified evaluation later |
+| Noise augmentation (opt-in) | `--noise-augment` appends a typo-corrupted copy of every query (adjacent swap / dropped / doubled char); labels & candidates unchanged, difficulty re-scored | Real users typo — the model learns "typos don't change the match"; val/test get perturbed views free |
 
 Output: `train.json` / `val.json` / `test.json` in Alpaca format (drop-in compatible with `train-domain` and `MedicalEntityDataset`) plus a `wizard_report.json` with every check result. Exit code 0 = safe to train, 2 = fix first.
 

@@ -193,6 +193,12 @@ r_train = p2.number_input("train 比例", 0.05, 0.95, 0.8, 0.05)
 r_val = p3.number_input("val 比例", 0.05, 0.95, 0.1, 0.05)
 r_test = p4.number_input("test 比例", 0.05, 0.95, 0.1, 0.05)
 seed = p5.number_input("随机种子", 0, 9999, 42, help="同种子 = 同产出，可复现。")
+noise = st.checkbox(
+    "噪音增强（错别字鲁棒性）",
+    value=False,
+    help="每个样本追加一条带错别字/漏字的查询副本：标准答案与候选不变，难度按扰动后重估。"
+    "模拟真实输入噪声；val/test 也会各自带上扰动样本。",
+)
 dedup = st.checkbox("自动去重（相同查询+标准名只保留一条）", value=True)
 
 ratios_sum = round(r_train + r_val + r_test, 2)
@@ -228,6 +234,7 @@ if gen_col.button("🚀 生成训练集", type="primary", disabled=not ready):
             template=template_name,
             split_ratios=(float(r_train), float(r_val), float(r_test)),
             n_candidates=int(n_candidates),
+            noise_augment=bool(noise),
             dedup=bool(dedup),
             seed=int(seed),
         )
@@ -252,6 +259,8 @@ m5.metric("train", report.split_counts.get("train", 0))
 m6.metric(
     "val / test", f"{report.split_counts.get('val', 0)} / {report.split_counts.get('test', 0)}"
 )
+if report.augmented:
+    st.caption(f"🧬 噪音增强已追加 {report.augmented} 条带错别字的查询副本（标签不变，难度重估）。")
 
 st.markdown("**数据体检**（✗ = 阻断性问题，必须修复才能用于训练；⚠ = 有风险，建议关注）")
 _COLOR = {"error": "#F87171", "warning": "#FBBF24", "info": "#94A3B8"}
