@@ -1791,27 +1791,100 @@ if not session.analysis:
             ],
             key=f"baseline_exclude_{session.session_id}",
         )
+        baseline_temporal = st.checkbox(
+            "按时间分区切分（预测未来结果的任务需要，防止把未来信息泄漏进训练）",
+            key=f"baseline_temporal_{session.session_id}",
+        )
+        temporal_policy = None
+        if baseline_temporal:
+            st.caption(
+                "三个时间字段必须互不相同，时间须为带时区的 ISO 格式（如 2026-02-01T00:00:00Z）。"
+                "训练/验证的标签必须在下一分区起点前成熟，未成熟的行会明确保留排除，不随机补数。"
+            )
+            available_options = [
+                column for column in session.source.columns if column != baseline_target
+            ]
+            if len(available_options) < 3:
+                st.error(
+                    f"当前数据只有 {len(session.source.columns)} 个字段，"
+                    "时间分区需要答案列之外还有 3 个互不相同的时间字段；请补充时间列或关闭时间分区。"
+                )
+            else:
+                available_column = st.selectbox(
+                    "信息实际可获得时间字段（每行全部输入最晚可得知的时间）",
+                    available_options,
+                    key=f"baseline_available_at_{session.session_id}",
+                )
+                prediction_column = st.selectbox(
+                    "作出预测时间字段（业务实际下单/决策的时间）",
+                    [column for column in available_options if column != available_column],
+                    key=f"baseline_prediction_at_{session.session_id}",
+                )
+                label_end_column = st.selectbox(
+                    "标签窗口结束时间字段（仅用于分区，不会作为模型输入）",
+                    [
+                        column
+                        for column in available_options
+                        if column not in {available_column, prediction_column}
+                    ],
+                    key=f"baseline_label_end_at_{session.session_id}",
+                )
+                validation_start = st.text_input(
+                    "验证起点（含时区 ISO 时间）",
+                    placeholder="2026-02-01T00:00:00Z",
+                    key=f"baseline_validation_start_{session.session_id}",
+                )
+                test_start = st.text_input(
+                    "测试起点（含时区 ISO 时间）",
+                    placeholder="2026-03-01T00:00:00Z",
+                    key=f"baseline_test_start_{session.session_id}",
+                )
+                observation_end = st.text_input(
+                    "观察截止（含时区 ISO 时间）",
+                    placeholder="2026-04-01T00:00:00Z",
+                    key=f"baseline_observation_end_{session.session_id}",
+                )
+                if (
+                    label_end_column
+                    and validation_start.strip()
+                    and test_start.strip()
+                    and observation_end.strip()
+                ):
+                    temporal_policy = {
+                        "available_at_column": available_column,
+                        "prediction_at_column": prediction_column,
+                        "label_end_at_column": label_end_column,
+                        "validation_start": validation_start.strip(),
+                        "test_start": test_start.strip(),
+                        "observation_end": observation_end.strip(),
+                    }
         if st.button(
             "生成基础分析并预览",
             key=f"baseline_apply_{session.session_id}",
             disabled=not baseline_target,
         ):
-            try:
-                from src.workbench.baseline_analysis import propose_baseline_analysis
-
-                session = service.apply_analysis(
-                    session,
-                    propose_baseline_analysis(
-                        session,
-                        target_column=baseline_target,
-                        group_columns=baseline_groups,
-                        excluded_columns=baseline_exclude,
-                    ),
-                    model="baseline-deterministic",
+            if baseline_temporal and temporal_policy is None:
+                st.error(
+                    "已选择按时间分区切分：请选择三个互不相同的时间字段，并填写三个带时区的时间边界。"
                 )
-                st.rerun()
-            except (ValueError, RuntimeError, OSError) as exc:
-                st.error(str(exc))
+            else:
+                try:
+                    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+                    session = service.apply_analysis(
+                        session,
+                        propose_baseline_analysis(
+                            session,
+                            target_column=baseline_target,
+                            group_columns=baseline_groups,
+                            excluded_columns=baseline_exclude,
+                            temporal_policy=temporal_policy,
+                        ),
+                        model="baseline-deterministic",
+                    )
+                    st.rerun()
+                except (ValueError, RuntimeError, OSError) as exc:
+                    st.error(str(exc))
 
 if session.preview:
     st.subheader("真实转换预览")

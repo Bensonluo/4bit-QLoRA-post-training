@@ -19,6 +19,7 @@ from src.workbench.intake_models import (
     IntakeAnalysis,
     IntakeSession,
     TaskSpec,
+    TemporalSplitPolicy,
 )
 
 _CATEGORICAL_MAX_DISTINCT = 20
@@ -51,8 +52,13 @@ def propose_baseline_analysis(
     group_columns: tuple[str, ...] | list[str] = (),
     excluded_columns: tuple[str, ...] | list[str] = (),
     instruction: str | None = None,
+    temporal_policy: TemporalSplitPolicy | dict | None = None,
 ) -> IntakeAnalysis:
-    """Build a valid baseline analysis from the user's column choices."""
+    """Build a valid baseline analysis from the user's column choices.
+
+    temporal_policy：用户显式指定的时间分区字段与边界；提供后按时间分区隔离切分，
+    基础分析只核验字段存在与格式，不判断业务时间含义。
+    """
     columns = list(session.source.columns)
     if target_column not in columns:
         raise ValueError(f"答案列「{target_column}」不在数据字段中（可用：{columns}）。")
@@ -63,6 +69,24 @@ def propose_baseline_analysis(
         raise ValueError(f"选择的字段不存在：{sorted(unknown - set(columns))}。")
     if target_column in groups or target_column in excluded:
         raise ValueError("答案列不能同时作为分组或排除字段。")
+
+    policy = None
+    if temporal_policy is not None:
+        policy = TemporalSplitPolicy.model_validate(
+            temporal_policy.model_dump()
+            if isinstance(temporal_policy, TemporalSplitPolicy)
+            else temporal_policy
+        )
+        time_columns = {
+            policy.available_at_column,
+            policy.prediction_at_column,
+            policy.label_end_at_column,
+        }
+        missing = time_columns - set(columns)
+        if missing:
+            raise ValueError(f"时间分区字段不在数据字段中：{sorted(missing)}（可用：{columns}）。")
+        # 标签窗口结束时间只能用于分区，绝不能进入模型输入（协议同样强制）。
+        excluded.add(policy.label_end_at_column)
 
     input_columns = [
         column
@@ -103,7 +127,11 @@ def propose_baseline_analysis(
         FieldRole(
             column=column,
             role="input",
-            reason="未排除的普通字段，单表静态数据按预测时可获得处理；请核对预览确认业务含义。",
+            reason=(
+                "时间分区引用的时间字段，保留为模型输入；请核对预测时确实可获得。"
+                if policy and column in {policy.available_at_column, policy.prediction_at_column}
+                else "未排除的普通字段，单表静态数据按预测时可获得处理；请核对预览确认业务含义。"
+            ),
             available_at_prediction=True,
             evidence_row_ids=[row.row_id for row in session.source.rows[:2]],
         )
@@ -113,7 +141,11 @@ def propose_baseline_analysis(
         FieldRole(
             column=column,
             role="metadata",
-            reason="用户指定排除在模型输入之外，仅作记录。",
+            reason=(
+                "标签窗口结束时间：仅用于时间分区，不得作为模型输入。"
+                if policy and column == policy.label_end_at_column
+                else "用户指定排除在模型输入之外，仅作记录。"
+            ),
         )
         for column in sorted(excluded)
     )
@@ -225,14 +257,28 @@ def propose_baseline_analysis(
                 ),
             )
         )
-    if any(marker in session.goal for marker in ("预测", "未来", "走势", "行情", "涨跌", "收益")):
+    if policy:
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    f"时间分区方案由用户指定：信息可得「{policy.available_at_column}」、"
+                    f"预测「{policy.prediction_at_column}」、标签窗口结束「{policy.label_end_at_column}」；"
+                    f"验证起点 {policy.validation_start}、测试起点 {policy.test_start}、"
+                    f"观察截止 {policy.observation_end}。"
+                    "基础分析只核验字段存在与时间格式，不判断业务时间含义；"
+                    "请确认边界符合真实业务节奏，且标签窗口结束时间在预测时确实未知。"
+                ),
+            )
+        )
+    elif any(marker in session.goal for marker in ("预测", "未来", "走势", "行情", "涨跌", "收益")):
         findings.append(
             Finding(
                 kind="needs_business_input",
                 message=(
                     "目标像是对未来结果的预测。基础分析没有做时间分区：随机切分会把"
-                    "未来信息泄漏进训练，得到虚高的假效果。请配置 Agent 建立时间方案，"
-                    "或确认这确实不是预测任务后再继续。"
+                    "未来信息泄漏进训练，得到虚高的假效果。可在下方基础分析里选择时间分区字段，"
+                    "或配置 Agent 建立时间方案，或确认这确实不是预测任务后再继续。"
                 ),
             )
         )
@@ -240,38 +286,43 @@ def propose_baseline_analysis(
         Finding(
             kind="observed",
             message=(
-                "基础分析范围说明：未做多源组合、时间分区、受限适配与业务问答，"
-                "本方案仅覆盖单表字段映射；任务确需这些能力时请配置 Agent 或补充说明后重新分析。"
+                "基础分析范围说明：未做多源组合、受限适配与业务问答，本方案仅覆盖单表字段映射；"
+                + ("时间分区按用户指定的字段与边界执行。" if policy else "未做时间分区。")
+                + "任务确需这些能力时请配置 Agent 或补充说明后重新分析。"
             ),
         )
     )
-    recipe = DataRecipe.model_validate(
-        {
-            "instruction": instruction_text,
-            "inputs": [
-                {
-                    "column": column,
-                    "label": column,
-                    "value_kind": _value_kind(session, column),
-                    "transforms": [{"operation": "strip"}],
-                }
-                for column in input_columns
-            ],
-            "targets": [
-                {
-                    "column": target_column,
-                    "label": target_label,
-                    "value_kind": _value_kind(session, target_column),
-                    "transforms": [],
-                }
-            ],
-            "group_columns": groups,
-            "split_rationale": (
-                "按业务分组隔离切分，同一对象不跨训练与评测分区；"
-                "未配置 Agent，未做多源组合与时间分区。"
-            ),
-        }
-    )
+    recipe_payload = {
+        "instruction": instruction_text,
+        "inputs": [
+            {
+                "column": column,
+                "label": column,
+                "value_kind": _value_kind(session, column),
+                "transforms": [{"operation": "strip"}],
+            }
+            for column in input_columns
+        ],
+        "targets": [
+            {
+                "column": target_column,
+                "label": target_label,
+                "value_kind": _value_kind(session, target_column),
+                "transforms": [],
+            }
+        ],
+        "group_columns": groups,
+        "split_rationale": (
+            "按时间分区与业务分组隔离切分：训练/验证标签须在下一分区起点前成熟，"
+            "同一对象不跨分区；时间字段与边界由用户指定，基础分析不判断业务时间含义。"
+            if policy
+            else "按业务分组隔离切分，同一对象不跨训练与评测分区；"
+            "未配置 Agent，未做多源组合与时间分区。"
+        ),
+    }
+    if policy:
+        recipe_payload["temporal_split"] = policy.model_dump()
+    recipe = DataRecipe.model_validate(recipe_payload)
     task = TaskSpec.model_validate(
         {
             "goal": session.goal.strip(),
@@ -294,7 +345,9 @@ def propose_baseline_analysis(
             "questions": [],
             "recipe": recipe.model_dump(),
             "training_approach": (
-                "单表监督微调（SFT）：按分组隔离切分，先做固定开发集基座对照，"
+                "单表监督微调（SFT）："
+                + ("按时间分区与分组隔离切分，" if policy else "按分组隔离切分，")
+                + "先做固定开发集基座对照，"
                 "再决定是否迭代；未配置 Agent，训练方案由后续推荐步骤确认。"
             ),
             "next_steps": [
