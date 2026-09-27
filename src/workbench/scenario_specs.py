@@ -317,6 +317,27 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("mixed-type", "boundary-note"),
         ),
+        ScenarioSpec(
+            scenario_id="chinese-punctuation-variants",
+            goal="根据客户首次描述判断售后类别",
+            sample=("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n").encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                "001,杯子破损。,质量\n002,物流未更新,物流\n003,屏幕碎裂！,质量\n"
+                "004,快递丢失?,物流\n005,开不了机。,质量\n006,地址填错，地址错了,物流\n"
+                "007,异味,质量\n008,延迟送达!,物流\n009,无法充电……,质量\n010,包装破损,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:零密钥路径不做标点归一,全角/半角标点与句尾标点差异"
+                "原样进入训练;基础分析的变体检出只针对答案列,输入侧标点差异由"
+                "真实预览由用户核对。语义是否受影响由用户判断。"
+            ),
+            tags=("boundary", "punctuation"),
+        ),
     ]
 
 

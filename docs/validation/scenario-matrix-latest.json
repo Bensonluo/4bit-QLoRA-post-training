@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T07:32:45.571626+00:00",
+  "created_at": "2026-09-27T09:27:54.672976+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -264,11 +264,29 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "chinese-punctuation-variants",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 15,
-    "as_expected": 15,
+    "total": 16,
+    "as_expected": 16,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,

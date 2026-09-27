@@ -119,10 +119,12 @@ def test_builtin_new_scenarios_match_expected_verdicts(tmp_path):
         assert result.blocked_at is None, result.to_dict()
 
 
-def test_builtin_matrix_counts_fifteen_as_expected(tmp_path):
+def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
+    """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
-    assert report["summary"]["total"] == 15
-    assert report["summary"]["as_expected"] == 15
+    total = report["summary"]["total"]
+    assert total >= 16, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
     assert report["summary"]["error"] == 0
