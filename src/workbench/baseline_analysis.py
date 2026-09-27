@@ -24,6 +24,45 @@ from src.workbench.intake_models import (
 
 _CATEGORICAL_MAX_DISTINCT = 20
 _OPEN_TEXT_MIN_AVG_LENGTH = 40.0
+_TIME_PROBLEM_LIMIT = 3
+
+
+def _require_time_values(session: IntakeSession, policy: TemporalSplitPolicy) -> None:
+    """核验三个时间字段的样例值确为带时区时间且满足行内先后顺序。
+
+    与预览/物化使用同一套 parse_timestamp 规则：选错字段（如把编号当时间）
+    在生成基础分析时就地报错，而不是等到全量验证或物化才失败。
+    只核验格式与顺序，不判断字段的业务时间含义。
+    """
+    from src.workbench.temporal_split import parse_timestamp
+
+    problems: list[str] = []
+    for row in session.source.rows:
+        try:
+            times = {
+                name: parse_timestamp(row.values.get(column), label=f"第{row.row_id}行{column}")
+                for name, column in (
+                    ("信息可得时间", policy.available_at_column),
+                    ("预测时间", policy.prediction_at_column),
+                    ("标签窗口结束时间", policy.label_end_at_column),
+                )
+            }
+        except ValueError as exc:
+            problems.append(str(exc))
+        else:
+            if not times["信息可得时间"] <= times["预测时间"] < times["标签窗口结束时间"]:
+                problems.append(
+                    f"第{row.row_id}行需满足 信息可得时间 ≤ 预测时间 < 标签窗口结束时间；"
+                    "不能使用预测之后才可获得的信息。"
+                )
+        if len(problems) >= _TIME_PROBLEM_LIMIT:
+            break
+    if problems:
+        raise ValueError(
+            "时间分区字段的样例值不是可用的带时区ISO时间："
+            + "；".join(problems)
+            + "。请改选真正的时间字段，或修正数据中的时间格式后重试；不会退回随机切分。"
+        )
 
 
 def _column_values(session: IntakeSession, column: str) -> list[str]:
@@ -57,7 +96,7 @@ def propose_baseline_analysis(
     """Build a valid baseline analysis from the user's column choices.
 
     temporal_policy：用户显式指定的时间分区字段与边界；提供后按时间分区隔离切分，
-    基础分析只核验字段存在与格式，不判断业务时间含义。
+    基础分析核验字段存在、样例值时间格式与行内先后顺序，不判断业务时间含义。
     """
     columns = list(session.source.columns)
     if target_column not in columns:
@@ -85,6 +124,7 @@ def propose_baseline_analysis(
         missing = time_columns - set(columns)
         if missing:
             raise ValueError(f"时间分区字段不在数据字段中：{sorted(missing)}（可用：{columns}）。")
+        _require_time_values(session, policy)
         # 标签窗口结束时间只能用于分区，绝不能进入模型输入（协议同样强制）。
         excluded.add(policy.label_end_at_column)
 
@@ -266,7 +306,7 @@ def propose_baseline_analysis(
                     f"预测「{policy.prediction_at_column}」、标签窗口结束「{policy.label_end_at_column}」；"
                     f"验证起点 {policy.validation_start}、测试起点 {policy.test_start}、"
                     f"观察截止 {policy.observation_end}。"
-                    "基础分析只核验字段存在与时间格式，不判断业务时间含义；"
+                    "基础分析只核验字段存在、时间格式与行内先后顺序，不判断业务时间含义；"
                     "请确认边界符合真实业务节奏，且标签窗口结束时间在预测时确实未知。"
                 ),
             )

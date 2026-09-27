@@ -281,6 +281,29 @@ def test_baseline_temporal_unknown_columns_rejected(tmp_path):
         )
 
 
+def test_baseline_temporal_rejects_non_time_sample_columns(tmp_path):
+    """把非时间列选成时间字段：生成基础分析时就地报错，不留到全量验证或物化才失败。"""
+    _, session = temporal_store(tmp_path)
+    with pytest.raises(ValueError, match="编号不是有效ISO时间"):
+        propose_baseline_analysis(
+            session,
+            target_column="类别",
+            temporal_policy=BASELINE_TEMPORAL | {"available_at_column": "编号"},
+        )
+
+
+def test_baseline_temporal_rejects_row_time_order_violation(tmp_path):
+    """样例行违反 可得时间 ≤ 预测时间 < 标签窗口结束：生成即报错并点名行号。"""
+    service = IntakeService(tmp_path / "intake")
+    csv = (
+        "编号,描述,类别,记录时间,决策时间,窗口结束\n"
+        "A1,描述一,质量,2026-01-05T00:00:00Z,2026-01-01T00:00:00Z,2026-01-02T00:00:00Z\n"
+    ).encode()
+    session = service.create("根据描述判断售后类别", "工单.csv", csv)
+    with pytest.raises(ValueError, match="第r000001行需满足 信息可得时间 ≤ 预测时间"):
+        propose_baseline_analysis(session, target_column="类别", temporal_policy=BASELINE_TEMPORAL)
+
+
 def test_baseline_temporal_applies_and_materializes_point_in_time(tmp_path):
     """基础分析 + 用户时间方案走完整真实链路:预览可确认,物化按时间分区并保留排除。"""
     service, session = temporal_store(tmp_path)

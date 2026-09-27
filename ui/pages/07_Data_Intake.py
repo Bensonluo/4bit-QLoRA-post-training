@@ -1844,12 +1844,33 @@ if not session.analysis:
                     placeholder="2026-04-01T00:00:00Z",
                     key=f"baseline_observation_end_{session.session_id}",
                 )
-                if (
-                    label_end_column
-                    and validation_start.strip()
-                    and test_start.strip()
-                    and observation_end.strip()
+                # 边界就地校验：与服务/物化同一套 parse_timestamp 规则，
+                # 输入期即可看到哪个边界错，而不是点击后才收到原始报错。
+                from src.workbench.temporal_split import parse_timestamp
+
+                boundary_errors = []
+                parsed_boundaries = {}
+                for name, raw in (
+                    ("验证起点", validation_start),
+                    ("测试起点", test_start),
+                    ("观察截止", observation_end),
                 ):
+                    value = raw.strip()
+                    if not value:
+                        continue
+                    try:
+                        parsed_boundaries[name] = parse_timestamp(value, label=name)
+                    except ValueError as exc:
+                        boundary_errors.append(str(exc))
+                if len(parsed_boundaries) == 3 and not (
+                    parsed_boundaries["验证起点"]
+                    < parsed_boundaries["测试起点"]
+                    < parsed_boundaries["观察截止"]
+                ):
+                    boundary_errors.append("时间边界需满足：验证起点 < 测试起点 < 观察截止。")
+                for message in boundary_errors:
+                    st.error(message)
+                if label_end_column and not boundary_errors and len(parsed_boundaries) == 3:
                     temporal_policy = {
                         "available_at_column": available_column,
                         "prediction_at_column": prediction_column,
