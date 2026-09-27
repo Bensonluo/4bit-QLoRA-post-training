@@ -159,6 +159,7 @@ def register_merged_model(
     stage: str = "Staging",
     tracking_uri: str | None = None,
     registered_via: str = "manual",
+    lineage_tags: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Register an already-merged model directory as a new Registry version.
 
@@ -199,7 +200,10 @@ def register_merged_model(
 
     registry_name = name.replace("/", "-")
     console.print(f"\n[bold cyan]Registering '{model_dir}' as '{registry_name}'...[/bold cyan]")
-    tracker.start_run(run_name=f"register-{registry_name}", tags={"registered_via": registered_via})
+    run_tags = {"registered_via": registered_via}
+    if lineage_tags:
+        run_tags.update(lineage_tags)
+    tracker.start_run(run_name=f"register-{registry_name}", tags=run_tags)
     try:
         tracker.log_params({"registered_via": registered_via, "source_dir": str(model_path)})
         model_uri = tracker.log_model(model_dir=str(model_path), artifact_path="model")

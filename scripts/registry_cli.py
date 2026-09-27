@@ -230,6 +230,11 @@ def register(
     name: str = typer.Option(..., "--name", "-n", help="Registered model name"),
     stage: str = typer.Option("Staging", "--stage", "-s"),
     tracking_uri: str | None = typer.Option(None, "--tracking-uri"),
+    source_run_id: str | None = typer.Option(
+        None, "--source-run-id", help="血缘:来源 workbench 训练 ID"
+    ),
+    dataset_version: str | None = typer.Option(None, "--dataset-version", help="血缘:训练数据版本"),
+    config_digest: str | None = typer.Option(None, "--config-digest", help="血缘:训练配置摘要"),
 ):
     """Register an already-merged model directory as a new model version.
 
@@ -240,12 +245,22 @@ def register(
     from src.tracking.registry import register_merged_model
 
     try:
+        lineage = {
+            key: value
+            for key, value in {
+                "workbench.run_id": source_run_id,
+                "workbench.dataset_version": dataset_version,
+                "workbench.config_digest": config_digest,
+            }.items()
+            if value
+        }
         info = register_merged_model(
             model_dir=model_dir,
             name=name,
             stage=stage,
             tracking_uri=tracking_uri,
             registered_via="registry_cli",
+            lineage_tags=lineage or None,
         )
     except (FileNotFoundError, RuntimeError) as e:
         console.print(f"[red]✗ {e}[/red]")

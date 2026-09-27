@@ -187,7 +187,16 @@ class MLflowTracker:
             kwargs["registered_model_name"] = registered_model_name
 
         # mlflow.transformers.log_model returns a ModelInfo with .model_uri.
-        model_info = self._mlflow.transformers.log_model(transformers_model=components, **kwargs)
+        try:
+            model_info = self._mlflow.transformers.log_model(
+                transformers_model=components, **kwargs
+            )
+        except Exception:
+            # 本地模型目录可能无法被 transformers flavor 推断任务(如自定义小模型)。
+            # 回退为按 artifacts 原样记录:保留全部文件,注册与血缘不受影响,
+            # 只是不能经 mlflow.pyfunc 直接加载。
+            self._mlflow.log_artifacts(model_dir, artifact_path=artifact_path)
+            return f"runs:/{self._current_run_id()}/{artifact_path}"
         return (
             getattr(model_info, "model_uri", None)
             or f"runs:/{self._current_run_id()}/{artifact_path}"
