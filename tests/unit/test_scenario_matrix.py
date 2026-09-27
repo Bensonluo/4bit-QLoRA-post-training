@@ -160,11 +160,36 @@ def test_excel_data_on_second_sheet_blocked_at_baseline_analysis(tmp_path):
     )
 
 
+def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
+    """场景 40:重复表头行两侧同现——样例侧不拦(同场景 30 的不对称边界),全量侧硬拦
+    (同场景 22),组合结局由全量侧决定:validate_full 拦下,不会带病物化。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "duplicate-header-rows-in-both" in specs, "缺少场景 duplicate-header-rows-in-both"
+
+    spec = specs["duplicate-header-rows-in-both"]
+
+    # 夹具真实性:样例与全量的数据中部各含一条与表头完全相同的行
+    header = spec.sample.split(b"\n")[0]
+    assert header in spec.sample.split(b"\n")[1:-1], "样例应在数据中部含重复表头行"
+    assert header in spec.full.split(b"\n")[1:-1], "全量应在数据中部含重复表头行"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "validate_full", result.to_dict()
+    assert "与表头完全相同" in result.blocked_message, result.to_dict()
+    # 样例侧四关照常通过:中部表头行按普通数据行读入并参与对比核验——
+    # 样例侧没有对称检查的不对称边界与场景 30 实测结论一致
+    assert all(
+        result.stages[stage] == "passed"
+        for stage in ("create", "baseline_analysis", "contrast_check", "confirm_sample")
+    ), result.to_dict()
+
+
 def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 39, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 40, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0

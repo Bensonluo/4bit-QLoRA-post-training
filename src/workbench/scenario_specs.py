@@ -247,7 +247,8 @@ _LONG_LINE_SAMPLE = "".join(_LONG_LINE_LINES[:3]).encode()
 _LONG_LINE_FULL = "".join(_LONG_LINE_LINES).encode()
 
 # 样例(非全量)中部混入重复表头行:与 _DUP_HEADER_FULL 方向相反的脏数据——
-# 全量侧已有硬拦(repeated_header_rows),样例侧是否拦、读成什么,以实测为准。
+# 已实测定局(场景 30):样例侧不拦、按普通数据行读入,与全量侧硬拦构成不对称边界;
+# 两侧同现的组合见场景 40(duplicate-header-rows-in-both,与 22 共用 _DUP_HEADER_FULL)。
 _DUP_HEADER_IN_SAMPLE = (
     "编号,客户描述,类别\n001,杯子破损,质量\n编号,客户描述,类别\n002,物流未更新,物流\n"
 ).encode()
@@ -1157,6 +1158,28 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "sheet 选择;把要分析的表放到第一个 sheet 后旅程可续"
             ),
             tags=("excel", "multi-sheet", "negative-scenario"),
+        ),
+        ScenarioSpec(
+            scenario_id="duplicate-header-rows-in-both",
+            goal="根据客户首次描述判断售后类别",
+            sample=_DUP_HEADER_IN_SAMPLE,
+            sample_name="工单.csv",
+            full=_DUP_HEADER_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:validate_full",
+            expect_note=(
+                "实测结局:重复表头行两侧同现(导出拼接在样例与全量各留了一条表头行)——"
+                "样例侧行为与 duplicate-header-row-in-sample(场景 30)一致:中部表头行按"
+                "普通数据行读入、不拦,以「就绪」面目进预览并参与对比核验,样例确认照常通过;"
+                "全量侧行为与 duplicate-header-rows-in-full(场景 22)一致:validate_full "
+                "硬拦「1 条记录与表头完全相同(通常是导出拼接产生的重复表头行),会变成无意义"
+                "的训练样本…」,组合场景的结局由全量侧决定。任务初衷「样例中部混入重复表头"
+                "是否与全量侧对称」已由场景 30 测定:不对称——样例侧至今没有对称检查,靠用户"
+                "预览逐行核对;40 号覆盖此前未测的两侧同现组合,钉住「全量硬拦兜底,两侧同时"
+                "脏也不会带病物化」"
+            ),
+            tags=("dirty-data", "header-hygiene"),
         ),
     ]
 
