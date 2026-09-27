@@ -430,3 +430,110 @@ def summarize_acceptance(record: dict) -> list[str]:
         "是否交付由你按业务决定。"
     )
     return lines
+
+
+_ITERATION_DECISION_NAMES = {
+    "adopt": "采用本轮结果",
+    "continue": "继续改进",
+    "stop": "停止本轮路线",
+    "insufficient_evidence": "证据不足",
+}
+
+
+def summarize_iteration(record: dict) -> list[str]:
+    """把一个改进轮次记录翻译成人话：当前停在哪一步、业务决定是否已记录。
+
+    只复述记录里的事实：状态机位置、已记录的决定与业务理由；采用记录不会
+    自动部署模型，流程状态不代表业务效果达标。
+    """
+    hypothesis = record.get("hypothesis")
+    lines = [f"这轮改进的假设是：{hypothesis}。" if hypothesis else "这轮改进提案。"]
+    status = record.get("status")
+    if status == "decided":
+        decision = record.get("decision")
+        lines.append(f"已记录你的业务决定：{_ITERATION_DECISION_NAMES.get(decision, decision)}。")
+        reason = record.get("decision_reason")
+        if reason:
+            lines.append(f"业务理由：{reason}")
+        if decision == "adopt":
+            lines.append("采用记录不会自动部署模型；是否上线由你按业务决定。")
+        elif decision == "insufficient_evidence":
+            lines.append("固定题数太少、输出截断或开放任务尚无评分时，应明确保留证据局限。")
+    elif status == "evaluated":
+        lines.append(
+            "基座、父轮与本轮的三模型同题对照已完成，正等待你的业务决定："
+            "采用、继续、停止或证据不足。"
+        )
+    elif status == "running":
+        lines.append("本轮训练已启动；训练完成只说明产出模型，效果要看三模型同题对照。")
+    elif status == "preparing":
+        lines.append("正在准备本轮训练。")
+    elif status == "prepared":
+        lines.append("本轮训练方案已准备，尚未启动。")
+    elif status == "confirmed":
+        lines.append("本轮假设与变更范围已确认，尚未准备训练。")
+    elif status == "blocked":
+        failure = record.get("failure")
+        lines.append(f"本轮训练准备被阻断：{failure}。" if failure else "本轮训练准备被阻断。")
+        lines.append("请处理问题后重新准备；处理不了就提出新的改进轮次。")
+    else:
+        lines.append("提案已保存，尚未确认；确认假设与变更范围后才会准备训练。")
+    lines.append("以上只是流程状态与已记录的决定，不代表业务效果达标。")
+    return lines
+
+
+_EXECUTION_IN_PROGRESS = {
+    "queued": "已受理，等待后台执行开始。",
+    "materializing": "正在用本轮固定题集准备数据版本。",
+    "preparing": "正在按已确认方案准备训练。",
+    "training": "训练已按确认方案启动。",
+    "waiting_for_release": "训练进程已退出，等待释放资源后开始开发集对照。",
+    "evaluating": "正在按父轮协议比较基座、父轮与本轮模型。",
+}
+
+
+def summarize_execution(record: dict) -> list[str]:
+    """把一次自动执行记录翻译成人话：后台走到哪一步、是否需要用户动作、终态事实。
+
+    awaiting_warning_ack 表示已暂停等待用户核对，completed 表示对照完成、轮次
+    停在待业务决定——都不是业务效果结论。
+    """
+    status = record.get("status")
+    lines = []
+    if status in _EXECUTION_IN_PROGRESS:
+        lines.append(f"自动执行正在后台推进：{_EXECUTION_IN_PROGRESS[status]}")
+        lines.append("后台进程独立于页面与终端运行，关闭页面不影响执行。")
+    elif status == "awaiting_warning_ack":
+        lines.append("自动执行已暂停：预检存在需核对的提示。")
+        lines.append("请查看提示内容后，在原入口勾选确认继续才会恢复；不会跳过提示自动训练。")
+    elif status == "completed":
+        lines.append("自动执行已完成：三模型同题对照报告已生成。")
+        pointers = []
+        if record.get("run_id"):
+            pointers.append(f"训练 {record['run_id']}")
+        if record.get("evaluation_id"):
+            pointers.append(f"评测 {record['evaluation_id']}")
+        if pointers:
+            lines.append(f"相关记录：{'、'.join(pointers)}。")
+        lines.append(
+            "轮次停在待业务决定，请核对三模型结果后选择采用、继续、停止或证据不足；"
+            "重复提交不会再次训练，只返回这份报告。"
+        )
+    elif status in {"blocked", "failed"}:
+        label = "被阻断" if status == "blocked" else "失败"
+        message = record.get("message")
+        lines.append(f"自动执行{label}：{message}" if message else f"自动执行{label}。")
+        issues = record.get("issues") or []
+        if issues:
+            shown = "；".join(str(issue) for issue in issues[:3])
+            if len(issues) > 3:
+                shown += "等"
+            lines.append(f"问题：{shown}。")
+        lines.append("请查看执行记录与 worker.log，处理问题后提出新的改进轮次。")
+    elif status == "stopped":
+        lines.append("已按请求停止自动执行；本轮不再推进，如需继续请提出新的改进轮次。")
+    else:
+        message = record.get("message")
+        lines.append(f"自动执行状态：{message}" if message else "自动执行状态未记录。")
+    lines.append("以上是自动执行的当前状态，不代表业务效果达标。")
+    return lines

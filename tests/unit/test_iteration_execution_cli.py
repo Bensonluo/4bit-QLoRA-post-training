@@ -39,10 +39,18 @@ def execution_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(execution_module, "IterationExecutionService", Execution)
 
     def invoke(*arguments):
-        monkeypatch.setattr(sys, "argv", [
-            "data_intake.py", "--store", str(intake.root),
-            "--iteration-root", str(tmp_path / "iterations"), *map(str, arguments),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "data_intake.py",
+                "--store",
+                str(intake.root),
+                "--iteration-root",
+                str(tmp_path / "iterations"),
+                *map(str, arguments),
+            ],
+        )
         return data_intake.main()
 
     return invoke, intake, session, result, calls
@@ -53,7 +61,8 @@ def test_execute_requires_current_revision_and_explicit_warning_ack(execution_cl
     args = ("iteration-execute", session.session_id, result["iteration_id"], "--revision")
     assert invoke(*args, session.revision) == 0
     assert calls[-1][3] == {
-        "acknowledge_warnings": False, "independent_rows_confirmed": False,
+        "acknowledge_warnings": False,
+        "independent_rows_confirmed": False,
     }
     capsys.readouterr()
     result["status"] = "awaiting_warning_ack"
@@ -74,3 +83,27 @@ def test_status_and_stop_do_not_dispatch_start(execution_cli, capsys):
     assert invoke("iteration-execution-stop", result["iteration_id"]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "stopped"
     assert [call[0] for call in calls] == ["get", "stop"]
+
+
+def test_execution_commands_print_plain_language_summary_to_stderr(execution_cli, capsys):
+    """自动执行子命令 stdout 仍是纯 JSON,stderr 追加人话:进行中/等确认/已停止各如实。"""
+    invoke, _, _, result, _ = execution_cli
+
+    assert invoke("iteration-execution-status", result["iteration_id"]) == 0
+    queued = capsys.readouterr()
+    assert json.loads(queued.out)["status"] == "queued"
+    assert "等待后台执行开始" in queued.err
+    assert "关闭页面不影响执行" in queued.err
+
+    result["status"] = "awaiting_warning_ack"
+    assert invoke("iteration-execution-status", result["iteration_id"]) == 0
+    paused = capsys.readouterr()
+    assert json.loads(paused.out)["status"] == "awaiting_warning_ack"
+    assert "自动执行已暂停" in paused.err
+    assert "勾选确认继续才会恢复" in paused.err
+
+    assert invoke("iteration-execution-stop", result["iteration_id"]) == 0
+    stopped = capsys.readouterr()
+    assert json.loads(stopped.out)["status"] == "stopped"
+    assert "已按请求停止自动执行" in stopped.err
+    assert "不代表业务效果达标" in stopped.err

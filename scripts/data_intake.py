@@ -745,6 +745,11 @@ def main() -> int:
                     independent_rows_confirmed=args.independent_rows_confirmed,
                 )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if isinstance(result, dict):
+                from src.workbench.report_summary import summarize_execution
+
+                for line in summarize_execution(result):
+                    print(line, file=sys.stderr)
             return 0
         if args.command.startswith("iteration-"):
             from src.workbench.iterations import IterationService
@@ -810,6 +815,11 @@ def main() -> int:
                         args.iteration_id, session, args.evaluation_id
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if isinstance(result, dict):
+                from src.workbench.report_summary import summarize_iteration
+
+                for line in summarize_iteration(result):
+                    print(line, file=sys.stderr)
             return 0
         if args.command in {"suite-freeze", "suite-show"}:
             from src.workbench.evaluation_suites import EvalSuiteService

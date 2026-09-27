@@ -396,6 +396,8 @@ python scripts/data_intake.py iteration-list SESSION_ID
 
 `iteration-propose` 可重复 `--change`，可选 `--epochs`、`--learning-rate`、`--max-length`；不改数据则省略 `--data-change`。`iteration-start` 有预检风险且已核对时加 `--acknowledge-warnings`。`eval-compare --iteration-id` 会自动选择父轮，并绑定三模型结果；已有合格报告也可用 `iteration-bind SESSION_ID ITERATION_ID --revision CURRENT_REVISION --evaluation-id EVALUATION_ID` 关联。全局 `--iteration-root` 可覆盖改进记录目录。
 
+上述轮次子命令（iteration-propose/confirm/prepare/start/bind/revise/decide）与自动执行子命令（iteration-execute/execution-status/execution-stop）在 stdout 输出 JSON 的同时，都会向 stderr 追加人话摘要（iteration-list 只列清单，不追加）。轮次摘要先复述这轮改进的假设，再说明当前停在哪一步：提案已保存尚未确认、已确认尚未准备训练、正在准备、方案已准备尚未启动、训练已启动、三模型同题对照已完成正等待业务决定；已记录决定时回显决定名（「采用本轮结果」「继续改进」「停止本轮路线」「证据不足」）与业务理由，采用补「采用记录不会自动部署模型」、证据不足补证据局限提示，被阻断时如实点名原因。自动执行摘要翻译执行状态机：进行中各态说明后台推进到哪一步，并写明「关闭页面不影响执行」；暂停等待确认时点名需要你在原入口勾选确认继续才会恢复，不会跳过提示自动训练；completed 点名训练与评测记录、轮次停在待业务决定，重复提交不会再次训练、只返回原报告；被阻断或失败时逐条列出问题并指向 worker.log；已停止说明本轮不再推进。每条摘要都以流程状态不代表业务效果达标收尾——以上只是流程状态与已记录的决定，不代表业务效果达标。
+
 若只需先固定题集，可点击「固定当前开发与测试题集」，或运行 `suite-freeze SESSION_ID --revision CURRENT_REVISION`；这一步不修改父轮数据版本。`suite-show SUITE_ID` 查看来源与题数，后续 `materialize ... --suite-id SUITE_ID` 显式复用。全局 `--suite-root` 控制独立题集目录；改进提案自带题集引用，使用 `--iteration-id` 时无需手工查找目录。固定题集时，新独立行进入训练，原题保持不变，分区比例及随机种子不再重新分配原题。
 
 ## 配置文件与优先级

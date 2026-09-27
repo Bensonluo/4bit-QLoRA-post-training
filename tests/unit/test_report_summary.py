@@ -615,3 +615,97 @@ def test_acceptance_summary_pending_blocked_failed_and_bare_states():
     assert "当前结论：证据不足，不能确认可交付。" in joined
     assert "原因：" not in joined, "裸 result 没有 reason,不得编造原因行"
     assert "通过 " not in joined, "裸 result 没有计数,不得编造通过数"
+
+
+def test_iteration_summary_states_and_decision_echo():
+    """轮次摘要:决定回显与业务理由如实入句,采用补不自动部署边界;未决状态只报流程停点。"""
+    from src.workbench.report_summary import summarize_iteration
+
+    decided = summarize_iteration(
+        {
+            "iteration_id": "it-x",
+            "hypothesis": "已有监督覆盖不足可能影响类别判断",
+            "status": "decided",
+            "decision": "adopt",
+            "decision_reason": "固定开发题错误减少",
+        }
+    )
+    joined = "\n".join(decided)
+    assert "这轮改进的假设是：已有监督覆盖不足可能影响类别判断。" in joined
+    assert "已记录你的业务决定：采用本轮结果。" in joined
+    assert "业务理由：固定开发题错误减少" in joined
+    assert "不会自动部署模型" in joined
+    assert "不代表业务效果达标" in joined
+
+    insufficient = summarize_iteration({"status": "decided", "decision": "insufficient_evidence"})
+    joined = "\n".join(insufficient)
+    assert "已记录你的业务决定：证据不足。" in joined
+    assert "保留证据局限" in joined
+    assert "业务理由：" not in joined, "没有理由不得编造业务理由行"
+    assert "不会自动部署模型" not in joined, "不自动部署边界只对采用记录补充"
+
+    evaluated = summarize_iteration({"status": "evaluated"})
+    joined = "\n".join(evaluated)
+    assert "三模型同题对照已完成" in joined
+    assert "等待你的业务决定" in joined
+
+    proposed = summarize_iteration({"status": "proposed"})
+    joined = "\n".join(proposed)
+    assert "提案已保存，尚未确认" in joined
+    assert "确认假设与变更范围后才会准备训练" in joined
+
+    blocked = summarize_iteration({"status": "blocked", "failure": "父轮模型或基座已改变"})
+    joined = "\n".join(blocked)
+    assert "本轮训练准备被阻断：父轮模型或基座已改变。" in joined
+
+    bare = summarize_iteration({})
+    joined = "\n".join(bare)
+    assert "这轮改进提案。" in joined, "裸记录没有假设,按提案口径如实降级"
+    assert "不代表业务效果达标" in joined
+
+
+def test_execution_summary_state_machine_translates_user_action_states():
+    """自动执行摘要:进行中/暂停等确认/完成待决定/终态各如实;等确认必须点名用户动作。"""
+    from src.workbench.report_summary import summarize_execution
+
+    training = summarize_execution({"status": "training"})
+    joined = "\n".join(training)
+    assert "训练已按确认方案启动" in joined
+    assert "关闭页面不影响执行" in joined
+
+    ack = summarize_execution({"status": "awaiting_warning_ack"})
+    joined = "\n".join(ack)
+    assert "自动执行已暂停" in joined
+    assert "勾选确认继续才会恢复" in joined
+    assert "不会跳过提示自动训练" in joined
+
+    done = summarize_execution(
+        {"status": "completed", "run_id": "wb-run-x", "evaluation_id": "ev-x"}
+    )
+    joined = "\n".join(done)
+    assert "三模型同题对照报告已生成" in joined
+    assert "训练 wb-run-x" in joined and "评测 ev-x" in joined
+    assert "停在待业务决定" in joined
+    assert "重复提交不会再次训练" in joined
+
+    blocked = summarize_execution(
+        {
+            "status": "blocked",
+            "message": "训练准备未通过，请查看问题后处理。",
+            "issues": ["数据版本过期", "预检阻断"],
+        }
+    )
+    joined = "\n".join(blocked)
+    assert "自动执行被阻断：训练准备未通过，请查看问题后处理。" in joined
+    assert "问题：数据版本过期；预检阻断。" in joined
+    assert "提出新的改进轮次" in joined
+
+    failed = summarize_execution({"status": "failed"})
+    joined = "\n".join(failed)
+    assert "自动执行失败。" in joined, "没有 message 时如实降级,不得编造原因"
+    assert "worker.log" in joined
+
+    stopped = summarize_execution({"status": "stopped"})
+    joined = "\n".join(stopped)
+    assert "已按请求停止自动执行" in joined
+    assert "不代表业务效果达标" in joined

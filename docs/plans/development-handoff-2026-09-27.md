@@ -1284,3 +1284,60 @@ CLI-only 先例)。
   scripts/data_intake.py、tests/unit/test_report_summary.py、
   tests/unit/test_acceptance_cli.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 35 轮 = 迭代决策与自动执行人话摘要（恢复循环第 16 轮）
+
+(恢复的北极星打磨循环,第 16 轮。)核心痛点:iteration-* 家族(propose/revise/
+confirm/prepare/start/bind/decide/list)与自动执行家族(iteration-execute/
+execution-status/execution-stop)是最后两块零人话的业务决策 CLI 表面——全部
+收敛到 `print(json.dumps(...)); return 0`,而这两个域恰是「改进假设是否成立、
+业务采用与否、自动执行停在哪一步」的关键决策点。页面(07 迭代决策区)已渲染
+决策入口,CLI 平权缺口与第 34 轮验收域同型;report_summary 此前四个 summarize_
+函数均不覆盖迭代/执行域。
+
+- **summarize_iteration(report_summary.py)**:首句复述改进假设(无假设如实降级
+  「这轮改进提案。」);按八态机报停点——proposed(提案已保存,尚未确认;确认
+  假设与变更范围后才会准备训练)/confirmed(已确认,尚未准备训练)/preparing/
+  prepared(方案已准备,尚未启动)/running(训练完成只说明产出模型,效果要看
+  三模型同题对照)/evaluated(三模型同题对照已完成,正等待业务决定四选一)/
+  blocked(点名 failure,处理不了就提出新的改进轮次)/decided(回显决定名:
+  采用本轮结果/继续改进/停止本轮路线/证据不足 + 业务理由)。adopt 补「采用
+  记录不会自动部署模型」;insufficient_evidence 补证据局限提示;固定收尾
+  「以上只是流程状态与已记录的决定,不代表业务效果达标」。全程 .get 链,
+  裸 dict 不崩溃不编造。
+- **summarize_execution(report_summary.py)**:翻译执行状态机——进行中六态
+  (queued/materializing/preparing/training/waiting_for_release/evaluating)
+  各配一句真实进度 + 「后台进程独立于页面与终端运行,关闭页面不影响执行」;
+  awaiting_warning_ack 点名用户动作「在原入口勾选确认继续才会恢复;不会跳过
+  提示自动训练」;completed 点名训练与评测记录(run_id/evaluation_id)+「轮次
+  停在待业务决定」+「重复提交不会再次训练,只返回这份报告」(幂等边界入句);
+  blocked/failed 用中文标签(自动执行被阻断/失败)+ message + 前三条问题
+  逐条列出 + 指向 worker.log;stopped 说明本轮不再推进;未知状态按 message
+  如实降级。固定收尾「以上是自动执行的当前状态,不代表业务效果达标」。
+- **CLI 接线**(data_intake.py 两处分派尾):execution 分派(iteration-execute/
+  execution-status/execution-stop)尾接 summarize_execution;iteration 分派
+  (propose/revise/confirm/prepare/start/bind/decide)尾接 summarize_iteration;
+  均为 `isinstance(result, dict)` 守卫——iteration-list 返回 list 自然跳过,
+  stdout 保持纯 JSON。与 eval-compare/preflight/acceptance 先例同构。
+- **测试 +4**:test_report_summary +2(轮次摘要:decided 回显 adopt 决定名+
+  业务理由+不自动部署边界、insufficient_evidence 证据局限+不编造业务理由行、
+  evaluated/proposed/blocked/裸 dict 各态;执行摘要:training 关闭页面不影响、
+  awaiting_warning_ack 勾选确认继续、completed 停在待业务决定+重复提交不会
+  再次训练、blocked 中文标签+问题逐条、failed 裸态不编造原因+worker.log、
+  stopped);test_iteration_execution_cli +1(status queued→stderr 等待后台
+  执行开始+关闭页面不影响执行;awaiting_warning_ack→已暂停+勾选确认继续;
+  stop→已按请求停止+不代表业务效果达标;stdout 三次均纯 JSON);
+  test_readme_alignment +1 钉文档(stderr 位点/采用本轮结果/不会自动部署
+  模型/不代表业务效果达标/关闭页面不影响执行/勾选确认继续才会恢复/重复提交
+  不会再次训练/worker.log 八句)。
+- **文档**(agent-setup.md 迭代段):CLI 示例块后新增完整口径段——轮次与自动
+  执行子命令 stderr 追加人话、iteration-list 例外、八态停点、决定回显与
+  证据局限、执行状态机翻译、等确认用户动作、completed 幂等边界、blocked/
+  failed 指向 worker.log、流程状态不代表业务效果达标收尾。
+- 回归:ruff check/format clean;定向套件(report_summary+iteration_execution_
+  cli+iteration_cli+iterations+iteration_execution+readme_alignment)
+  83 passed。全量回归 **tests/unit 1759 passed / 0 failed**(--no-cov,无排除;
+  基线 1755 + 新增 4)。本批只动 src/workbench/report_summary.py、
+  scripts/data_intake.py、tests/unit/test_report_summary.py、
+  tests/unit/test_iteration_execution_cli.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

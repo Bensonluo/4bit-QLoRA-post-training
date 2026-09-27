@@ -494,3 +494,20 @@ def test_acceptance_summary_docs_pinned():
     assert "数值不能作为独立业务验收的结论" in section, "隔离未核验不作数边界必须写明"
     assert "仅作描述" in section, "自定义规则业务评分均值的口径必须写明"
     assert "不会自动部署模型" in section, "收尾边界必须写明"
+
+
+def test_iteration_execution_summary_docs_pinned():
+    """迭代与自动执行 CLI stderr 人话摘要口径钉死:状态机各态、等确认用户动作与诚实边界。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 从评测结果进入下一轮改进",
+        "## 配置文件与优先级",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "采用本轮结果" in section, "决定四态回显(采用/继续/停止/证据不足)必须写明"
+    assert "不会自动部署模型" in section, "采用记录的不部署边界必须写明"
+    assert "不代表业务效果达标" in section, "收尾边界必须写明"
+    assert "关闭页面不影响执行" in section, "后台独立性必须写明"
+    assert "勾选确认继续才会恢复" in section, "等确认暂停的用户动作必须写明"
+    assert "重复提交不会再次训练" in section, "completed 幂等边界必须写明"
+    assert "worker.log" in section, "被阻断/失败的排查指向必须写明"
