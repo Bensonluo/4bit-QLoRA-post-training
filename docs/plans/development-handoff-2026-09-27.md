@@ -189,6 +189,11 @@ stop(iteration_id)
 (报告 docs/validation/scenario-matrix-latest.json)。新增预测型目标的时间分区泄漏
 预警。已知缺口入 M5 队列:高基数目标早期警告。提交 c480380、b72498f。
 
+### 第 6 轮 = 里程碑 M5 known-gap 清偿（2026-09-27 进行中）
+
+高基数目标早期警告(27ff83e)、标签变体检出+矩阵 8 场景(9ba317d)、开放任务诚实
+声明+value_kind 误判修复(30a0c28)。矩阵保持 8/8 as_expected,回归 1544 全绿。
+
 ### 候选下一轮（按用户试用反馈排序）
 
 - 试用模板（user-trial-log.md）回收后按专家介入点清单迭代

@@ -1810,9 +1810,15 @@ if session.preview:
     if status == "review_preview":
         st.subheader("对比核验（确认前先配对一次，防止盲点头）")
         contrast = service.contrast_check_status(session.session_id)
-        if contrast and contrast.get("verdict") == "verified":
-            st.success("对比核验已通过：转换的业务含义已被配对核对。")
+        if (
+            contrast
+            and contrast.get("verdict") == "verified"
+            and not contrast.get("needs_second_round")
+        ):
+            st.success("对比核验二连对：转换的业务含义经两组不同题目配对核对。")
         else:
+            if contrast and contrast.get("verdict") == "verified":
+                st.info("第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。")
             if contrast and contrast.get("verdict") == "mismatch":
                 st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
             with st.form("contrast_check_form"):

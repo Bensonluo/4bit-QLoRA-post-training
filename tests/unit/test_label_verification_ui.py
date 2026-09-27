@@ -92,7 +92,17 @@ def test_contrast_check_via_page(data_page, monkeypatch):
         box.select(targets[row_id]).run()
     next(b for b in page.button if b.label == "提交配对").click().run()
     assert not page.exception
-    assert any("对比核验已通过" in message.value for message in page.success)
+    assert any("第一轮配对正确" in message.value for message in page.info)
+
+    # 第二轮(换题):二连对后才显示通过
+    next(b for b in page.button if b.label == "开始配对对比").click().run()
+    boxes = [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]
+    for box in boxes:
+        row_id = str(box.key).rsplit("_", 1)[-1]
+        box.select(targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("对比核验二连对" in message.value for message in page.success)
 
 
 def test_stale_warning_renders_after_revision(verify_page):

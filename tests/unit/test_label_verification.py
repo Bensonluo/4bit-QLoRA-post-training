@@ -38,7 +38,9 @@ def test_full_agreement_verifies_and_partial_reports_every_mismatch(store):
     pending, answers = _answers_from(service, session)
     first = pending["items"][0]["row_id"]
     answers[first] = "明显不同的答案"
-    result = service.submit_label_verification(session.session_id, pending["verification_id"], answers)
+    result = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
     assert result["verdict"] == "insufficient_agreement"
     assert result["matched"] == result["sample_size"] - 1
     bad = next(item for item in result["items"] if not item["match"])
@@ -59,13 +61,12 @@ def test_answer_set_and_resubmission_are_strict(store):
     service, session = store
     pending, answers = _answers_from(service, session)
     with pytest.raises(ValueError, match="不能多答或漏答"):
-        service.submit_label_verification(
-            session.session_id, pending["verification_id"], {}
-        )
+        service.submit_label_verification(session.session_id, pending["verification_id"], {})
     with pytest.raises(ValueError, match="不要留空"):
         service.submit_label_verification(
-            session.session_id, pending["verification_id"],
-            {key: "" for key in answers},
+            session.session_id,
+            pending["verification_id"],
+            dict.fromkeys(answers, ""),
         )
     service.submit_label_verification(session.session_id, pending["verification_id"], answers)
     with pytest.raises(ValueError, match="已提交过结论"):
@@ -122,21 +123,15 @@ def test_recipe_change_invalidates_previous_verification(store, tmp_path):
     from tests.unit.test_data_materialize import FULL
 
     analysis = deepcopy(session.analysis)
-    analysis.recipe.inputs[0].transforms.append(
-        Transform(operation="replace", old="x", new="y")
-    )
+    analysis.recipe.inputs[0].transforms.append(Transform(operation="replace", old="x", new="y"))
     updated = service.apply_analysis(session, analysis)
     updated = service.confirm(updated.session_id, updated.revision)
-    updated = service.validate_full_data(
-        updated.session_id, updated.revision, "full.csv", FULL
-    )
+    updated = service.validate_full_data(updated.session_id, updated.revision, "full.csv", FULL)
     updated = service.confirm_full_data(updated.session_id, updated.revision)
     refreshed = service.load(updated.session_id)
     assert refreshed.label_verification.get("stale") is True  # 修订后失效可见,而非静默消失
     training = TrainingRunService(tmp_path / "runs")
-    rematerialized = service.materialize_dataset(
-        refreshed.session_id, refreshed.revision
-    )
+    rematerialized = service.materialize_dataset(refreshed.session_id, refreshed.revision)
     _assert_prepare_blocked(training, rematerialized, tmp_path)
 
 
@@ -168,12 +163,27 @@ def test_contrast_check_pairs_answers_and_records_mismatch(tmp_path):
     assert all(not item["match"] for item in result["items"])
     assert service.contrast_check_status(session.session_id)["verdict"] == "mismatch"
 
-    # 正确配对
-    pending = service.start_contrast_check(session.session_id, session.revision)
-    right = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
-    result = service.submit_contrast_check(session.session_id, pending["check_id"], right)
+    # 正确配对(两轮换题:种子含轮数,二连对才 needs_second_round=False)
+    second_round = service.start_contrast_check(session.session_id, session.revision)
+    if {i["row_id"] for i in second_round["items"]} == {i["row_id"] for i in pending["items"]}:
+        pass  # 数据行太少时两轮可能同题;连胜语义不受影响
+    right = {item["row_id"]: targets[item["row_id"]] for item in second_round["items"]}
+    result = service.submit_contrast_check(session.session_id, second_round["check_id"], right)
     assert result["verdict"] == "verified"
-    assert service.contrast_check_status(session.session_id)["verdict"] == "verified"
+    status = service.contrast_check_status(session.session_id)
+    assert status["verdict"] == "verified"
+    assert status["streak"] >= 1
+
+    # 一轮对之后一轮错:连胜归零,需要重新二连对
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    wrong = {
+        pending["items"][0]["row_id"]: targets[pending["items"][1]["row_id"]],
+        pending["items"][1]["row_id"]: targets[pending["items"][0]["row_id"]],
+    }
+    service.submit_contrast_check(session.session_id, pending["check_id"], wrong)
+    status = service.contrast_check_status(session.session_id)
+    assert status["verdict"] == "mismatch" and status["streak"] == 0
+    assert status["needs_second_round"] is True
 
 
 def test_contrast_check_rejects_bad_submissions_and_stale_binding(tmp_path):

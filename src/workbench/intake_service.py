@@ -342,7 +342,15 @@ class IntakeService:
             if session.analysis and session.analysis.recipe
             else ""
         )
-        seed = zlib.crc32(binding.encode("utf-8"))
+        # 轮次感知抽样:已完成轮数计入种子,每轮换一组题,二连对防瞎蒙。
+        with sqlite3.connect(self.database) as connection:
+            round_row = connection.execute(
+                "SELECT COUNT(*) FROM contrast_checks "
+                "WHERE session_id=? AND binding=? AND status='completed'",
+                (session.session_id, binding),
+            ).fetchone()
+        round_number = (round_row[0] if round_row else 0) + 1
+        seed = zlib.crc32(f"{binding}:{round_number}".encode())
         first, second = sorted(random.Random(seed).sample(range(len(labelled)), 2))
         rows = [labelled[first], labelled[second]]
         if rows[0].target == rows[1].target:  # 确定性兜底:答案必须不同
@@ -444,7 +452,7 @@ class IntakeService:
         return result
 
     def contrast_check_status(self, session_id: str) -> dict | None:
-        """当前预览绑定下最近一次对比核验结论(供确认前展示)。"""
+        """当前绑定下最近结论与连胜轮数(二连对才算真正看清,防瞎蒙)。"""
         session = self.load(session_id)
         if session.preview is None:
             return None
@@ -454,15 +462,26 @@ class IntakeService:
             else ""
         )
         with sqlite3.connect(self.database) as connection:
-            row = connection.execute(
-                "SELECT status, verdict, result FROM contrast_checks "
+            rows = connection.execute(
+                "SELECT verdict, result FROM contrast_checks "
                 "WHERE session_id=? AND binding=? AND status='completed' "
-                "ORDER BY created_at DESC LIMIT 1",
+                "ORDER BY created_at DESC LIMIT 2",
                 (session.session_id, binding),
-            ).fetchone()
-        if row is None:
+            ).fetchall()
+        if not rows:
             return None
-        return {"status": row[0], "verdict": row[1], **(json.loads(row[2]) if row[2] else {})}
+        streak = 0
+        for verdict, _ in rows:
+            if verdict == "verified":
+                streak += 1
+            else:
+                break
+        return {
+            "verdict": rows[0][0],
+            "streak": streak,
+            "needs_second_round": streak < 2,
+            **(json.loads(rows[0][1]) if rows[0][1] else {}),
+        }
 
     def confirm(
         self, session_id: str, expected_revision: int, row_ids: list[str] | None = None
