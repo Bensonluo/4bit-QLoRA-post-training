@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T12:44:26.273371+00:00",
+  "created_at": "2026-09-27T13:43:51.539387+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -477,11 +477,65 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "duplicate-header-row-in-sample",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "multiline-quoted-cells",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "target-case-variants",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 29,
-    "as_expected": 29,
+    "total": 32,
+    "as_expected": 32,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,
