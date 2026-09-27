@@ -190,12 +190,18 @@ def load_latest_probe(root: str | Path, dataset_version: str) -> dict | None:
     return None
 
 
-def describe_candidates(candidates: list[dict]) -> list[str]:
+def describe_candidates(candidates: list[dict], limit: int | None = 20) -> list[str]:
     """标签问题候选的人话清单:一行一个候选,供 CLI 直接打印到 stderr。
 
     强证据(基座零样本与用户盲标都不认同数据标签)加 ⚠ 标记;没有候选时
     给出明确说法而不是沉默。候选不等于错误——这是人工核对清单,不是判决。
+
+    limit 与页面对齐:页面候选多于 20 条分页展示,CLI 默认也只逐行列出
+    前 20 条;截断时明确说明总数与已显示条数,并指向导出 CSV 拿全量清单,
+    不谎称已经全量显示。limit=None 表示不截断(逐行全列)。
     """
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError("limit 必须是正整数或 None。")
     if not candidates:
         return ["没有发现值得优先核对的行。"]
     strong = sum(1 for item in candidates if item.get("user_blind_answer"))
@@ -203,7 +209,8 @@ def describe_candidates(candidates: list[dict]) -> list[str]:
         f"标签问题候选 {len(candidates)} 行（其中强证据 {strong} 行）；"
         "候选不等于错误——基座可能错，标签也可能错："
     ]
-    for item in candidates:
+    listed = candidates if limit is None else candidates[:limit]
+    for item in listed:
         marker = "⚠" if item.get("user_blind_answer") else "·"
         blind = (
             f"，你的盲标「{item['user_blind_answer']}」" if item.get("user_blind_answer") else ""
@@ -212,6 +219,12 @@ def describe_candidates(candidates: list[dict]) -> list[str]:
         lines.append(
             f"{marker} 行 {item.get('row_id', '')}：数据标签「{item.get('data_label', '')}」"
             f"，基座零样本「{item.get('base_zero_shot', '')}」{blind}{trace}"
+        )
+    if limit is not None and len(candidates) > limit:
+        rest = len(candidates) - limit
+        lines.append(
+            f"……以上只列出前 {limit}/{len(candidates)} 条，其余 {rest} 条候选"
+            "见导出 CSV（learnability-probe --export-csv，或页面「导出候选为 CSV」）。"
         )
     return lines
 

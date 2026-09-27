@@ -155,6 +155,48 @@ def test_describe_candidates_plain_lines_and_empty_message():
     assert "原始来源行" not in lines[2]
 
 
+def test_describe_candidates_limits_listing_like_ui_pagination():
+    """CLI 与页面分页对齐:默认只逐行列出前 20 条,截断如实说明并指向导出 CSV。"""
+    from src.workbench.learnability_probe import describe_candidates
+
+    candidates = [
+        {
+            "row_id": f"r{index:06d}",
+            "data_label": "质量",
+            "base_zero_shot": "物流",
+            "user_blind_answer": "用户盲标" if index % 5 == 1 else None,
+            "evidence": "弱信号供参考",
+        }
+        for index in range(1, 26)
+    ]
+
+    lines = describe_candidates(candidates)  # 默认 limit=20,与页面每页 20 条对齐
+    assert len(lines) == 22  # 表头 + 前 20 行 + 截断说明,不是全量 25 行
+    assert "候选 25 行" in lines[0], "总数说明始终如实"
+    for index, line in zip(range(1, 21), lines[1:21]):
+        assert f"r{index:06d}" in line
+    tail = lines[-1]
+    assert "前 20/25 条" in tail and "其余 5 条" in tail and "导出 CSV" in tail
+    joined = "".join(lines)
+    assert "r000021" not in joined and "r000025" not in joined, "没列出的行不冒充已显示"
+
+    # limit=None 或 limit 不小于总数:逐行全列,行为与不分页时一致
+    full_lines = describe_candidates(candidates, limit=None)
+    assert len(full_lines) == 26
+    assert "r000025" in full_lines[-1]
+    assert "导出 CSV" not in full_lines[-1], "全量显示时不需要截断说明"
+    assert describe_candidates(candidates, limit=25) == full_lines
+
+    # 自定义 limit 同样如实
+    two = describe_candidates(candidates, limit=2)
+    assert len(two) == 4
+    assert "前 2/25 条" in two[-1] and "其余 23 条" in two[-1]
+
+    # 非法 limit 明确报错,不静默产出"前 0 条"之类的糊涂清单
+    with pytest.raises(ValueError, match="limit"):
+        describe_candidates(candidates, limit=0)
+
+
 def test_candidates_csv_export_is_excel_friendly():
     from src.workbench.learnability_probe import candidates_to_csv
 

@@ -247,3 +247,46 @@ def test_cli_probe_show_export_csv_without_candidates_writes_nothing(
     _, err = capsys.readouterr()
     assert not csv_path.exists()
     assert "没有候选，未生成核对清单 CSV" in err
+
+
+def test_cli_probe_listing_beyond_twenty_truncates_but_csv_stays_complete(
+    store, tmp_path, monkeypatch, capsys
+):
+    """候选超过 20 条:CLI 逐行清单只列前 20 并如实说明,CSV 导出仍包含全部候选。"""
+    import src.workbench.learnability_probe as probe_module
+
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    csv_path = tmp_path / "all-candidates.csv"
+    candidates = [
+        {
+            "row_id": f"r{index:06d}",
+            "data_label": "质量",
+            "base_zero_shot": "物流",
+            "user_blind_answer": None,
+            "evidence": "弱信号供参考",
+        }
+        for index in range(1, 26)
+    ]
+
+    def fake_probe(current, model_path, **kwargs):
+        return {
+            "kind": "learnability_probe",
+            "dataset_version": current.dataset.version,
+            "model_path": model_path,
+            "zero_shot_accuracy": 0.0,
+            "majority_baseline": 1.0,
+            "difference": -1.0,
+            "note": "证据说明。",
+            "candidates_note": "候选不等于错误——模型可能错。",
+            "label_error_candidates": candidates,
+        }
+
+    monkeypatch.setattr(probe_module, "probe_learnability", fake_probe)
+    assert _run_probe(monkeypatch, service, evaluation_root, session, "--export-csv", csv_path) == 0
+    _, err = capsys.readouterr()
+    assert "前 20/25 条" in err and "其余 5 条" in err, "逐行清单截断时如实说明"
+    assert "r000021" not in err and "r000025" not in err, "没列出的行不冒充已显示"
+    text = csv_path.read_bytes().decode("utf-8-sig")
+    assert "r000025" in text, "CSV 导出不受 CLI 清单截断影响,包含全部候选"
+    assert len([line for line in text.splitlines() if line.strip()]) == 26
