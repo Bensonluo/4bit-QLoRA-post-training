@@ -1,5 +1,6 @@
 """Goal → real composition → confirmed full sources → immutable train partitions."""
 
+import io
 import json
 
 import pytest
@@ -161,3 +162,110 @@ def test_full_declared_sources_can_be_reused_without_reupload(tmp_path):
     assert session.full_data.source.scope == "full"
     assert len(session.full_data.sources) == 2
     assert next_action(session) == "review_full_data"
+
+
+def _workbook_bytes(*sheets):
+    """sheets: (名称, 表头行, 数据行) 三元组；openpyxl 现场生成多 Sheet 工作簿。"""
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    for index, (name, header, rows) in enumerate(sheets):
+        sheet = workbook.active if index == 0 else workbook.create_sheet()
+        sheet.title = name
+        sheet.append(header)
+        for row in rows:
+            sheet.append(row)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def excel_files():
+    """两份多 Sheet Excel：真实全量数据都不在第一个 sheet，须各自指定。"""
+    return {
+        "main": (
+            "tickets.xlsx",
+            _workbook_bytes(
+                ("说明", ("备注",), [("全量数据在下一个 sheet",)]),
+                (
+                    "工单表",
+                    ("ticket", "description"),
+                    [(str(i), f"问题{i}") for i in range(8)],
+                ),
+            ),
+        ),
+        "labels": (
+            "labels.xlsx",
+            _workbook_bytes(
+                (
+                    "类别表",
+                    ("id", "category"),
+                    [(str(i), "咨询") for i in range(8)],
+                ),
+                ("说明", ("备注",), [("这份资料数据在第一个 sheet",)]),
+            ),
+        ),
+    }
+
+
+def confirmed_composition_session(service):
+    session = setup(service)
+    session = service.apply_analysis(session, analysis_for(session))
+    return service.confirm(session.session_id, session.revision)
+
+
+def test_validate_full_sources_reads_designated_sheet_per_alias(tmp_path):
+    """组合全量验证按别名指定各来源 sheet；两份 Excel 各读各的工作表。"""
+    service = IntakeService(tmp_path)
+    session = confirmed_composition_session(service)
+    files = excel_files()
+    session = service.validate_full_sources(
+        session.session_id,
+        session.revision,
+        files,
+        sheets={"main": "工单表", "labels": "类别表"},
+    )
+    assert next_action(session) == "review_full_data"
+    assert session.full_data.sources["main"].sheet == "工单表"
+    assert session.full_data.sources["labels"].sheet == "类别表"
+    assert len(session.full_data.preview.rows) == 8
+    assert all(row.target == "咨询" for row in session.full_data.preview.rows)
+
+
+def test_validate_full_sources_without_sheets_keeps_first_sheet_behavior(tmp_path):
+    """不传 sheets 时行为与此前完全一致：各 Excel 读第一个 sheet。"""
+    service = IntakeService(tmp_path)
+    session = confirmed_composition_session(service)
+    files = excel_files()
+    session = service.validate_full_sources(session.session_id, session.revision, files)
+    assert session.full_data.sources["main"].sheet == "说明"
+    assert session.full_data.sources["labels"].sheet == "类别表"
+    # main 读错 sheet 后组合缺少输入列，问题如实报告而不是静默通过。
+    assert next_action(session) == "needs_full_data_revision"
+
+
+def test_validate_full_sources_rejects_unmatched_sheets_and_extra_files(tmp_path):
+    """sheet 指定与资料一一对应；方案外的多余资料如实拒绝，不静默入库。"""
+    service = IntakeService(tmp_path)
+    session = confirmed_composition_session(service)
+    files = excel_files()
+    with pytest.raises(ValueError, match="未提供的资料"):
+        service.validate_full_sources(
+            session.session_id,
+            session.revision,
+            files,
+            sheets={"main": "工单表", "labels": "类别表", "extra": "x"},
+        )
+    with pytest.raises(ValueError, match="不需要这些资料"):
+        service.validate_full_sources(
+            session.session_id,
+            session.revision,
+            {**files, "bonus": ("bonus.jsonl", rows_bytes([{"x": "1"}]))},
+        )
+    with pytest.raises(ValueError, match="同时提供各份资料文件"):
+        service.validate_full_sources(
+            session.session_id, session.revision, sheets={"main": "工单表"}
+        )
+    unchanged = service.load(session.session_id)
+    assert unchanged.revision == session.revision
+    assert unchanged.full_data is None or unchanged.full_data.status != "confirmed"

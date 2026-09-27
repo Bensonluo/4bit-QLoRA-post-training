@@ -968,7 +968,14 @@ class IntakeService:
         session_id: str,
         expected_revision: int,
         files: dict[str, tuple[str, bytes]] | None = None,
+        *,
+        sheets: dict[str, str | int | None] | None = None,
     ) -> IntakeSession:
+        """Validate every composed full source; ``sheets`` names each Excel's worksheet.
+
+        ``sheets`` 按资料别名指定各自 Excel 的 sheet（名称或 1 起始序号），与
+        ``files`` 一一对应；不传时全部读第一个 sheet，行为与此前完全一致。
+        """
         from src.workbench.composition import CompositionRecipe, compose_sources, required_sources
         from src.workbench.intake_models import FullDataIssue
 
@@ -986,10 +993,22 @@ class IntakeService:
         if files is not None:
             if needed - set(files):
                 raise ValueError(f"缺少这些全量来源：{sorted(needed - set(files))}")
+            if set(files) - needed:
+                raise ValueError(
+                    f"组合方案不需要这些资料：{sorted(set(files) - needed)}；"
+                    "请只提供方案所需的每份全量资料。"
+                )
+            specified = sheets or {}
+            if set(specified) - set(files):
+                raise ValueError(
+                    f"sheet 指定包含未提供的资料：{sorted(set(specified) - set(files))}"
+                )
             sources = {
-                alias: read_source(name, data, scope="full")
+                alias: read_source(name, data, scope="full", sheet=specified.get(alias))
                 for alias, (name, data) in files.items()
             }
+        elif sheets:
+            raise ValueError("sheet 指定需要同时提供各份资料文件；复用已存全量来源不会重新读取。")
         else:
             sources = (
                 session.full_data.sources
