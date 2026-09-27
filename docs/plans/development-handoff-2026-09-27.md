@@ -702,3 +702,45 @@ value_kind 需随之改期望」的欠条本轮兑现。核心原则与盲标/�
   src/workbench/intake_models.py、src/workbench/baseline_analysis.py、
   src/workbench/full_data.py、src/agent/intake.py、src/workbench/scenario_specs.py、
   tests/unit/test_scenario_matrix.py 与本记录。
+
+### 第 23 轮 = add-source CLI 补 --sheet + sheet/numeric_continuous 文档补齐(恢复循环第 3 轮)
+
+(恢复的北极星打磨循环,第 3 轮。)起点是文档补齐——第 19-21 轮的 sheet 选择与
+第 22 轮的 numeric_continuous 在 agent-setup.md 里零记载;核查文档的过程中发现
+一处真实代码缺口并入本批:CLI add-source 没有 `--sheet`,而服务层
+(`add_source(sheet=...)`,第 20 轮 A 线)与页面(excel_sheet_input)早已支持——
+第 21 轮记录的「sheet 选择至此四个入口全对称:create / add-source /
+full-validate / full-sources」对 add-source CLI 而言当时并不成立(该轮只补了
+full-sources)。历史记录不改写,本条如实更正:对称性在本轮补齐 add-source 后
+才真正成立。
+
+- **add-source CLI 补 `--sheet`**(scripts/data_intake.py):parser 与 create/
+  full-validate 同款 help 串「读取 Excel 的指定 sheet（名称或序号，1 表示第一个；
+  默认第一个）」,分派透传 `sheet=args.sheet`。多 Sheet Excel 的补充资料在 CLI
+  路径上从此可指定 sheet,不再只读第一个。
+- **测试 test_multisource_cli 11→12 项**:新增 add-source --sheet 正路径——补充
+  资料真实数据在第二个 sheet(首 sheet 是说明表),按名称指定后会话记录的
+  columns/sheet/sheet_note 全部来自指定表(「按指定读取「类别表」」);同一份字节
+  不带 --sheet 再补充一次,读到说明表、标注「仅读取第一个「说明」」——同摘要
+  不同选择不串味在 add-source 路径同样成立。
+- **agent-setup.md 文档补齐**(三处):①「多份资料一起分析」的 full-sources 示例
+  加 `--sheet main=工单表 --sheet labels=1`,新增一段 sheet 选择说明——四个入口
+  (create/add-source/full-validate/full-sources)+页面可选输入、默认只读第一个
+  sheet、读取范围随来源持久化并如实标注、复用原文件沿用持久化选择、指定不存在
+  报错列全部 sheet 名、CSV/JSONL 明确拒绝;②「单份资料」的 full-validate 支持
+  参数列表补 `--sheet`;③新增小节「连续数值答案的如实边界」——numeric_continuous
+  如实标注、逐字字符串学习(「1.0」≠「1.00」)、不是数值回归、需数值误差先离散化、
+  整数编码不受影响、numeric_new_values 常态提示不阻断、评测落入开放任务人工核对
+  口径。QUICKSTART/README 经查无读取选项内容,agent-setup.md 是唯一文档目标。
+- **测试 test_readme_alignment 14→16 项**:新增两个钉测试——(a)sheet 文档与
+  真实 CLI help 同步:create/add-source/full-validate 三入口同款 canonical help
+  串、full-sources 的 `--sheet ALIAS=名称或序号` 与「1 起始序号」、agent-setup
+  的「四个入口/如实标注/CSV/JSONL 明确拒绝/full-validate 三参数」关键句;
+  (b)连续数值边界:numeric_continuous/不是数值回归/逐字/1.0≠1.00/
+  numeric_new_values/离散化/整数编码关键句,并由场景矩阵
+  numeric-continuous-target 场景真实存在背书。
+- 回归:test_multisource_cli 12 passed、test_full_data_cli+test_sources+
+  test_composed_intake 22 passed、test_readme_alignment 16 passed(均 --no-cov);
+  ruff check/format clean。本批只动 scripts/data_intake.py(add-source 的参数与
+  透传)、tests/unit/test_multisource_cli.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

@@ -214,3 +214,51 @@ def test_semantic_safety_gates_are_backed_by_scenario_matrix():
     contrast = [s for s in scenarios if "对比核验" in s.expect_note]
     assert blind, "场景矩阵缺少盲标核验相关场景,agent-setup 的门禁描述失去背书"
     assert contrast, "场景矩阵缺少对比核验相关场景,agent-setup 的门禁描述失去背书"
+
+
+def test_sheet_selection_docs_and_cli_help_in_sync(monkeypatch, capsys, tmp_path):
+    """sheet 选择文档与真实 CLI 同步:三入口同款 help 串、full-sources 按资料指定、
+    agent-setup 的四个入口/标注/拒绝边界关键句在场。"""
+    canonical = "读取 Excel 的指定 sheet（名称或序号，1 表示第一个；默认第一个）"
+    for command in ("create", "add-source", "full-validate"):
+        help_text = _cli_help_text(monkeypatch, capsys, tmp_path, command)
+        assert "--sheet" in help_text, f"{command} 缺少 --sheet 参数"
+        assert canonical in help_text, f"{command} 的 --sheet help 漂移"
+    full_sources_help = _cli_help_text(monkeypatch, capsys, tmp_path, "full-sources")
+    assert "--sheet ALIAS=名称或序号" in full_sources_help, "full-sources 缺少按资料的 --sheet"
+    assert "1 起始序号" in full_sources_help
+
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 多份资料一起分析",
+        "### 长尾字段解析与受限适配",
+    )
+    assert "四个入口" in section, "sheet 选择文档必须说明四个入口的对称性"
+    assert "--sheet ALIAS=名称或序号" in section
+    assert "仅读取第一个" in section and "如实标注" in section, "默认读取范围标注口径漂移"
+    assert "CSV/JSONL 传 sheet 会被明确拒绝" in section
+    single = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"), "### 单份资料", "### 连续数值答案的如实边界"
+    )
+    assert "`full-validate` 支持 `--encoding`、`--delimiter`、`--sheet`" in single
+
+
+def test_numeric_continuous_boundary_docs_pinned_and_backed_by_matrix():
+    """连续数值答案的如实边界文档:value_kind/逐字/回归边界关键句钉死,由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 连续数值答案的如实边界",
+        "## 语义安全层",
+    )
+    assert "numeric_continuous" in section
+    assert "不是数值回归" in section and "逐字" in section
+    assert "「1.0」与「1.00」算两个不同答案" in section
+    assert "numeric_new_values" in section and "不阻断" in section
+    assert "离散化" in section, "数值误差口径的出路(先离散化)必须写明"
+    assert "整数编码（0/1/2）不受此判定影响" in section
+
+    # 场景矩阵背书:numeric-continuous-target 场景真实存在,文档不是空头承诺
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "numeric-continuous-target" in scenarios, "场景矩阵缺少连续数值目标场景"

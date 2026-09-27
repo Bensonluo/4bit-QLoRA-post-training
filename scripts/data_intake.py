@@ -179,6 +179,9 @@ def main() -> int:
     add_source.add_argument("--scope", choices=["sample", "full"], default="sample")
     add_source.add_argument("--encoding")
     add_source.add_argument("--delimiter")
+    add_source.add_argument(
+        "--sheet", help="读取 Excel 的指定 sheet（名称或序号，1 表示第一个；默认第一个）"
+    )
     analyze = sub.add_parser("analyze", help="使用配置的模型检查数据、澄清或生成方案")
     analyze.add_argument("session_id")
     analyze.add_argument("--answer", default="")
@@ -1016,6 +1019,7 @@ def main() -> int:
                 scope=args.scope,
                 encoding=args.encoding,
                 delimiter=args.delimiter,
+                sheet=args.sheet,
             )
             if args.description.strip():
                 session = service.answer(

@@ -79,10 +79,13 @@ python scripts/data_intake.py analyze SESSION_ID --allow-remote-data
 
 ```sh
 python scripts/data_intake.py full-sources SESSION_ID --revision CURRENT_REVISION \
-  --source main=./tickets-full.csv --source labels=./labels-full.csv
+  --source main=./tickets-full.csv --source labels=./labels-full.csv \
+  --sheet main=工单表 --sheet labels=1
 ```
 
 `full-sources` 不提供 `--source` 时，只能复用已保存且明确标为全量的所需来源；样例不会自动升级为全量。全量继续执行已经确认的组合与转换规则，缺失关联、字段冲突或会话顺序异常会进入报告。
+
+Excel 多 Sheet 工作簿默认只读第一个 sheet。四个入口都可以指定读取的工作表（名称或 1 起始序号，1 表示第一个）：`create`、`add-source`、`full-validate` 各收一个 `--sheet` 参数，`full-sources` 按资料收可重复的 `--sheet ALIAS=名称或序号`；页面上传 Excel 时同样提供可选 sheet 输入。实际读取范围随来源持久化并在画像中如实标注，例如「该文件含 2 个 sheet，仅读取第一个「员工表」；其余 1 个（工单表）未读取」——数据在第二个 sheet 时用户能看见读的是哪张表。首次声明全量的文件复用原文件做全量验证时，沿用当时持久化的 sheet 选择。指定的 sheet 不存在会报错并列出全部可用 sheet 名，不静默回退；CSV/JSONL 传 sheet 会被明确拒绝。
 
 ### 长尾字段解析与受限适配
 
@@ -106,7 +109,11 @@ python scripts/data_intake.py full-validate SESSION_ID --revision CURRENT_REVISI
 python scripts/data_intake.py full-confirm SESSION_ID --revision FULL_REPORT_REVISION
 ```
 
-`full-validate` 支持 `--encoding`、`--delimiter`。首次上传已声明 `--scope full` 时可省略 `--input`，样例任务必须显式提供全量文件。这两个命令只处理本地文件，不调用模型或消耗模型服务额度。验证发现问题仍会保存报告，下一步状态为 `needs_full_data_revision`；问题解决后核对并确认，进入 `awaiting_dataset_split`。这表示可以继续准备独立训练与评测分区，尚未认定可以正式训练。
+`full-validate` 支持 `--encoding`、`--delimiter`、`--sheet`。首次上传已声明 `--scope full` 时可省略 `--input`，样例任务必须显式提供全量文件。这两个命令只处理本地文件，不调用模型或消耗模型服务额度。验证发现问题仍会保存报告，下一步状态为 `needs_full_data_revision`；问题解决后核对并确认，进入 `awaiting_dataset_split`。这表示可以继续准备独立训练与评测分区，尚未认定可以正式训练。
+
+### 连续数值答案的如实边界
+
+答案列是带小数的连续测量值（如 1.0/2.5/3.7）时，基础分析会把该目标的答案形态如实标注为 `numeric_continuous`，并同时给出边界说明：当前训练仍按逐字字符串学习答案（「1.0」与「1.00」算两个不同答案），不是数值回归；评测只能逐字比对，无法按数值误差评分。需要数值误差口径时，先在数据侧把答案列离散化。小数若只是离散编码（如版本号），照常逐字核对即可；整数编码（0/1/2）不受此判定影响，仍按类别处理。全量出现样例未覆盖的新测量值是连续目标的常态：报告以 `numeric_new_values` 如实列出这些值并重申逐字学习边界，不按「新类别」表述、不阻断。评测、验收与页面都不会把 `numeric_continuous` 目标伪造成分类严格评分——它落入与开放任务相同的人工核对口径。
 
 ## 语义安全层：确认不再盲点头
 

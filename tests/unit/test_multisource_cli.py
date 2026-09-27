@@ -255,6 +255,58 @@ def test_cli_full_sources_sheet_selects_each_excels_worksheet(tmp_path):
     assert "review_full_data" in result.stderr
 
 
+def test_cli_add_source_sheet_selects_second_worksheet(tmp_path):
+    """add-source 的 --sheet 与 create/full-validate/full-sources 对称。
+
+    补充资料的真实数据在第二个 sheet（首 sheet 是说明），不指定 --sheet 会读错表；
+    按名称指定后，会话里该资料读到的就是工单数据，画像如实标注按指定读取。
+    """
+    service = IntakeService(tmp_path / "intake")
+    session = service.create("判断工单类别", "tickets.csv", MAIN)
+    labels_path = tmp_path / "labels.xlsx"
+    labels_path.write_bytes(
+        _workbook_bytes(
+            ("说明", ("备注",), [("类别数据在下一个 sheet",)]),
+            ("类别表", ("id", "category"), [("1", "质量"), ("2", "物流"), ("3", "质量")]),
+        )
+    )
+    result = invoke(
+        service,
+        "add-source",
+        session.session_id,
+        "--revision",
+        session.revision,
+        "--alias",
+        "labels",
+        "--input",
+        labels_path,
+        "--sheet",
+        "类别表",
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    sources = payload["sources"]
+    assert sources["labels"]["columns"] == ["id", "category"], sources["labels"]
+    assert sources["labels"]["sheet"] == "类别表"
+    assert "按指定读取「类别表」" in sources["labels"]["sheet_note"]
+    # 不指定 --sheet 时同一份文件读到的是说明表——同摘要不同选择不串味
+    result_default = invoke(
+        service,
+        "add-source",
+        session.session_id,
+        "--revision",
+        session.revision + 1,
+        "--alias",
+        "labels",
+        "--input",
+        labels_path,
+    )
+    assert result_default.returncode == 0, result_default.stderr
+    default_sources = json.loads(result_default.stdout)["sources"]
+    assert default_sources["labels"]["columns"] == ["备注"], default_sources["labels"]
+    assert "仅读取第一个「说明」" in default_sources["labels"]["sheet_note"]
+
+
 @pytest.mark.parametrize(
     "sheet_args,with_files",
     [
