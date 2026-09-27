@@ -498,3 +498,41 @@ latest.json 留给跑台例行刷新,本批未动。
 23→26 项全绿,全集下限断言随之 35→38;ruff check/format clean。本批只动
 scenario_specs.py 与 test_scenario_matrix.py(scenario_matrix.py 无需改动),
 未触碰 A 线并行文件。
+
+### 第 18 轮 = 多 Sheet 提示清偿 + 并行矩阵扩展(场景 39-40)
+
+(B 线第九批。)上批场景 36 实测发现的真缺口——多 Sheet Excel 上传第二个 sheet 被
+静默忽略、用户得不到任何提示——本批清偿,并以两个新场景钉住边界。全部结论先以
+临时探针实测、再定期望(探针测完即删,禁止猜)。
+
+- **多 Sheet 读取范围标注上线**(`sources.py`):读 xlsx/xls 时探测 sheet 清单
+  (改用 `pd.ExcelFile` + `book.parse`,与原 `read_excel(BytesIO, sheet_name=0)`
+  同一解析路径,**读取行为不变**——探针验证两种写法解析结果逐格相等),含多个
+  sheet 时把「该文件含 N 个 sheet,仅读取第一个(名称);其余 N-1 个(名称)未读取」
+  按内容摘要记下,`profile_source` 以 `sheet_note` 键如实呈现(单 sheet/CSV 无此键,
+  profile 形状不变)。实现要点:SampleSource 契约不可增字段(extra="forbid",本批
+  文件域不含 intake_models),故用摘要键控的进程内记忆——内容寻址、确定性一致,
+  重启后历史会话已序列化的 profile 快照仍带标注,仅重新计算依赖同进程读取记录
+  (局限如实记录)。全量侧同样标注;其余 sheet 超 5 个不逐一罗列、以「等」收尾。
+  新增 tests/unit/test_sources.py(openpyxl 现场生成单/双/9-sheet 夹具)。
+- **场景 36 真相更新**:`excel-multi-sheet` 的 expect_note 从「第二个 sheet 被静默
+  忽略(不报错、不提示)」更新为「提示已上线,读取即可见」——矩阵记录的是当前真相。
+- **场景 39「多 Sheet 数据在第二个 sheet」**(`excel-data-on-second-sheet`):
+  第一个 sheet 是员工表、工单数据在第二个 sheet。实测结局:入口仍按 sheet_name=0
+  把员工表当数据读入(列名 员工号/姓名/部门,2 行员工记录),create 不拦;旅程在
+  **baseline_analysis 被拦**——「答案列『类别』不在数据字段中(可用:['员工号',
+  '姓名', '部门'])」,被读入的列名原样列出。配合 sheet_note,数据放错 sheet 从
+  「无声吞掉」变为 create 即告知「只读了员工表,工单表未读取」。定局:入口只读
+  第一个 sheet、不做 sheet 选择是已知边界;修好数据后旅程可续。
+- **场景 40「重复表头行两侧同现」**(`duplicate-header-rows-in-both`):任务初衷
+  「样例(非全量)中部混入重复表头、与全量侧是否对称」**已由既有场景 30
+  (duplicate-header-row-in-sample)实测定局**——不对称:样例侧不拦、按普通数据行
+  读入,靠用户预览逐行核对。为不在矩阵里重复计一条行为,40 号覆盖此前未测的组合:
+  样例与全量同时含重复表头行。实测结局:样例侧四关照常通过(表头行以「就绪」面目
+  进预览并参与对比核验),全量侧 validate_full 硬拦「1 条记录与表头完全相同…」,
+  **组合结局由全量侧决定**——全量硬拦兜底,两侧同时脏也不会带病物化。
+
+矩阵 38→40,40/40 as_expected(意外通过/意外拦截/错误均为 0);test_scenario_matrix
+26→28 项、test_sources 0→3 项全绿,全集下限断言随之 38→40;ruff check/format
+clean。本批只动 sources.py、scenario_specs.py、test_scenario_matrix.py、新增
+test_sources.py,未触碰 A 线并行文件(intake_service/页面/基线分析域均只读)。
