@@ -2059,9 +2059,11 @@ if session.preview:
                 st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
             render_contrast_round()
         if verified_streak >= 2:
-            # 二连对后核验已达标;第三轮起只是自愿加练,不强制。
-            with st.expander(f"可选：继续第 {verified_streak + 1} 轮对比核验（不强制）"):
-                st.caption("核验已达标。多配一轮只是自愿加练——碰巧连续蒙对的概率会越来越低。")
+            # 二连对后核验已达标;第三轮起只是自愿加练,不强制——文案必须与行为一致。
+            with st.expander(f"可选：继续第 {verified_streak + 1} 轮对比核验提高置信度（不强制）"):
+                st.caption(
+                    "核验已达标，不需要再核验；多配一轮只是自愿加练——碰巧连续蒙对的概率会越来越低。"
+                )
                 render_contrast_round()
         accepted = st.checkbox(
             "已核对预览：输入是模型实际可获得的信息，答案与我希望模型学会的目标一致。",

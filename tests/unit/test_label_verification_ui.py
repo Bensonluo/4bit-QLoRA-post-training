@@ -144,6 +144,39 @@ def test_contrast_check_third_round_is_optional_entry(data_page, monkeypatch):
     assert not next(b for b in page.button if b.label == "确认当前转换含义").disabled
 
 
+def test_contrast_meeting_copy_matches_optional_behavior(data_page, monkeypatch):
+    """二连对达标后文案与行为一致:入口说「可选提高置信度」,不说「需要」。"""
+    import src.agent.intake
+    from tests.unit.test_data_intake import analysis, model_for
+
+    service, session, page = data_page
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "联合分析目标与数据").click().run()
+    targets = {row.row_id: row.target for row in service.load(session.session_id).preview.rows}
+    for _ in range(2):
+        next(b for b in page.button if b.label == "开始配对对比").click().run()
+        for box in [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]:
+            row_id = str(box.key).rsplit("_", 1)[-1]
+            box.select(targets[row_id]).run()
+        next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("对比核验二连对" in message.value for message in page.success)
+
+    expander = next(e for e in page.expander if "可选" in e.label and "对比核验" in e.label)
+    assert "提高置信度" in expander.label
+    assert "不强制" in expander.label
+    assert "需要" not in expander.label
+    captions = [c.value for c in expander.caption]
+    assert any("核验已达标" in value for value in captions)
+    assert any("不需要再核验" in value for value in captions)
+    # 未达标时的「再配一组」提示不再出现——达标后页面上没有强制性文案
+    assert not any("再配一组不同的题" in info.value for info in page.info)
+
+
 def test_stale_warning_renders_after_revision(verify_page):
     """数据修订后,页面明确显示「核验已失效请重验」,而不是静默回到初始状态。"""
     from copy import deepcopy
