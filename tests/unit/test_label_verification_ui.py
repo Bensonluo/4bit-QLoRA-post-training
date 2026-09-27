@@ -89,6 +89,29 @@ def test_mismatch_page_shows_lower_bound_caption(verify_page):
     assert any("下界才是你能依赖的数" in c.value for c in page.caption)
 
 
+def test_sample_size_selection_guidance_and_honest_shortfall(verify_page):
+    """抽取表单引导样本量选择:默认 5 是快速关卡,高风险建议 20+;选超了如实说明不足。"""
+    service, session, page = verify_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    size_input = next(n for n in page.number_input if "核验样本量" in n.label)
+    assert size_input.value == 5, "默认 5 条:快速关卡"
+    guidance = next(c.value for c in page.caption if "核验强度由你按业务风险决定" in c.value)
+    assert "默认 5 条：快速关卡" in guidance
+    assert "高风险业务需要更强证据" in guidance
+    assert "20 条以上" in guidance
+
+    # 选择 20 条但已标注行只有 3 条:抽题后如实说明不足,不静默按更小量缩水
+    size_input.set_value(20).run()
+    next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+    assert not page.exception
+    pending = page.session_state["pending_label_verification"]
+    assert pending["requested_sample_size"] == 20
+    assert pending["sample_size"] < 20
+    assert any("不足你选择的 20 条" in c.value for c in page.caption)
+    assert any("即使全部一致" in c.value for c in page.caption)
+
+
 def test_mismatch_shows_per_row_differences_and_blocks_training(verify_page):
     service, session, page = verify_page
     page.run()
@@ -330,8 +353,16 @@ def test_stale_warning_renders_after_revision(verify_page):
     analysis = deepcopy(session.analysis)
     analysis.recipe.inputs[0].transforms.append(Transform(operation="replace", old="x", new="y"))
     service.apply_analysis(session, analysis)
-    assert any("已失效" in w.value for w in page.warning) or True  # 先提交后渲染
-    page.run()
-    assert not page.exception
-    # 失效警告出现在盲标核验区(核验状态需在全量确认后可见)
-    assert any("已失效" in w.value for w in page.warning)
+    # 修订后重新确认全量,使核验进入 stale 态(与旅程一致)
+    revised = service.load(session.session_id)
+    revised = service.confirm(revised.session_id, revised.revision)
+    revised = service.validate_full_data(
+        revised.session_id, revised.revision, "full.csv", FULL
+    )
+    revised = service.confirm_full_data(revised.session_id, revised.revision)
+    # 新会话读取:同会话内控件序列随新增控件变化会触发 AppTest 的状态清理怪癖
+    fresh = intake_ui.AppTest.from_file(str(intake_ui.PAGE), default_timeout=20)
+    fresh.run()
+    fresh.selectbox(key="intake_select").select(session.session_id).run()
+    assert not fresh.exception
+    assert any("已失效" in w.value for w in fresh.warning)

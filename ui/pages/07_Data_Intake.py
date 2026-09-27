@@ -13,7 +13,12 @@ import streamlit as st
 
 from src.agent.intake import CompatibleChatClient, is_local_endpoint
 from src.workbench.evaluation_suites import EvalSuiteService
-from src.workbench.intake_service import IntakeService, agreement_evidence_note, next_action
+from src.workbench.intake_service import (
+    IntakeService,
+    agreement_evidence_note,
+    next_action,
+    wilson_lower_bound,
+)
 from src.workbench.iterations import IterationService
 from src.workbench.training_runs import TrainingRunService
 from ui.components.agent_settings import render_agent_settings
@@ -2391,11 +2396,27 @@ if session.confirmed_revision is not None or session.full_data is not None:
                         st.caption(note)
                 with st.form("label_verification_form"):
                     st.write("开始一轮新的盲标核验：题目在提交表单后展示（答案不随题目显示）。")
+                    sample_size = st.number_input(
+                        "核验样本量（抽取多少条已标注行）",
+                        min_value=1,
+                        max_value=50,
+                        value=5,
+                        step=1,
+                        key=f"lv_sample_size_{session.session_id}",
+                    )
+                    st.caption(
+                        "默认 5 条：快速关卡，适合首轮快速发现问题或低风险业务。"
+                        "高风险业务需要更强证据，建议 20 条以上——"
+                        f"5 条全部一致的 95% 置信下界约 {wilson_lower_bound(5, 5):.0%}，"
+                        f"20 条约 {wilson_lower_bound(20, 20):.0%}，"
+                        f"30 条约 {wilson_lower_bound(30, 30):.0%}。"
+                        "核验强度由你按业务风险决定，系统不替你设定。"
+                    )
                     started = st.form_submit_button("抽取盲标核验题目", type="primary")
                 if started:
                     try:
                         pending = service.start_label_verification(
-                            session.session_id, session.revision
+                            session.session_id, session.revision, sample_size=int(sample_size)
                         )
                         st.session_state["pending_label_verification"] = pending
                         st.rerun()
@@ -2415,6 +2436,9 @@ if session.confirmed_revision is not None or session.full_data is not None:
                 start_note = pending_items.get("evidence_note")
                 if start_note:
                     st.caption(start_note)
+                shortfall = pending_items.get("shortfall_note")
+                if shortfall:
+                    st.caption(shortfall)
                 with st.form(f"label_verification_answer_{pending_items['verification_id']}"):
                     answers = {}
                     for item in pending_items["items"]:

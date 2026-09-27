@@ -476,3 +476,19 @@ def test_mismatch_result_lower_bound_reflects_partial_agreement(store):
     assert result["agreement_lower_bound"] == pytest.approx(wilson_lower_bound(size - 1, size))
     assert result["agreement_lower_bound"] < result["agreement"]
     assert "样本量小" in result["evidence_note"]
+
+
+def test_start_reports_shortfall_when_requested_exceeds_labelled_rows(store):
+    """要求条数超过已标注行时如实说明:按现有全部抽取,不静默按更小量缩水。"""
+    service, session = store
+    labelled = [r for r in session.full_data.preview.rows if r.target is not None]
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=20)
+    assert pending["requested_sample_size"] == 20
+    assert pending["sample_size"] == len(labelled) < 20
+    assert f"只有 {len(labelled)} 条" in pending["shortfall_note"]
+    assert "不足你选择的 20 条" in pending["shortfall_note"]
+
+    # 需求被满足时不带 shortfall 字段,正常抽取照旧
+    normal = service.start_label_verification(session.session_id, session.revision)
+    assert normal["requested_sample_size"] == normal["sample_size"]
+    assert "shortfall_note" not in normal

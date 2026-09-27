@@ -812,9 +812,21 @@ class IntakeService:
         return {
             "verification_id": verification_id,
             "sample_size": size,
+            "requested_sample_size": sample_size,
             "seed": seed,
             "items": [{"row_id": row.row_id, "input": row.input} for row in rows],
             "evidence_note": sample_evidence_note(size),
+            # 选择的强度没有被满足时如实说明,不静默按更小的样本量缩水。
+            **(
+                {
+                    "shortfall_note": (
+                        f"已标注行只有 {len(labelled)} 条，不足你选择的 {sample_size} 条——"
+                        "本轮已按现有全部已标注行抽取。"
+                    )
+                }
+                if size < sample_size
+                else {}
+            ),
             "note": (
                 "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。"
                 "重新核验会换一组题：上一轮公布过的正确答案照抄无效。"
