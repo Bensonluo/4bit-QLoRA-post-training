@@ -939,6 +939,13 @@ class IntakeService:
         sources = session.sources or {"main": session.source}
         sources[alias] = source
         session.sources = sources
+        if session.full_data and session.full_data.sources:
+            stored = session.full_data.sources.get(alias)
+            if stored is not None and stored.digest != source.digest:
+                # 具名原始资料已被替换成新内容:此前验证过的全量来源不再是
+                # 当前文件,必须从可复用集合中移除,不能继续冒充当前资料被
+                # 复用校验;用户需重新提供这份资料的全量文件。
+                session.full_data.sources.pop(alias)
         session.source = sources["main"]
         session.profile = profile_source(session.source)
         session.composition_report = None
@@ -1015,8 +1022,14 @@ class IntakeService:
                 if session.full_data and session.full_data.sources
                 else session.sources
             )
-            if needed - set(sources) or any(sources[alias].scope != "full" for alias in needed):
-                raise ValueError("请提供组合方案所需的每份全量资料，不能将样例自动当作全量。")
+            unusable = sorted(
+                alias for alias in needed if alias not in sources or sources[alias].scope != "full"
+            )
+            if unusable:
+                raise ValueError(
+                    f"缺少可复用的全量资料：{'、'.join(unusable)}。"
+                    "请提供组合方案所需的每份全量资料，不能将样例自动当作全量。"
+                )
         composed = compose_sources(sources, recipe)
         full_source = composed.source
         adapted = None

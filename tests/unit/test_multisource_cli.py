@@ -144,3 +144,45 @@ def test_cli_invalid_full_source_arguments_leave_session_unchanged(tmp_path, sou
     assert result.returncode == 2
     assert service.load(session.session_id).revision == session.revision
     assert "Traceback" not in result.stderr
+
+
+def test_replacing_named_source_stops_old_full_source_from_reuse(tmp_path):
+    """替换具名原始资料后,旧全量来源不能再冒充当前资料被复用校验。
+
+    此前 add_source 只把全量报告标记为 stale,full_data.sources 仍保留被替换前
+    的旧来源;「验证已提供的全部全量资料」会继续校验旧字节并当成当前文件通过。
+    """
+    from src.workbench.intake_service import next_action
+
+    service = IntakeService(tmp_path / "intake")
+    session = composition_session(service)
+    session = service.validate_full_sources(
+        session.session_id,
+        session.revision,
+        {"main": ("full-main.csv", FULL_MAIN), "labels": ("full-labels.csv", FULL_LABELS)},
+    )
+    assert next_action(session) == "review_full_data"
+    old_labels_digest = session.full_data.sources["labels"].digest
+    labels_v2 = "id,category\n1,售后\n2,安装\n3,售后\n".encode()
+    session = service.add_source(
+        session.session_id, session.revision, "labels", "labels-v2.csv", labels_v2, scope="full"
+    )
+    assert "labels" not in (session.full_data.sources or {})
+    assert "main" in session.full_data.sources
+    session = service.apply_analysis(session, combined_plan())
+    session = service.confirm(session.session_id, session.revision)
+    with pytest.raises(ValueError, match="labels"):
+        service.validate_full_sources(session.session_id, session.revision)
+    # 明确重新提供每份全量文件后仍可正常验证,修复没有把合法路径堵死。
+    labels_v2_full = "id,category\n10,售后\n11,安装\n12,售后\n".encode()
+    session = service.validate_full_sources(
+        session.session_id,
+        session.revision,
+        {"main": ("full-main.csv", FULL_MAIN), "labels": ("labels-v2.csv", labels_v2_full)},
+    )
+    assert next_action(session) == "review_full_data"
+    import hashlib
+
+    assert session.full_data.sources["labels"].digest == hashlib.sha256(labels_v2_full).hexdigest()
+    assert session.full_data.sources["labels"].digest != old_labels_digest
+    assert {row.target for row in session.full_data.preview.rows} == {"售后", "安装"}
