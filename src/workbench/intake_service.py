@@ -114,6 +114,52 @@ def _stratified_sample(rows: list, size: int, seed: int) -> list[int]:
     return sorted(set(picked))
 
 
+def wilson_lower_bound(matched: int, total: int, *, z: float = 1.96) -> float:
+    """观测一致率的 95% Wilson 得分区间下界（纯 Python 实现，不引第三方依赖）。
+
+    样本量小时观测一致率会高估真实一致率：5/5 全对的 95% 下界只有约 57%。
+    盲标核验的结论必须附上下界——小样本下，下界才是能依赖的数。
+    """
+    if total <= 0:
+        return 0.0
+    proportion = matched / total
+    z_squared = z * z
+    denominator = 1 + z_squared / total
+    center = (proportion + z_squared / (2 * total)) / denominator
+    spread = (proportion * (1 - proportion) / total + z_squared / (4 * total * total)) ** 0.5
+    return max(0.0, min(1.0, center - z / denominator * spread))
+
+
+def agreement_evidence_note(matched: int, total: int) -> str:
+    """如实说明一致率结论的统计强度：小样本看下界，样本充足时下界接近观测值。"""
+    lower = f"{wilson_lower_bound(matched, total):.0%}"
+    observed = f"{matched}/{total}"
+    if total < 30:
+        return (
+            f"样本量小（{total} 条）：{observed} 一致在 95% 置信下真实一致率下界约 {lower}。"
+            "样本量小，下界才是你能依赖的数，不要把观测一致率当作真实水平；"
+            "高风险业务建议加大样本量后再下结论。"
+        )
+    return (
+        f"样本量 {total} 条：{observed} 一致在 95% 置信下真实一致率下界约 {lower}，"
+        "下界接近观测值，结论相对可靠。"
+    )
+
+
+def sample_evidence_note(sample_size: int) -> str:
+    """抽取前如实说明本轮样本量最多能提供的证据强度（即使全部一致）。"""
+    lower = f"{wilson_lower_bound(sample_size, sample_size):.0%}"
+    if sample_size < 30:
+        return (
+            f"本轮 {sample_size} 条即使全部一致，95% 置信下真实一致率下界也只约 {lower}；"
+            "样本量小，下界才是你能依赖的数。"
+        )
+    return (
+        f"本轮 {sample_size} 条：即使全部一致，95% 置信下真实一致率下界约 {lower}，"
+        "下界接近观测值，证据相对充分。"
+    )
+
+
 class IntakeService:
     def __init__(self, root: str | Path):
         self.root = Path(root)
@@ -768,6 +814,7 @@ class IntakeService:
             "sample_size": size,
             "seed": seed,
             "items": [{"row_id": row.row_id, "input": row.input} for row in rows],
+            "evidence_note": sample_evidence_note(size),
             "note": (
                 "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。"
                 "重新核验会换一组题：上一轮公布过的正确答案照抄无效。"
@@ -828,6 +875,8 @@ class IntakeService:
             "sample_size": len(row_ids),
             "matched": matched,
             "agreement": matched / len(row_ids),
+            "agreement_lower_bound": wilson_lower_bound(matched, len(row_ids)),
+            "evidence_note": agreement_evidence_note(matched, len(row_ids)),
             "items": items,
             "verdict_note": (
                 "抽样行全部一致：监督信号的业务含义经用户独立复现。"

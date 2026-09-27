@@ -13,7 +13,7 @@ import streamlit as st
 
 from src.agent.intake import CompatibleChatClient, is_local_endpoint
 from src.workbench.evaluation_suites import EvalSuiteService
-from src.workbench.intake_service import IntakeService, next_action
+from src.workbench.intake_service import IntakeService, agreement_evidence_note, next_action
 from src.workbench.iterations import IterationService
 from src.workbench.training_runs import TrainingRunService
 from ui.components.agent_settings import render_agent_settings
@@ -2357,9 +2357,21 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     "数据或处理方案修订后，此前完成的盲标核验已失效——监督信号的业务含义可能已经改变，"
                     "请重新完成一轮核验后再准备训练。"
                 )
+
+            def result_evidence_note(record: dict) -> str:
+                """核验结论附统计说明:旧记录没有存 evidence_note 时现算,口径与服务层一致。"""
+                note = record.get("evidence_note")
+                if note:
+                    return note
+                matched_count, size = record.get("matched"), record.get("sample_size")
+                if isinstance(matched_count, int) and isinstance(size, int) and size > 0:
+                    return agreement_evidence_note(matched_count, size)
+                return ""
+
             if verification and verification.get("verdict") == "verified":
                 st.success(
                     f"盲标核验已通过（{verification['matched']}/{verification['sample_size']} 一致）。"
+                    + result_evidence_note(verification)
                 )
             else:
                 if verification and verification.get("verdict") == "insufficient_agreement":
@@ -2374,6 +2386,9 @@ if session.confirmed_revision is not None or session.full_data is not None:
                             ):
                                 st.code(item["input"], language=None)
                     st.caption("标签错误、业务歧义或任务定义不清都会造成不一致；修正后重新核验。")
+                    note = result_evidence_note(verification)
+                    if note:
+                        st.caption(note)
                 with st.form("label_verification_form"):
                     st.write("开始一轮新的盲标核验：题目在提交表单后展示（答案不随题目显示）。")
                     started = st.form_submit_button("抽取盲标核验题目", type="primary")
@@ -2397,6 +2412,9 @@ if session.confirmed_revision is not None or session.full_data is not None:
                 st.write(
                     f"**本轮核验（{pending_items['sample_size']} 条，verification {pending_items['verification_id'][:8]}）**"
                 )
+                start_note = pending_items.get("evidence_note")
+                if start_note:
+                    st.caption(start_note)
                 with st.form(f"label_verification_answer_{pending_items['verification_id']}"):
                     answers = {}
                     for item in pending_items["items"]:

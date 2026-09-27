@@ -391,3 +391,88 @@ def test_blind_verification_rolls_questions_between_rounds(tmp_path):
     assert verdict["verdict"] == "verified"
     # 换题后新轮次的 note 说明换题事实
     assert "换一组题" in second["note"]
+
+
+def test_wilson_lower_bound_matches_known_values():
+    """95% Wilson 下界用已知值校验:5/5≈56.6%、4/5≈37.6%、3/10≈10.8%,纯 Python 不引依赖。"""
+    from src.workbench.intake_service import wilson_lower_bound
+
+    assert wilson_lower_bound(5, 5) == pytest.approx(0.5655, abs=1e-3)
+    assert wilson_lower_bound(4, 5) == pytest.approx(0.3755, abs=1e-3)
+    assert wilson_lower_bound(3, 10) == pytest.approx(0.1078, abs=1e-3)
+    assert wilson_lower_bound(30, 30) == pytest.approx(0.8865, abs=1e-3)
+    assert wilson_lower_bound(0, 5) == 0.0
+    assert wilson_lower_bound(0, 0) == 0.0
+    # 同为全对,样本越大下界越高、越接近 100%:小样本的全对不等于高可信
+    assert wilson_lower_bound(5, 5) < wilson_lower_bound(20, 20) < wilson_lower_bound(30, 30) < 1.0
+
+
+def test_agreement_note_has_two_honest_tiers():
+    """两档文案:样本 <30 说「下界才是你能依赖的数」;≥30 改说「下界接近观测值」。"""
+    from src.workbench.intake_service import agreement_evidence_note
+
+    small = agreement_evidence_note(5, 5)
+    assert "5/5 一致" in small
+    assert "57%" in small
+    assert "下界才是你能依赖的数" in small
+    partial = agreement_evidence_note(4, 5)
+    assert "4/5 一致" in partial
+    assert "38%" in partial
+    large = agreement_evidence_note(30, 30)
+    assert "89%" in large
+    assert "下界接近观测值" in large
+    assert "下界才是你能依赖的数" not in large
+
+
+def test_start_result_states_statistical_limit_upfront(store):
+    """抽题结果自带统计局限说明:本轮 N 条即使全部一致,下界也只有约 X%。"""
+    from src.workbench.intake_service import sample_evidence_note, wilson_lower_bound
+
+    service, session = store
+    pending = service.start_label_verification(session.session_id, session.revision)
+    assert pending["evidence_note"] == sample_evidence_note(pending["sample_size"])
+    assert "即使全部一致" in pending["evidence_note"]
+    assert "下界才是你能依赖的数" in pending["evidence_note"]  # 默认 5 条属于小样本档
+    assert (
+        f"{wilson_lower_bound(pending['sample_size'], pending['sample_size']):.0%}"
+        in pending["evidence_note"]
+    )
+
+
+def test_submit_result_carries_lower_bound_and_note(store):
+    """提交结果附 95% 下界与统计说明,并存档回读一致:5/5 全对下界约 57%,不冒充 100%。"""
+    from src.workbench.intake_service import wilson_lower_bound
+
+    service, session = store
+    pending, answers = _answers_from(service, session)
+    size = pending["sample_size"]
+    result = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert result["verdict"] == "verified"
+    assert result["agreement"] == 1.0
+    assert result["agreement_lower_bound"] == pytest.approx(wilson_lower_bound(size, size))
+    assert result["agreement_lower_bound"] < 1.0
+    assert "下界才是你能依赖的数" in result["evidence_note"]
+    stored = service.load(session.session_id).label_verification
+    assert stored["agreement_lower_bound"] == pytest.approx(wilson_lower_bound(size, size))
+    assert stored["evidence_note"] == result["evidence_note"]
+
+
+def test_mismatch_result_lower_bound_reflects_partial_agreement(store):
+    """不一致结论同样附下界:4/5 的下界明显低于观测 80%,不粉饰分歧证据强度。"""
+    from src.workbench.intake_service import wilson_lower_bound
+
+    service, session = store
+    pending, answers = _answers_from(
+        service, session, mutate=lambda a, p: a.update({p["items"][0]["row_id"]: "明显不同"})
+    )
+    size = pending["sample_size"]
+    result = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert result["verdict"] == "insufficient_agreement"
+    assert result["matched"] == size - 1
+    assert result["agreement_lower_bound"] == pytest.approx(wilson_lower_bound(size - 1, size))
+    assert result["agreement_lower_bound"] < result["agreement"]
+    assert "样本量小" in result["evidence_note"]

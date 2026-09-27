@@ -46,6 +46,49 @@ def test_blind_verification_flow_via_page(verify_page):
     assert not any(b.label == "抽取盲标核验题目" for b in page.button)
 
 
+def test_verified_result_shows_statistical_lower_bound(verify_page):
+    """核验结论附统计局限说明:抽题前预告下界,通过后展示 95% 下界而非冒充 100%。"""
+    from src.workbench.intake_service import wilson_lower_bound
+
+    service, session, page = verify_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+    assert not page.exception
+    # 抽题后先如实预告:本轮即使全部一致,95% 置信下真实一致率下界也有限
+    assert any("即使全部一致" in c.value for c in page.caption)
+    assert any("下界才是你能依赖的数" in c.value for c in page.caption)
+
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    for field in [t for t in page.text_input if t.key and str(t.key).startswith("lv_")]:
+        row_id = str(field.key).rsplit("_", 1)[-1]
+        field.input(targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交盲标核验答案").click().run()
+    assert not page.exception
+    success = next(m.value for m in page.success if "盲标核验已通过" in m.value)
+    assert "下界才是你能依赖的数" in success
+    size = service.load(session.session_id).label_verification["sample_size"]
+    assert f"{wilson_lower_bound(size, size):.0%}" in success
+
+
+def test_mismatch_page_shows_lower_bound_caption(verify_page):
+    """未通过时页面同样给出统计说明:4/5 这类观测一致率不粉饰证据强度。"""
+    service, session, page = verify_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+    fields = [t for t in page.text_input if t.key and str(t.key).startswith("lv_")]
+    fields[0].input("故意答错").run()
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    for field in fields[1:]:
+        row_id = str(field.key).rsplit("_", 1)[-1]
+        field.input(targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交盲标核验答案").click().run()
+    assert not page.exception
+    assert any("盲标核验未通过" in message.value for message in page.error)
+    assert any("下界才是你能依赖的数" in c.value for c in page.caption)
+
+
 def test_mismatch_shows_per_row_differences_and_blocks_training(verify_page):
     service, session, page = verify_page
     page.run()
