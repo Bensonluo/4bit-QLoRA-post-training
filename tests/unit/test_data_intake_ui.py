@@ -606,3 +606,41 @@ def test_add_source_form_reads_designated_excel_sheet(data_page, monkeypatch):
     assert saved.sources["labels"].columns == ["员工号", "部门"]
     assert any(row.values.get("员工号") == "E01" for row in saved.sources["labels"].rows)
     assert saved.sources["main"].digest == session.source.digest
+
+
+def test_full_upload_form_reads_designated_excel_sheet(data_page, monkeypatch):
+    """全量文件读取设置与新建任务对称：全量 Excel 数据在第二个 sheet 时按指定读取。"""
+    from tests.unit.test_full_data import approved
+
+    service, _, page = data_page
+    session = approved(service)
+    holder = {"file": None}
+    patch_uploader(monkeypatch, "提供本次任务的全量文件", holder)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert not any(t.label == SHEET_INPUT_LABEL for t in page.text_input)
+    holder["file"] = uploaded_bytes(
+        _workbook_bytes(
+            ("说明", ("备注",), [("全量数据在下一个 sheet",)]),
+            (
+                "全量表",
+                ("编号", "客户描述", "类别", "处理结果"),
+                [
+                    ("100", "收到破杯", "质量", "补发"),
+                    ("101", "快递太慢", "物流", "查询"),
+                    ("102", "杯把断了", "质量", "补发"),
+                ],
+            ),
+        ),
+        "全量.xlsx",
+    )
+    page.run()
+    next(t for t in page.text_input if t.label == SHEET_INPUT_LABEL).input("全量表")
+    button(page, "按已确认方案验证全量数据").click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert next_action(current) == "review_full_data"
+    assert current.full_data.sources["main"].sheet == "全量表"
+    assert current.full_data.source.columns == ["编号", "客户描述", "类别", "处理结果"]
+    assert current.full_data.preview.counts["ready"] == 3

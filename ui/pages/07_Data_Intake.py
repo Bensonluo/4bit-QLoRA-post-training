@@ -2231,14 +2231,19 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
+            # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
+            # 按上传的文件类型显示 sheet 选择。
+            full_upload = st.file_uploader(
+                "提供本次任务的全量文件", type=["csv", "xlsx", "xls", "jsonl"]
+            )
             with st.form(f"full_upload_{session.session_id}"):
-                full_upload = st.file_uploader(
-                    "提供本次任务的全量文件", type=["csv", "xlsx", "xls", "jsonl"]
-                )
                 with st.expander("全量文件读取设置"):
                     full_encoding = st.text_input("全量文件编码（留空自动识别）")
                     full_delimiter = st.selectbox(
                         "全量 CSV 分隔符", ["自动", "逗号", "分号", "Tab", "竖线"]
+                    )
+                    full_sheet = excel_sheet_input(
+                        full_upload, key=f"full_sheet_{session.session_id}"
                     )
                 validate_full = st.form_submit_button("按已确认方案验证全量数据")
             if validate_full:
@@ -2255,6 +2260,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                             delimiter={"逗号": ",", "分号": ";", "Tab": "\t", "竖线": "|"}.get(
                                 full_delimiter
                             ),
+                            sheet=(full_sheet or "").strip() or None,
                         )
                         st.rerun()
                     except (ValueError, OSError) as exc:
