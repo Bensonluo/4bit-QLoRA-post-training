@@ -419,3 +419,43 @@ summarize_training_run 接进两个子命令,且各有一条最小 CLI 断言(ev
 
 矩阵 29→32,32/32 as_expected(意外通过/意外拦截/错误均为 0);test_scenario_matrix
 17→20 项全绿,全集下限断言随之 29→32;ruff clean。
+
+### 第 16 轮 = 并行矩阵扩展(场景 33-35)
+
+(B 线第七批。)三个新场景全部先以临时探针实测真实行为、再定期望(探针测完即删,
+禁止猜):
+
+- **场景 33「样例与全量目标列含义反转」**(`target-meaning-reversal`):样例确认
+  「类别」=售后类别(质量/物流),全量是另一份导出——同名列装的是优先级(高/低),
+  输入行与样例不重叠。实测结局:apply_analysis/样例预览不检测漂移(全量那时还不在
+  场);漂移的既有守卫在 validate_full 触发但**不硬拦**——`new_categories` 是
+  review 级预警:「类别字段 类别 出现样例未覆盖的 2 种答案,请核对是否属于目标类别」
+  点名全部 10 行,`new_target_values` 如实记录 ['高','低'],全量预览原样携带反转后
+  标签,确认全量不被 review 拦;含义反转最终**拦在盲标关**——按样例确认的业务语义
+  作答的用户复现不出 高/低(盲标 0/5 insufficient_agreement)。对照事实(探针实测):
+  若全量还含与样例同输入的行,`sample_answer_disagreement`(blocking)会在
+  validate_full 更早硬拦。边界如实记录:照抄数据标签的「全知用户」会全程通过——
+  自动检出=review 预警,语义裁决靠用户在预览与盲标两处人工核对;期望定为
+  blocked_at:blind_verification,若日后把 new_categories 升级为 blocking(拦截前移),
+  本场景需随之改期望。
+- **场景 34「单格 10 万字符」**(`100k-single-cell`):extreme-long-single-cell
+  (精确 3 万字符)的 3.3 倍同形态夹具(含逗号、按 CSV 规范加引号)。实测结局:
+  入口读取完整无截断(读入口按文件长度抬高 csv 字段上限,不依赖 128KB 默认值),
+  预览原样进入(输入 100 006 字符=单元格+「客户描述: 」前缀),全量验证无 blocking,
+  八关全过——与 3 万字符场景同结论:零密钥数据层不设长度上限,训练期截断风险由
+  训练前预检用真实 tokenizer 测量。
+- **场景 35「Excel『CSV UTF-8』导出」**(`excel-utf8-bom-csv`,自选形态):UTF-8 带
+  BOM(EF BB BF)+ CRLF 行尾——Windows Excel 2016+ 默认 UTF-8 导出的真实形态。
+  实测结局:全程无碍——utf-8-sig 解码剥掉 BOM,CRLF 由 csv 规范消化,列名与单元格
+  值都不残留 \ufeff/\r,八关全过。对照事实(探针实测):同样的字节用纯 utf-8 解码,
+  首列名是「\ufeff编号」——若入口不做 utf-8-sig 兜底,用户按业务口径选「编号」作
+  分组列就会像 spaced-header-names 一样在基础分析被拦;与 gbk-encoded-upload(编码
+  回退)、utf16-excel-export(BOM 证据识别)、utf16-no-bom-rejected(明确拒绝)共同
+  构成入口编码家族边界。探针同时实测了两个落选形态,记录在案:仅 CRLF(无 BOM)
+  同样干净通过(不单列场景);全量答案值带前后空格(样例干净)会因「同输入不同答案」
+  在 validate_full 被 sample_answer_disagreement 硬拦——本质与场景 33 对照变体同守卫,
+  不重复入列。
+
+矩阵 32→35,35/35 as_expected(意外通过/意外拦截/错误均为 0);test_scenario_matrix
+20→23 项全绿,全集下限断言随之 32→35;ruff clean。docs/validation/scenario-matrix-
+latest.json 留给跑台例行刷新,本批未动。
