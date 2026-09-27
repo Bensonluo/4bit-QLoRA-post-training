@@ -143,6 +143,54 @@ def summarize_comparison(report: Any) -> list[str]:
     return lines
 
 
+def summarize_dataset(statistics: dict) -> list[str]:
+    """把数据集分区统计翻译成人话：怎么分的、各多少、排除了什么、边界声明在哪。
+
+    只复述统计里的事实：时间方案明确说出排除与不随机补数；分组方案如实说明
+    实际比例受分组大小影响。不宣称训练效果，也不替用户判断业务达标。
+    """
+    counts = statistics.get("row_counts") or {}
+    train = counts.get("train", 0)
+    validation = counts.get("validation", 0)
+    test = counts.get("test", 0)
+    total = statistics.get("total_rows") or sum(counts.values())
+    method = statistics.get("split_method", "")
+    lines: list[str] = []
+    if method.startswith("temporal"):
+        included = statistics.get("included_rows", train + validation + test)
+        excluded = statistics.get("excluded_rows", 0)
+        lines.append(
+            f"本版本按已确认的时间边界划分：训练 {train} 条、验证 {validation} 条、"
+            f"独立测试 {test} 条，共纳入 {included} 条（全量 {total} 条）；"
+            "分界线与本版本实际使用的时间字段见下方。"
+        )
+        if excluded:
+            lines.append(
+                f"另有 {excluded} 条因标签未成熟、跨越分区边界或与排除记录同源被明确排除，"
+                "原行完整保留在排除明细里；没有随机补数，也没有把未成熟标签当作真值。"
+            )
+        else:
+            lines.append("没有记录被排除，全部按时间边界纳入对应分区。")
+        if method == "temporal_fixed_evaluation_suite":
+            lines.append(
+                "本版本同时沿用固定开发/测试题集：后续轮次在同一批题目上比较，新增资料不扩充评分题。"
+            )
+    elif method == "fixed_evaluation_suite":
+        lines.append(
+            f"本版本沿用固定开发/测试题集：训练 {train} 条、验证 {validation} 条、"
+            f"独立测试 {test} 条；新增独立资料进入训练，评分题目保持不变。"
+        )
+    else:
+        groups = statistics.get("independent_groups", "?")
+        lines.append(
+            f"本版本按业务对象隔离划分：训练 {train} 条、验证 {validation} 条、"
+            f"独立测试 {test} 条，共 {total} 条、{groups} 个独立分组；"
+            "同一对象的记录保持在同一分区，实际比例受分组大小影响。"
+        )
+    lines.append("分区就绪只说明数据已按规则隔离、可以进入训练前检查；不代表模型效果或业务达标。")
+    return lines
+
+
 def summarize_preflight(preflight: dict) -> list[str]:
     """把训练前检查报告翻译成人话:答案是否保留、截断多少、问题在哪。"""
     if not preflight:

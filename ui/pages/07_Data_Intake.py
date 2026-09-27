@@ -35,8 +35,10 @@ TEMPORAL_EXCLUSION_NAMES = {
 }
 
 
-def show_temporal_policy(policy) -> None:
-    st.write("**已提出的时间分区方案（随业务预览确认）**")
+def show_temporal_policy(
+    policy, *, title: str = "**已提出的时间分区方案（随业务预览确认）**"
+) -> None:
+    st.write(title)
     st.dataframe(
         [
             {"时间含义": label, "来源字段": column}
@@ -2401,6 +2403,11 @@ if dataset is not None:
     st.write(
         f"训练 {counts['train']} 条 · 验证 {counts['validation']} 条 · 独立测试 {counts['test']} 条"
     )
+    # 分区统计大白话摘要：非专家读句子核对「怎么分的、排除了什么」，不读 JSON。
+    from src.workbench.report_summary import summarize_dataset
+
+    for line in summarize_dataset(dataset.statistics):
+        st.write(line)
     if dataset.statistics.get("split_method", "").startswith("temporal"):
         st.info(
             f"按时间规则纳入 {dataset.statistics.get('included_rows', sum(counts.values()))} 条，排除并保留 {dataset.statistics.get('excluded_rows', 0)} 条；没有随机回退或补标签。"
@@ -2409,7 +2416,18 @@ if dataset is not None:
             st.write(f"{TEMPORAL_EXCLUSION_NAMES.get(reason, reason)}：{count} 条")
         try:
             manifest = json.loads(Path(dataset.paths["manifest"]).read_text(encoding="utf-8"))
-            excluded = manifest.get("metadata", {}).get("excluded_rows", [])
+            metadata = manifest.get("metadata", {})
+            policy_payload = metadata.get("temporal_policy")
+            if policy_payload:
+                # 版本卡回显本版本实际使用的时间字段与边界：数据集是产物，
+                # 核对「当时是按什么分界线切的」不应要求用户去解析 manifest JSON。
+                from src.workbench.intake_models import TemporalSplitPolicy
+
+                show_temporal_policy(
+                    TemporalSplitPolicy.model_validate(policy_payload),
+                    title="**本数据集版本实际使用的时间分区方案（核对边界与字段）**",
+                )
+            excluded = metadata.get("excluded_rows", [])
             show_temporal_exclusions(excluded, title="本版本的时间排除明细")
             st.download_button(
                 "下载时间排除记录",

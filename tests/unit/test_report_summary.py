@@ -284,3 +284,62 @@ def test_low_truncation_ratio_does_not_hint_max_new_tokens():
     assert "1 题没写完被截断" in joined
     assert "触及生成长度上限被截断" not in joined
     assert "max_new_tokens" not in joined
+
+
+def test_summarize_dataset_temporal_states_inclusion_and_exclusion_honestly():
+    """时间方案摘要:分法、纳入/排除数量、不随机补数,一句不漏也不夸大。"""
+    from src.workbench.report_summary import summarize_dataset
+
+    statistics = {
+        "total_rows": 6,
+        "row_counts": {"train": 3, "validation": 1, "test": 1},
+        "split_method": "temporal",
+        "included_rows": 5,
+        "excluded_rows": 1,
+        "exclusion_counts": {"label_not_mature": 1},
+    }
+    joined = "\n".join(summarize_dataset(statistics))
+    assert "按已确认的时间边界划分" in joined
+    assert "训练 3 条、验证 1 条、独立测试 1 条" in joined
+    assert "共纳入 5 条（全量 6 条）" in joined
+    assert "另有 1 条" in joined and "明确排除" in joined
+    assert "没有随机补数" in joined and "未成熟标签当作真值" in joined
+    assert "分区就绪只说明数据已按规则隔离" in joined
+
+
+def test_summarize_dataset_temporal_without_exclusions_and_fixed_suite():
+    from src.workbench.report_summary import summarize_dataset
+
+    clean = {
+        "total_rows": 3,
+        "row_counts": {"train": 1, "validation": 1, "test": 1},
+        "split_method": "temporal_fixed_evaluation_suite",
+        "included_rows": 3,
+        "excluded_rows": 0,
+    }
+    joined = "\n".join(summarize_dataset(clean))
+    assert "没有记录被排除" in joined
+    assert "固定开发/测试题集" in joined
+    assert "新增资料不扩充评分题" in joined
+
+
+def test_summarize_dataset_grouped_and_fixed_suite_split_methods():
+    from src.workbench.report_summary import summarize_dataset
+
+    grouped = {
+        "total_rows": 10,
+        "row_counts": {"train": 8, "validation": 1, "test": 1},
+        "independent_groups": 7,
+    }
+    joined = "\n".join(summarize_dataset(grouped))
+    assert "按业务对象隔离划分" in joined
+    assert "7 个独立分组" in joined
+    assert "实际比例受分组大小影响" in joined
+    fixed = {
+        "total_rows": 10,
+        "row_counts": {"train": 8, "validation": 1, "test": 1},
+        "split_method": "fixed_evaluation_suite",
+    }
+    joined = "\n".join(summarize_dataset(fixed))
+    assert "沿用固定开发/测试题集" in joined
+    assert "按业务对象隔离划分" not in joined

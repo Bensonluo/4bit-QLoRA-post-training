@@ -137,3 +137,58 @@ def test_baseline_temporal_wrong_time_column_errors_in_place(temporal_page):
     assert not page.exception
     assert any("编号不是有效ISO时间" in error.value for error in page.error)
     assert service.load(session.session_id).analysis is None
+
+
+def test_materialized_temporal_dataset_card_restates_policy_and_plain_summary(temporal_page):
+    """零密钥时间方案物化后：版本卡回显实际边界与字段，并用大白话重述分区统计。"""
+    service, session, page = temporal_page
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(
+            session,
+            target_column="类别",
+            excluded_columns=["编号"],
+            temporal_policy={
+                "available_at_column": "记录时间",
+                "prediction_at_column": "决策时间",
+                "label_end_at_column": "窗口结束",
+                "validation_start": "2026-02-01T00:00:00Z",
+                "test_start": "2026-03-01T00:00:00Z",
+                "observation_end": "2026-04-01T00:00:00Z",
+            },
+        ),
+        model="baseline-deterministic",
+    )
+    session = service.confirm(session.session_id, session.revision)
+    full = (
+        TEMPORAL_CSV
+        + (
+            "A5,尚未成熟的描述,质量,2026-03-31T00:00:00Z,2026-03-31T00:00:00Z,2026-04-02T00:00:00Z\n"
+        ).encode()
+    )
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", full)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(
+        session.session_id, session.revision, independent_rows_confirmed=True
+    )
+    assert session.dataset.statistics["row_counts"] == {
+        "train": 2,
+        "validation": 1,
+        "test": 1,
+    }
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    markdown = [item.value for item in page.markdown]
+    # 版本卡回显本版本实际使用的时间边界，核对不必解析 manifest JSON。
+    assert any("本数据集版本实际使用的时间分区方案" in value for value in markdown)
+    assert any(
+        "2026-03-01T00:00:00Z" in value and "2026-04-01T00:00:00Z" in value for value in markdown
+    )
+    # 分区统计以大白话重述：纳入/排除与「不随机补数」如实可读。
+    assert any("按已确认的时间边界划分" in value for value in markdown)
+    assert any("共纳入 4 条（全量 5 条）" in value for value in markdown)
+    assert any("另有 1 条" in value and "没有随机补数" in value for value in markdown)
+    assert any("分区就绪只说明数据已按规则隔离" in value for value in markdown)
