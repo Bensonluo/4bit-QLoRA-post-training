@@ -184,6 +184,15 @@ _CONSTANT_TARGET_SAMPLE = (
 ).encode()
 _CONSTANT_TARGET_FULL = _CONSTANT_TARGET_SAMPLE
 
+# 答案列全是空格:表头保留、每行答案字段是 3 个空格(复制粘贴/导出填充产生的
+# 「看起来填了」的列)——空格是否等价于空,以实测为准。
+_WHITESPACE_TARGET_SAMPLE = (
+    "编号,客户描述,类别\n001,杯子破损,   \n002,物流未更新,   \n"
+).encode()
+_WHITESPACE_TARGET_FULL = (
+    "编号,客户描述,类别\n" + "".join(f"{i:03d},问题{i},   \n" for i in range(1, 11))
+).encode()
+
 
 def _long_line_text() -> str:
     import csv as _csv
@@ -662,6 +671,25 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "用户须让数据覆盖至少两个类别,或确认答案列本身选错"
             ),
             tags=("dirty-data", "single-class"),
+        ),
+        ScenarioSpec(
+            scenario_id="whitespace-only-values",
+            goal="根据客户首次描述判断售后类别",
+            sample=_WHITESPACE_TARGET_SAMPLE,
+            sample_name="工单.csv",
+            full=_WHITESPACE_TARGET_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:contrast_check",
+            expect_note=(
+                "实测结局:空格不算真值——预览层按 strip 判空,逐行标 needs_label"
+                "(「缺少监督答案，需要补充或确认标签；没有自动生成真值。」),与真空值同路;"
+                "旅程在对比核验被拦:「对比核验需要至少两条答案不同的已标注行。」"
+                "边界如实记录:基础分析的「非空取值」计数按不等于空串统计,空格被算作非空"
+                "(finding 显示「非空取值 2/2 行,共 1 类:空格×2」)——两层判空口径不一致,"
+                "但既不静默跳过也不带病通过,拦截关卡与报错同真空值完全一致;用户须补真标签"
+            ),
+            tags=("dirty-data", "whitespace"),
         ),
     ]
 

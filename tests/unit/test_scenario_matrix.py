@@ -123,7 +123,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 27, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 28, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -319,3 +319,38 @@ def test_constant_target_blocked_at_contrast_check(tmp_path):
     analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
     messages = [finding.message for finding in analysis.findings]
     assert any("分布严重不均衡" in message and "100%" in message for message in messages), messages
+
+
+def test_whitespace_only_values_treated_as_missing(tmp_path):
+    """场景 28:答案列全是空格——不等价于真值:预览层判空标 needs_label,旅程在对比核验被拦。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "whitespace-only-values" in specs, "缺少场景 whitespace-only-values"
+
+    spec = specs["whitespace-only-values"]
+    # 夹具真实性:表头保留「类别」,每条数据行的答案字段都是 3 个空格
+    assert spec.sample.splitlines()[0].endswith(",类别".encode())
+    for blob in (spec.sample, spec.full):
+        data_lines = blob.splitlines()[1:]
+        assert data_lines and all(line.endswith(b",   ") for line in data_lines), "答案字段应全为空格"
+
+    result = run_scenario(spec, tmp_path / "whitespace-only-values")
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "contrast_check", result.to_dict()
+    assert "对比核验需要至少两条答案不同的已标注行" in result.blocked_message
+    # create 与基础分析都不拦;空格不被当成真值放行,与真空值同一关卡同一报错
+    assert result.stages["create"] == "passed"
+    assert result.stages["baseline_analysis"] == "passed"
+
+    # 预览层事实:空格答案按 strip 判空,逐行标 needs_label、target 为 None,不自动补值
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "whitespace-only-values-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    assert session.preview.counts["ready"] == 0
+    assert session.preview.counts["needs_label"] == len(session.preview.rows)
+    for row in session.preview.rows:
+        assert row.target is None, row
+        assert any("缺少监督答案" in issue for issue in row.issues), row
