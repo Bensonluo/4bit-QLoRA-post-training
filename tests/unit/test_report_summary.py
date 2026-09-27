@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from src.workbench.report_summary import summarize_comparison
 
 
-def _model(label, total, accuracy, statuses=(), outputs=(), prompt="题目:某指令文本较长较长较长较长"):
+def _model(
+    label, total, accuracy, statuses=(), outputs=(), prompt="题目:某指令文本较长较长较长较长"
+):
     rows = []
     for index in range(total):
         status = statuses[index] if index < len(statuses) else "correct"
@@ -94,9 +96,7 @@ def test_preflight_summary_passed_and_empty():
 
     assert summarize_preflight(None) == ["尚未执行训练前检查。"]
     joined = "\n".join(
-        summarize_preflight(
-            {"status": "passed", "splits": {"train": {"rows": 4}}, "issues": []}
-        )
+        summarize_preflight({"status": "passed", "splits": {"train": {"rows": 4}}, "issues": []})
     )
     assert "检查通过" in joined and "没有内容因长度超限被截断" in joined
 
@@ -105,20 +105,66 @@ def test_training_run_summary_status_and_honesty():
     from src.workbench.report_summary import summarize_training_run
 
     running = summarize_training_run(
-        {"status": "running", "model_path": "/models/Qwen3-1.7B", "config": {"training": {"num_epochs": 1}}}
+        {
+            "status": "running",
+            "model_path": "/models/Qwen3-1.7B",
+            "config": {"training": {"num_epochs": 1}},
+        }
     )
     assert any("正在训练中" in line and "关闭页面不影响" in line for line in running)
 
     done = summarize_training_run(
-        {"status": "succeeded", "model_path": "/models/Qwen3-1.7B",
-         "config": {"training": {"num_epochs": 1}}, "metrics": {"train_loss": 0.42}}
+        {
+            "status": "succeeded",
+            "model_path": "/models/Qwen3-1.7B",
+            "config": {"training": {"num_epochs": 1}},
+            "metrics": {"train_loss": 0.42},
+        }
     )
     joined = "\n".join(done)
     assert "训练完成" in joined and "0.4200" in joined
     assert "要用同一套开发题与基座对照" in joined
 
     failed = summarize_training_run(
-        {"status": "failed", "model_path": "/m", "failure": {"stage": "training", "message": "显存不足"}}
+        {
+            "status": "failed",
+            "model_path": "/m",
+            "failure": {"stage": "training", "message": "显存不足"},
+        }
     )
     joined = "\n".join(failed)
     assert "training阶段：显存不足" in joined
+
+
+def test_preflight_summary_gives_concrete_length_advice():
+    from src.workbench.report_summary import summarize_preflight
+
+    lines = summarize_preflight(
+        {
+            "status": "warnings",
+            "max_length": 512,
+            "splits": {"train": {"rows": 8, "truncated_rows": 2}},
+            "rows": [
+                {"full_tokens": 823, "answer_was_truncated": True},
+                {"full_tokens": 300, "answer_was_truncated": False},
+            ],
+            "issues": [],
+        }
+    )
+    joined = "\n".join(lines)
+    assert "答案在截断后丢了" in joined
+    assert "最长一条记录需要 823" in joined
+    assert "设为 832 左右" in joined
+
+    # 无答案丢失且长度已足够:建议核对个别行
+    lines = summarize_preflight(
+        {
+            "status": "warnings",
+            "max_length": 1024,
+            "splits": {"train": {"rows": 8, "truncated_rows": 1}},
+            "rows": [{"full_tokens": 700, "answer_was_truncated": False}],
+            "issues": [],
+        }
+    )
+    joined = "\n".join(lines)
+    assert "答案都保留了" in joined and "已能容纳最长记录" in joined

@@ -87,9 +87,33 @@ def summarize_preflight(preflight: dict) -> list[str]:
             for name, split in splits.items()
             if split.get("truncated_rows")
         )
-        lines.append(
-            f"有内容超出长度上限被截断（{detail}）——被截掉的可能正是答案或关键上下文，请核对。"
-        )
+        rows = preflight.get("rows") or []
+        answer_partial = sum(1 for row in rows if row.get("answer_was_truncated"))
+        if answer_partial:
+            lines.append(
+                f"有 {answer_partial} 行的答案在截断后丢了一部分（共截断 {detail}）——"
+                "优先加大长度或缩短输入；答案不完整的样本教不会模型正确作答。"
+            )
+        else:
+            lines.append(
+                f"有内容超出长度上限被截断（{detail}）——答案都保留了，截掉的是输入内容；请核对被截部分是否关键。"
+            )
+        full_tokens = [
+            row.get("full_tokens") for row in rows if isinstance(row.get("full_tokens"), int)
+        ]
+        used = preflight.get("max_length")
+        if full_tokens and isinstance(used, int):
+            needed = max(full_tokens)
+            suggested = ((needed + 63) // 64) * 64
+            if used < needed:
+                lines.append(
+                    f"当前长度 {used}，最长一条记录需要 {needed}——把长度设为 {suggested} 左右即可全部放下；"
+                    "显存吃紧时优先压缩最长的输入字段，而不是压长度。"
+                )
+            else:
+                lines.append(
+                    f"当前长度 {used} 已能容纳最长记录（{needed}），截断来自个别超长行，可单独核对。"
+                )
     else:
         lines.append("没有内容因长度超限被截断。")
     if lost:
