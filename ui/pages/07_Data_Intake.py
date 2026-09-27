@@ -624,6 +624,22 @@ def show_final_acceptance(run: dict) -> None:
             )
 
 
+LR_TIER_DISCLAIMER = (
+    "该分档是 2026 年外部指南的汇总启发（Unsloth 指南、Raschka 实践笔记等），"
+    "非本产品实测，以你自己的同题对照结果为准。"
+)
+
+
+def learning_rate_suggestion(total_rows: int) -> tuple[float, str]:
+    """按 QUICKSTART 第 4 步的外部分档给学习率起步档：<2,000 条 5e-5~1e-4，≥2,000 条 2e-4。"""
+    if total_rows < 2000:
+        return 0.0001, (
+            f"全量 {total_rows} 条（< 2,000），建议学习率起步 5e-5~1e-4——"
+            "小数据集用大学习率易过拟合、训练不稳，业界指南一致建议降档。"
+        )
+    return 0.0002, f"全量 {total_rows} 条（≥ 2,000），建议学习率起步 2e-4——通用可靠默认。"
+
+
 def show_training_recommendations() -> None:
     """Recommend only on request, then prepare a saved plan after business review."""
     from src.workbench.local_models import discover_local_models
@@ -2603,6 +2619,23 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                 "推荐起步值（小数据）：训练轮数 1–2、每设备 batch size 1、梯度累积步数 4、"
                 "学习率 0.0002（即 2e-4）、LoRA rank 8——与下方表单默认值一致；先跑通再调。"
             )
+            row_counts = (
+                (session.dataset.statistics or {}).get("row_counts") or {}
+                if session.dataset
+                else {}
+            )
+            total_rows = sum(int(count) for count in row_counts.values())
+            suggested_lr, lr_reason = learning_rate_suggestion(total_rows)
+            lr_key = f"training_lr_{session.session_id}"
+            if lr_key not in st.session_state:
+                st.session_state[lr_key] = 0.0002  # 表单默认值：与「推荐起步值」2e-4 一致
+            # Streamlit 表单内不能放普通按钮：采用按钮放在表单上方，点击后把建议值填入表单内学习率输入。
+            if st.button(
+                "采用建议学习率",
+                key=f"adopt_lr_{session.session_id}",
+                help=f"按全量 {total_rows} 条填入建议起步值 {suggested_lr:.7f}；填入后仍可手改。",
+            ):
+                st.session_state[lr_key] = suggested_lr
             with st.form(f"prepare_training_{session.session_id}"):
                 training_model_path = st.text_input(
                     "本地基础模型目录", placeholder="包含基础模型权重、配置和 tokenizer 的目录"
@@ -2613,8 +2646,9 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                 training_epochs = st.number_input("训练轮数", min_value=1, value=1, step=1)
                 training_batch = st.number_input("每设备 batch size", min_value=1, value=1, step=1)
                 with st.expander("基础训练参数"):
+                    st.caption(f"学习率分档建议：{lr_reason}{LR_TIER_DISCLAIMER}")
                     training_lr = st.number_input(
-                        "学习率", min_value=0.0000001, value=0.0002, format="%.7f"
+                        "学习率", min_value=0.0000001, format="%.7f", key=lr_key
                     )
                     training_accumulation = st.number_input(
                         "梯度累积步数", min_value=1, value=4, step=1

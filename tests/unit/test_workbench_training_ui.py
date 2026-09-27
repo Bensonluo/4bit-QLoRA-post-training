@@ -582,3 +582,30 @@ def test_manual_training_parameters_have_plain_language_guidance(training_page):
     # 指引与表单同时在场:默认值即推荐起步值,用户可以直接准备训练
     next(t for t in page.text_input if t.label == "本地基础模型目录")
     next(b for b in page.button if b.label == "准备本轮训练方案")
+
+
+def test_learning_rate_tier_suggestion_fills_lower_tier_on_request(training_page):
+    """<2,000 条全量:默认学习率保持 2e-4,点击「采用建议学习率」才填入 1e-4 档,仍可手改。"""
+    _, session, page, calls, _ = training_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    lr_input = next(field for field in page.number_input if field.label == "学习率")
+    assert lr_input.value == pytest.approx(0.0002)
+    captions = "\n".join(caption.value for caption in page.caption)
+    # 全量夹具共 3 行:建议降档到 5e-5~1e-4,并明示分档依据为外部指南、非本产品实测
+    assert "全量 3 条（< 2,000）" in captions
+    assert "5e-5~1e-4" in captions
+    assert "非本产品实测" in captions
+    button(page, "采用建议学习率").click().run()
+    assert not page.exception
+    lr_input = next(field for field in page.number_input if field.label == "学习率")
+    assert lr_input.value == pytest.approx(0.0001)
+    # 建议只是预填:用户仍可手改,且手改值进入训练准备参数
+    next(field for field in page.number_input if field.label == "学习率").set_value(0.0003).run()
+    next(field for field in page.text_input if field.label == "本地基础模型目录").input(
+        "/tmp/local-base"
+    )
+    button(page, "准备本轮训练方案").click().run()
+    assert not page.exception
+    assert calls[0][3]["training_options"]["learning_rate"] == pytest.approx(0.0003)
