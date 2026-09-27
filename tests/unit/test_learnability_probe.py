@@ -117,6 +117,37 @@ def test_label_error_candidates_cross_signal_ranking(store, tmp_path):
         assert "强证据" in candidates[0]["evidence"]
 
 
+def test_describe_candidates_plain_lines_and_empty_message():
+    """人话清单:强证据带 ⚠ 逐行可核对;没有候选时给明确说法而不是沉默。"""
+    from src.workbench.learnability_probe import describe_candidates
+
+    assert describe_candidates([]) == ["没有发现值得优先核对的行。"]
+
+    lines = describe_candidates(
+        [
+            {
+                "row_id": "r1",
+                "data_label": "质量",
+                "base_zero_shot": "物流",
+                "user_blind_answer": "服务",
+                "evidence": "强证据,优先人工核对",
+            },
+            {
+                "row_id": "r2",
+                "data_label": "物流",
+                "base_zero_shot": "质量",
+                "user_blind_answer": None,
+                "evidence": "弱信号供参考",
+            },
+        ]
+    )
+    assert len(lines) == 3
+    assert "候选 2 行" in lines[0] and "强证据 1 行" in lines[0]
+    assert "候选不等于错误" in lines[0]
+    assert lines[1].startswith("⚠") and "r1" in lines[1] and "服务" in lines[1]
+    assert lines[2].startswith("·") and "r2" in lines[2] and "⚠" not in lines[2]
+
+
 def test_candidates_csv_export_is_excel_friendly():
     from src.workbench.learnability_probe import candidates_to_csv
 
@@ -181,7 +212,9 @@ def test_cli_probe_show_reads_saved_result_without_rerunning(store, tmp_path, mo
     assert data_intake.main() == 2  # 尚未运行过探针:明确告知,不伪造
     capsys.readouterr()
 
-    result = probe_learnability(session, "/tmp/base", runtime_factory=_factory("质量"), sample_size=2)
+    result = probe_learnability(
+        session, "/tmp/base", runtime_factory=_factory("质量"), sample_size=2
+    )
     save_probe(evaluation_root.parent / "probes", result)
     monkeypatch.setattr(sys, "argv", argv)
     assert data_intake.main() == 0

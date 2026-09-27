@@ -1088,7 +1088,11 @@ def main() -> int:
             )
             return 0
         elif args.command == "learnability-probe":
-            from src.workbench.learnability_probe import probe_learnability, save_probe
+            from src.workbench.learnability_probe import (
+                describe_candidates,
+                probe_learnability,
+                save_probe,
+            )
 
             session = service.load(args.session_id)
             if session.revision != args.revision:
@@ -1102,6 +1106,8 @@ def main() -> int:
             path = save_probe(Path(args.evaluation_root).parent / "probes", result)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             print(f"\n探针记录已保存：{path}", file=sys.stderr)
+            for line in describe_candidates(result.get("label_error_candidates") or []):
+                print(line, file=sys.stderr)
             return 0
         elif args.command == "label-verify":
             pending = service.start_label_verification(

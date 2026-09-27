@@ -188,6 +188,31 @@ def load_latest_probe(root: str | Path, dataset_version: str) -> dict | None:
     return None
 
 
+def describe_candidates(candidates: list[dict]) -> list[str]:
+    """标签问题候选的人话清单:一行一个候选,供 CLI 直接打印到 stderr。
+
+    强证据(基座零样本与用户盲标都不认同数据标签)加 ⚠ 标记;没有候选时
+    给出明确说法而不是沉默。候选不等于错误——这是人工核对清单,不是判决。
+    """
+    if not candidates:
+        return ["没有发现值得优先核对的行。"]
+    strong = sum(1 for item in candidates if item.get("user_blind_answer"))
+    lines = [
+        f"标签问题候选 {len(candidates)} 行（其中强证据 {strong} 行）；"
+        "候选不等于错误——基座可能错，标签也可能错："
+    ]
+    for item in candidates:
+        marker = "⚠" if item.get("user_blind_answer") else "·"
+        blind = (
+            f"，你的盲标「{item['user_blind_answer']}」" if item.get("user_blind_answer") else ""
+        )
+        lines.append(
+            f"{marker} 行 {item.get('row_id', '')}：数据标签「{item.get('data_label', '')}」"
+            f"，基座零样本「{item.get('base_zero_shot', '')}」{blind}"
+        )
+    return lines
+
+
 def candidates_to_csv(candidates: list[dict]) -> bytes:
     """候选表导出为 CSV(带 BOM,Excel 直开);供人工核对的离线清单。"""
     import csv
