@@ -1,0 +1,17 @@
+.milestones 记录由 milestone-001 样式沿用;此处为 M2 权威任务清单
+id: "milestone-002"
+title: "旅程串联与非专家可视化"
+priority: "high"
+category: "feature"
+timeline: { estimated_start: "2026-09-27", estimated_end: "2026-10-03", estimated_hours: 40, buffer_percentage: 20 }
+success_criteria:
+  - "零密钥九段旅程集成测试(test_product_journey)常绿,作为旅程断点定位器"
+  - "对照报告、训练状态、预检结果各有「大白话」解读,非专家能复述发生了什么(浏览器实测)"
+  - "页面动线按九段旅程重排核对,无死按钮与断头路(走查记录)"
+tasks:
+  - { id: task-001, title: "零密钥九段旅程集成测试+断点修复", status: completed, hours: 6 }
+  - { id: task-002, title: "对照报告语言化摘要(模块+页面+测试)", status: completed, hours: 4 }
+  - { id: task-003, title: "训练状态与预检结果的语言化解读", status: pending, hours: 5 }
+  - { id: task-004, title: "页面九段旅程走查与断头路清理", status: pending, hours: 8 }
+  - { id: task-005, title: "盲标/对比核验的引导文案打磨(非专家视角)", status: pending, hours: 4 }
+  - { id: task-006, title: "全量回归+浏览器走查记录+提交", status: pending, hours: 5 }

@@ -843,6 +843,11 @@ def show_business_comparison(report, *, key: str) -> None:
             "max_new_tokens 是否小于最短合法答案。这是观察事实，原因仍需核查。"
         )
     st.dataframe(summaries, hide_index=True, width="stretch")
+    from src.workbench.report_summary import summarize_comparison
+
+    with st.expander("用大白话解读这份对照(观察事实,不是达标结论)"):
+        for line in summarize_comparison(report):
+            st.write(line)
     all_rows = {row["index"]: row for model_result in report.models for row in model_result["rows"]}
     if all_rows:
         selected = st.selectbox(
