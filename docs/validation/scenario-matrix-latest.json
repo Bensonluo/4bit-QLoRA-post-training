@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T15:25:59.689711+00:00",
+  "created_at": "2026-09-27T17:01:11.031714+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -665,11 +665,29 @@
       "blocked_message": "1 条记录与表头完全相同（通常是导出拼接产生的重复表头行），会变成无意义的训练样本；请在原始数据中删除这些行后重新验证，没有自动删行。",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "excel-second-sheet-selected",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 40,
-    "as_expected": 40,
+    "total": 41,
+    "as_expected": 41,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,

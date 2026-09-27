@@ -15,10 +15,15 @@ pytest.importorskip("mlflow")
 from src.models.merger import merge_adapter_to_dir
 from src.tracking.registry import register_merged_model
 from src.workbench.registry_link import run_registration_status, version_lineage
-from tests.unit.test_workbench_training_runs import _prepare, _verify_labels, _wait, environment  # noqa: F401
+from tests.unit.test_workbench_training_runs import (  # noqa: F401
+    _prepare,
+    _verify_labels,
+    _wait,
+    environment,
+)
 
 
-def test_lineage_triangle_survives_real_merge_and_register(environment, tmp_path):
+def test_lineage_triangle_survives_real_merge_and_register(environment, tmp_path):  # noqa: F811
     intake, session, training, model = environment
     record = _prepare(environment)
     training.start(record["run_id"], session)
