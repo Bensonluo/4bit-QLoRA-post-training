@@ -770,3 +770,60 @@ def test_plan_summary_needs_data_questions_and_bare_records_do_not_invent():
     assert "这份方案还没有选择基础模型。" in bare[0]
     assert len(bare) == 2, "裸记录只剩模型缺位句+固定边界句,不得编造状态"
     assert "不构成训练效果或业务达标的判断" in bare[-1]
+
+
+def test_scoring_summary_draft_and_confirmed_states_with_boundaries():
+    """评分规则摘要:标准+通过线+正反例验证+确认/待确认边界+不构成达标判断。"""
+    from src.workbench.report_summary import summarize_scoring
+
+    record = {
+        "status": "draft",
+        "recipe": {
+            "business_standard": "回答须含全部必要处理步骤",
+            "pass_threshold": 0.8,
+            "examples": [
+                {"name": "完整步骤", "kind": "business"},
+                {"name": "缺项反例", "kind": "counterexample"},
+            ],
+        },
+        "validation": {"status": "passed", "backend": "fixture-os"},
+    }
+    lines = summarize_scoring(record)
+    joined = "\n".join(lines)
+    assert lines[0] == "这套规则要判断的业务标准：回答须含全部必要处理步骤。"
+    assert "单题得分达到 0.8 才计为通过；均分与通过率分开展示。" in lines
+    assert "用 1 条业务正例与 1 条同题反例在真实隔离后端验证。" in lines
+    assert "隔离验证：passed（后端：fixture-os）。" in lines
+    assert "草稿待你核对实际正反例分数与理由后确认；软件不会自动确认评分规则。" in lines
+    assert "不等于严格准确率，也不构成业务达标的判断" in joined
+
+    record["status"] = "confirmed"
+    confirmed = summarize_scoring(record)
+    joined = "\n".join(confirmed)
+    assert "已确认：规则绑定当前业务目标与输入/答案语义" in joined
+    assert "数据修订后兼容规则可继续用" in joined
+    assert "业务目标或含义变更需重新确认" in joined
+    assert "软件不会自动确认" not in joined
+
+
+def test_scoring_summary_needs_business_input_and_bare_records_do_not_invent():
+    """needs_business_input 摘要:原因+待补业务问题+没有可确认方案;裸记录不编造。"""
+    from src.workbench.report_summary import summarize_scoring
+
+    record = {
+        "status": "needs_business_input",
+        "reason": "专业程度需要明确可判定要求",
+        "questions": ["哪些关键步骤不可缺少？", "缺少时如何扣分？"],
+    }
+    lines = summarize_scoring(record)
+    joined = "\n".join(lines)
+    assert lines[0] == "业务评分标准还不能转成可执行的规则。"
+    assert "原因：专业程度需要明确可判定要求" in joined
+    assert "需要你先补充的业务问题：哪些关键步骤不可缺少？；缺少时如何扣分？" in joined
+    assert "当前没有可确认的评分方案" in joined
+    assert "业务达标" not in joined, "澄清态没有规则与验证事实,不得带达标边界句"
+
+    bare = summarize_scoring({})
+    assert bare[0] == "这套规则没有写明业务标准。"
+    assert "软件不会自动确认评分规则" in "\n".join(bare)
+    assert "不等于严格准确率" in bare[-1]

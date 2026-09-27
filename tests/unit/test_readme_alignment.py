@@ -480,6 +480,25 @@ def test_custom_scoring_summary_docs_pinned():
     assert "生成失败、缺失或截断的回答不能人工标为通过" in section
 
 
+def test_scoring_summary_docs_pinned():
+    """scoring-* CLI stderr 人话摘要口径钉死:澄清态、确认绑定语义与不构成达标判断。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 定义并确认自定义业务评分",
+        "## 用独立测试题做单模型业务验收",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "scoring-list` 只列清单" in section, "list 例外必须写明"
+    assert "软件不会自动确认评分规则" in section, "草稿态不自动确认边界必须写明"
+    assert "绑定当前业务目标与输入/答案语义" in section, "已确认规则的绑定语义必须写明"
+    assert "数据修订后兼容规则可继续用" in section, "兼容复用与重新确认的分界必须写明"
+    assert "当前没有可确认的评分方案" in section, "澄清态口径必须写明"
+    assert "不等于严格准确率" in section, "均值/通过率不作严格准确率必须写明"
+    assert "不构成业务达标的判断" in section, "固定边界句必须写明"
+    assert "summarize_scoring" in section, "页面渲染位点必须点名摘要函数"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+
+
 def test_acceptance_summary_docs_pinned():
     """最终验收 CLI stderr 人话摘要口径钉死:冻结标准、五态结论、分母口径与不作数边界。"""
     section = _section(

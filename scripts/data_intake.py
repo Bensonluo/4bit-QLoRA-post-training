@@ -578,6 +578,17 @@ def main() -> int:
                         output_root=args.scoring_root,
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            # scoring-* 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加人话。
+            # scoring-list 只列清单不追加；confirm 只返回引用，人话从记录本身读取。
+            if args.command != "scoring-list":
+                from src.workbench.report_summary import summarize_scoring
+
+                if args.command == "scoring-confirm":
+                    source = scoring.get(args.scoring_id)
+                else:
+                    source = result
+                for line in summarize_scoring(source):
+                    print(line, file=sys.stderr)
             return 0
         if args.command.startswith("acceptance-"):
             from src.workbench.acceptance import AcceptanceService

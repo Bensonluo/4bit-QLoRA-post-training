@@ -1476,3 +1476,46 @@ iteration-*、execution-* 等 CLI stderr 人话摘要补齐,但同一批记录�
   tests/unit/test_acceptance_ui.py、tests/unit/test_iteration_decide_ui.py、
   tests/unit/test_iteration_execution_ui.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 39 轮 = 业务评分规则人话摘要（恢复循环第 20 轮）
+
+**痛点**：scoring-propose/show/confirm 是 CLI 覆盖图上最后一块零人话的业务决策
+面（此前 acceptance/plan/execution/iteration/materialize 均已接入）。确认一套
+业务评分规则是用户冻结「何为业务好」的纯业务决策——规则是确定性代码，靠真实
+隔离后端里的业务正例与同题反例验证；这条决策链此前在 CLI 上只有纯 JSON，草稿
+与已确认两种状态、needs_business_input 澄清态、以及「业务分均值≠严格准确率」
+的口径边界都读不出来。页面侧评分 expander 已展示正反例分数与验证状态，但没有
+与 CLI 同源的整体摘要。
+
+- **summarize_scoring 函数**(report_summary.py 第 10 个摘要函数):草稿态复述
+  业务标准→单题通过分数(达到才计为通过,均分与通过率分开展示)→业务正例/同题
+  反例条数+隔离验证状态(后端名)→「草稿待你核对实际正反例分数与理由后确认；
+  软件不会自动确认评分规则」;已确认态改写为「已确认：规则绑定当前业务目标与
+  输入/答案语义;数据修订后兼容规则可继续用，业务目标或含义变更需重新确认」；
+  两种已成形状态都以「业务评分均值与通过率是规则口径的描述，不等于严格准确率，
+  也不构成业务达标的判断」收尾。needs_business_input 澄清态早退:原因+待补
+  业务问题原文+「当前没有可确认的评分方案」,不带达标边界句(没有规则与验证
+  事实,不得借边界句暗示存在)。裸记录降级:「这套规则没有写明业务标准。」
+- **CLI 接线**(data_intake.py scoring 分支):scoring-propose/show 直接对
+  result 追加 stderr 摘要;scoring-confirm 只返回 {root, scoring_id,
+  spec_digest} 引用,人话经 scoring.get() 从记录本身重读,保证 confirm 后
+  立即读到已确认态句子;scoring-list 依清单例外不追加。
+- **页面接线**(07_Data_Intake.py 评分 expander):验证状态 caption 下方、
+  example_results 之前渲染 summarize_scoring(spec),与 CLI 同源同词汇;
+  needs_business_input 页面路径已有自己的措辞,不重复接线。
+- **测试 +3 个新函数+3 处既有扩展**:test_report_summary 新增 2 函数钉死
+  草稿/已确认态精确句、澄清态三句+裸记录降级;test_scoring_cli fixture 充实
+  (standard/threshold/examples/validation)后 propose/confirm/show 逐步断言
+  stderr 摘要句,scoring-list 断言「这套规则」不出现(清单例外),澄清态
+  断言原因+问题句;test_business_scoring_ui fixture 加 examples 后断言页面
+  markdown 含标准句+不自动确认句;test_readme_alignment 新增
+  test_scoring_summary_docs_pinned(11 断言钉死文档段)。定向 68 passed。
+- **文档**(agent-setup.md 评分节新增一段):stderr 位点+scoring-list 例外+
+  草稿句集+confirm 从记录重读+绑定语义/兼容分界+澄清态口径+固定边界句+
+  页面位点(summarize_scoring,验证状态下方,同源同词汇)。
+- 回归:ruff check/format clean;定向 4 文件 68 passed。全量回归
+  **tests/unit 1768 passed / 0 failed**(--no-cov,基线 1765 + 3 个新测试
+  函数)。本批只动 src/workbench/report_summary.py、scripts/data_intake.py、
+  ui/pages/07_Data_Intake.py、tests/unit/test_report_summary.py、
+  tests/unit/test_scoring_cli.py、tests/unit/test_business_scoring_ui.py、
+  tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

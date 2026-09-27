@@ -27,6 +27,15 @@ def scoring_cli(tmp_path, monkeypatch):
         "session_id": session.session_id,
         "status": "draft",
         "spec_digest": "c" * 64,
+        "recipe": {
+            "business_standard": "须含全部处理步骤",
+            "pass_threshold": 0.8,
+            "examples": [
+                {"name": "正例", "kind": "business"},
+                {"name": "反例", "kind": "counterexample"},
+            ],
+        },
+        "validation": {"status": "passed", "backend": "fixture-os"},
     }
     calls = []
     root = tmp_path / "scoring"
@@ -127,7 +136,11 @@ def test_scoring_proposal_requires_remote_consent_and_separate_confirmation(scor
     assert calls == []
     assert "需先允许" in capsys.readouterr().err
     assert invoke(*args, "--allow-remote-data") == 0
-    assert json.loads(capsys.readouterr().out)["status"] == "draft"
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "draft"
+    # 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加评分规则人话摘要。
+    assert "这套规则要判断的业务标准：须含全部处理步骤。" in captured.err
+    assert "软件不会自动确认评分规则" in captured.err
     assert [call[0] for call in calls] == ["draft"]
     assert (
         invoke(
@@ -139,8 +152,15 @@ def test_scoring_proposal_requires_remote_consent_and_separate_confirmation(scor
         )
         == 0
     )
-    assert json.loads(capsys.readouterr().out)["spec_digest"] == record["spec_digest"]
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["spec_digest"] == record["spec_digest"]
     assert record["status"] == "confirmed"
+    # confirm 只返回引用，人话从记录本身读取：已确认+绑定语义边界。
+    assert "已确认：规则绑定当前业务目标与输入/答案语义" in captured.err
+    assert invoke("scoring-show", record["scoring_id"]) == 0
+    assert "已确认：规则绑定当前业务目标" in capsys.readouterr().err
+    assert invoke("scoring-list", session.session_id) == 0
+    assert "这套规则" not in capsys.readouterr().err, "scoring-list 只列清单，不追加人话"
 
 
 def test_confirmed_rules_drive_business_metrics_and_acceptance_pass_rate(scoring_cli, capsys):
@@ -218,6 +238,10 @@ def test_ambiguous_standard_returns_questions_without_a_confirmable_spec(
         )
         == 0
     )
-    result = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
     assert result["status"] == "needs_business_input" and "scoring_id" not in result
     assert calls == []
+    # 澄清态的人话与页面同口径：原因+待补业务问题+当前没有可确认的评分方案。
+    assert "业务评分标准还不能转成可执行的规则。" in captured.err
+    assert "需要你先补充的业务问题：哪些要素必须正确？" in captured.err

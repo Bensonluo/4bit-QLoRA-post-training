@@ -604,3 +604,50 @@ def summarize_execution(record: dict) -> list[str]:
         lines.append(f"自动执行状态：{message}" if message else "自动执行状态未记录。")
     lines.append("以上是自动执行的当前状态，不代表业务效果达标。")
     return lines
+
+
+def summarize_scoring(record: dict) -> list[str]:
+    """把一份业务评分规则记录翻译成人话：标准是什么、通过线在哪、验证与确认状态。
+
+    只复述记录里的事实：规则是确定性代码，须在真实隔离后端用业务正例与同题
+    反例验证；确认由用户完成，绑定当前业务目标与输入/答案语义。业务分均值与
+    通过率是规则口径的描述，不等于严格准确率。
+    """
+    if record.get("status") == "needs_business_input":
+        lines = ["业务评分标准还不能转成可执行的规则。"]
+        reason = str(record.get("reason") or "").strip()
+        if reason:
+            lines.append(f"原因：{reason}")
+        questions = [str(item) for item in (record.get("questions") or []) if str(item).strip()]
+        if questions:
+            lines.append("需要你先补充的业务问题：" + "；".join(questions))
+        lines.append("请补充业务标准后重新拟定规则；当前没有可确认的评分方案。")
+        return lines
+    recipe = record.get("recipe") or {}
+    standard = str(recipe.get("business_standard") or "").strip()
+    lines = [
+        f"这套规则要判断的业务标准：{standard}。" if standard else "这套规则没有写明业务标准。"
+    ]
+    threshold = recipe.get("pass_threshold")
+    if threshold is not None:
+        lines.append(f"单题得分达到 {threshold} 才计为通过；均分与通过率分开展示。")
+    examples = recipe.get("examples") or []
+    if examples:
+        positives = sum(1 for item in examples if item.get("kind") == "business")
+        counterexamples = sum(1 for item in examples if item.get("kind") == "counterexample")
+        lines.append(
+            f"用 {positives} 条业务正例与 {counterexamples} 条同题反例在真实隔离后端验证。"
+        )
+    validation = record.get("validation") or {}
+    if validation.get("status"):
+        backend = validation.get("backend") or "未记录"
+        lines.append(f"隔离验证：{validation['status']}（后端：{backend}）。")
+    if record.get("status") == "confirmed":
+        lines.append(
+            "已确认：规则绑定当前业务目标与输入/答案语义；数据修订后兼容规则可继续用，"
+            "业务目标或含义变更需重新确认。"
+        )
+    else:
+        lines.append("草稿待你核对实际正反例分数与理由后确认；软件不会自动确认评分规则。")
+    lines.append("业务评分均值与通过率是规则口径的描述，不等于严格准确率，也不构成业务达标的判断。")
+    return lines

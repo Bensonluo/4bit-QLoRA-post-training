@@ -56,7 +56,10 @@ def scoring_page(training_page, monkeypatch):  # noqa: F811
                 "business_standard": standard,
                 "pass_threshold": 0.8,
                 "source_code": "def transform(rows, config): return rows",
-                "examples": [{"name": "完整步骤", "score": 1.0}],
+                "examples": [
+                    {"name": "完整步骤", "kind": "business", "score": 1.0},
+                    {"name": "缺项反例", "kind": "counterexample", "score": 0.5},
+                ],
                 "config": {},
             },
             "validation": {
@@ -144,6 +147,11 @@ def test_draft_requires_business_confirmation_then_comparison_uses_business_metr
     assert specs[0]["status"] == "draft"
     assert [item[0] for item in calls] == ["draft"]
     assert button(page, "确认这套业务评分规则").disabled
+    # 页面与 CLI 同源的人话摘要：标准句+通过线+不自动确认边界句。
+    assert any(
+        "这套规则要判断的业务标准：回答须含全部必要步骤。" in item.value for item in page.markdown
+    )
+    assert any("软件不会自动确认评分规则" in item.value for item in page.markdown)
     assert any("score" in table.value.columns for table in page.dataframe)
     page.checkbox(key="ack_scoring_score-fixture").check().run()
     button(page, "确认这套业务评分规则").click().run()

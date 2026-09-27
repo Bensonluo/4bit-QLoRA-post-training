@@ -389,6 +389,10 @@ def show_business_scoring() -> None:
             st.caption(
                 f"实际隔离后端：{validation.get('backend', '未记录')} · 验证状态：{validation.get('status', '未验证')}"
             )
+            from src.workbench.report_summary import summarize_scoring
+
+            for line in summarize_scoring(spec):
+                st.write(line)
             if spec.get("example_results"):
                 st.write("**实际正反例分数与理由**")
                 st.dataframe(spec["example_results"], hide_index=True, width="stretch")
