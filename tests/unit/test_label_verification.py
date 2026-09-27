@@ -132,7 +132,7 @@ def test_recipe_change_invalidates_previous_verification(store, tmp_path):
     )
     updated = service.confirm_full_data(updated.session_id, updated.revision)
     refreshed = service.load(updated.session_id)
-    assert refreshed.label_verification is None
+    assert refreshed.label_verification.get("stale") is True  # 修订后失效可见,而非静默消失
     training = TrainingRunService(tmp_path / "runs")
     rematerialized = service.materialize_dataset(
         refreshed.session_id, refreshed.revision
@@ -199,3 +199,34 @@ def test_contrast_check_rejects_bad_submissions_and_stale_binding(tmp_path):
             {item["row_id"]: pending["options"][0] for item in pending["items"]},
         )
     assert changed
+
+
+def test_stale_verification_is_visible_after_revision(store, tmp_path):
+    """修订后旧核验不再静默消失:会话带上 stale 标记,页面可明确告知需重验。"""
+    service, session = store
+    session = service.materialize_dataset(session.session_id, session.revision)
+    pending, answers = _answers_from(service, session)
+    service.submit_label_verification(session.session_id, pending["verification_id"], answers)
+    assert service.load(session.session_id).label_verification["verdict"] == "verified"
+
+    from copy import deepcopy
+
+    from src.workbench.intake_models import Transform
+    from tests.unit.test_data_materialize import FULL
+
+    analysis = deepcopy(session.analysis)
+    analysis.recipe.inputs[0].transforms.append(Transform(operation="replace", old="x", new="y"))
+    updated = service.apply_analysis(session, analysis)
+    updated = service.confirm(updated.session_id, updated.revision)
+    updated = service.validate_full_data(updated.session_id, updated.revision, "full.csv", FULL)
+    updated = service.confirm_full_data(updated.session_id, updated.revision)
+    refreshed = service.load(updated.session_id)
+    assert refreshed.label_verification is not None
+    assert refreshed.label_verification.get("stale") is True
+    assert refreshed.label_verification.get("previous_verdict") == "verified"
+    # 训练门禁仍然拦截(stale 无 verified verdict)
+    training = TrainingRunService(tmp_path / "runs")
+    rematerialized = service.materialize_dataset(refreshed.session_id, refreshed.revision)
+    record = training.prepare(rematerialized, tmp_path, max_length=32)
+    assert record["status"] == "blocked"
+    assert "盲标核验" in record["issues"][-1]["message"]

@@ -2089,6 +2089,11 @@ if session.confirmed_revision is not None or session.full_data is not None:
                 "数据或方案修订后需重新核验。"
             )
             verification = session.label_verification
+            if verification and verification.get("stale"):
+                st.warning(
+                    "数据或处理方案修订后，此前完成的盲标核验已失效——监督信号的业务含义可能已经改变，"
+                    "请重新完成一轮核验后再准备训练。"
+                )
             if verification and verification.get("verdict") == "verified":
                 st.success(
                     f"盲标核验已通过（{verification['matched']}/{verification['sample_size']} 一致）。"

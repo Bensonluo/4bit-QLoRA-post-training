@@ -169,7 +169,11 @@ class IntakeService:
         return self._attach_label_verification(session)
 
     def _attach_label_verification(self, session: IntakeSession) -> IntakeSession:
-        """Attach the latest verified-or-not blind check matching current supervision digests."""
+        """Attach the latest verified-or-not blind check matching current supervision digests.
+
+        数据或方案修订后,旧核验不再匹配当前摘要;此时附加 ``stale`` 标记而非静默清空,
+        让页面能明确告知「此前的核验已失效,需重新完成」。
+        """
         report = session.full_data
         recipe = session.analysis.recipe if session.analysis else None
         if report is None or recipe is None:
@@ -182,8 +186,24 @@ class IntakeService:
                 "ORDER BY created_at DESC LIMIT 1",
                 (session.session_id, report.source.digest, report.approved_recipe_digest),
             ).fetchone()
+            if row is None:
+                stale = connection.execute(
+                    "SELECT verdict, created_at FROM label_verifications "
+                    "WHERE session_id=? AND status='completed' "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (session.session_id,),
+                ).fetchone()
+            else:
+                stale = None
         if row is None:
-            session.label_verification = None
+            if stale is not None:
+                session.label_verification = {
+                    "stale": True,
+                    "previous_verdict": stale[0],
+                    "previous_created_at": stale[1],
+                }
+            else:
+                session.label_verification = None
             return session
         verification_id, status, verdict, result, created_at = row
         session.label_verification = {
