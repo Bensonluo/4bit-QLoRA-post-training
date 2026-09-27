@@ -101,7 +101,9 @@ _LONG_CELL_PREFIX = (
 
 # JSONL 超长行:每行一个 JSON 对象,单条记录的输入字段带数万字符日志,
 # 单行数十 KB(JSONL 路径逐行 json.loads,无按行截断)。
-_JSONL_LONG_CELL = "2026-09-27 10:23:01 INFO 收到客户端请求,处理订单流程,读取配置项共 42 项,回源查询耗时 187ms;"
+_JSONL_LONG_CELL = (
+    "2026-09-27 10:23:01 INFO 收到客户端请求,处理订单流程,读取配置项共 42 项,回源查询耗时 187ms;"
+)
 
 
 def _jsonl_long_line_text() -> str:
@@ -152,7 +154,9 @@ _FW_FULL = (
     "００４,快递丢失,物流\n００５,开不了机,质量\n００６,地址填错,物流\n"
     "００７,异味,质量\n００８,延迟送达,物流\n００９,无法充电,质量\n０１０,包装破损,物流\n"
 ).encode()
-_FW_SAMPLE = "编号,客户描述,类别\n００１,订单１２３号商品杯子破损,质量\n００２,物流未更新,物流\n".encode()
+_FW_SAMPLE = (
+    "编号,客户描述,类别\n００１,订单１２３号商品杯子破损,质量\n００２,物流未更新,物流\n".encode()
+)
 
 
 def _long_line_text() -> str:
@@ -539,15 +543,13 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             full=_DUP_HEADER_FULL,
             target_column="类别",
             group_columns=("编号",),
-            expect="passes",
+            expect="blocked_at:validate_full",
             expect_note=(
-                "实测结局(已知缺口):导出拼接产生的重复表头行不被数据层识别,"
-                "该行作为普通样本进入训练(输入「客户描述: 客户描述」、答案「类别」);"
-                "用户能看到的唯一提示是 review 级「类别出现样例未覆盖的 1 种答案」,"
-                "不阻断。表头行等垃圾样本不应静默成为训练数据——待办:全量验证应把"
-                "与表头完全相同的行列为 blocking 问题点名行号"
+                "实测结局:导出拼接产生的重复表头行被全量验证硬拦(blocking 问题"
+                "「与表头完全相同」点名行号);曾为已知缺口(静默成为训练样本),已清偿——"
+                "用户删除表头行后可重新验证;没有自动删行"
             ),
-            tags=("dirty-data", "header-hygiene", "known-gap"),
+            tags=("dirty-data", "header-hygiene"),
         ),
         ScenarioSpec(
             scenario_id="full-width-digits",

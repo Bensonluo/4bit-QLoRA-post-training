@@ -188,17 +188,25 @@ def test_spaced_header_names_blocked_at_baseline_analysis(tmp_path):
 
 
 def test_jsonl_long_line_duplicate_header_and_full_width_scenarios(tmp_path):
-    """场景 21-23:JSONL 超长行/重复表头(已知缺口)/全角数字——期望结局以实测为准。"""
+    """场景 21-23:JSONL 超长行/重复表头(全量验证硬拦)/全角数字——期望结局以实测为准。"""
     specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
-    for scenario_id in (
-        "jsonl-long-line",
-        "duplicate-header-rows-in-full",
-        "full-width-digits",
-    ):
+    for scenario_id in ("jsonl-long-line", "full-width-digits"):
         assert scenario_id in specs, f"缺少场景 {scenario_id}"
         result = run_scenario(specs[scenario_id], tmp_path / scenario_id)
         assert result.verdict == "as_expected", result.to_dict()
         assert result.blocked_at is None, result.to_dict()
+
+    # 重复表头行必须被全量验证拦下,不能静默成为训练样本(曾经的已知缺口,已清偿)
+    dup_spec = specs["duplicate-header-rows-in-full"]
+    dup_result = run_scenario(dup_spec, tmp_path / "duplicate-header-rows-in-full")
+    assert dup_result.verdict == "as_expected", dup_result.to_dict()
+    assert dup_result.blocked_at == "validate_full", dup_result.to_dict()
+    assert "与表头完全相同" in dup_result.blocked_message, dup_result.to_dict()
+    # 样例阶段(分析/对比/确认)先通过,拦截发生在全量验证这一关
+    assert all(
+        dup_result.stages[stage] == "passed"
+        for stage in ("create", "baseline_analysis", "contrast_check", "confirm_sample")
+    )
 
     # JSONL 场景确实覆盖「单行数十 KB」量级,且走的是 jsonl 入口而非 CSV
     jsonl_spec = specs["jsonl-long-line"]
@@ -206,8 +214,8 @@ def test_jsonl_long_line_duplicate_header_and_full_width_scenarios(tmp_path):
     assert jsonl_spec.full_name.endswith(".jsonl")
     assert max(len(line) for line in jsonl_spec.full.split(b"\n")) >= 40_000
 
-    # 重复表头场景的夹具确实在数据中部含一条与表头相同的行(已知缺口的事实基础)
-    dup_lines = specs["duplicate-header-rows-in-full"].full.split(b"\n")
+    # 重复表头场景的夹具确实在数据中部含一条与表头相同的行
+    dup_lines = dup_spec.full.split(b"\n")
     assert dup_lines[0] == "编号,客户描述,类别".encode()
     assert dup_lines[0] in dup_lines[1:], "全量应含重复表头行"
 

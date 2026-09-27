@@ -186,3 +186,37 @@ def test_full_answer_disagreement_with_approved_sample_uses_input_not_row_id(ser
     assert issue.row_ids == ["r000002"]
     assert session.full_data.preview.counts["ready"] == 2
     assert next_action(session) == "needs_full_data_revision"
+
+
+def test_repeated_header_rows_block_at_full_validation(service):
+    """导出拼接的重复表头行被全量验证硬拦并点名行号;不静默删行,正常数据不受影响。"""
+    original = approved(service)
+    full_with_header = (
+        FULL.decode() + "编号,客户描述,类别,处理结果\n103,杯盖裂开,质量,补发\n"
+    ).encode()
+    session = service.validate_full_data(
+        original.session_id, original.revision, "full.csv", full_with_header
+    )
+    issue = next(i for i in session.full_data.issues if i.code == "repeated_header_rows")
+    assert issue.severity == "blocking"
+    assert issue.row_ids == ["r000004"]
+    assert "没有自动删行" in issue.message
+    assert session.full_data.status == "needs_revision"
+
+    # 无重复表头的同一份数据不产生该问题(重新验证须使用最新 revision)
+    clean = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    assert not any(i.code == "repeated_header_rows" for i in clean.full_data.issues)
+
+
+def test_repeated_header_rows_detected_in_jsonl_full(service):
+    """JSONL 全量中的重复表头行(每个字段值等于列名)同样被拦。"""
+    original = approved(service)
+    full_jsonl = (
+        '{"编号": "100", "客户描述": "收到破杯", "类别": "质量", "处理结果": "补发"}\n'
+        '{"编号": "编号", "客户描述": "客户描述", "类别": "类别", "处理结果": "处理结果"}\n'
+    ).encode()
+    session = service.validate_full_data(
+        original.session_id, original.revision, "full.jsonl", full_jsonl
+    )
+    issue = next(i for i in session.full_data.issues if i.code == "repeated_header_rows")
+    assert issue.severity == "blocking" and issue.row_ids == ["r000002"]

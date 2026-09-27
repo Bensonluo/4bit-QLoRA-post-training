@@ -130,6 +130,24 @@ def validate_full_source(session: IntakeSession, source: SampleSource) -> FullDa
                 message="本次文件与原样例完全相同，请确认它确实代表本次任务的全量资料，而非仅用于理解结构的样例。",
             )
         )
+    # 重复表头行:每个单元格都等于其列名的行,几乎必然是导出拼接产生的重复表头;
+    # 若不拦截,它会静默成为一条无意义训练样本(输入与答案都是列名)。
+    if len(source.columns) >= 2:
+        header_rows = [
+            row.row_id
+            for row in source.rows
+            if all(row.values.get(column) == column for column in source.columns)
+        ]
+        if header_rows:
+            issues.append(
+                FullDataIssue(
+                    code="repeated_header_rows",
+                    severity="blocking",
+                    row_ids=header_rows,
+                    message=f"{len(header_rows)} 条记录与表头完全相同（通常是导出拼接产生的重复表头行），"
+                    "会变成无意义的训练样本；请在原始数据中删除这些行后重新验证，没有自动删行。",
+                )
+            )
     preview = None if missing_required else preview_recipe(source, recipe)
     new_targets: dict[str, list[Any]] = {}
     if preview:
