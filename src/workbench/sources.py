@@ -16,6 +16,13 @@ from src.workbench.intake_models import SampleSource, SourceRow
 
 _CSV_READ_LOCK = threading.Lock()
 
+# 多 Sheet 工作簿的读取范围标注:read_source 读 Excel 时探测 sheet 结构,把
+# 「含 N 个 sheet、仅读取第一个」的说明按内容摘要记下,profile_source 取用。
+# 按摘要键控是内容寻址的记忆:同一摘要必是同一文件,标注确定性一致;进程重启后
+# 历史会话里已序列化的 profile 快照仍带标注,仅重新计算依赖同进程的读取记录。
+_EXCEL_SHEET_NOTES: dict[str, str] = {}
+_EXCEL_SHEET_NOTES_LOCK = threading.Lock()
+
 
 def _read_csv(text: str, delimiter: str) -> tuple[list[str], list[tuple[int, dict[str, Any]]]]:
     # csv's field limit is process-global. Serialize our readers and restore it even
@@ -102,6 +109,22 @@ def parse_json_value(text: str) -> Any:
     return value
 
 
+def _excel_sheet_note(sheet_names: list[str]) -> str:
+    """多 Sheet 工作簿的读取范围说明:如实列出读了哪个 sheet、哪些未读取。"""
+
+    first, rest = sheet_names[0], sheet_names[1:]
+    listed = "、".join(rest[:5]) + ("等" if len(rest) > 5 else "")
+    return (
+        f"该文件含 {len(sheet_names)} 个 sheet，仅读取第一个「{first}」；"
+        f"其余 {len(rest)} 个（{listed}）未读取。"
+    )
+
+
+def _excel_sheet_note_for(digest: str) -> str:
+    with _EXCEL_SHEET_NOTES_LOCK:
+        return _EXCEL_SHEET_NOTES.get(digest, "")
+
+
 def read_source(
     name: str,
     data: bytes,
@@ -112,6 +135,7 @@ def read_source(
 ) -> SampleSource:
     """Read supplied bytes only; never follow paths mentioned inside the data."""
     suffix = Path(name).suffix.lower().lstrip(".")
+    digest = hashlib.sha256(data).hexdigest()
     records: list[tuple[int, dict[str, Any]]] = []
     actual_encoding, actual_delimiter = "", ""
     if suffix in {"csv", "jsonl"}:
@@ -146,9 +170,10 @@ def read_source(
         import pandas as pd
 
         try:
-            frame = pd.read_excel(
-                io.BytesIO(data), header=None, dtype=object, keep_default_na=False
-            )
+            # ExcelFile 与 read_excel(BytesIO, sheet_name=0) 走同一条解析路径,
+            # 读取行为不变;借此拿到 sheet 清单,多 Sheet 时如实告知读取范围。
+            book = pd.ExcelFile(io.BytesIO(data))
+            frame = book.parse(header=None, dtype=object, keep_default_na=False)
         except ImportError as exc:
             raise ValueError(
                 "读取 Excel 缺少对应引擎，请安装 openpyxl（xlsx）或 xlrd（xls）。"
@@ -159,6 +184,10 @@ def read_source(
         for i, values in enumerate(frame.iloc[1:].itertuples(index=False, name=None), 2):
             normalized = [v.isoformat() if hasattr(v, "isoformat") else v for v in values]
             records.append((i, dict(zip(columns, normalized))))
+        sheet_names = list(book.sheet_names)
+        if len(sheet_names) > 1:
+            with _EXCEL_SHEET_NOTES_LOCK:
+                _EXCEL_SHEET_NOTES[digest] = _excel_sheet_note(sheet_names)
     else:
         raise ValueError("当前数据入口支持 CSV、Excel、JSONL。")
     if not records:
@@ -169,7 +198,7 @@ def read_source(
     ]
     return SampleSource(
         name=Path(name).name,
-        digest=hashlib.sha256(data).hexdigest(),
+        digest=digest,
         scope=scope,
         format=suffix,
         encoding=actual_encoding,
@@ -192,7 +221,11 @@ def _value_type(value: Any) -> str:
 
 
 def profile_source(source: SampleSource) -> dict[str, Any]:
-    """All counts apply exclusively to the provided file, even when called a sample."""
+    """All counts apply exclusively to the provided file, even when called a sample.
+
+    多 Sheet Excel 的读取范围说明(sheet_note)由 read_source 按内容摘要记下:
+    同进程内读取过的文件,profile 如实呈现「含几个 sheet、仅读取第一个」。
+    """
     fields: dict[str, Any] = {}
     evidence: list[str] = []
 
@@ -242,7 +275,7 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
     for row in source.rows:
         duplicates.setdefault(canonical(row.values), []).append(row.row_id)
     groups = [ids for ids in duplicates.values() if len(ids) > 1]
-    return {
+    profile: dict[str, Any] = {
         "source_digest": source.digest,
         "source_scope": source.scope,
         "record_count": len(source.rows),
@@ -256,3 +289,7 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
             else "以上描述本次提供的文件；统计通过不代表监督含义正确或已具备独立评测条件。"
         ),
     }
+    sheet_note = _excel_sheet_note_for(source.digest)
+    if sheet_note:
+        profile["sheet_note"] = sheet_note
+    return profile

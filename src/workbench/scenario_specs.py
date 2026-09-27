@@ -354,12 +354,24 @@ _UTF8_BOM_FULL = _bom_crlf(
 
 
 # 多 Sheet Excel:xlsx 含两个 sheet——第一个 sheet 是工单数据,第二个是完全不同的
-# 员工表(一份工作簿装多个业务表的常见形态)。入口按证据只读第一个 sheet:
-# pd.read_excel 默认 sheet_name=0,第二个 sheet 被静默忽略(不报错、不提示)。
+# 员工表(一份工作簿装多个业务表的常见形态)。入口只读第一个 sheet
+# (pd.read_excel 默认 sheet_name=0,读取行为不变),profile 如实标注读取范围
+# 「该文件含 N 个 sheet,仅读取第一个(名称)」(增强提示已上线,曾为静默忽略);
+# 数据在第二个 sheet 的反例见 excel-data-on-second-sheet。
 _XLSX_CACHE: dict[str, bytes] = {}
 
 
-def _two_sheet_xlsx(key: str, rows: tuple[tuple[str, str, str], ...]) -> bytes:
+def _two_sheet_xlsx(
+    key: str,
+    rows: tuple[tuple[str, str, str], ...],
+    *,
+    staff_first: bool = False,
+) -> bytes:
+    """生成含两个 sheet 的工作簿:工单表(业务数据)+员工表(无关表)。
+
+    staff_first=False 时数据在第一个 sheet(excel-multi-sheet 用);
+    True 时数据在第二个 sheet、第一个 sheet 是员工表(excel-data-on-second-sheet 用)。
+    """
     cached = _XLSX_CACHE.get(key)
     if cached is not None:
         return cached
@@ -368,16 +380,18 @@ def _two_sheet_xlsx(key: str, rows: tuple[tuple[str, str, str], ...]) -> bytes:
 
     from openpyxl import Workbook
 
+    staff_rows = (("员工号", "姓名", "部门"), ("E01", "张三", "质检"), ("E02", "李四", "物流"))
+    ticket_rows = (("编号", "客户描述", "类别"), *rows)
+    names = ("员工表", "工单表") if staff_first else ("工单表", "员工表")
+    lead_rows, tail_rows = (staff_rows, ticket_rows) if staff_first else (ticket_rows, staff_rows)
     workbook = Workbook()
-    tickets = workbook.active
-    tickets.title = "工单表"
-    tickets.append(("编号", "客户描述", "类别"))
-    for row in rows:
-        tickets.append(row)
-    staff = workbook.create_sheet("员工表")
-    staff.append(("员工号", "姓名", "部门"))
-    staff.append(("E01", "张三", "质检"))
-    staff.append(("E02", "李四", "物流"))
+    lead = workbook.active
+    lead.title = names[0]
+    for row in lead_rows:
+        lead.append(row)
+    tail = workbook.create_sheet(names[1])
+    for row in tail_rows:
+        tail.append(row)
     stamp = datetime(2026, 9, 27, 8, 0, 0)  # 固定文档时间戳,同夹具字节可复现
     workbook.properties.created = stamp
     workbook.properties.modified = stamp
@@ -1071,12 +1085,12 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             expect="passes",
             expect_note=(
                 "实测结局:xlsx 含两个 sheet(工单表+员工表,表结构完全不同)——入口按 "
-                "pd.read_excel 默认 sheet_name=0 只读第一个 sheet,第二个 sheet 被静默忽略:"
-                "不报错、不提示其存在,列名/数据/全旅程全部只来自工单表,八关全过。对照事实"
-                "(探针实测):数据放在第二个 sheet(第一个 sheet 是员工表)时,入口把员工表"
-                "当数据读入(列名 员工号/姓名/部门),同样不报错——用户得不到「数据在其他 "
-                "sheet」的提示。单 sheet 隐含限制是已知边界:多 sheet 工作簿须用户自行把要"
-                "分析的表放在第一个 sheet,入口不做 sheet 选择"
+                "pd.read_excel 默认 sheet_name=0 只读第一个 sheet,列名/数据/全旅程全部只"
+                "来自工单表,八关全过。多 Sheet 读取范围提示已上线:profile 如实标注"
+                "「该文件含 2 个 sheet,仅读取第一个『工单表』,其余 1 个(员工表)未读取」"
+                "——此前第二个 sheet 被静默忽略(不报错、不提示),现读取即可见。已知边界:"
+                "入口只读第一个 sheet、不做 sheet 选择,其余 sheet 不参与分析;数据在第二个 "
+                "sheet 的反例见 excel-data-on-second-sheet"
             ),
             tags=("excel", "multi-sheet", "boundary-note"),
         ),

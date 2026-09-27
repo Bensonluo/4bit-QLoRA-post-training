@@ -707,7 +707,8 @@ def test_excel_utf8_bom_csv_passes_full_journey(tmp_path):
 
 
 def test_excel_multi_sheet_reads_first_sheet_only(tmp_path):
-    """场景 36:xlsx 含两个 sheet——入口只读第一个 sheet,第二个被静默忽略(已知边界)。"""
+    """场景 36:xlsx 含两个 sheet——入口只读第一个 sheet(读取行为不变),
+    profile 如实标注读取范围(多 Sheet 提示已上线,曾为静默忽略)。"""
     specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
     assert "excel-multi-sheet" in specs, "缺少场景 excel-multi-sheet"
 
@@ -727,15 +728,25 @@ def test_excel_multi_sheet_reads_first_sheet_only(tmp_path):
     assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
 
     # 入口事实:只读第一个 sheet——列名与数据全部来自工单表,员工表的列不可见
-    from src.workbench.sources import read_source
+    from src.workbench.sources import profile_source, read_source
 
     source = read_source(spec.sample_name, spec.sample, scope="sample")
     assert source.format == "xlsx"
     assert source.columns == ["编号", "客户描述", "类别"], source.columns
     assert [row.values["客户描述"] for row in source.rows] == ["杯子破损", "物流未更新"]
+    # 多 Sheet 读取范围提示已上线:profile 如实标注含 2 个 sheet、只读了第一个
+    note = profile_source(source)["sheet_note"]
+    assert "2 个 sheet" in note and "仅读取第一个「工单表」" in note, note
+    assert "员工表" in note, note
+    # 旅程侧同样可见:会话 profile 在 create 即携带该标注
+    from src.workbench.intake_service import IntakeService
 
-    # 对照事实(探针实测):数据在第二个 sheet(第一个是员工表)时,入口把员工表
-    # 当数据读入,同样不报错——用户得不到「数据在其他 sheet」的提示
+    service = IntakeService(tmp_path / "multi-sheet-note-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert "仅读取第一个「工单表」" in session.profile["sheet_note"]
+
+    # 对照事实(实测):数据在第二个 sheet(第一个是员工表)时,入口把员工表
+    # 当数据读入,同样不报错——读取范围标注此时是用户唯一的「读错了 sheet」线索
     from openpyxl import Workbook
 
     workbook = Workbook()
