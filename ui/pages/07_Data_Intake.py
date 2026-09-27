@@ -2027,21 +2027,27 @@ if session.preview:
                     mapping = {}
                     for item in pending_contrast["items"]:
                         st.code(item["input"], language=None)
+                        # 默认不预选任何答案:漏选提交不记录核验轮次,瞎点不算配对证据。
+                        # 答案加引号展示:仅差空白的两个答案肉眼可辨。
                         mapping[item["row_id"]] = st.selectbox(
                             f"这条输入的正确答案（{item['row_id']}）",
-                            pending_contrast["options"],
+                            ["", *pending_contrast["options"]],
+                            format_func=lambda value: "请选择" if value == "" else f"「{value}」",
                             key=f"cc_{pending_contrast['check_id']}_{item['row_id']}",
                         )
                     submitted_contrast = st.form_submit_button("提交配对", type="primary")
                 if submitted_contrast:
-                    try:
-                        service.submit_contrast_check(
-                            session.session_id, pending_contrast["check_id"], mapping
-                        )
-                        st.session_state["pending_contrast_check"] = None
-                        st.rerun()
-                    except (ValueError, RuntimeError, OSError) as exc:
-                        st.error(str(exc))
+                    if any(value == "" for value in mapping.values()):
+                        st.error("请为每条输入选择答案；未选择不算作答，也不会记录核验轮次。")
+                    else:
+                        try:
+                            service.submit_contrast_check(
+                                session.session_id, pending_contrast["check_id"], mapping
+                            )
+                            st.session_state["pending_contrast_check"] = None
+                            st.rerun()
+                        except (ValueError, RuntimeError, OSError) as exc:
+                            st.error(str(exc))
 
         verified_streak = (
             contrast.get("streak", 0) if contrast and contrast.get("verdict") == "verified" else 0

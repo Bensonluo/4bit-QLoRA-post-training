@@ -177,6 +177,44 @@ def test_contrast_meeting_copy_matches_optional_behavior(data_page, monkeypatch)
     assert not any("再配一组不同的题" in info.value for info in page.info)
 
 
+def test_contrast_unanswered_selection_is_not_recorded(data_page, monkeypatch):
+    """配对题默认不预选答案:漏选提交不记录核验轮次,补选后照常完成判定。"""
+    import src.agent.intake
+    from tests.unit.test_data_intake import analysis, model_for
+
+    service, session, page = data_page
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "联合分析目标与数据").click().run()
+    next(b for b in page.button if b.label == "开始配对对比").click().run()
+    assert not page.exception
+
+    targets = {row.row_id: row.target for row in service.load(session.session_id).preview.rows}
+    boxes = [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]
+    assert len(boxes) == 2
+    assert all(box.value == "" for box in boxes), "默认不预选任何答案,瞎点不算配对证据"
+    keys = [box.key for box in boxes]
+    row_ids = [str(key).rsplit("_", 1)[-1] for key in keys]
+
+    # 只答一题就提交:漏选不算作答,也不记录核验轮次(连胜不被误伤)
+    boxes[0].select(targets[row_ids[0]]).run()
+    next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("请为每条输入选择答案" in message.value for message in page.error)
+    assert service.contrast_check_status(session.session_id) is None
+
+    # 补选另一题后照常提交,这一轮正常判定为第一轮配对正确
+    page.selectbox(key=keys[1]).select(targets[row_ids[1]]).run()
+    next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("第一轮配对正确" in message.value for message in page.info)
+    status = service.contrast_check_status(session.session_id)
+    assert status and status["verdict"] == "verified" and status["streak"] == 1
+
+
 def test_stale_warning_renders_after_revision(verify_page):
     """数据修订后,页面明确显示「核验已失效请重验」,而不是静默回到初始状态。"""
     from copy import deepcopy
