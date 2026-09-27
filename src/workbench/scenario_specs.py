@@ -296,6 +296,62 @@ _CASE_VARIANTS_FULL = (
 ).encode()
 
 
+# 目标列含义反转:样例确认「类别」=售后类别(质量/物流),全量却是另一份导出,
+# 同名列装的是优先级(高/低)——输入行与样例不重叠,答案值整体是样例未覆盖的新类别。
+_REVERSAL_FULL = (
+    "编号,客户描述,类别\n"
+    "101,地址填错,高\n102,快递丢失,低\n103,屏幕碎裂,高\n104,延迟送达,低\n"
+    "105,异味,高\n106,包装破损,低\n107,开不了机,高\n108,无法充电,低\n"
+    "109,外壳划痕,高\n110,配件缺失,低\n"
+).encode()
+
+# 单格 10 万字符:比 extreme-long-single-cell(精确 3 万字符)更极端的同形态夹具
+# ——一条记录的输入单元格粘贴精确 100 000 字符的运行日志(含逗号,按 CSV 规范加引号)。
+_100K_LOG_UNIT = "2026-09-27 10:23:01 INFO 收到客户端请求,开始处理订单,读取配置42项,回源187ms;"
+
+
+def _hundred_k_cell(row_tag: str) -> str:
+    head = f"{row_tag} 2026-09-27 10:23:01 收到客户端请求,开始处理订单;"
+    return (head + _100K_LOG_UNIT * 2000)[:100_000]
+
+
+def _hundred_k_cell_text(full: bool) -> str:
+    import csv as _csv
+    import io as _io
+
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer, lineterminator="\n")
+    writer.writerow(("编号", "客户描述", "类别"))
+    for i in range(1, 11):
+        if not full and i == 2:  # 样例第 2 行带 10 万字符长格
+            writer.writerow(("002", _hundred_k_cell("工单002"), "物流"))
+        elif full and i == 5:  # 全量第 5 行带同形态长格(行号嵌入,内容不同)
+            writer.writerow(("005", _hundred_k_cell("工单005"), "物流"))
+        else:
+            writer.writerow((f"{i:03d}", f"问题{i}", "质量" if i % 2 else "物流"))
+    return buffer.getvalue()
+
+
+_100K_SINGLE_CELL_SAMPLE = "".join(
+    _hundred_k_cell_text(full=False).splitlines(keepends=True)[:3]
+).encode()
+_100K_SINGLE_CELL_FULL = _hundred_k_cell_text(full=True).encode()
+
+# Excel「CSV UTF-8」导出(Windows Excel 2016+ 的默认 UTF-8 导出):UTF-8 带 BOM(EF BB BF)
+# + CRLF 行尾。BOM 若不剥掉,首列名会变成「\ufeff编号」;CRLF 若按裸行切分会残留 \r。
+def _bom_crlf(text: str) -> bytes:
+    return b"\xef\xbb\xbf" + text.replace("\n", "\r\n").encode("utf-8")
+
+
+_UTF8_BOM_SAMPLE = _bom_crlf("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n")
+_UTF8_BOM_FULL = _bom_crlf(
+    "编号,客户描述,类别\n"
+    "001,杯子破损,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n004,快递丢失,物流\n"
+    "005,开不了机,质量\n006,地址填错,物流\n007,异味,质量\n008,延迟送达,物流\n"
+    "009,无法充电,质量\n010,包装破损,物流\n"
+)
+
+
 def builtin_scenarios() -> list[ScenarioSpec]:
     return [
         ScenarioSpec(
@@ -861,6 +917,69 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("dirty-data", "case-variants", "boundary-note"),
         ),
+        ScenarioSpec(
+            scenario_id="target-meaning-reversal",
+            goal="根据客户首次描述判断售后类别",
+            sample=_CLEAN_SAMPLE,
+            sample_name="工单.csv",
+            full=_REVERSAL_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:blind_verification",
+            user_answers=_reversal_semantics_user,
+            expect_note=(
+                "实测结局:全量与样例输入不重叠,答案值(高/低)整体是样例未覆盖的新类别——"
+                "答案语义漂移的既有守卫在 validate_full 触发但不硬拦:new_categories 是 "
+                "review 级预警,「类别字段 类别 出现样例未覆盖的 2 种答案,请核对是否属于"
+                "目标类别」点名全部行号,new_target_values 如实记录 ['高','低'],全量预览"
+                "原样携带反转后的标签,确认全量不被 review 拦;含义反转最终拦在盲标关:"
+                "按样例确认的业务语义(售后类别)作答的用户复现不出 高/低,盲标 0/5 "
+                "不一致。对照事实(探针实测):若全量还含与样例同输入的行,"
+                "sample_answer_disagreement(blocking)会在 validate_full 更早硬拦。"
+                "边界:照抄数据标签的全知用户会全程通过——自动检出=review 预警,"
+                "语义裁决靠用户在预览与盲标两处人工核对"
+            ),
+            tags=("dirty-data", "semantic-drift", "negative-scenario"),
+        ),
+        ScenarioSpec(
+            scenario_id="100k-single-cell",
+            goal="根据客户粘贴的运行日志判断问题类别",
+            sample=_100K_SINGLE_CELL_SAMPLE,
+            sample_name="工单.csv",
+            full=_100K_SINGLE_CELL_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:单格精确 10 万字符(extreme-long-single-cell 3 万字符的 3.3 倍)"
+                "入口读取完整无截断——读入口按文件长度抬高 csv 字段上限,不依赖 128KB 默认值;"
+                "预览原样进入(输入 100 006 字符=单元格+「客户描述: 」前缀),全量验证无 "
+                "blocking,全旅程通过,与 3 万字符场景同结论:零密钥数据层不设长度上限,"
+                "训练期截断风险由训练前预检用真实 tokenizer 测量"
+            ),
+            tags=("long-text", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="excel-utf8-bom-csv",
+            goal="根据客户首次描述判断售后类别",
+            sample=_UTF8_BOM_SAMPLE,
+            sample_name="工单.csv",
+            full=_UTF8_BOM_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:Excel「CSV UTF-8」导出(UTF-8 带 BOM + CRLF 行尾,Windows Excel "
+                "2016+ 的默认 UTF-8 导出形态)全程无碍——utf-8-sig 解码剥掉 BOM,CRLF 由 "
+                "csv 规范消化,列名与单元格值都不残留 \\ufeff/\\r,全旅程通过。对照事实"
+                "(探针实测):同样的字节用纯 utf-8 解码,首列名是「\\ufeff编号」——若入口"
+                "不按 utf-8-sig 兜底,用户按业务口径选「编号」作分组列就会像 "
+                "spaced-header-names 一样在基础分析被拦;与 gbk-encoded-upload(编码回退)、"
+                "utf16-excel-export(BOM 证据识别)、utf16-no-bom-rejected(明确拒绝)"
+                "共同构成入口编码家族边界"
+            ),
+            tags=("encoding", "utf8", "excel", "bom"),
+        ),
     ]
 
 
@@ -869,3 +988,27 @@ def _contradictory(session):
     first = sorted(answers)[0]
     answers[first] = "和所有标签都不同的答案"
     return answers
+
+
+def _reversal_semantics_user(session):
+    """按样例确认的业务语义(售后类别)作答的用户:目标列含义反转后复现不出 高/低。
+
+    样例教会用户的是「类别=质量/物流」;全量同名列实际是优先级(高/低)。
+    忠实的用户按输入文本给出售后类别答案,与反转后的数据标签必然不一致。
+    """
+    category_by_text = {
+        "地址填错": "物流",
+        "快递丢失": "物流",
+        "屏幕碎裂": "质量",
+        "延迟送达": "物流",
+        "异味": "质量",
+        "包装破损": "物流",
+        "开不了机": "质量",
+        "无法充电": "质量",
+        "外壳划痕": "质量",
+        "配件缺失": "物流",
+    }
+    return {
+        row.row_id: category_by_text[row.original["客户描述"]]
+        for row in session.full_data.preview.rows
+    }

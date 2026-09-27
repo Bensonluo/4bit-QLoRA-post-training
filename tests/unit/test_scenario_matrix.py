@@ -128,7 +128,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 32, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 35, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -570,3 +570,137 @@ def test_target_case_variants_pass_without_case_normalization(tmp_path):
     assert analysis.recipe.targets[0].transforms == [], analysis.recipe.targets[0]
     session = service.apply_analysis(session, analysis, model="scenario-matrix")
     assert {row.target for row in session.preview.rows} == {"Yes", "yes", "YES"}
+
+
+def test_target_meaning_reversal_warned_then_blocked_at_blind_verification(tmp_path):
+    """场景 33:样例与全量目标列含义反转——validate_full 发 review 预警不硬拦,盲标关拦住。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "target-meaning-reversal" in specs, "缺少场景 target-meaning-reversal"
+
+    spec = specs["target-meaning-reversal"]
+
+    # 夹具真实性:全量答案值(高/低)整体不在样例答案值(质量/物流)里,且输入行不重叠
+    sample_lines = spec.sample.decode().splitlines()
+    full_lines = spec.full.decode().splitlines()
+    assert {line.rsplit(",", 1)[1] for line in sample_lines[1:]} == {"质量", "物流"}
+    assert {line.rsplit(",", 1)[1] for line in full_lines[1:]} == {"高", "低"}
+    sample_inputs = {line.split(",")[1] for line in sample_lines[1:]}
+    full_inputs = {line.split(",")[1] for line in full_lines[1:]}
+    assert not sample_inputs & full_inputs, "输入不重叠,只考 new_categories 这一道守卫"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "blind_verification", result.to_dict()
+    assert "盲标不一致" in result.blocked_message
+    # validate_full 不拦:语义漂移的既有守卫是 review 级预警,旅程继续走到盲标
+    assert result.stages["validate_full"] == "passed", result.to_dict()
+
+    # 预警事实(探针实测):new_categories 触发、点名全部行号、new_target_values 如实记录
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "reversal-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    service.submit_contrast_check(
+        session.session_id,
+        pending["check_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full
+    )
+    report = session.full_data
+    assert report.status == "review", report.status
+    assert not [issue for issue in report.issues if issue.severity == "blocking"], report.issues
+    warning = next(issue for issue in report.issues if issue.code == "new_categories")
+    assert "样例未覆盖的 2 种答案" in warning.message
+    assert "请核对是否属于目标类别" in warning.message
+    assert len(warning.row_ids) == 10, warning.row_ids
+    assert report.new_target_values == {"类别": ["高", "低"]}
+    assert {row.target for row in report.preview.rows} == {"高", "低"}
+    # review 级预警不拦全量确认:数据照常进入人工复核,由用户裁决语义
+    session = service.confirm_full_data(session.session_id, session.revision)
+    assert session.full_data.status == "confirmed"
+
+
+def test_100k_single_cell_passes_full_journey(tmp_path):
+    """场景 34:单格精确 10 万字符——入口与预览完整无截断,全旅程通过(3 万字符的 3.3 倍)。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "100k-single-cell" in specs, "缺少场景 100k-single-cell"
+
+    spec = specs["100k-single-cell"]
+
+    # 夹具真实性:样例与全量各含一条精确 100 000 字符的输入单元格(按 CSV 规范加引号)
+    def cell_lengths(blob: bytes) -> list[int]:
+        rows = list(csv.reader(io.StringIO(blob.decode())))
+        return [len(row[1]) for row in rows[1:]]
+
+    assert 100_000 in cell_lengths(spec.sample), "样例应含一条 10 万字符单元格"
+    assert 100_000 in cell_lengths(spec.full), "全量应含一条 10 万字符单元格"
+    assert max(cell_lengths(spec.full)) == 100_000, "全量最长单元格就是这 10 万字符"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 入口与预览事实:单元格原样保留,预览输入=单元格+「客户描述: 」前缀,状态就绪
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "100k-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    long_cell = max((row.values["客户描述"] for row in session.source.rows), key=len)
+    assert len(long_cell) == 100_000, "入口读取不应截断单元格"
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    long_row = max(session.preview.rows, key=lambda row: len(row.input))
+    assert len(long_row.input) == 100_000 + len("客户描述: ")
+    assert long_row.status == "ready", long_row
+
+
+def test_excel_utf8_bom_csv_passes_full_journey(tmp_path):
+    """场景 35:Excel「CSV UTF-8」导出(BOM+CRLF)——BOM 被剥、CRLF 不残留,全旅程通过。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "excel-utf8-bom-csv" in specs, "缺少场景 excel-utf8-bom-csv"
+
+    spec = specs["excel-utf8-bom-csv"]
+
+    # 夹具真实性:样例与全量都带 UTF-8 BOM 且使用 CRLF 行尾(Excel 默认导出形态)
+    for blob in (spec.sample, spec.full):
+        assert blob.startswith(b"\xef\xbb\xbf"), "应带 UTF-8 BOM"
+        assert b"\r\n" in blob, "应使用 CRLF 行尾"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 入口与预览事实:utf-8-sig 剥 BOM、csv 规范消化 CRLF,列名与值都不残留 \ufeff/\r
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+    from src.workbench.sources import read_source
+
+    service = IntakeService(tmp_path / "bom-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert session.source.encoding == "utf-8-sig"
+    assert session.source.columns == ["编号", "客户描述", "类别"], session.source.columns
+    assert session.source.rows[0].values == {
+        "编号": "001",
+        "客户描述": "杯子破损",
+        "类别": "质量",
+    }
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    assert session.preview.rows[0].input == "客户描述: 杯子破损"
+    assert session.preview.rows[0].target == "质量"
+
+    # 对照事实(实测):同样的字节用纯 utf-8 解码,首列名带 \ufeff——
+    # 若入口不做 utf-8-sig 兜底,业务口径的列名会匹配不上(spaced-header-names 同款拦截)
+    plain = read_source("工单.csv", spec.sample, scope="sample", encoding="utf-8")
+    assert plain.columns[0] == "\ufeff编号"
