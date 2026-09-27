@@ -283,6 +283,23 @@ def main() -> int:
         required=True,
         help="行ID=你的答案，每条抽样行一个 --answer",
     )
+    contrast_check = sub.add_parser(
+        "contrast-check",
+        help="对比核验：两条输入配打乱后的两个答案，配对正确才说明真正看清转换含义（样例确认时）",
+    )
+    contrast_check.add_argument("session_id")
+    contrast_check.add_argument("--revision", type=int, required=True)
+    contrast_submit = sub.add_parser(
+        "contrast-check-submit", help="提交配对答案并得到判定；配错留档并提示重新查看预览"
+    )
+    contrast_submit.add_argument("session_id")
+    contrast_submit.add_argument("--check-id", required=True)
+    contrast_submit.add_argument(
+        "--answer",
+        action="append",
+        required=True,
+        help="行ID=候选答案，每条输入一个 --answer",
+    )
     probe = sub.add_parser(
         "learnability-probe",
         help="可学性探针：基座模型对开发集抽样零样本探测，与多数类基线如实对比（证据，不是判决）",
@@ -1085,6 +1102,32 @@ def main() -> int:
             session = service.analyze(args.session_id, client)
         elif args.command == "confirm":
             session = service.confirm(args.session_id, args.revision)
+            # 对比核验是软门禁：确认不因未核验而阻断（区别于盲标的硬门禁），但
+            # stderr 必须如实报告当前配对状态——尚未核验、连胜不足二连对、
+            # 达标、最近配错四种状态都不静默，CLI 用户与页面用户读到同一事实。
+            status = service.contrast_check_status(session.session_id)
+            if status is None:
+                print(
+                    "对比核验：当前方案尚未做过配对核验；建议先运行 contrast-check "
+                    "核对业务含义后再确认。",
+                    file=sys.stderr,
+                )
+            elif status["verdict"] == "verified" and status["needs_second_round"]:
+                print(
+                    f"对比核验：已连续 {status['streak']} 轮配对正确；"
+                    "还需再连续配对正确一轮（二连对）才算真正看清。",
+                    file=sys.stderr,
+                )
+            elif status["verdict"] == "verified":
+                print(
+                    f"对比核验：已连续 {status['streak']} 轮配对正确（二连对达标）。",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    "对比核验：最近一次配对错误——此前的确认可能是盲点头；请重新查看预览后再确认。",
+                    file=sys.stderr,
+                )
         elif args.command == "full-validate":
             session = service.validate_full_data(
                 args.session_id,
@@ -1324,6 +1367,60 @@ def main() -> int:
                 file=sys.stderr,
             )
             print(verdict_note, file=sys.stderr)
+            return 0
+        elif args.command == "contrast-check":
+            pending = service.start_contrast_check(args.session_id, args.revision)
+            print(pending["note"], file=sys.stderr)
+            for item in pending["items"]:
+                print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
+            options = "、".join(f"「{option}」" for option in pending["options"])
+            print(f"\n两个候选答案（已打乱）：{options}", file=sys.stderr)
+            result = {
+                "check_id": pending["check_id"],
+                "items": pending["items"],
+                "options": pending["options"],
+                "submit_hint": (
+                    # 与解析器严格一致：提交不收 --revision，核验与预览及方案绑定，
+                    # 变化自动失效（contrast_check_status 按当前绑定读取连胜）。
+                    "data_intake.py contrast-check-submit SESSION --check-id CHECK_ID "
+                    "--answer 行ID=候选答案（每条输入一个 --answer，答案从候选中选）"
+                ),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        elif args.command == "contrast-check-submit":
+            mapping: dict[str, str] = {}
+            for item in args.answer:
+                row_id, separator, value = item.partition("=")
+                if not separator or not row_id.strip() or not value.strip():
+                    raise ValueError("--answer 格式应为 行ID=候选答案，例如 r000001=硬件。")
+                if row_id in mapping:
+                    raise ValueError(f"行 {row_id} 重复作答。")
+                mapping[row_id] = value
+            result = service.submit_contrast_check(args.session_id, args.check_id, mapping)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            # 连胜口径如实亮出：二连对才算真正看清，只对一轮时点名还差一轮。
+            status = service.contrast_check_status(args.session_id) or {}
+            if result["verdict"] == "verified":
+                if status.get("needs_second_round"):
+                    print(
+                        f"\n判定：verified（{result['matched']}/{result['total']} 配对正确）；"
+                        f"已连续 {status.get('streak', 1)} 轮，"
+                        "还需再连续配对正确一轮（二连对）才算真正看清。",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"\n判定：verified（{result['matched']}/{result['total']} 配对正确）；"
+                        f"已连续 {status.get('streak', 2)} 轮配对正确（二连对达标）。",
+                        file=sys.stderr,
+                    )
+            else:
+                print(
+                    f"\n判定：mismatch（{result['matched']}/{result['total']} 配对正确）。",
+                    file=sys.stderr,
+                )
+            print(result["verdict_note"], file=sys.stderr)
             return 0
         else:
             session = service.load(args.session_id)

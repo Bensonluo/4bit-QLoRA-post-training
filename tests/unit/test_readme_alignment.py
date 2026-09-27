@@ -99,6 +99,34 @@ def test_agent_setup_semantic_safety_layer_pins_three_gates():
     assert "这三道关卡都不使用 LLM 判断、不消耗模型服务额度，判定全部确定性可复现。" in section
 
 
+def test_contrast_cli_docs_pinned():
+    """对比核验 CLI 用法钉死:命令、--answer 格式、二连对口径、confirm 提示与软门禁边界。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 语义安全层",
+        "### 盲标核验的完整 CLI 用法",
+    )
+    assert "contrast-check SESSION_ID --revision CURRENT_REVISION" in section
+    assert "contrast-check-submit SESSION_ID --check-id CHECK_ID --answer 行ID=候选答案" in section
+    assert "stdout 为纯 JSON" in section, "位点必须写明:stdout 纯 JSON、stderr 人读"
+    assert "还需再连续配对正确一轮（二连对）才算真正看清" in section, "二连对口径必须写明"
+    assert "防瞎蒙靠的是连胜不是单轮" in section, "连胜语义必须写明"
+    assert "此前的确认可能是盲点头" in section, "配错提示必须写明"
+    assert "尚未核验" in section and "建议先运行 `contrast-check`" in section
+    assert "软门禁" in section and "不阻断确认" in section, "软门禁边界必须写明"
+    assert "提交不收 `--revision`" in section, "提交参数边界必须写明"
+    assert "自动失效" in section, "失效规则必须写明"
+
+
+def test_agent_setup_contrast_check_help_matches_documentation(monkeypatch, capsys, tmp_path):
+    """对比核验用法与真实 argparse 同步:--revision 必填;--check-id/--answer 提交参数。"""
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "contrast-check")
+    assert "--revision" in help_text
+    submit_help = _cli_help_text(monkeypatch, capsys, tmp_path, "contrast-check-submit")
+    assert "--check-id" in submit_help
+    assert "--answer" in submit_help
+
+
 def test_agent_setup_blind_label_cli_section_pins_full_usage():
     """「盲标核验的完整 CLI 用法」小节:命令、参数与统计键说明钉死。"""
     section = _section(

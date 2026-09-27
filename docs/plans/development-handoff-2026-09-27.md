@@ -1632,3 +1632,49 @@ CLI 零人话表面。
   scripts/data_intake.py、tests/unit/test_report_summary.py、
   tests/unit/test_full_data_cli.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 43 轮 = 对比核验 CLI 平权（恢复循环第 24 轮）
+
+痛点：语义安全层三道关卡中，盲标核验与可学性探针都有完整 CLI（label-verify
+/label-verify-submit/learnability-probe），唯独第一道——对比核验——服务层完整
+（intake_service.py start_contrast_check/submit_contrast_check/
+contrast_check_status）、页面入口完整（07_Data_Intake.py「确认当前转换含义」前），
+但 CLI 零命令。照 agent-setup.md 走 CLI 的 agent 无法完成语义安全故事的完整
+闭环；且 CLI 的 confirm 对当前配对状态完全无声——页面用户能看到「尚未核验/
+连胜不足/达标/最近配错」，CLI 用户什么都读不到。
+
+- **两个新子命令**(data_intake.py):`contrast-check SESSION --revision R` 抽题
+  （stderr 逐条「[行ID] 题目输入」+候选清单「已打乱」，stdout 纯 JSON：
+  check_id/items/options/可照抄 submit_hint——与 label-verify 同款双流结构）；
+  `contrast-check-submit SESSION --check-id ID --answer 行ID=候选答案`（可重复
+  --answer，恰好两条、答案来自候选；格式/重复作答在解析层拒绝，exit 2）。
+  提交不收 --revision：核验与预览及方案绑定（binding = source digest +
+  recipe json），变化自动失效——与盲标提交同款设计。
+- **判定行如实亮出连胜口径**:verified 但 streak=1 时「已连续 1 轮，还需再连续
+  配对正确一轮（二连对）才算真正看清」；二连对及以上「已连续 N 轮配对正确
+  （二连对达标）」；mismatch 报配对计数并附 verdict_note（点名盲点头）。
+  防瞎蒙靠连胜不是单轮——单轮全对有 50% 是蒙对的概率。
+- **confirm 四态如实提示**(软门禁语义保持):confirm 后查 contrast_check_status，
+  stderr 依次报告——尚未做过配对核验（建议先运行 contrast-check）/连胜不足
+  二连对（点名还差一轮）/达标/最近一次配对错误（此前的确认可能是盲点头）。
+  **刻意不阻断确认**：对比核验是设计上的软门禁（盲标是训练准备的硬门禁），
+  配错留档+如实报告，去留由用户决定——与页面语义一致，不改变服务层行为。
+- **测试**(test_contrast_cli.py 新文件,4 个 subprocess 测试):mismatch 全流程
+  （抽题 stderr 结构、调换答案 0/2、判定行、confirm 提示配错事实）；二连对
+  达标路径（两轮正确,round1 提示还差一轮/round2 达标,confirm 同步）；未核验
+  直接 confirm（提示先做但不阻断）；过期 revision 拒绝+重复提交拒绝+方案变化
+  后 binding 失效（apply_analysis 改 recipe.instruction → 提交时报「已变化…
+  失效」）。钉测试 +2：test_contrast_cli_docs_pinned（10 断言钉死新文档段：
+  命令格式、stdout 纯 JSON、二连对口径、防瞎蒙句、盲点头句、尚未核验句、
+  软门禁边界、提交不收 --revision、自动失效）；test_agent_setup_contrast_check_
+  help_matches_documentation（argparse --help 同步：--revision/--check-id/
+  --answer）。定向 61 passed。
+- **文档**(agent-setup.md 语义安全层):对比核验 bullet 补 CLI 命令指向；确定性
+  句后新增完整用法段（抽题/提交格式/连胜口径/confirm 四态/软门禁边界/绑定
+  失效规则）。段落插在「这三道关卡都不使用 LLM 判断…」与「### 盲标核验的完整
+  CLI 用法」之间，既有 _section 边界全部保持。
+- 回归:ruff check/format clean(1 处 import 排序)。全量回归
+  **tests/unit 1780 passed / 0 failed**(--no-cov,基线 1774 + 4 个 CLI 测试 +
+  2 个钉测试)。本批只动 scripts/data_intake.py、
+  tests/unit/test_contrast_cli.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。
