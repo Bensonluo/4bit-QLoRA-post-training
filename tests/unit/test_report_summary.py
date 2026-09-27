@@ -168,3 +168,79 @@ def test_preflight_summary_gives_concrete_length_advice():
     )
     joined = "\n".join(lines)
     assert "答案都保留了" in joined and "已能容纳最长记录" in joined
+
+
+def test_all_zero_plugs_failure_cause_counts_into_advice():
+    echo = "某指令文本较长较长较长较长" + "继续复述" * 3
+    report = _report(
+        [
+            _model("基座", 2, 0.0, statuses=["truncated", "failed"]),
+            _model("本轮微调", 2, 0.0, outputs=[echo, echo]),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "微调后仍是零分" in joined
+    assert "继续加数据之前" in joined
+    assert "2 题在复述题目" in joined
+    assert "1 题没写完被截断" in joined
+    assert "1 题生成失败" in joined
+    assert "没有带来可见变化" not in joined  # 全零分归入零分态,不再叠无差异结论
+
+
+def test_all_zero_without_diagnostics_points_to_format_mismatch():
+    report = _report(
+        [
+            _model("基座", 3, 0.0, outputs=["错", "错", "错"]),
+            _model("本轮微调", 3, 0.0, outputs=["错", "错", "错"]),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "微调后仍是零分" in joined
+    assert "没有观察到截断、生成失败或复述" in joined
+    assert "答案格式不匹配" in joined
+
+
+def test_clear_finetune_gain_states_counts_with_sample_caveat():
+    report = _report(
+        [
+            _model("基座", 10, 0.3),
+            _model("本轮微调", 10, 0.6),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "本轮微调比基座答对更多(6/10 vs 3/10)" in joined
+    assert "要注意样本量" in joined
+    assert "逐题核对答错的部分" in joined
+
+
+def test_no_difference_between_base_and_finetune_is_named():
+    report = _report(
+        [
+            _model("基座", 10, 0.4),
+            _model("本轮微调", 10, 0.4),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "微调没有带来可见变化(4/10 vs 4/10)" in joined
+    assert "数据量不足或任务难度过高" in joined
+    assert "比基座答对更多" not in joined
+
+
+def test_middling_difference_gets_neither_extreme_claim():
+    report = _report(
+        [
+            _model("基座", 20, 0.2),
+            _model("本轮微调", 20, 0.35),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "比基座答对更多" not in joined
+    assert "没有带来可见变化" not in joined
+    assert "答对最多的是本轮微调(7/20)" in joined
+
+
+def test_zero_scores_without_finetuned_model_use_generic_head():
+    report = _report([_model("基座", 2, 0.0, statuses=["failed", "failed"])])
+    joined = "\n".join(summarize_comparison(report))
+    assert "所有模型都是零分" in joined
+    assert "微调后仍是零分" not in joined

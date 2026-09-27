@@ -11,6 +11,19 @@ from __future__ import annotations
 from typing import Any
 
 
+def _pick_counterpart(
+    stats: dict[str, dict[str, Any]], exact: str, contains: str | None = None
+) -> dict[str, Any] | None:
+    """按标签挑出基座/本轮微调那一方:先精确匹配,再按关键词取最后出现的那个。"""
+    if exact in stats:
+        return stats[exact]
+    if contains:
+        for label in reversed(list(stats)):
+            if contains in label:
+                return stats[label]
+    return None
+
+
 def summarize_comparison(report: Any) -> list[str]:
     """Turn a comparison report into a few honest sentences for a non-expert."""
     models = report.models
@@ -20,9 +33,13 @@ def summarize_comparison(report: Any) -> list[str]:
     total = models[0]["metrics"].get("total") or 0
     lines.append(f"这次对照在固定开发集的 {total} 道题上进行,所有模型用同样的题目和评分规则。")
 
-    from src.workbench.evaluation_diagnostics import count_instruction_echo
+    from src.workbench.evaluation_diagnostics import count_instruction_echo, output_echoes_prompt
 
     best_label, best_correct, best_score = None, -1, -1.0
+    stats: dict[str, dict[str, Any]] = {}
+    truncated_questions: set[int] = set()
+    failed_questions: set[int] = set()
+    echo_questions: set[int] = set()
     for model in models:
         metrics = model["metrics"]
         rows = model["rows"]
@@ -31,6 +48,14 @@ def summarize_comparison(report: Any) -> list[str]:
         truncated = sum(row.get("status") == "truncated" for row in rows)
         failed = sum(row.get("status") == "failed" for row in rows)
         echo = count_instruction_echo(rows)
+        stats[model["label"]] = {"correct": correct, "score": score_value or 0.0}
+        for position, row in enumerate(rows):
+            if row.get("status") == "truncated":
+                truncated_questions.add(position)
+            if row.get("status") == "failed":
+                failed_questions.add(position)
+            if output_echoes_prompt(row.get("output"), row.get("prompt")):
+                echo_questions.add(position)
         parts = [f"{model['label']}答对 {correct}/{total}"]
         if truncated:
             parts.append(f"{truncated} 题没写完被截断")
@@ -45,10 +70,37 @@ def summarize_comparison(report: Any) -> list[str]:
         if score > best_score:
             best_label, best_correct, best_score = model["label"], correct, score
 
+    base_stats = _pick_counterpart(stats, "基座")
+    tuned_stats = _pick_counterpart(stats, "本轮微调", "微调")
+
     if best_score == 0:
         lines.append(
             "没有一个模型答对任何题:目前不能说任何模型学会了这个任务,常见原因是题目太难、数据太少或提示格式不匹配,可查看每题的完整输出再判断。"
         )
+        cause_parts = []
+        if echo_questions:
+            cause_parts.append(f"{len(echo_questions)} 题在复述题目")
+        if truncated_questions:
+            cause_parts.append(f"{len(truncated_questions)} 题没写完被截断")
+        if failed_questions:
+            cause_parts.append(f"{len(failed_questions)} 题生成失败")
+        zero_head = (
+            "微调后仍是零分,说明按当前数据量和任务定义学不出这个任务;"
+            if tuned_stats
+            else "所有模型都是零分;"
+        )
+        if cause_parts:
+            lines.append(
+                zero_head
+                + "继续加数据之前,先核对失败原因——本次对照观察到"
+                + "、".join(cause_parts)
+                + ",逐题查看完整输出定位属于哪一类。"
+            )
+        else:
+            lines.append(
+                zero_head + "本次没有观察到截断、生成失败或复述,零分更可能来自答案格式不匹配;"
+                "继续加数据之前,先核对输出格式与期望答案是否对得上。"
+            )
     elif best_score == 1.0:
         lines.append(
             f"{best_label}在本次题目上全部答对;但题目只有 {total} 道,样本很小,不能据此断定业务上足够好。"
@@ -57,6 +109,19 @@ def summarize_comparison(report: Any) -> list[str]:
         lines.append(
             f"答对最多的是{best_label}({best_correct}/{total});请结合逐题输出判断答错的部分是否可接受。"
         )
+    if best_score > 0 and base_stats and tuned_stats:
+        diff = tuned_stats["score"] - base_stats["score"]
+        if diff >= 0.2:
+            lines.append(
+                f"本轮微调比基座答对更多({tuned_stats['correct']}/{total} vs "
+                f"{base_stats['correct']}/{total})——但要注意样本量,并逐题核对答错的部分再下判断。"
+            )
+        elif abs(diff) < 0.05:
+            lines.append(
+                f"微调没有带来可见变化({tuned_stats['correct']}/{total} vs "
+                f"{base_stats['correct']}/{total})——数据量不足或任务难度过高都可能是原因;"
+                "先逐题核对输出,再决定是加数据还是改任务定义。"
+            )
     if 0 < total < 20:
         lines.append(f"注意:开发集只有 {total} 道题,任何百分比都受单题影响很大,只当方向参考。")
     lines.append("以上是观察事实,不是业务达标结论;是否采用仍由你按业务标准决定。")
