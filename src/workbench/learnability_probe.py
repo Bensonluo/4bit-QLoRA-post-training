@@ -9,6 +9,7 @@ never a claim of business quality.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.workbench.sources import content_digest
@@ -160,17 +161,20 @@ def _default_runtime(model):
 def save_probe(root: str | Path, result: dict) -> Path:
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
+    # 证据记录自带生成时间:文件 mtime 在复制/同步后会丢,探针何时跑的应当
+    # 由记录本身说明,回看时才能判断这份证据离当前数据有多远。
+    result["saved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     path = root / f"{result['dataset_version']}-{content_digest(result)[:16]}.json"
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
-def load_latest_probe(root: str | Path, dataset_version: str) -> dict | None:
-    """回读指定数据版本最近一次保存的探针结果;没有则返回 None。
+def load_latest_probe_record(root: str | Path, dataset_version: str) -> tuple[Path, dict] | None:
+    """回读指定数据版本最近一次保存的探针结果,连同记录文件路径;没有则返回 None。
 
     探针要真实加载本地基座模型,重跑成本高;结果存盘后必须能原样回看,
     页面刷新或切换会话不丢证据。按数据版本过滤:数据重物化后旧结果不会
-    冒充新版本的证据。
+    冒充新版本的证据。记录文件路径一并返回:证据要能溯源到出处。
     """
     root = Path(root)
     if not root.exists():
@@ -186,8 +190,13 @@ def load_latest_probe(root: str | Path, dataset_version: str) -> dict | None:
         except (ValueError, OSError):
             continue  # 损坏的历史记录跳过,不阻塞回读
         if isinstance(data, dict) and data.get("kind") == "learnability_probe":
-            return data
+            return path, data
     return None
+
+
+def load_latest_probe(root: str | Path, dataset_version: str) -> dict | None:
+    record = load_latest_probe_record(root, dataset_version)
+    return None if record is None else record[1]
 
 
 def describe_candidates(candidates: list[dict], limit: int | None = 20) -> list[str]:

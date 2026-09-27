@@ -260,6 +260,45 @@ def test_saved_probe_can_be_loaded_back_per_dataset_version(store, tmp_path):
     assert again is not None and again["kind"] == "learnability_probe"
 
 
+def test_saved_probe_records_generation_time(store, tmp_path):
+    """存盘记录自带生成时间:mtime 在复制/同步后会丢,证据文件自己说明何时产生。"""
+    from datetime import datetime
+
+    _, session = store
+    result = probe_learnability(
+        session, "/tmp/base", runtime_factory=_factory("yes"), sample_size=1
+    )
+    assert "saved_at" not in result  # 保存前不掺入
+    path = save_probe(tmp_path / "probes", result)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["saved_at"] == result["saved_at"]
+    datetime.fromisoformat(saved["saved_at"])  # 可解析的 ISO 时间戳
+    assert saved["saved_at"].endswith("+00:00"), "带时区,不产生本地时间的歧义"
+
+
+def test_load_latest_probe_record_returns_source_path(store, tmp_path):
+    """回读连同记录文件路径一起返回:证据要能溯源到出处;兼容原 load_latest_probe。"""
+    from src.workbench.learnability_probe import (
+        load_latest_probe,
+        load_latest_probe_record,
+    )
+
+    _, session = store
+    root = tmp_path / "probes"
+    assert load_latest_probe_record(root, session.dataset.version) is None
+
+    path = save_probe(
+        root,
+        probe_learnability(session, "/tmp/base", runtime_factory=_factory("yes"), sample_size=1),
+    )
+    record = load_latest_probe_record(root, session.dataset.version)
+    assert record is not None
+    record_path, data = record
+    assert record_path == path
+    assert data["kind"] == "learnability_probe"
+    assert load_latest_probe(root, session.dataset.version) == data
+
+
 def test_cli_probe_show_reads_saved_result_without_rerunning(store, tmp_path, monkeypatch, capsys):
     """CLI learnability-probe-show 回读已存盘结果;没跑过探针时如实说明。"""
     import sys
@@ -290,3 +329,5 @@ def test_cli_probe_show_reads_saved_result_without_rerunning(store, tmp_path, mo
     out, err = capsys.readouterr()
     assert json.loads(out)["zero_shot_accuracy"] == result["zero_shot_accuracy"]
     assert "最近一次已保存的探针结果" in err
+    # 证据溯源:回读说明指出证据来自哪个记录文件、什么时候生成的
+    assert result["saved_at"] in err and "记录文件" in err

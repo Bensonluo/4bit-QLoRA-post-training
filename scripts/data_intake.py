@@ -1078,26 +1078,32 @@ def main() -> int:
             from src.workbench.learnability_probe import (
                 candidates_to_csv,
                 describe_candidates,
-                load_latest_probe,
+                load_latest_probe_record,
             )
 
             session = service.load(args.session_id)
             if session.dataset is None:
                 raise ValueError("当前任务还没有数据集版本，先物化分区再运行探针。")
-            saved = load_latest_probe(
+            record = load_latest_probe_record(
                 Path(args.evaluation_root).parent / "probes", session.dataset.version
             )
-            if saved is None:
+            if record is None:
                 print(
                     f"当前数据版本（{session.dataset.version}）没有已保存的探针记录；"
                     "先运行 learnability-probe。",
                     file=sys.stderr,
                 )
                 return 2
+            record_path, saved = record
             print(json.dumps(saved, ensure_ascii=False, indent=2))
+            # 证据溯源:回看结论要能对上是哪个记录文件、什么时候跑出来的。
+            saved_at = saved.get("saved_at")
+            provenance = f"（记录文件：{record_path.name}" + (
+                f"，生成于 {saved_at}" if saved_at else ""
+            )
             print(
-                f"以上是数据版本 {session.dataset.version} 最近一次已保存的探针结果；"
-                "重新探测请运行 learnability-probe。",
+                f"以上是数据版本 {session.dataset.version} 最近一次已保存的探针结果"
+                f"{provenance}）；重新探测请运行 learnability-probe。",
                 file=sys.stderr,
             )
             # 回读同样逐行列出候选:重看结论不应重新加载模型,也不该丢掉核对清单。
