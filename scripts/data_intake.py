@@ -252,6 +252,11 @@ def main() -> int:
     probe.add_argument("--model-path", required=True, help="已准备好的本地基础模型目录")
     probe.add_argument("--size", type=int, default=8)
     probe.add_argument("--max-new-tokens", type=int, default=32)
+    probe_show = sub.add_parser(
+        "learnability-probe-show",
+        help="回读当前数据版本最近一次已保存的探针结果，不重新加载模型",
+    )
+    probe_show.add_argument("session_id")
     train_prepare = sub.add_parser(
         "train-prepare", help="用本地基础模型准备真实训练配置并重做匹配 tokenizer 预检"
     )
@@ -1059,6 +1064,29 @@ def main() -> int:
 
             for line in summarize_preflight(session.training_preflight):
                 print(line, file=sys.stderr)
+        elif args.command == "learnability-probe-show":
+            from src.workbench.learnability_probe import load_latest_probe
+
+            session = service.load(args.session_id)
+            if session.dataset is None:
+                raise ValueError("当前任务还没有数据集版本，先物化分区再运行探针。")
+            saved = load_latest_probe(
+                Path(args.evaluation_root).parent / "probes", session.dataset.version
+            )
+            if saved is None:
+                print(
+                    f"当前数据版本（{session.dataset.version}）没有已保存的探针记录；"
+                    "先运行 learnability-probe。",
+                    file=sys.stderr,
+                )
+                return 2
+            print(json.dumps(saved, ensure_ascii=False, indent=2))
+            print(
+                f"以上是数据版本 {session.dataset.version} 最近一次已保存的探针结果；"
+                "重新探测请运行 learnability-probe。",
+                file=sys.stderr,
+            )
+            return 0
         elif args.command == "learnability-probe":
             from src.workbench.learnability_probe import probe_learnability, save_probe
 

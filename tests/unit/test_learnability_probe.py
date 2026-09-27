@@ -1,5 +1,7 @@
 """可学性探针:零样本 vs 多数类基线的最便宜证据,附样本量限制声明。"""
 
+import json
+
 import pytest
 
 from src.workbench.business_evaluation import Generation
@@ -156,3 +158,33 @@ def test_saved_probe_can_be_loaded_back_per_dataset_version(store, tmp_path):
     (root / f"{session.dataset.version}-broken.json").write_text("{not json", encoding="utf-8")
     again = load_latest_probe(root, session.dataset.version)
     assert again is not None and again["kind"] == "learnability_probe"
+
+
+def test_cli_probe_show_reads_saved_result_without_rerunning(store, tmp_path, monkeypatch, capsys):
+    """CLI learnability-probe-show 回读已存盘结果;没跑过探针时如实说明。"""
+    import sys
+
+    from scripts import data_intake
+
+    service, session = store
+    evaluation_root = tmp_path / "eval"  # 探针记录在 evaluation_root.parent / "probes"
+    argv = [
+        "data_intake.py",
+        "--store",
+        str(service.root),
+        "--evaluation-root",
+        str(evaluation_root),
+        "learnability-probe-show",
+        session.session_id,
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert data_intake.main() == 2  # 尚未运行过探针:明确告知,不伪造
+    capsys.readouterr()
+
+    result = probe_learnability(session, "/tmp/base", runtime_factory=_factory("质量"), sample_size=2)
+    save_probe(evaluation_root.parent / "probes", result)
+    monkeypatch.setattr(sys, "argv", argv)
+    assert data_intake.main() == 0
+    out, err = capsys.readouterr()
+    assert json.loads(out)["zero_shot_accuracy"] == result["zero_shot_accuracy"]
+    assert "最近一次已保存的探针结果" in err
