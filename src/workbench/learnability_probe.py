@@ -163,6 +163,31 @@ def save_probe(root: str | Path, result: dict) -> Path:
     return path
 
 
+def load_latest_probe(root: str | Path, dataset_version: str) -> dict | None:
+    """回读指定数据版本最近一次保存的探针结果;没有则返回 None。
+
+    探针要真实加载本地基座模型,重跑成本高;结果存盘后必须能原样回看,
+    页面刷新或切换会话不丢证据。按数据版本过滤:数据重物化后旧结果不会
+    冒充新版本的证据。
+    """
+    root = Path(root)
+    if not root.exists():
+        return None
+    candidates = sorted(
+        (p for p in root.glob(f"{dataset_version}-*.json") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue  # 损坏的历史记录跳过,不阻塞回读
+        if isinstance(data, dict) and data.get("kind") == "learnability_probe":
+            return data
+    return None
+
+
 def candidates_to_csv(candidates: list[dict]) -> bytes:
     """候选表导出为 CSV(带 BOM,Excel 直开);供人工核对的离线清单。"""
     import csv

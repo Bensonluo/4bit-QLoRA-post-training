@@ -169,6 +169,53 @@ def show_temporal_exclusions(rows: list[dict], *, title: str) -> None:
         st.json(rows)
 
 
+def render_probe_result(result: dict) -> None:
+    """渲染一次可学性探针结果:指标、判定与标签问题候选(证据强者在先)。"""
+    delta = result["difference"]
+    verdict = (
+        "零样本高于瞎猜基线"
+        if delta > 0
+        else "零样本不低于瞎猜基线"
+        if delta == 0
+        else "零样本低于瞎猜基线——先核查提示格式与任务定义"
+    )
+    st.metric(
+        f"零样本 {result['zero_shot_accuracy']:.0%} vs 基线 {result['majority_baseline']:.0%}",
+        f"{delta:+.0%}",
+        delta_color="normal" if delta >= 0 else "inverse",
+    )
+    st.info(f"{verdict}。{result['note']}")
+    candidates = result.get("label_error_candidates") or []
+    st.subheader("标签问题候选(优先人工核对)")
+    if candidates:
+        st.dataframe(
+            [
+                {
+                    "行ID": item["row_id"],
+                    "数据标签": item["data_label"],
+                    "基座零样本输出": item["base_zero_shot"],
+                    "你的盲标答案": item.get("user_blind_answer") or "—",
+                    "证据": item["evidence"],
+                }
+                for item in candidates
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+        st.caption(result.get("candidates_note", ""))
+        from src.workbench.learnability_probe import candidates_to_csv
+
+        st.download_button(
+            "导出候选为 CSV(供人工核对)",
+            data=candidates_to_csv(candidates),
+            file_name="label_issue_candidates.csv",
+            mime="text/csv",
+            key=f"probe_candidates_csv_{result.get('dataset_version', 'x')}",
+        )
+    else:
+        st.info("没有发现值得优先核对的行。")
+
+
 def scoring_store():
     from src.workbench.business_scoring import ScoringService
 
@@ -2315,51 +2362,23 @@ if dataset is not None:
                             service.load(session.session_id), probe_model.strip()
                         )
                         save_probe(PROJECT_ROOT / "outputs" / "workbench" / "probes", result)
-                    delta = result["difference"]
-                    verdict = (
-                        "零样本高于瞎猜基线"
-                        if delta > 0
-                        else "零样本不低于瞎猜基线"
-                        if delta == 0
-                        else "零样本低于瞎猜基线——先核查提示格式与任务定义"
-                    )
-                    st.metric(
-                        f"零样本 {result['zero_shot_accuracy']:.0%} vs 基线 {result['majority_baseline']:.0%}",
-                        f"{delta:+.0%}",
-                        delta_color="normal" if delta >= 0 else "inverse",
-                    )
-                    st.info(f"{verdict}。{result['note']}")
-                    candidates = result.get("label_error_candidates") or []
-                    st.subheader("标签问题候选(优先人工核对)")
-                    if candidates:
-                        st.dataframe(
-                            [
-                                {
-                                    "行ID": item["row_id"],
-                                    "数据标签": item["data_label"],
-                                    "基座零样本输出": item["base_zero_shot"],
-                                    "你的盲标答案": item.get("user_blind_answer") or "—",
-                                    "证据": item["evidence"],
-                                }
-                                for item in candidates
-                            ],
-                            hide_index=True,
-                            width="stretch",
-                        )
-                        st.caption(result.get("candidates_note", ""))
-                        from src.workbench.learnability_probe import candidates_to_csv
-
-                        st.download_button(
-                            "导出候选为 CSV(供人工核对)",
-                            data=candidates_to_csv(candidates),
-                            file_name="label_issue_candidates.csv",
-                            mime="text/csv",
-                            key=f"probe_candidates_csv_{session.session_id}",
-                        )
-                    else:
-                        st.info("没有发现值得优先核对的行。")
+                    render_probe_result(result)
                 except (ValueError, RuntimeError, OSError, ImportError) as exc:
                     st.error(str(exc))
+            else:
+                # 探针要真实加载本地模型,重跑成本高;结果已存盘,任何交互后回读最近一次,
+                # 不让用户为了再看一眼而重新加载模型。按数据版本过滤,旧版本不冒充新证据。
+                from src.workbench.learnability_probe import load_latest_probe
+
+                saved = load_latest_probe(
+                    PROJECT_ROOT / "outputs" / "workbench" / "probes", dataset.version
+                )
+                if saved:
+                    st.caption(
+                        f"显示最近一次已保存的探针结果（基座 `{saved.get('model_path', '未知')}`，"
+                        "抽样见原始记录）；需要重新探测请再运行一次。"
+                    )
+                    render_probe_result(saved)
         with st.form(f"training_preflight_{session.session_id}"):
             tokenizer_path = st.text_input("本地 tokenizer 目录或已缓存标识")
             max_length = st.number_input("训练最大 token 长度", min_value=1, value=2048, step=1)

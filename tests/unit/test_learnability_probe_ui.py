@@ -21,9 +21,11 @@ def probe_page(data_page):
     return service, session, page
 
 
-def _probe_result(candidates):
+def _probe_result(candidates, version="test-version"):
     return {
-        "dataset_version": "test-version",
+        "kind": "learnability_probe",
+        "dataset_version": version,
+        "model_path": "/tmp/local-base",
         "zero_shot_accuracy": 0.25,
         "majority_baseline": 0.5,
         "difference": -0.25,
@@ -92,4 +94,33 @@ def test_probe_no_candidates_shows_clean_info(probe_page, monkeypatch):
     )
     next(b for b in page.button if "运行可学性探针" in b.label).click().run()
     assert not page.exception
+    assert any("没有发现值得优先核对的行" in i.value for i in page.info)
+
+
+def test_probe_result_survives_page_rerun_from_saved_record(probe_page, monkeypatch):
+    """探针结果已存盘:任何交互后回读最近一次结果,不需要重新加载模型重跑。"""
+    service, session, page = probe_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    textbox = next(t for t in page.text_input if "本地基础模型目录" in t.label)
+    textbox.input("/tmp/local-base").run()
+
+    import src.workbench.learnability_probe as probe_module
+
+    calls = []
+
+    def fake_probe(current, model_path, **kwargs):
+        calls.append(model_path)
+        return _probe_result([], version=session.dataset.version)
+
+    monkeypatch.setattr(probe_module, "probe_learnability", fake_probe)
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert not page.exception
+    assert len(calls) == 1
+
+    # 再次整页渲染(模拟用户做了别的操作),探针区应回读已存盘结果,而不是空白
+    page.run()
+    assert not page.exception
+    assert len(calls) == 1, "回看结果不应重新运行探针(模型加载成本高)"
+    assert any("显示最近一次已保存的探针结果" in c.value for c in page.caption)
     assert any("没有发现值得优先核对的行" in i.value for i in page.info)

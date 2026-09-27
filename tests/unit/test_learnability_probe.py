@@ -132,3 +132,27 @@ def test_candidates_csv_export_is_excel_friendly():
     text = data.decode("utf-8-sig")
     assert "行ID" in text and "r1" in text and "弱信号" in text
     assert data.startswith(b"\xef\xbb\xbf")  # BOM: Excel 直接打开不乱码
+
+
+def test_saved_probe_can_be_loaded_back_per_dataset_version(store, tmp_path):
+    """探针结果存盘后必须能按数据版本回读——重看结论不需要重新加载模型。"""
+    from src.workbench.learnability_probe import load_latest_probe
+
+    _, session = store
+    root = tmp_path / "probes"
+    assert load_latest_probe(root, session.dataset.version) is None  # 从未运行过
+
+    result = probe_learnability(
+        session, "/tmp/base", runtime_factory=_factory("质量"), sample_size=2
+    )
+    save_probe(root, result)
+    loaded = load_latest_probe(root, session.dataset.version)
+    assert loaded is not None
+    assert loaded["zero_shot_accuracy"] == result["zero_shot_accuracy"]
+    assert loaded["observations"] == result["observations"]
+
+    # 数据版本不同(重物化后)不回读旧版本结果;损坏文件跳过不阻塞
+    assert load_latest_probe(root, "other-version") is None
+    (root / f"{session.dataset.version}-broken.json").write_text("{not json", encoding="utf-8")
+    again = load_latest_probe(root, session.dataset.version)
+    assert again is not None and again["kind"] == "learnability_probe"
