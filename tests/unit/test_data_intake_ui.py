@@ -646,6 +646,114 @@ def test_full_upload_form_reads_designated_excel_sheet(data_page, monkeypatch):
     assert current.full_data.preview.counts["ready"] == 3
 
 
+def _fact_note_workbook_bytes() -> bytes:
+    """双 sheet + 合并区 + 隐藏行:一个工作簿同时触发 sheet/merged/hidden 三条如实标注。"""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "客户描述", "类别"))
+    for row in (
+        ("001", "杯子破损", "质量"),
+        ("002", "物流未更新", None),  # C2:C3 合并,非首格读空
+        ("003", "屏幕碎裂", None),
+        ("004", "快递丢失", "物流"),
+    ):
+        sheet.append(row)
+    sheet.merge_cells("C2:C3")
+    sheet.row_dimensions[5].hidden = True  # 第 5 行(004,带有效标签)隐藏,照常读入
+    staff = workbook.create_sheet("员工表")
+    staff.append(("员工号", "部门"))
+    staff.append(("E01", "质检"))
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _full_fact_note_workbook_bytes() -> bytes:
+    """全量侧夹具:隐藏行带着有效标签(场景 44 形态),全量验证照常通过。"""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "全量表"
+    sheet.append(("编号", "客户描述", "类别", "处理结果"))
+    for row in (
+        ("100", "收到破杯", "质量", "补发"),
+        ("101", "快递太慢", "物流", "查询"),
+        ("102", "杯把断了", "质量", "补发"),
+    ):
+        sheet.append(row)
+    sheet.row_dimensions[3].hidden = True  # 101 行隐藏——有效数据,不拦旅程
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def test_excel_fact_notes_render_after_create(data_page):
+    """四条 Excel 如实标注在任务页可见:主来源的 sheet(info)/merged/hidden(warning)
+    在 scope_note 下按级渲染;CSV 任务一条都不渲染。"""
+    service, existing, page = data_page
+    # 两个会话都在首次 run 前建好:AppTest 的 selectbox 选项来自上一次渲染,
+    # run 之后才 create 的会话不在旧选项里,select 会静默渲染回旧会话。
+    created = service.create(
+        "根据客户首次描述判断售后类别", "工单.xlsx", _fact_note_workbook_bytes()
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(existing.session_id).run()
+    assert not page.exception
+    # CSV 任务没有 Excel 事实:四条标注一条都不出现
+    assert not any("合并单元格" in w.value for w in page.warning)
+    assert not any("隐藏行" in w.value for w in page.warning)
+    assert not any("sheet" in i.value for i in page.info)
+
+    page.selectbox(key="intake_select").select(created.session_id).run()
+    assert not page.exception
+    assert any("1 处合并单元格" in w.value for w in page.warning), [w.value for w in page.warning]
+    assert any("1 个隐藏行" in w.value for w in page.warning), [w.value for w in page.warning]
+    assert any("仅读取第一个" in i.value for i in page.info), [i.value for i in page.info]
+
+
+def test_full_report_renders_excel_fact_notes(data_page, monkeypatch):
+    """全量验证报告同样渲染 Excel 事实标注:全量文件的隐藏行在来源 caption 下可见。"""
+    from tests.unit.test_full_data import approved
+
+    service, _, page = data_page
+    session = approved(service)
+    holder = {"file": uploaded_bytes(_full_fact_note_workbook_bytes(), "全量.xlsx")}
+    patch_uploader(monkeypatch, "提供本次任务的全量文件", holder)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    button(page, "按已确认方案验证全量数据").click().run()
+    assert not page.exception
+    assert next_action(service.load(session.session_id)) == "review_full_data"
+    assert any("1 个隐藏行" in w.value for w in page.warning), [w.value for w in page.warning]
+
+
+def test_added_source_fact_notes_listed_with_alias(data_page):
+    """补充资料的 Excel 标注在「原始资料与补充文件」区按资料名前缀列出。"""
+    service, session, page = data_page
+    service.add_source(
+        session.session_id,
+        session.revision,
+        "labels",
+        "labels.xlsx",
+        _fact_note_workbook_bytes(),
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any(w.value.startswith("labels：") and "1 个隐藏行" in w.value for w in page.warning), [
+        w.value for w in page.warning
+    ]
+
+
 def test_composed_full_sources_form_reads_designated_excel_sheets(data_page, monkeypatch):
     """组合全量表单与单文件表单对称：每份 Excel 旁的 sheet 输入逐份透传。
 

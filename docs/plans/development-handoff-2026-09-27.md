@@ -891,3 +891,38 @@ Sheet 静默忽略(第 18 轮)、合并单元格静默空读(第 24 轮)、公�
   intake_models.py、src/workbench/sources.py、src/workbench/scenario_specs.py、
   tests/unit/test_sources.py、tests/unit/test_scenario_matrix.py、
   tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+### 第 27 轮 = Excel 四条如实标注上页面渲染(恢复循环第 8 轮)
+
+(恢复的北极星打磨循环,第 8 轮。)核心痛点:第 18/24/25/26 轮建成的四条 Excel
+如实标注(sheet_note/merged_note/formula_note/hidden_note)只在 CLI 输出与
+profile JSON 里可见——页面任务视图只渲染 scope_note,全量报告的标注埋在
+「全量原始记录与结构变化」expander 的 st.json 深处。grep 核实页面零渲染。
+对非专家目标用户(北极星:雇不起算法工程师的人)等于披露链路断了最后一公里:
+服务层如实点名了,用户看不见。
+
+- **show_excel_fact_notes 渲染助手**(07_Data_Intake.py):固定键序遍历
+  (sheet_note→merged_note→formula_note→hidden_note),sheet_note 用 st.info
+  (说明读取范围,信息级),其余三条用 st.warning(影响数据事实的告知级);
+  profile(dict,.get)与 SampleSource(对象,getattr——pydantic 无 .get)同键
+  统一取用;空标注跳过。三个渲染位点:(1) 任务视图主来源画像 scope_note 下
+  (session.profile);(2) 全量验证报告来源 caption 下(report.profile,报告
+  stale 与否都渲染——披露不因失效而消失);(3)「原始资料与补充文件」区每份
+  资料各自渲染,多资料(>1)时每条标注带资料名前缀「labels:…」区分归属。
+- **UI 测试三件**(test_data_intake_ui.py 22→25):双 sheet+合并区+隐藏行
+  夹具一簿触发三注;(a) 新建任务后主来源渲染——CSV 任务四条负例 + Excel 任务
+  merged/hidden warning 与 sheet info 正例;(b) 全量报告位点——隐藏行带有效
+  标签的 xlsx 全量验证通过(expect=passes 形态)且 hidden_note 在 warning 里;
+  (c) 补充资料位点——labels 别名前缀断言。**AppTest 教训**:selectbox 选项
+  来自上一次渲染,run 之后才 service.create 的会话不在旧选项里,.select 新 id
+  会静默渲染回旧会话——负例断言「零 warning」全过而正例落空,极具迷惑性;
+  夹具会话必须在首次 page.run() 前建好(测试内已留注释钉死)。
+- **文档钉死**(agent-setup.md + test_readme_alignment 19→20):多份资料小节
+  新增渲染位点段——四条标注不埋进 JSON、三处位点(主来源画像下/原始资料区
+  带前缀/全量报告来源行下)、info/warning 分级、CSV/JSONL 一条都不渲染;钉
+  测试断言关键句。本轮纯 UI,不改读取行为,无矩阵场景新增。
+- 回归:test_data_intake_ui 22→25、test_readme_alignment 19→20;ruff
+  check/format clean。全量回归 **tests/unit 1724 passed / 0 failed**
+  (--no-cov,无排除,169.98s)。本批只动 ui/pages/07_Data_Intake.py、
+  tests/unit/test_data_intake_ui.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

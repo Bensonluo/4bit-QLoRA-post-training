@@ -332,3 +332,18 @@ def test_hidden_rows_docs_pinned_and_backed_by_matrix():
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "hidden-rows-in-sheet" in scenarios, "场景矩阵缺少隐藏行场景"
     assert scenarios["hidden-rows-in-sheet"].expect == "passes"
+
+
+def test_excel_fact_notes_page_rendering_docs_pinned():
+    """四条 Excel 如实标注的页面渲染位点文档钉死:披露不埋进 JSON,非专家看得见。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 多份资料一起分析",
+        "### 长尾字段解析与受限适配",
+    )
+    assert "不埋进 JSON" in section, "披露必须写明在页面渲染,而非只存 JSON"
+    assert "「原始资料与补充文件」" in section, "补充资料区的标注位点必须写明"
+    assert "全量验证报告的来源行下" in section, "全量报告的标注位点必须写明"
+    assert "sheet 级标注用 info" in section
+    assert "warning 提示影响数据事实" in section, "severity 分级必须写明"
+    assert "一条都不渲染" in section, "CSV/JSONL 负例边界必须写明"

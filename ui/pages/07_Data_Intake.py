@@ -176,6 +176,18 @@ def show_temporal_exclusions(rows: list[dict], *, title: str) -> None:
         st.json(rows)
 
 
+def show_excel_fact_notes(profile, *, alias: str = "") -> None:
+    """渲染 Excel 如实标注(第 18/24/25/26 轮):sheet_note 说明读取范围(info 级),
+    merged/formula/hidden 是影响数据事实的告知(warning 级)。profile(dict)与
+    SampleSource(属性)同键,统一取用;为空不渲染,顺序固定。"""
+    for key in ("sheet_note", "merged_note", "formula_note", "hidden_note"):
+        note = profile.get(key) if isinstance(profile, dict) else getattr(profile, key, None)
+        if not note:
+            continue
+        text = f"{alias}：{note}" if alias else note
+        (st.info if key == "sheet_note" else st.warning)(text)
+
+
 def probe_source_hints(session) -> dict[str, str]:
     """候选行 → 原始来源行提示:行号取自全量来源记录,供人工对照原始行溯源。
 
@@ -1314,6 +1326,7 @@ st.caption(
     f"{session.source.name} · {len(session.source.rows)} 条记录 · 任务 {session.session_id[:8]}"
 )
 st.info(session.profile["scope_note"])
+show_excel_fact_notes(session.profile)
 if iterations:
     st.subheader("改进轮次与当前下一步")
     iteration_states = {
@@ -1680,6 +1693,9 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
         hide_index=True,
         width="stretch",
     )
+    # 每份资料如实标注自己的 Excel 事实(读取范围/合并/公式/隐藏);多资料时带名称前缀
+    for alias, source in original_sources.items():
+        show_excel_fact_notes(source, alias=alias if len(original_sources) > 1 else "")
     # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
     # 按上传的文件类型显示 sheet 选择。
     source_upload = st.file_uploader("上传补充原始资料", type=["csv", "xlsx", "xls", "jsonl"])
@@ -2283,6 +2299,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
         st.caption(
             f"全量来源：{report.source.name} · {len(report.source.rows)} 条 · {report.source.digest[:12]}。以下行 ID 仅属于这份全量文件。"
         )
+        show_excel_fact_notes(report.profile)
         if report.status == "stale":
             st.warning(
                 "业务理解或方案已变化，以下全量报告已失效。请重新分析、确认样例方案，再验证全量数据。"
