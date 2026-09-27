@@ -112,6 +112,90 @@ def test_sample_size_selection_guidance_and_honest_shortfall(verify_page):
     assert any("即使全部一致" in c.value for c in page.caption)
 
 
+def test_old_archive_without_statistical_fields_recomputes_note(verify_page):
+    """旧存档记录没有 evidence_note/agreement_lower_bound 时,回读页面按同口径现算统计说明。
+
+    模拟 2374e43 之前的存档:result JSON 只含 matched/sample_size 等旧字段;
+    页面回读不得静默丢掉统计说明,通过与未通过两种回读都现算。
+    """
+    import json
+    import sqlite3
+
+    from src.workbench.intake_service import agreement_evidence_note
+
+    def strip_statistical_fields(service, *, expect_fields: bool):
+        """把已完成核验的存档结果抹成旧版格式(去掉两个新字段)。
+
+        expect_fields 只在第一次抹除时为 True:断言当前实现确实存了这两个字段。
+        """
+        with sqlite3.connect(service.database) as connection:
+            stored = connection.execute(
+                "SELECT result FROM label_verifications WHERE status='completed'"
+            ).fetchall()
+        assert stored and all(row[0] for row in stored)
+        with sqlite3.connect(service.database) as connection:
+            for (result_json,) in stored:
+                legacy = json.loads(result_json)
+                if expect_fields:
+                    assert "evidence_note" in legacy and "agreement_lower_bound" in legacy
+                legacy.pop("evidence_note", None)
+                legacy.pop("agreement_lower_bound", None)
+                connection.execute(
+                    "UPDATE label_verifications SET result=? WHERE status='completed'",
+                    (json.dumps(legacy, ensure_ascii=False),),
+                )
+
+    def answer_round_via_page(page, session, *, wrong_first=False):
+        page.run()
+        page.selectbox(key="intake_select").select(session.session_id).run()
+        next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+        assert not page.exception
+        targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+        fields = [t for t in page.text_input if t.key and str(t.key).startswith("lv_")]
+        for index, field in enumerate(fields):
+            row_id = str(field.key).rsplit("_", 1)[-1]
+            field.input("故意答错" if wrong_first and index == 0 else targets[row_id]).run()
+        next(b for b in page.button if b.label == "提交盲标核验答案").click().run()
+        assert not page.exception
+
+    def fresh_page(session):
+        fresh = intake_ui.AppTest.from_file(str(intake_ui.PAGE), default_timeout=20)
+        fresh.run()
+        fresh.selectbox(key="intake_select").select(session.session_id).run()
+        assert not fresh.exception
+        return fresh
+
+    service, session, page = verify_page
+    # 通过态旧记录回读:success 按旧字段现算统计说明
+    answer_round_via_page(page, session)
+    assert any("盲标核验已通过" in m.value for m in page.success)
+    strip_statistical_fields(service, expect_fields=True)
+    record = service.load(session.session_id).label_verification
+    assert "evidence_note" not in record and "agreement_lower_bound" not in record
+    fresh = fresh_page(session)
+    success = next(m.value for m in fresh.success if "盲标核验已通过" in m.value)
+    assert f"{record['matched']}/{record['sample_size']} 一致" in success
+    assert agreement_evidence_note(record["matched"], record["sample_size"]) in success
+    assert "下界才是你能依赖的数" in success
+
+    # 未通过态旧记录回读:error 后的 caption 同样现算,不粉饰不一致的证据强度
+    pending = service.start_label_verification(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    answers = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+    answers[pending["items"][0]["row_id"]] = "旧记录里也是答错的"
+    service.submit_label_verification(session.session_id, pending["verification_id"], answers)
+    strip_statistical_fields(service, expect_fields=False)
+    record = service.load(session.session_id).label_verification
+    assert record["verdict"] == "insufficient_agreement"
+    assert "evidence_note" not in record and "agreement_lower_bound" not in record
+    fresh = fresh_page(session)
+    assert any("盲标核验未通过" in m.value for m in fresh.error)
+    assert agreement_evidence_note(record["matched"], record["sample_size"]) in [
+        c.value for c in fresh.caption
+    ]
+    assert any("下界才是你能依赖的数" in c.value for c in fresh.caption)
+
+
 def test_mismatch_shows_per_row_differences_and_blocks_training(verify_page):
     service, session, page = verify_page
     page.run()
@@ -356,9 +440,7 @@ def test_stale_warning_renders_after_revision(verify_page):
     # 修订后重新确认全量,使核验进入 stale 态(与旅程一致)
     revised = service.load(session.session_id)
     revised = service.confirm(revised.session_id, revised.revision)
-    revised = service.validate_full_data(
-        revised.session_id, revised.revision, "full.csv", FULL
-    )
+    revised = service.validate_full_data(revised.session_id, revised.revision, "full.csv", FULL)
     revised = service.confirm_full_data(revised.session_id, revised.revision)
     # 新会话读取:同会话内控件序列随新增控件变化会触发 AppTest 的状态清理怪癖
     fresh = intake_ui.AppTest.from_file(str(intake_ui.PAGE), default_timeout=20)
