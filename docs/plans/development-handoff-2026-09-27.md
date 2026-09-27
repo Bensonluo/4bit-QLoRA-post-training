@@ -926,3 +926,59 @@ profile JSON 里可见——页面任务视图只渲染 scope_note,全量报告�
   (--no-cov,无排除,169.98s)。本批只动 ui/pages/07_Data_Intake.py、
   tests/unit/test_data_intake_ui.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 28 轮 = 空行/全空行如实点名 blank_note + 矩阵场景 45(恢复循环第 9 轮)
+
+(恢复的北极星打磨循环,第 9 轮。)核心痛点:空行处理是披露系列里唯一跨格式、
+且三种格式行为互不相同的事实——CSV/JSONL 的空行读取时被静默跳过(不进数据,
+用户不知道有没有丢行);Excel 数据区中部的全空行照常读入为全空记录(每列空串),
+旅程在样例确认被通用缺标签门拦下、全量侧被 invalid+missing_group_values 双
+blocking 拦下;Excel 尾部空行在解析时自然消失。三种形态都不在记录里留下痕迹,
+用户被拦时无从知道根因。与多 Sheet 静默忽略(第 18 轮)、合并/公式/隐藏静默
+(第 24-26 轮)同源:事实不可见,不是判断错误。
+
+- **blank_note 跨格式如实点名**(`sources.py` + `intake_models.py`):探针实测
+  三态定局后实现。双口径对应两种真实行为——CSV/JSONL「已跳过」:「该文件有
+  3 个空行（第 3 行、第 5 行、第 6 行）已跳过——空行不进入分析与训练。请核对
+  空行位置是否丢了数据；没有自动补行。」(读取行为不变,csv.reader 空行
+  `not values` 跳过时收集行号、JSONL 纯空白行 `not line.strip()` 同计);
+  Excel「照常读入」:「该 sheet 有 1 个全空行（第 3 行）照常读入——全空行按
+  缺少监督答案与分组标识处理，会在样例确认或全量验证被拦下。请删除空行或补全
+  数据；没有自动排除。」(基于解析后记录 `all(is_missing(v))` 判定,因此 **xls
+  同样检测**——与 merged/formula/hidden 仅 xlsx 不同)。行号超过 5 个以「等」
+  收尾(与前四注同口径);Excel 尾部空行解析时自然消失、无从检测,不列入
+  (如实边界)。随 SampleSource 契约字段持久化,profile 同步呈现;不自动补行、
+  不自动排除,处理由用户决定。
+- **UI 助手升级 show_fact_notes**(07_Data_Intake.py):原 show_excel_fact_notes
+  改名——blank_note 跨格式后「Excel 事实」名不副实;键序元组扩为五注
+  (sheet→merged→formula→hidden→blank),sheet 用 info、其余四条 warning,
+  三个渲染位点与签名不变。
+- **矩阵场景 45「全空行照常读入」**(`blank-rows-in-sheet`,先探针后定局):
+  样例第 3 行全空、全量 005 后插全空行(复用 `_hidden_xlsx` 生成器,无隐藏参数
+  时即普通 xlsx 夹具)。实测结局:create 不拦、blank_note 即时点名,旅程在样例
+  确认被拦「当前方案仍有业务问题、缺标签或转换问题,不能确认数据就绪。」
+  (通用缺标签门,与公式/纯缺标签同关同错——拦截本身与空行无关,blank_note 的
+  价值是点名根因),**expect=blocked_at:confirm_sample**。全量侧对照实测:样例
+  干净时全量含全空行在 validate_full 被双 blocking 拦下(invalid「无法按已确认
+  规则转换」+ missing_group_values「缺少方案声明的分组标识」);两侧同现时样例
+  侧更早拦截。对照事实(入 expect_note):CSV/JSONL 跳过口径点名行号(纯空白行
+  也计);尾部空行无从检测;xls 同样检测。测试另钉:夹具全空行由 openpyxl 重读
+  复核(整行 cell.value 全 None,防夹具漂移)、create 后全空记录在第 3 行每列
+  空串、profile 与来源的 blank_note 一致。矩阵 44→45,45/45 as_expected。
+- **文档钉死**(agent-setup.md + test_readme_alignment 20→21):多份资料小节
+  新增空行段——blank_note 双口径(已跳过/照常读入为全空记录)、空行不进入分析
+  与训练、缺少监督答案与分组标识关联、没有自动排除、尾部空行自然消失不列入、
+  xls 同样检测;渲染段「四条」改「五条」并修正 CSV/JSONL 边界句(sheet/merged/
+  formula/hidden 一条都不渲染,blank_note 跨格式、空行事实同样渲染);钉测试
+  断言关键句且由场景矩阵 blank-rows-in-sheet 真实存在背书;渲染位点钉测试补
+  「空行事实同样渲染」断言。
+- 回归:test_sources 25→31(CSV 跳过+行号/JSONL 含纯空白/Excel 照常读入+尾部
+  边界/前五上限等/三格式干净负例/服务层持久化)、test_scenario_matrix 32→33
+  (全集下限 44→45)、test_data_intake_ui 25(夹具升级四注一簿+blank 断言)、
+  test_readme_alignment 20→21;ruff check/format clean。全量回归 **tests/unit
+  1732 passed / 0 failed**(--no-cov,无排除,171.68s)。本批只动
+  src/workbench/intake_models.py、src/workbench/sources.py、
+  src/workbench/scenario_specs.py、ui/pages/07_Data_Intake.py、
+  tests/unit/test_sources.py、tests/unit/test_scenario_matrix.py、
+  tests/unit/test_data_intake_ui.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

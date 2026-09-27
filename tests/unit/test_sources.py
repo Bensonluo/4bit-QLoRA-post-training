@@ -558,3 +558,113 @@ def test_service_create_persists_hidden_note(tmp_path):
     reloaded = service.load(session.session_id)
     assert "第 3 行" in reloaded.source.hidden_note
     assert "hidden_note" in reloaded.profile
+
+
+def _blank_row_workbook_bytes(*rows: tuple) -> bytes:
+    """生成数据区含全空行(None 元组,Excel 里整行无值)的工作簿。"""
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "客户描述", "类别"))
+    for row in rows:
+        sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def test_csv_blank_lines_skipped_and_annotated():
+    """CSV 空行如实点名:读取行为不变(仍跳过),blank_note 点名行号并说明不进入训练。"""
+    source = read_source(
+        "工单.csv",
+        "编号,客户描述,类别\n001,杯子破损,质量\n\n002,物流未更新,物流\n\n\n".encode(),
+    )
+    # 读取行为不变:空行照旧跳过,不进入记录
+    assert [row.line for row in source.rows] == [2, 4]
+    note = source.blank_note
+    assert "3 个空行" in note, note
+    assert "第 3 行、第 5 行、第 6 行" in note, note  # 逐行点名
+    assert "已跳过" in note, note
+    assert "空行不进入分析与训练" in note, note
+    assert "没有自动补行" in note, note
+    assert profile_source(source)["blank_note"] == note  # profile 同步如实呈现
+
+
+def test_jsonl_blank_lines_skipped_and_annotated():
+    """JSONL 空行(含纯空白行)同样跳过并点名——与 CSV 同款如实口径。"""
+    text = '{"编号": "001", "类别": "质量"}\n   \n{"编号": "002", "类别": "物流"}\n\n'
+    source = read_source("工单.jsonl", text.encode())
+    assert [row.line for row in source.rows] == [1, 3]
+    note = source.blank_note
+    assert "2 个空行" in note, note
+    assert "第 2 行、第 4 行" in note, note
+    assert "blank_note" in profile_source(source)
+
+
+def test_excel_blank_row_kept_as_empty_record_and_annotated():
+    """Excel 全空行如实点名:照常读入为全空记录(不自动排除),note 说明会被缺标签门拦下;
+    尾部空行在解析时自然消失、无从检测,不列入——如实边界。"""
+    data = _blank_row_workbook_bytes(
+        ("001", "杯子破损", "质量"),
+        (None, None, None),  # 第 3 物理行:全空行,照常读入
+        ("002", "物流未更新", "物流"),
+        ("003", "屏幕碎裂", "质量"),
+    )
+    source = read_source("工单.xlsx", data)
+    # 读取行为不变:全空行照常进入数据(第 3 行,全空记录)
+    assert [row.line for row in source.rows] == [2, 3, 4, 5]
+    assert source.rows[1].values == {"编号": "", "客户描述": "", "类别": ""}
+    note = source.blank_note
+    assert "1 个全空行" in note, note
+    assert "第 3 行" in note, note
+    assert "照常读入" in note, note
+    assert "缺少监督答案" in note, note
+    assert "没有自动排除" in note, note
+    assert profile_source(source)["blank_note"] == note
+
+    trailing = _blank_row_workbook_bytes(("001", "杯子破损", "质量"), (None, None, None))
+    trailing_source = read_source("尾部.xlsx", trailing)
+    assert [row.line for row in trailing_source.rows] == [2]
+    assert trailing_source.blank_note == ""  # 尾部空行无从检测,不点名
+    assert "blank_note" not in profile_source(trailing_source)
+
+
+def test_blank_note_lists_first_five_and_caps_long_lists():
+    """空行超过 5 个时不逐一罗列,以「等」收尾——与各 note 同款口径。"""
+    dirty = "编号,类别\n" + "".join("001,质量\n\n" for _ in range(7)) + "002,物流\n"
+    source = read_source("many.csv", dirty.encode())
+    note = source.blank_note
+    assert "7 个空行" in note, note
+    assert "第 9 行" in note, note  # 只列前 5 个
+    assert "第 13 行" not in note, note
+    assert "等" in note, note
+
+
+def test_clean_files_have_no_blank_note():
+    """干净文件(各格式)不携带 blank_note,profile 形状不变。"""
+    csv_source = read_source("干净.csv", "编号,类别\n001,质量\n002,物流\n".encode())
+    assert csv_source.blank_note == ""
+    assert "blank_note" not in profile_source(csv_source)
+    jsonl_source = read_source("干净.jsonl", '{"编号": "001", "类别": "质量"}\n'.encode())
+    assert jsonl_source.blank_note == ""
+    excel_source = read_source("干净.xlsx", _blank_row_workbook_bytes(("001", "杯子破损", "质量")))
+    assert excel_source.blank_note == ""
+    assert "blank_note" not in profile_source(excel_source)
+
+
+def test_service_create_persists_blank_note(tmp_path):
+    """创建入口(服务层)透传:会话建在含空行的文件上,存档回读后标注仍在。"""
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(
+        "根据客户首次描述判断售后类别",
+        "工单.csv",
+        "编号,客户描述,类别\n001,杯子破损,质量\n\n002,物流未更新,物流\n".encode(),
+    )
+    assert "第 3 行" in session.source.blank_note
+    assert "blank_note" in session.profile
+    reloaded = service.load(session.session_id)
+    assert "第 3 行" in reloaded.source.blank_note
+    assert "blank_note" in reloaded.profile

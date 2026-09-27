@@ -383,6 +383,51 @@ def test_hidden_rows_in_sheet_passes_with_disclosure(tmp_path):
     assert session.profile["hidden_note"] == note  # profile 同步如实呈现
 
 
+def test_blank_rows_in_sheet_blocked_at_confirm_sample_with_disclosure(tmp_path):
+    """场景 45:数据区全空行照常读入为全空记录,旅程在样例确认被缺标签门拦下——
+    blank_note 在 create 即点名行号与「没有自动排除」;夹具全空行由 openpyxl 复核。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "blank-rows-in-sheet" in specs, "缺少场景 blank-rows-in-sheet"
+
+    spec = specs["blank-rows-in-sheet"]
+
+    # 夹具真实性:样例/全量的数据区确有整行无值的空行(openpyxl 重读复核,防夹具漂移)
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    for blob, expected in ((spec.sample, 3), (spec.full, 7)):
+        sheet = load_workbook(BytesIO(blob), read_only=False)["工单表"]
+        blank = [
+            row[0].row
+            for row in sheet.iter_rows(min_row=2)
+            if all(cell.value is None for cell in row)
+        ]
+        assert blank == [expected], f"夹具全空行 {blank} 应为第 {expected} 行"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "confirm_sample", result.to_dict()
+
+    # create 即点名:全空行照常读入为全空记录(第 3 行,每列空串),blank_note 点名行号
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "blank-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert len(session.source.rows) == 5, "全空行照常读入,共 5 条记录"
+    assert session.source.rows[1].line == 3
+    assert session.source.rows[1].values == {"编号": "", "客户描述": "", "类别": ""}
+    note = session.source.blank_note
+    assert (
+        "1 个全空行" in note
+        and "第 3 行" in note
+        and "照常读入" in note
+        and "缺少监督答案" in note
+        and "没有自动排除" in note
+    ), note
+    assert session.profile["blank_note"] == note  # profile 同步如实呈现
+
+
 def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
     """场景 40:重复表头行两侧同现——样例侧不拦(同场景 30 的不对称边界),全量侧硬拦
     (同场景 22),组合结局由全量侧决定:validate_full 拦下,不会带病物化。"""
@@ -412,7 +457,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 44, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 45, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0

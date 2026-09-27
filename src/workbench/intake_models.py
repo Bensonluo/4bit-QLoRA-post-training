@@ -55,6 +55,15 @@ class SampleSource(Contract):
         "分析与训练；不自动排除，是否取消隐藏、删除不需要的行列由用户决定。"
         "当前仅 xlsx 检测，xls 不检测。",
     )
+    blank_note: str = Field(
+        default="",
+        description="空行/全空行的如实说明（跨格式）：CSV/JSONL 存在被跳过的空行时点名"
+        "行号并说明空行不进入分析与训练（读取行为不变）；Excel 数据区存在全空行"
+        "（整行无值、照常读入为全空记录）时点名行号并说明会按缺少监督答案与分组"
+        "标识处理。不自动补行、不自动排除，处理由用户决定。Excel 尾部空行在解析时"
+        "自然消失、无从检测，不列入。xlsx 与 xls 均检测（基于解析后的记录，"
+        "不依赖引擎特性）。",
+    )
     columns: list[str]
     rows: list[SourceRow]
 

@@ -45,7 +45,9 @@ def _resolve_excel_sheet(book: Any, sheet: str | int | None) -> tuple[str, bool]
     raise ValueError(f"找不到 sheet「{text}」；{hint}")
 
 
-def _read_csv(text: str, delimiter: str) -> tuple[list[str], list[tuple[int, dict[str, Any]]]]:
+def _read_csv(
+    text: str, delimiter: str
+) -> tuple[list[str], list[tuple[int, dict[str, Any]]], list[int]]:
     # csv's field limit is process-global. Serialize our readers and restore it even
     # on malformed input; the supplied file already bounds the required field size.
     with _CSV_READ_LOCK:
@@ -54,6 +56,7 @@ def _read_csv(text: str, delimiter: str) -> tuple[list[str], list[tuple[int, dic
             csv.field_size_limit(max(previous_limit, len(text)))
             reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
             records = []
+            blank_lines: list[int] = []
             try:
                 columns = _headers(next(reader, []))
                 while True:
@@ -62,6 +65,7 @@ def _read_csv(text: str, delimiter: str) -> tuple[list[str], list[tuple[int, dic
                     if values is None:
                         break
                     if not values:
+                        blank_lines.append(first_line)
                         continue
                     if len(values) != len(columns):
                         raise ValueError(
@@ -71,7 +75,7 @@ def _read_csv(text: str, delimiter: str) -> tuple[list[str], list[tuple[int, dic
                     records.append((first_line, dict(zip(columns, values))))
             except csv.Error as exc:
                 raise ValueError(f"CSV 第 {reader.line_num} 行解析失败：{exc}") from exc
-            return columns, records
+            return columns, records, blank_lines
         finally:
             csv.field_size_limit(previous_limit)
 
@@ -241,6 +245,29 @@ def _excel_notes(
     return merged_note, formula_note, hidden_note
 
 
+def _list_line_numbers(lines: list[int]) -> str:
+    """行号清单:前 5 个逐一点名,超过 5 个以「等」收尾(与各 note 同口径)。"""
+    described = [f"第 {line} 行" for line in lines[:5]]
+    return "、".join(described) + ("等" if len(lines) > 5 else "")
+
+
+def _skipped_blank_lines_note(lines: list[int]) -> str:
+    """CSV/JSONL 被跳过空行的如实说明:点名行号,读取行为不变。"""
+    return (
+        f"该文件有 {len(lines)} 个空行（{_list_line_numbers(lines)}）已跳过——"
+        "空行不进入分析与训练。请核对空行位置是否丢了数据；没有自动补行。"
+    )
+
+
+def _kept_blank_rows_note(lines: list[int]) -> str:
+    """Excel 全空行(照常读入为全空记录)的如实说明:点名行号,不自动排除。"""
+    return (
+        f"该 sheet 有 {len(lines)} 个全空行（{_list_line_numbers(lines)}）照常读入——"
+        "全空行按缺少监督答案与分组标识处理，会在样例确认或全量验证被拦下。"
+        "请删除空行或补全数据；没有自动排除。"
+    )
+
+
 def read_source(
     name: str,
     data: bytes,
@@ -258,10 +285,16 @@ def read_source(
     隐藏行/列时，来源分别携带 merged_note / formula_note / hidden_note
     如实点名（合并区除左上角外、无缓存公式格均读为空值；隐藏行/列照常
     读入）；不自动填充、不自动计算、不自动排除，修复由用户决定。
+
+    空行处理跨格式如实点名（blank_note）：CSV/JSONL 的空行读取时被跳过
+    （读取行为不变），Excel 的全空行照常读入为全空记录——来源携带
+    blank_note 点名行号；不自动补行、不自动排除。Excel 尾部空行在解析时
+    自然消失、无从检测，不列入。
     """
     suffix = Path(name).suffix.lower().lstrip(".")
     digest = hashlib.sha256(data).hexdigest()
     records: list[tuple[int, dict[str, Any]]] = []
+    blank_lines: list[int] = []
     actual_encoding, actual_delimiter = "", ""
     resolved_sheet, sheet_note, merged_note, formula_note, hidden_note = "", "", "", "", ""
     if suffix in {"csv", "jsonl"}:
@@ -276,11 +309,12 @@ def read_source(
             except csv.Error:
                 sniffed = ","
             actual_delimiter = delimiter or sniffed
-            columns, records = _read_csv(text, actual_delimiter)
+            columns, records, blank_lines = _read_csv(text, actual_delimiter)
         else:
             columns = []
             for line_no, line in enumerate(text.splitlines(), 1):
                 if not line.strip():
+                    blank_lines.append(line_no)
                     continue
                 try:
                     record = parse_json_value(line)
@@ -328,6 +362,19 @@ def read_source(
         )
     else:
         raise ValueError("当前数据入口支持 CSV、Excel、JSONL。")
+    # 空行的如实说明(跨格式):CSV/JSONL 的空行读取时被跳过,Excel 的全空行照常
+    # 读入为全空记录——两者都不在记录里留下痕迹,用户被拦时无从知道根因。
+    # Excel 尾部空行在解析时自然消失、无从检测,不列入。
+    blank_note = ""
+    if suffix in {"csv", "jsonl"}:
+        if blank_lines:
+            blank_note = _skipped_blank_lines_note(blank_lines)
+    else:
+        kept_blank_rows = [
+            line for line, record in records if all(is_missing(v) for v in record.values())
+        ]
+        if kept_blank_rows:
+            blank_note = _kept_blank_rows_note(kept_blank_rows)
     if not records:
         raise ValueError("文件没有数据行。")
     rows = [
@@ -346,6 +393,7 @@ def read_source(
         merged_note=merged_note,
         formula_note=formula_note,
         hidden_note=hidden_note,
+        blank_note=blank_note,
         columns=columns,
         rows=rows,
     )
@@ -442,4 +490,6 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
         profile["formula_note"] = source.formula_note
     if source.hidden_note:
         profile["hidden_note"] = source.hidden_note
+    if source.blank_note:
+        profile["blank_note"] = source.blank_note
     return profile

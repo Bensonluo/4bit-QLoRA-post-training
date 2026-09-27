@@ -588,6 +588,25 @@ _HIDDEN_SAMPLE = _hidden_xlsx("hidden-sample", _HIDDEN_SAMPLE_ROWS, (3, 4))
 _HIDDEN_FULL = _hidden_xlsx("hidden-full", _CLEAN_TEN_ROWS, (7, 8))
 
 
+# Excel 数据区全空行(整行无值):与 CSV/JSONL 读取时跳过空行不同,Excel 的全空行
+# 不消失——照常读入为全空记录,按缺少监督答案与分组标识处理,旅程在样例确认或
+# 全量验证被拦;blank_note 点名行号、说明没有自动排除。
+_BLANK_SAMPLE_ROWS = (
+    ("001", "杯子破损", "质量"),
+    (None, None, None),  # 第 3 物理行:全空行,照常读入为全空记录
+    ("002", "物流未更新", "物流"),
+    ("003", "屏幕碎裂", "质量"),
+    ("004", "快递丢失", "物流"),
+)
+# 样例:第 3 行全空 → 全空记录照常读入,旅程在样例确认被缺标签门拦下。
+_BLANK_SAMPLE = _hidden_xlsx("blank-sample", _BLANK_SAMPLE_ROWS, ())
+# 全量:005 之后插一条全空行(第 7 物理行)→ 对照探针实测全量验证被
+# invalid + missing_group_values 双 blocking 拦下。
+_BLANK_FULL = _hidden_xlsx(
+    "blank-full", _CLEAN_TEN_ROWS[:5] + ((None, None, None),) + _CLEAN_TEN_ROWS[5:], ()
+)
+
+
 # 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
 # 全量含样例未覆盖的新测量值。value_kind 判定与旅程行为以实测为准。
 _CONTINUOUS_SAMPLE = _rows_as_csv(
@@ -1457,6 +1476,36 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "隐藏不列入;xls 引擎不提供隐藏标志,不检测"
             ),
             tags=("excel", "hidden-rows"),
+        ),
+        ScenarioSpec(
+            scenario_id="blank-rows-in-sheet",
+            goal="根据客户首次描述判断售后类别",
+            sample=_BLANK_SAMPLE,
+            sample_name="工单.xlsx",
+            full=_BLANK_FULL,
+            full_name="full.xlsx",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:confirm_sample",
+            expect_note=(
+                "实测结局:数据区中部全空行(整行无值)照常读入为全空记录——与 CSV/JSONL"
+                " 读取时静默跳过空行不同,Excel 的全空行不消失,每列都是空串。create 不拦,"
+                "blank_note 已上线且 create 即如实点名:「该 sheet 有 1 个全空行（第 3 行）"
+                "照常读入——全空行按缺少监督答案与分组标识处理，会在样例确认或全量验证"
+                "被拦下。请删除空行或补全数据；没有自动排除。」——用户在「缺少监督答案」"
+                "被拦前就能看到根因是全空行。对比核验不拦(两条已标注行 001/002 答案不同"
+                "足以配对);旅程在样例确认被拦:「当前方案仍有业务问题、缺标签或转换问题,"
+                "不能确认数据就绪。」(通用缺标签门,与公式/纯缺标签同关同错——拦截本身与"
+                "空行无关,blank_note 的价值是点名根因)。全量侧对照实测:样例干净时全量含"
+                "全空行(第 7 物理行)在 validate_full 被双 blocking 拦下——invalid「全量存在"
+                "无法按已确认规则转换的记录…(1 条)」+ missing_group_values「1 条记录缺少"
+                "方案声明的分组标识…」;本场景取样例侧形态定局,两侧同现时样例侧更早拦截。"
+                "对照事实(探针实测):CSV/JSONL 的空行读取时被跳过、不进数据(行为不变),"
+                "blank_note 以「已跳过」口径点名行号(纯空白行也计);Excel 尾部空行在解析时"
+                "自然消失、无从检测,不列入——如实边界;与 merged/formula/hidden 仅 xlsx"
+                " 检测不同,全空行基于解析后的记录判定,xls 同样检测"
+            ),
+            tags=("excel", "blank-rows", "negative-scenario"),
         ),
     ]
 
