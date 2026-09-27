@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T14:14:51.618714+00:00",
+  "created_at": "2026-09-27T15:25:59.689711+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -584,11 +584,92 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "excel-multi-sheet",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "numeric-continuous-target",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "row-order-reversed-full",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "excel-data-on-second-sheet",
+      "expect": "blocked_at:baseline_analysis",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "blocked"
+      },
+      "blocked_at": "baseline_analysis",
+      "blocked_message": "答案列「类别」不在数据字段中（可用：['员工号', '姓名', '部门']）。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "duplicate-header-rows-in-both",
+      "expect": "blocked_at:validate_full",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "blocked"
+      },
+      "blocked_at": "validate_full",
+      "blocked_message": "1 条记录与表头完全相同（通常是导出拼接产生的重复表头行），会变成无意义的训练样本；请在原始数据中删除这些行后重新验证，没有自动删行。",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 35,
-    "as_expected": 35,
+    "total": 40,
+    "as_expected": 40,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,
