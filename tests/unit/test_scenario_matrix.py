@@ -133,6 +133,44 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     assert report["summary"]["error"] == 0
 
 
+def test_label_variants_scenario_normalizes_variants_in_preview(tmp_path):
+    """场景 dirty-label-variants 端到端:归一草案预置后,预览答案只剩规范写法,全旅程通过。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "dirty-label-variants" in specs, "缺少场景 dirty-label-variants"
+    spec = specs["dirty-label-variants"]
+
+    # 夹具真实性:样例同时含两组变体写法(带句号与不带),且规范写法各占多数
+    sample_labels = [line.rsplit(",", 1)[1] for line in spec.sample.decode().splitlines()[1:]]
+    assert sample_labels.count("质量") > sample_labels.count("质量。"), sample_labels
+    assert sample_labels.count("物流") > sample_labels.count("物流。"), sample_labels
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 探针:草案已预置进方案,预览输入/答案与归一规则一致(变体写法不再进入答案)
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "variants-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    assert any("已生成归一规则草案" in finding.message for finding in analysis.findings)
+    draft = analysis.recipe.targets[0].transforms[0]
+    assert draft.operation == "map_values"
+    assert draft.mapping == {
+        "质量": "质量",
+        "质量。": "质量",
+        "物流": "物流",
+        "物流。": "物流",
+    }
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    assert session.preview is not None
+    assert {row.target for row in session.preview.rows} == {"质量", "物流"}
+    assert not any(row.issues for row in session.preview.rows)
+
+
 def test_utf16_excel_export_and_ultra_long_single_line_scenarios(tmp_path):
     """场景 17/18:Excel UTF-16 导出自动识别;超长单行边界如实记录。"""
     specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
@@ -303,7 +341,9 @@ def test_constant_target_blocked_at_contrast_check(tmp_path):
     for blob in (spec.sample, spec.full):
         data_lines = blob.splitlines()[1:]
         assert data_lines, "样例与全量都应有数据行"
-        assert all(line.endswith(",质量".encode()) for line in data_lines), "所有行答案应同为「质量」"
+        assert all(line.endswith(",质量".encode()) for line in data_lines), (
+            "所有行答案应同为「质量」"
+        )
 
     result = run_scenario(spec, tmp_path / "constant-target")
     assert result.verdict == "as_expected", result.to_dict()
@@ -334,7 +374,9 @@ def test_whitespace_only_values_treated_as_missing(tmp_path):
     assert spec.sample.splitlines()[0].endswith(",类别".encode())
     for blob in (spec.sample, spec.full):
         data_lines = blob.splitlines()[1:]
-        assert data_lines and all(line.endswith(b",   ") for line in data_lines), "答案字段应全为空格"
+        assert data_lines and all(line.endswith(b",   ") for line in data_lines), (
+            "答案字段应全为空格"
+        )
 
     result = run_scenario(spec, tmp_path / "whitespace-only-values")
     assert result.verdict == "as_expected", result.to_dict()
@@ -365,6 +407,7 @@ def test_extreme_long_single_cell_passes_full_journey(tmp_path):
     assert "extreme-long-single-cell" in specs, "缺少场景 extreme-long-single-cell"
 
     spec = specs["extreme-long-single-cell"]
+
     # 夹具真实性:样例与全量各含一条精确 30 000 字符的输入单元格(按 CSV 规范加引号)
     def cell_lengths(blob: bytes) -> list[int]:
         rows = list(csv.reader(io.StringIO(blob.decode())))
@@ -385,9 +428,7 @@ def test_extreme_long_single_cell_passes_full_journey(tmp_path):
 
     service = IntakeService(tmp_path / "extreme-long-single-cell-probe")
     session = service.create(spec.goal, spec.sample_name, spec.sample)
-    long_cell = max(
-        (row.values["客户描述"] for row in session.source.rows), key=len
-    )
+    long_cell = max((row.values["客户描述"] for row in session.source.rows), key=len)
     assert len(long_cell) == 30_000, "入口读取不应截断单元格"
     analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
     session = service.apply_analysis(session, analysis, model="scenario-matrix")

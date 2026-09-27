@@ -186,9 +186,7 @@ _CONSTANT_TARGET_FULL = _CONSTANT_TARGET_SAMPLE
 
 # 答案列全是空格:表头保留、每行答案字段是 3 个空格(复制粘贴/导出填充产生的
 # 「看起来填了」的列)——空格是否等价于空,以实测为准。
-_WHITESPACE_TARGET_SAMPLE = (
-    "编号,客户描述,类别\n001,杯子破损,   \n002,物流未更新,   \n"
-).encode()
+_WHITESPACE_TARGET_SAMPLE = ("编号,客户描述,类别\n001,杯子破损,   \n002,物流未更新,   \n").encode()
 _WHITESPACE_TARGET_FULL = (
     "编号,客户描述,类别\n" + "".join(f"{i:03d},问题{i},   \n" for i in range(1, 11))
 ).encode()
@@ -340,7 +338,13 @@ def builtin_scenarios() -> list[ScenarioSpec]:
         ScenarioSpec(
             scenario_id="dirty-label-variants",
             goal="根据客户首次描述判断售后类别",
-            sample=("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流。\n").encode(),
+            # 样例同时含两组变体写法(带句号与不带),规范写法各占多数:
+            # 归一草案从样例生成,因此草案能覆盖全量出现的全部四种写法。
+            sample=(
+                "编号,客户描述,类别\n"
+                "001,杯子破损,质量\n002,物流未更新,物流。\n003,屏幕碎裂,质量。\n"
+                "004,快递丢失,物流\n005,开不了机,质量\n006,地址填错,物流\n"
+            ).encode(),
             sample_name="工单.csv",
             full=(
                 "编号,客户描述,类别\n"
@@ -351,7 +355,11 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             target_column="类别",
             group_columns=("编号",),
             expect="passes",
-            expect_note="通过且带「标签多种写法」预警(变体检出已上线);变体在训练中会被当不同答案,预警建议归一",
+            expect_note=(
+                "通过且带「标签多种写法」预警(变体检出已上线),且归一草案已预置:"
+                "map_values 规则自动映射到各组出现次数最多的写法,预览答案只剩规范写法,"
+                "全旅程以归一后的标签通过;采用哪种写法仍由用户在预览确认时裁决"
+            ),
             tags=("dirty-data", "label-variants"),
         ),
         ScenarioSpec(
