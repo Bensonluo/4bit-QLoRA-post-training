@@ -1341,3 +1341,50 @@ execution-status/execution-stop)是最后两块零人话的业务决策 CLI 表�
   scripts/data_intake.py、tests/unit/test_report_summary.py、
   tests/unit/test_iteration_execution_cli.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 36 轮 = 物化 CLI 分区人话摘要统一接入 summarize_dataset（恢复循环第 17 轮）
+
+(恢复的北极星打磨循环,第 17 轮。)核心痛点:`materialize` 分派的 stderr 人话
+此前是「半成品」——grouped 与 fixed_evaluation_suite 两种切分方式零人话(只有
+JSON 落 stdout),temporal 路径则是 CLI 手写四段自造句式,词汇与页面数据集版本
+区(第 30/31 轮接入的 `summarize_dataset`)不一致;且 answer_coverage_note /
+duplicate_note 两条披露在 CLI 上是 raw 打印、页面才有人话定位。物化是「数据
+变训练资产」的关键节点,三切分方式在 CLI 上应与页面同一口径。
+
+- **CLI 接线**(data_intake.py materialize 分支):分支内 lazy import
+  `summarize_dataset`,对 `session.dataset.statistics` 逐行打 stderr——三种切分
+  方式统一拿到分法句(grouped 按业务对象隔离划分/temporal 按已确认的时间边界
+  划分/fixed-suite 沿用固定开发测试题集)、各分区计数、独立分组数、比例受分组
+  大小影响、答案覆盖与完全相同例题披露、边界句「分区就绪只说明数据已按规则
+  隔离、可以进入训练前检查;不代表模型效果或业务达标」。原有 raw
+  coverage/duplicate 打印删除,不双重输出;分支仍落到共享尾部,stdout 纯 JSON
+  不变。temporal 预告行(随机比例与种子不生效提示)保留在物化前。
+- **temporal 补充行瘦身**:摘要之外只保留一行独有内容——逐原因排除计数
+  (`exclusion_counts` 的 JSON)+「原行明细见 dataset.paths.manifest 的
+  metadata.excluded_rows」,gated 于 `excluded_rows > 0`。摘要句只说总数与
+  成因,逐条计数与原行入口由补充行承载,职责分明。
+- **report_summary.py 一处措辞**:temporal 首句「分界线与本版本实际使用的时间
+  字段见下方」→「…以已确认的时间方案为准」——CLI stderr 尾部没有「下方」可
+  指,位置中性措辞对 UI 与 CLI 两处消费方都成立。grep 确认源码唯一出现、无
+  测试或文档钉住旧句。
+- **测试 +2**:test_cli_summaries +1(分组路径真实 CLI:row_counts 1/1/1 +
+  按业务对象隔离划分 + 训练 1 条、验证 1 条、独立测试 1 条 + 个独立分组 +
+  实际比例受分组大小影响 + FULL 3 行 2 类下训练集只见 1 类的覆盖披露
+  「从未出现在训练集」+ 边界句收尾;stdout 仍纯 JSON——注意 `session.revision`
+  是 int,注入 argv 需 `str()`);test_readme_alignment +1 钉文档九句(stderr
+  位点/summarize_dataset 点名/三分法句/比例受分组大小影响/分区就绪只说明/
+  逐原因排除计数/metadata.excluded_rows)。test_temporal_intake_entrypoints
+  既有断言更新:「纳入 3 条」「排除 2 条」自造句式 → summarize_dataset 统一
+  词汇「共纳入 3 条（全量 5 条）」「另有 2 条」+「以已确认的时间方案为准」,
+  补充行断言(排除原因计数/manifest 指引)不变。
+- **文档**(agent-setup.md「## 生成独立数据分区与版本」):coverage/duplicate
+  披露段之后新增 materialize CLI 摘要口径段——stderr 位点、summarize_dataset
+  同口径、三分法句、如实边界、时间方案补充行分工、此前零人话/自造句式的
+  痛点点名。
+- 回归:ruff check/format clean;定向套件(cli_summaries+temporal_entrypoints+
+  full_data_cli+report_summary+readme_alignment+eval_suite_cli+iteration_cli+
+  data_materialize)96 passed。全量回归 **tests/unit 1761 passed / 0 failed**
+  (--no-cov,无排除;基线 1759 + 新增 2)。本批只动 scripts/data_intake.py、
+  src/workbench/report_summary.py、tests/unit/test_temporal_intake_entrypoints.py、
+  tests/unit/test_cli_summaries.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

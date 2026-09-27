@@ -1122,18 +1122,23 @@ def main() -> int:
                 independent_rows_confirmed=args.independent_rows_confirmed,
                 **suite_options,
             )
-            if session.dataset.statistics.get("split_method", "").startswith("temporal"):
-                statistics = session.dataset.statistics
+            # 分区人话摘要与页面数据集版本区同一口径(summarize_dataset):分法句、各分区
+            # 计数、答案覆盖与重复例题披露、边界句,三种切分方式统一;stdout 仍由共享
+            # 尾部输出纯 JSON。时间方案在摘要之外只补逐原因排除计数与原行入口——
+            # 摘要句只说总数与成因,不逐条列原因计数。
+            from src.workbench.report_summary import summarize_dataset
+
+            statistics = session.dataset.statistics
+            for line in summarize_dataset(statistics):
+                print(line, file=sys.stderr)
+            if statistics.get("split_method", "").startswith("temporal") and statistics.get(
+                "excluded_rows", 0
+            ):
+                reasons = json.dumps(statistics.get("exclusion_counts") or {}, ensure_ascii=False)
                 print(
-                    f"时间分区：纳入 {statistics['included_rows']} 条；保留排除 {statistics['excluded_rows']} 条。原因：{json.dumps(statistics.get('exclusion_counts', {}), ensure_ascii=False)}；原行明细见 dataset.paths.manifest 的 metadata.excluded_rows。",
+                    f"排除原因计数：{reasons}；原行明细见 dataset.paths.manifest 的 metadata.excluded_rows。",
                     file=sys.stderr,
                 )
-            coverage_note = session.dataset.statistics.get("answer_coverage_note")
-            if coverage_note:
-                print(coverage_note, file=sys.stderr)
-            duplicate_note = session.dataset.statistics.get("duplicate_note")
-            if duplicate_note:
-                print(duplicate_note, file=sys.stderr)
         elif args.command == "preflight":
             from src.workbench.training_preflight import load_local_tokenizer
 

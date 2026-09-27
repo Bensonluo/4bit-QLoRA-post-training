@@ -187,3 +187,49 @@ def test_train_status_without_preflight_does_not_invent_one(train_status_cli, ca
     assert "这次训练基于 Qwen3-1.7B" in err
     assert "正在训练中" in err and "关闭页面不影响后台训练" in err
     assert "训练前检查" not in err
+
+
+def test_materialize_stderr_carries_dataset_summary(tmp_path, monkeypatch, capsys):
+    """materialize stderr 追加分区人话摘要:分组路径此前零人话,现在与页面同口径;
+    stdout 仍是纯 JSON 任务记录。"""
+    service = IntakeService(tmp_path / "intake")
+    session = approved(service)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(service.root),
+            "materialize",
+            session.session_id,
+            "--revision",
+            str(session.revision),
+            "--validation-fraction",
+            "0.2",
+            "--test-fraction",
+            "0.2",
+            "--seed",
+            "17",
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["dataset"]["statistics"]["row_counts"] == {
+        "train": 1,
+        "validation": 1,
+        "test": 1,
+    }
+    err = captured.err
+    # 分法句 + 计数 + 分组数 + 比例受分组大小影响
+    assert "按业务对象隔离划分" in err
+    assert "训练 1 条、验证 1 条、独立测试 1 条" in err
+    assert "个独立分组" in err
+    assert "实际比例受分组大小影响" in err
+    # FULL 3 行 2 类、1/1/1 切分:训练集只见 1 类,覆盖披露必触发
+    assert "从未出现在训练集" in err
+    # 固定边界句收尾
+    assert "分区就绪只说明" in err

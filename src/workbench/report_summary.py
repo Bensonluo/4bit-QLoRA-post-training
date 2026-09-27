@@ -205,7 +205,7 @@ def summarize_dataset(statistics: dict) -> list[str]:
         lines.append(
             f"本版本按已确认的时间边界划分：训练 {train} 条、验证 {validation} 条、"
             f"独立测试 {test} 条，共纳入 {included} 条（全量 {total} 条）；"
-            "分界线与本版本实际使用的时间字段见下方。"
+            "分界线与本版本实际使用的时间字段以已确认的时间方案为准。"
         )
         if excluded:
             lines.append(

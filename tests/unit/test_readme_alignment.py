@@ -511,3 +511,21 @@ def test_iteration_execution_summary_docs_pinned():
     assert "勾选确认继续才会恢复" in section, "等确认暂停的用户动作必须写明"
     assert "重复提交不会再次训练" in section, "completed 幂等边界必须写明"
     assert "worker.log" in section, "被阻断/失败的排查指向必须写明"
+
+
+def test_materialize_summary_docs_pinned():
+    """materialize CLI stderr 分区人话摘要口径钉死:三切分统一、边界句与时间补充行。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 生成独立数据分区与版本",
+        "## 时间预测任务：先核对来源与标签窗口",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "summarize_dataset" in section, "与页面同口径的摘要函数必须点名"
+    assert "按业务对象隔离划分" in section, "分法句(分组)必须写明"
+    assert "按已确认的时间边界划分" in section, "分法句(时间)必须写明"
+    assert "沿用固定开发/测试题集" in section, "分法句(固定题集)必须写明"
+    assert "比例受分组大小影响" in section, "分组如实边界必须写明"
+    assert "分区就绪只说明数据已按规则隔离" in section, "固定边界句必须写明"
+    assert "逐原因排除计数" in section, "时间方案逐原因计数补充行必须写明"
+    assert "metadata.excluded_rows" in section, "manifest 原行明细指引必须写明"

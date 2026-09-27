@@ -99,7 +99,13 @@ def test_temporal_cli_materialize_reports_retained_exclusions_and_ignores_random
     assert stats["row_counts"] == {"train": 1, "validation": 1, "test": 1}
     assert stats["included_rows"] == 3 and stats["excluded_rows"] == 2
     assert "随机比例与种子不生效" in result.stderr
-    assert "纳入 3 条" in result.stderr and "排除 2 条" in result.stderr
+    # 摘要句式:纳入/排除走 summarize_dataset 的统一词汇(共纳入 N 条/另有 N 条),
+    # 而非 CLI 自造句;逐原因计数与 manifest 指引由 CLI 补充行单独承载。
+    assert "共纳入 3 条（全量 5 条）" in result.stderr
+    assert "另有 2 条" in result.stderr
+    assert "以已确认的时间方案为准" in result.stderr
+    assert "排除原因计数" in result.stderr
+    assert "原行明细见 dataset.paths.manifest" in result.stderr
     manifest = json.loads(Path(payload["dataset"]["paths"]["manifest"]).read_text())
     excluded = manifest["metadata"]["excluded_rows"]
     assert {item["reason"] for item in excluded} == {
