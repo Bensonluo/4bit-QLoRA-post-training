@@ -99,6 +99,61 @@ _LONG_CELL_PREFIX = (
     "2026-09-27 10:23:02 WARN 缓存未命中,回源查询耗时 187ms;"
 )
 
+# JSONL 超长行:每行一个 JSON 对象,单条记录的输入字段带数万字符日志,
+# 单行数十 KB(JSONL 路径逐行 json.loads,无按行截断)。
+_JSONL_LONG_CELL = "2026-09-27 10:23:01 INFO 收到客户端请求,处理订单流程,读取配置项共 42 项,回源查询耗时 187ms;"
+
+
+def _jsonl_long_line_text() -> str:
+    import json as _json
+
+    lines = [_json.dumps({"编号": "001", "描述": "杯子破损", "类别": "质量"}, ensure_ascii=False)]
+    lines.append(
+        _json.dumps({"编号": "002", "描述": "物流未更新", "类别": "物流"}, ensure_ascii=False)
+    )
+    for i in range(3, 11):
+        lines.append(
+            _json.dumps(
+                {
+                    "编号": f"{i:03d}",
+                    "描述": _JSONL_LONG_CELL * (400 + i * 40),
+                    "类别": "质量" if i % 2 else "物流",
+                },
+                ensure_ascii=False,
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+_JSONL_SAMPLE = (
+    "\n".join(
+        (
+            '{"编号": "001", "描述": "杯子破损", "类别": "质量"}',
+            '{"编号": "002", "描述": "物流未更新", "类别": "物流"}',
+        )
+    )
+    + "\n"
+).encode()
+_JSONL_FULL = _jsonl_long_line_text().encode()
+
+# 重复表头:导出工具把表头行追加在数据中部(常见拼接产物),表头行会变成一条普通数据。
+_DUP_HEADER_FULL = (
+    "编号,客户描述,类别\n"
+    "001,杯子破损,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n004,快递丢失,物流\n"
+    "编号,客户描述,类别\n"
+    "005,开不了机,质量\n006,地址填错,物流\n007,异味,质量\n008,延迟送达,物流\n"
+    "009,无法充电,质量\n010,包装破损,物流\n"
+).encode()
+
+# 全角数字:编号与描述里出现全角数字(０１２３),零密钥路径不做全角/半角归一。
+_FW_FULL = (
+    "编号,客户描述,类别\n"
+    "００１,订单１２３号商品杯子破损,质量\n００２,物流未更新,物流\n００３,屏幕碎裂第２次,质量\n"
+    "００４,快递丢失,物流\n００５,开不了机,质量\n００６,地址填错,物流\n"
+    "００７,异味,质量\n００８,延迟送达,物流\n００９,无法充电,质量\n０１０,包装破损,物流\n"
+).encode()
+_FW_SAMPLE = "编号,客户描述,类别\n００１,订单１２３号商品杯子破损,质量\n００２,物流未更新,物流\n".encode()
+
 
 def _long_line_text() -> str:
     import csv as _csv
@@ -458,6 +513,57 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "指令与标签——如实记录,不做自动剥空格"
             ),
             tags=("dirty-data", "header-hygiene"),
+        ),
+        ScenarioSpec(
+            scenario_id="jsonl-long-line",
+            goal="根据客户粘贴的运行日志判断问题类别",
+            sample=_JSONL_SAMPLE,
+            sample_name="日志工单.jsonl",
+            full=_JSONL_FULL,
+            full_name="full.jsonl",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:JSONL 单行数十 KB(单条记录的输入字段带数万字符日志)"
+                "逐行 json.loads 不被数据层拦截,数据层只验证结构与答案保留;"
+                "是否截断由训练前预检用真实 tokenizer 测量,语义是否受影响由用户在真实预览核对"
+            ),
+            tags=("long-text", "jsonl", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="duplicate-header-rows-in-full",
+            goal="根据客户首次描述判断售后类别",
+            sample=_CLEAN_SAMPLE,
+            sample_name="工单.csv",
+            full=_DUP_HEADER_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局(已知缺口):导出拼接产生的重复表头行不被数据层识别,"
+                "该行作为普通样本进入训练(输入「客户描述: 客户描述」、答案「类别」);"
+                "用户能看到的唯一提示是 review 级「类别出现样例未覆盖的 1 种答案」,"
+                "不阻断。表头行等垃圾样本不应静默成为训练数据——待办:全量验证应把"
+                "与表头完全相同的行列为 blocking 问题点名行号"
+            ),
+            tags=("dirty-data", "header-hygiene", "known-gap"),
+        ),
+        ScenarioSpec(
+            scenario_id="full-width-digits",
+            goal="根据客户首次描述判断售后类别",
+            sample=_FW_SAMPLE,
+            sample_name="工单.csv",
+            full=_FW_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:编号与描述中的全角数字(０１２３)不做全角/半角归一,"
+                "按原样文本进入输入与分组;与标点变体同理,语义是否受影响由用户判断,"
+                "需要数字语义时先在数据侧规整——已知边界,非缺陷"
+            ),
+            tags=("boundary", "full-width"),
         ),
     ]
 
