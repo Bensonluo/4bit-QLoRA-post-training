@@ -744,3 +744,54 @@ full-sources)。历史记录不改写,本条如实更正:对称性在本轮补�
   ruff check/format clean。本批只动 scripts/data_intake.py(add-source 的参数与
   透传)、tests/unit/test_multisource_cli.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 24 轮 = Excel 合并单元格如实点名 + 矩阵场景 42(恢复循环第 4 轮)
+
+(恢复的北极星打磨循环,第 4 轮。)核心痛点:Excel 里「同一类别只写一次然后下拉
+合并」是业务人员做表的常见形态,读取时合并区除左上角外均读为空串——用户在样例
+确认或全量验证被「缺少监督答案」拦下时,看到的只是一堆空值,无从知道根因是自己
+的 Excel 合并。与多 Sheet 静默忽略(第 18 轮)同源:事实不可见,不是判断错误。
+
+- **merged_note 如实点名**(`sources.py` + `intake_models.py`):探针实测 pd.ExcelFile
+  走 openpyxl 只读模式,ReadOnlyWorksheet 没有 merged_cells——检测需要第二次
+  `load_workbook(read_only=False)` 完整加载(仅 xlsx;xls 的 xlrd 引擎不提供合并
+  范围,如实不检测)。读取的 sheet 存在与数据区相交的合并区(行 1..行数+1、列
+  1..列数;完全在数据区之外或未读取 sheet 的合并不列入)时,来源携带 `merged_note`:
+  「该 sheet 含 1 处合并单元格(类别 C2:C4):合并区除左上角外均读为空值,涉及答案列
+  时这些行会按缺少监督答案处理。请取消合并并逐行填写受影响的值;没有自动填充。」
+  点名受影响列的表头与坐标(超过 5 处以「等」收尾,与 sheet_note 同口径);随
+  SampleSource 契约字段持久化(第 19 轮正道方案,不用进程内记忆),profile 同步呈现,
+  存档回读仍在。读取行为不变:合并区除锚点外读空串,**不自动填充**——是否取消合并
+  由用户决定(语义安全原则:不猜业务语义)。
+- **矩阵场景 42「目标列纵向合并」**(`merged-cells-in-target-column`,先探针后定局):
+  三变体探针实测——样例合并(C2:C4,锚点 质量 保留、002/003 空读):create 不拦、
+  merged_note 即时点名,对比核验不拦(两条已标注行 001/004 答案不同足以配对),旅程
+  **在样例确认被拦**「当前方案仍有业务问题、缺标签或转换问题,不能确认数据就绪。」
+  ——这是矩阵首个 confirm_sample 关场景(此前 24/25/27 都拦在更早的对比核验);
+  全量合并(C6:C8)且样例干净:走到全量验证被硬拦「全量存在缺少监督答案的记录,
+  需要补充标签;没有自动生成真值。(2 条)」(与场景 19 同守卫,根因不同);对照探针
+  (同样空答案但不合并)拦在同一关同一条报错——**拦截本身是通用缺标签门,与合并
+  无关;合并场景的独有价值是 merged_note 把根因点名给用户**。expect=`blocked_at:
+  confirm_sample`,测试另钉:profile 与来源的 merged_note 一致、全量来源空读 2 行
+  且点名 类别 C6:C8。矩阵 41→42,42/42 as_expected。
+- **顺手清偿一处过时标签**:high-cardinality-target 的 tags 含 "known-gap",但其
+  expect_note 早已写明「高基数目标早期警告已上线(M5/task-001)…预警不阻断」——
+  标签与自己的说明矛盾,移除。grep 确认 specs 内不再有 known-gap;forecast 场景的
+  known-limitation 保留(泄漏预警+无时间契约仍是该夹具的真实结局)。
+- **文档钉死**(agent-setup.md + test_readme_alignment 16→17):多份资料小节新增
+  合并单元格段——merged_note 逐字示例、合并区除左上角外读空值、没有自动填充、
+  数据区之外/未读取 sheet 不列入、xls 不检测;钉测试断言关键句且由场景矩阵
+  merged-cells-in-target-column 真实存在背书。
+- 回归:test_sources 11→15(空读不填充/区域与 sheet 过滤/前五上限/服务层持久化)、
+  test_scenario_matrix 29→30(全集下限 41→42)、test_readme_alignment 16→17;
+  邻接套件(multisource/full_data/composed/data_intake/baseline_analysis/full_data 域)
+  83 passed;ruff check/format clean。全量回归 **tests/unit 1706 passed / 0 failed**
+  (--no-cov,无排除,171.96s)。**环境更正(本轮核实,第 22 轮环境注记就此作废):**
+  本机 venv 现已装 datasets/peft/plotly(venv/bin/python 逐一 import 干净),
+  第 22 轮的 46 模块排除清单(/tmp/exclude_final.txt)已过时——收集期对比实测
+  1706(无排除)vs 1705(带该清单,标志实际未生效),真实全集 1706 项即本轮回归
+  基线;此前「621 passed 37 skipped」是排除清单生效时代的数字,不是当前真相。
+  本批只动 src/workbench/intake_models.py、src/workbench/sources.py、
+  src/workbench/scenario_specs.py、tests/unit/test_sources.py、
+  tests/unit/test_scenario_matrix.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

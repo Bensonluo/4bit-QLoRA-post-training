@@ -262,3 +262,25 @@ def test_numeric_continuous_boundary_docs_pinned_and_backed_by_matrix():
 
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "numeric-continuous-target" in scenarios, "场景矩阵缺少连续数值目标场景"
+
+
+def test_merged_cells_docs_pinned_and_backed_by_matrix():
+    """Excel 合并单元格文档:merged_note/不自动填充/xls 边界关键句钉死,由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 多份资料一起分析",
+        "### 长尾字段解析与受限适配",
+    )
+    assert "merged_note" in section
+    assert "合并区除左上角外均读为空值" in section
+    assert "没有自动填充" in section
+    assert "缺少监督答案" in section, "空值根因与拦截的关联必须写明"
+    assert "未读取 sheet 的合并不列入" in section
+    assert "xls 引擎不提供合并范围，不检测" in section
+
+    # 场景矩阵背书:merged-cells-in-target-column 场景真实存在且结局被钉住
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "merged-cells-in-target-column" in scenarios, "场景矩阵缺少合并单元格场景"
+    assert scenarios["merged-cells-in-target-column"].expect == "blocked_at:confirm_sample"

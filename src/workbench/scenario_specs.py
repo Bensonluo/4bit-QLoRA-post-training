@@ -404,6 +404,40 @@ def _two_sheet_xlsx(
     return data
 
 
+# Excel 合并单元格:目标列(类别)纵向合并——Excel 里「同一类别只写一次然后下拉合并」
+# 的常见形态,读取时除左上角锚点外均读为空串。read_source 检测与数据区相交的合并区,
+# merged_note 如实点名范围与根因、说明没有自动填充(仅 xlsx;xls 引擎不提供合并范围)。
+def _merged_xlsx(
+    key: str, rows: tuple[tuple[str, str, str | None], ...], merges: tuple[str, ...]
+) -> bytes:
+    """生成目标列含合并单元格的单 sheet 工作簿;None 表示合并区非首格(openpyxl 写入即为空)。"""
+
+    cached = _XLSX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    from datetime import datetime
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "客户描述", "类别"))
+    for row in rows:
+        sheet.append(row)
+    for coord in merges:
+        sheet.merge_cells(coord)
+    stamp = datetime(2026, 9, 27, 8, 0, 0)  # 固定文档时间戳,同夹具字节可复现
+    workbook.properties.created = stamp
+    workbook.properties.modified = stamp
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+    _XLSX_CACHE[key] = data
+    return data
+
+
 # 干净 10 行(编号 001-010,质量/物流交替):多 sheet 与行序颠倒场景共用同源数据。
 _CLEAN_TEN_ROWS = (
     ("001", "杯子破损", "质量"),
@@ -423,6 +457,22 @@ def _rows_as_csv(rows: tuple[tuple[str, str, str], ...], target_column: str = "�
     return (
         f"编号,客户描述,{target_column}\n" + "".join(f"{a},{b},{c}\n" for a, b, c in rows)
     ).encode()
+
+
+# 样例:类别 C2:C4 合并 → 001 质量(锚点)保留,002/003 空读,004 物流另有一格。
+_MERGED_SAMPLE = _merged_xlsx(
+    "merged-sample",
+    (
+        ("001", "杯子破损", "质量"),
+        ("002", "物流未更新", None),  # 合并区非首格:读取为空串
+        ("003", "屏幕碎裂", None),
+        ("004", "快递丢失", "物流"),
+    ),
+    ("C2:C4",),
+)
+# 全量:C6:C8 合并(openpyxl 合并时丢弃非首格的既有值)→ 005 质量(锚点)保留,
+# 006/007 空读,其余 8 行干净——对照探针用它实测全量侧结局。
+_MERGED_FULL = _merged_xlsx("merged-full", _CLEAN_TEN_ROWS, ("C6:C8",))
 
 
 # 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
@@ -533,7 +583,7 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "通过且带「可能选错答案列」预警(高基数目标早期警告已上线,M5/task-001);"
                 "抽取类任务的高基数是合法的,预警不阻断"
             ),
-            tags=("high-cardinality", "known-gap"),
+            tags=("high-cardinality",),
         ),
         ScenarioSpec(
             scenario_id="dirty-label-variants",
@@ -1209,6 +1259,34 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "不指定默认读第一个),页面入口待接入"
             ),
             tags=("excel", "multi-sheet", "sheet-selection"),
+        ),
+        ScenarioSpec(
+            scenario_id="merged-cells-in-target-column",
+            goal="根据客户首次描述判断售后类别",
+            sample=_MERGED_SAMPLE,
+            sample_name="工单.xlsx",
+            full=_MERGED_FULL,
+            full_name="full.xlsx",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:confirm_sample",
+            expect_note=(
+                "实测结局:目标列纵向合并(C2:C4)——create 不拦,合并区除左上角外读为"
+                "空串(001 质量/004 物流保留,002/003 空读,不自动填充),merged_note "
+                "已上线且 create 即如实点名:「该 sheet 含 1 处合并单元格(类别 C2:C4):"
+                "合并区除左上角外均读为空值…请取消合并并逐行填写受影响的值;没有自动填充」"
+                "——用户在「缺少监督答案」被拦前就能看到根因是 Excel 合并。对比核验不拦"
+                "(两条已标注行 001/004 答案不同足以配对);旅程在样例确认被拦:"
+                "「当前方案仍有业务问题、缺标签或转换问题,不能确认数据就绪。」——样例含"
+                " needs_label 行不能确认(通用缺标签门,矩阵首个 confirm_sample 关场景;"
+                "对照探针实测:同样空答案但不合并的文件拦在同一关同一条报错——拦截本身"
+                "与合并无关,合并的独有价值是 merged_note 点名根因)。全量侧合并(C6:C8)"
+                "对照实测:样例干净时旅程走到全量验证被硬拦「全量存在缺少监督答案的记录,"
+                "需要补充标签;没有自动生成真值。(2 条)」(与场景 19 同守卫,根因不同);"
+                "本场景取样例侧合并形态定局,两侧同现时样例侧更早拦截。边界如实记录:"
+                "取消合并并逐行填写由用户决定,没有自动填充;xls 引擎不提供合并范围,不检测"
+            ),
+            tags=("excel", "merged-cells", "negative-scenario"),
         ),
     ]
 

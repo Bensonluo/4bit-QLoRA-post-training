@@ -143,6 +143,37 @@ def _excel_sheet_note(sheet_names: list[str], read_name: str, explicit: bool) ->
     return f"{head}；其余 {len(unread)} 个（{listed}）未读取。"
 
 
+def _excel_merged_note(data: bytes, sheet_name: str, columns: list[str], row_count: int) -> str:
+    """xlsx 合并单元格的如实说明:点名与数据区相交的合并区,解释空值根因,不自动填充。
+
+    pandas 走 openpyxl 只读模式读值,合并区除左上角外均读为空串——用户在
+    「缺少监督答案」被拦时无从知道根因是 Excel 合并。openpyxl 完整加载能拿到
+    合并范围这一事实(只读模式没有 merged_cells),据此如实点名;完全落在
+    数据区之外的合并不涉及本次读取,不列入。
+    """
+    from openpyxl import load_workbook
+
+    book = load_workbook(io.BytesIO(data), read_only=False)
+    try:
+        merged = sorted(
+            book[sheet_name].merged_cells.ranges, key=lambda item: (item.min_row, item.min_col)
+        )
+    finally:
+        book.close()
+    overlapping = [
+        item for item in merged if item.min_row <= row_count + 1 and item.min_col <= len(columns)
+    ]
+    if not overlapping:
+        return ""
+    described = [f"{columns[item.min_col - 1]} {item.coord}" for item in overlapping[:5]]
+    listing = "、".join(described) + ("等" if len(overlapping) > 5 else "")
+    return (
+        f"该 sheet 含 {len(overlapping)} 处合并单元格（{listing}）："
+        "合并区除左上角外均读为空值，涉及答案列时这些行会按缺少监督答案处理。"
+        "请取消合并并逐行填写受影响的值；没有自动填充。"
+    )
+
+
 def read_source(
     name: str,
     data: bytes,
@@ -155,13 +186,15 @@ def read_source(
     """Read supplied bytes only; never follow paths mentioned inside the data.
 
     sheet 选择仅对 Excel 有效：按名称或 1 起始的序号指定工作表，None（默认）
-    读第一个 sheet，读取行为与此前完全一致。
+    读第一个 sheet，读取行为与此前完全一致。xlsx 读取的 sheet 存在与数据区
+    相交的合并单元格时，来源携带 merged_note 如实点名（合并区除左上角外
+    均读为空值）；不自动填充，是否取消合并由用户决定。
     """
     suffix = Path(name).suffix.lower().lstrip(".")
     digest = hashlib.sha256(data).hexdigest()
     records: list[tuple[int, dict[str, Any]]] = []
     actual_encoding, actual_delimiter = "", ""
-    resolved_sheet, sheet_note = "", ""
+    resolved_sheet, sheet_note, merged_note = "", "", ""
     if suffix in {"csv", "jsonl"}:
         if sheet is not None:
             raise ValueError(f"sheet 选择仅对 Excel 文件有效；当前文件是 {suffix}。")
@@ -217,6 +250,12 @@ def read_source(
         sheet_names = list(book.sheet_names)
         if len(sheet_names) > 1:
             sheet_note = _excel_sheet_note(sheet_names, resolved_sheet, explicit)
+        # xlsx 检测与数据区相交的合并单元格(xls 引擎不提供合并范围,不检测——如实边界)。
+        merged_note = (
+            _excel_merged_note(data, resolved_sheet, columns, len(records))
+            if suffix == "xlsx"
+            else ""
+        )
     else:
         raise ValueError("当前数据入口支持 CSV、Excel、JSONL。")
     if not records:
@@ -234,6 +273,7 @@ def read_source(
         delimiter=actual_delimiter,
         sheet=resolved_sheet,
         sheet_note=sheet_note,
+        merged_note=merged_note,
         columns=columns,
         rows=rows,
     )
@@ -324,4 +364,6 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
     sheet_note = source.sheet_note
     if sheet_note:
         profile["sheet_note"] = sheet_note
+    if source.merged_note:
+        profile["merged_note"] = source.merged_note
     return profile

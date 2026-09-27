@@ -193,3 +193,102 @@ def test_cli_create_sheet_flag_reads_designated_sheet(tmp_path, monkeypatch, cap
     assert payload["source"]["sheet"] == "员工表"
     assert payload["source"]["columns"] == ["员工号", "部门"]
     assert "按指定读取「员工表」" in payload["profile"]["sheet_note"]
+
+
+def _merged_workbook_bytes(merges: list[str], *, sheet_name: str = "工单表") -> bytes:
+    """生成类别列含合并单元格的工作簿:merges 是 openpyxl 坐标列表(如 "C2:C4")。"""
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = sheet_name
+    sheet.append(("编号", "客户描述", "类别"))
+    for number, text, label in (
+        ("001", "杯子破损", "质量"),
+        ("002", "物流未更新", None),  # 合并区非首格:openpyxl 写入时即为空
+        ("003", "屏幕碎裂", None),
+        ("004", "快递丢失", "物流"),
+    ):
+        sheet.append((number, text, label))
+    for coord in merges:
+        sheet.merge_cells(coord)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def test_merged_cells_read_as_empty_and_annotated():
+    """合并单元格如实点名:非首格读为空串(不自动填充),merged_note 说出根因与修法。"""
+    data = _merged_workbook_bytes(["C2:C4"])
+    source = read_source("工单.xlsx", data, scope="sample")
+    # 读取行为不变:合并区除左上角外均读为空串,绝不猜业务语义去填充
+    assert [row.values["类别"] for row in source.rows] == ["质量", "", "", "物流"]
+    note = source.merged_note
+    assert "1 处合并单元格" in note, note
+    assert "类别 C2:C4" in note, note  # 受影响列与范围点名
+    assert "除左上角外均读为空值" in note, note
+    assert "没有自动填充" in note, note
+    assert profile_source(source)["merged_note"] == note  # profile 同步如实呈现
+
+
+def test_merged_note_skips_out_of_region_and_unread_sheet_merges():
+    """数据区之外的合并不涉及本次读取不点名;未读取 sheet 的合并同样不点名;
+    干净文件与 CSV 的 profile 形状不变。"""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "类别"))
+    sheet.append(("001", "质量"))
+    sheet.append(("002", "物流"))
+    sheet.merge_cells("D9:D11")  # 完全在数据区之外(无内容格)
+    other = workbook.create_sheet("备注表")
+    other.append(("备注",))
+    other.append(("正常",))
+    other.merge_cells("A2:A3")  # 合并在另一个 sheet
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+
+    default = read_source("工作簿.xlsx", data)
+    assert default.merged_note == ""
+    assert "merged_note" not in profile_source(default)
+    second = read_source("工作簿.xlsx", data, sheet="备注表")
+    assert "备注 A2:A3" in second.merged_note, second.merged_note  # 只看实际读取的 sheet
+
+    csv_source = read_source("工单.csv", "编号,类别\n001,质量\n".encode())
+    assert csv_source.merged_note == ""
+    assert "merged_note" not in profile_source(csv_source)
+
+
+def test_merged_note_lists_first_five_and_caps_long_lists():
+    """合并区超过 5 处时不逐一罗列,以「等」收尾——与 sheet_note 同款口径。"""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "备注"))
+    for i in range(1, 13):
+        sheet.append((f"{i:03d}", f"备注{i}"))
+    for start in range(2, 13, 2):  # B2:B3 … B12:B13 共 6 处
+        sheet.merge_cells(f"B{start}:B{start + 1}")
+    buffer = BytesIO()
+    workbook.save(buffer)
+    source = read_source("工作簿.xlsx", buffer.getvalue())
+    note = source.merged_note
+    assert "6 处合并单元格" in note, note
+    assert "B10:B11" in note, note  # 只列前 5 处
+    assert "B12:B13" not in note, note
+    assert note.rstrip("。").endswith("等）") or "等" in note
+
+
+def test_service_create_persists_merged_note(tmp_path):
+    """创建入口(服务层)透传:会话建在含合并单元格的文件上,存档回读后标注仍在。"""
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(
+        "根据客户首次描述判断售后类别", "工单.xlsx", _merged_workbook_bytes(["C2:C4"])
+    )
+    assert "类别 C2:C4" in session.source.merged_note
+    assert "merged_note" in session.profile
+    reloaded = service.load(session.session_id)
+    assert "类别 C2:C4" in reloaded.source.merged_note
+    assert "merged_note" in reloaded.profile

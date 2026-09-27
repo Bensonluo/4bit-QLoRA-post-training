@@ -35,6 +35,12 @@ class SampleSource(Contract):
         description="多 Sheet 工作簿的读取范围说明（含多个 sheet 时非空）："
         "如实记录本次读了哪个 sheet、哪些未读取；由读取时按实际选择生成。",
     )
+    merged_note: str = Field(
+        default="",
+        description="Excel 合并单元格的如实说明（读取的 sheet 存在与数据区相交的合并区时非空）："
+        "点名合并范围与受影响列、说明合并区除左上角外均读为空值；不自动填充，"
+        "是否取消合并由用户决定。当前仅 xlsx 检测，xls 不检测。",
+    )
     columns: list[str]
     rows: list[SourceRow]
 

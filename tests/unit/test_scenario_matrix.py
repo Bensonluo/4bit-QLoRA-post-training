@@ -224,6 +224,56 @@ def test_excel_second_sheet_selected_passes_full_journey(tmp_path):
     )
 
 
+def test_merged_cells_in_target_column_blocked_at_confirm_sample(tmp_path):
+    """场景 42:目标列纵向合并——空读行走通用缺标签门(confirm_sample 首次入矩阵),
+    merged_note 在 create 即点名 Excel 合并根因;不自动填充。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "merged-cells-in-target-column" in specs, "缺少场景 merged-cells-in-target-column"
+
+    spec = specs["merged-cells-in-target-column"]
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "confirm_sample", result.to_dict()
+    assert result.stages["contrast_check"] == "passed", result.to_dict()  # 两条已标注行足以配对
+    assert "不能确认数据就绪" in result.blocked_message, result.blocked_message
+
+    # create 即点名根因:合并区除锚点外空读(不自动填充),merged_note 点名 类别 C2:C4
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "merged-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert [row.values["类别"] for row in session.source.rows] == ["质量", "", "", "物流"]
+    note = session.source.merged_note
+    assert "1 处合并单元格" in note and "类别 C2:C4" in note and "没有自动填充" in note, note
+    assert session.profile["merged_note"] == note  # profile 同步如实呈现
+
+    # 全量侧对照(探针实测结论钉住):样例干净 + 全量合并(C6:C8)→ validate_full 硬拦
+    from src.workbench.scenario_matrix import ScenarioSpec
+
+    control = ScenarioSpec(
+        scenario_id="merged-full-control",
+        goal=spec.goal,
+        sample="编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n".encode(),
+        sample_name="工单.csv",
+        full=spec.full,
+        full_name="full.xlsx",
+        target_column="类别",
+        group_columns=("编号",),
+        expect="passes",  # 期望值不影响被测行为,仅让 verdict 判定有值
+    )
+    control_result = run_scenario(control, tmp_path / control.scenario_id)
+    assert control_result.blocked_at == "validate_full", control_result.to_dict()
+    assert "缺少监督答案" in control_result.blocked_message, control_result.blocked_message
+
+    # 全量来源同样点名合并根因:2 行空读来自 C6:C8 合并
+    from src.workbench.sources import read_source
+
+    full_source = read_source("full.xlsx", spec.full, scope="full")
+    assert [row.values["类别"] for row in full_source.rows].count("") == 2
+    assert "类别 C6:C8" in full_source.merged_note, full_source.merged_note
+
+
 def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
     """场景 40:重复表头行两侧同现——样例侧不拦(同场景 30 的不对称边界),全量侧硬拦
     (同场景 22),组合结局由全量侧决定:validate_full 拦下,不会带病物化。"""
@@ -253,7 +303,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 41, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 42, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
