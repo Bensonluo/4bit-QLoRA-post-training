@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T11:18:02.873854+00:00",
+  "created_at": "2026-09-27T12:44:26.273371+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -396,11 +396,92 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "single-row-sample",
+      "expect": "blocked_at:contrast_check",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "blocked"
+      },
+      "blocked_at": "contrast_check",
+      "blocked_message": "对比核验需要至少两条答案不同的已标注行。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "all-empty-target-column",
+      "expect": "blocked_at:contrast_check",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "blocked"
+      },
+      "blocked_at": "contrast_check",
+      "blocked_message": "对比核验需要至少两条答案不同的已标注行。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "utf16-no-bom-rejected",
+      "expect": "blocked_at:create",
+      "stages": {
+        "create": "blocked"
+      },
+      "blocked_at": "create",
+      "blocked_message": "无法解码文件，请明确指定编码；原始数据未修改。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "constant-target",
+      "expect": "blocked_at:contrast_check",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "blocked"
+      },
+      "blocked_at": "contrast_check",
+      "blocked_message": "对比核验需要至少两条答案不同的已标注行。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "whitespace-only-values",
+      "expect": "blocked_at:contrast_check",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "blocked"
+      },
+      "blocked_at": "contrast_check",
+      "blocked_message": "对比核验需要至少两条答案不同的已标注行。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "extreme-long-single-cell",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 23,
-    "as_expected": 23,
+    "total": 29,
+    "as_expected": 29,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,
