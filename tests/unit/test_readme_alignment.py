@@ -5,7 +5,10 @@ north-star 权威版的关键句全部钉死——文档漂移即测试红,改�
 """
 
 import re
+import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 README = ROOT / "README.md"
@@ -158,3 +161,56 @@ def test_north_star_pins_authority_and_key_sentences():
     assert "覆盖率 × 独立通过率" in text
     assert "**诚实红线**" in text
     assert "场景多样性用场景矩阵系统性覆盖" in text
+
+
+def _cli_help_text(monkeypatch, capsys, tmp_path, *command):
+    """进程内跑真实 CLI 的 --help(参考 test_label_verify_cli 的 argv 注入模式)。"""
+    from scripts import data_intake
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["data_intake.py", "--store", str(tmp_path), *command, "--help"],
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        data_intake.main()
+    assert excinfo.value.code == 0
+    return capsys.readouterr().out
+
+
+def test_agent_setup_label_verify_help_matches_documentation(monkeypatch, capsys, tmp_path):
+    """agent-setup 盲标抽题用法与真实 argparse 同步:--size 默认 5 上限 50、--export-csv。"""
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "label-verify")
+    assert "--revision" in help_text
+    assert "--size" in help_text
+    assert "默认 5，上限 50" in help_text, "样本量口径漂移:文档写 1–50 默认 5"
+    assert "--export-csv" in help_text
+
+
+def test_agent_setup_label_verify_submit_help_matches_documentation(monkeypatch, capsys, tmp_path):
+    """label-verify-submit:--verification-id 必填、--answer 可重复、不收 --revision。"""
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "label-verify-submit")
+    assert "--verification-id" in help_text
+    assert "每条抽样行一个" in help_text
+    assert "--revision" not in help_text, "文档钉死:label-verify-submit 不收 --revision"
+
+
+def test_agent_setup_learnability_probe_help_matches_documentation(monkeypatch, capsys, tmp_path):
+    """可学性探针用法同步:--revision/--model-path 必填,--size/--export-csv 可选。"""
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "learnability-probe")
+    assert "--revision" in help_text
+    assert "--model-path" in help_text
+    assert "--size" in help_text
+    assert "--export-csv" in help_text
+
+
+def test_semantic_safety_gates_are_backed_by_scenario_matrix():
+    """agent-setup「三道关卡已接入流程」由场景矩阵背书:41+ 场景含盲标/对比拦截覆盖。"""
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = builtin_scenarios()
+    assert len(scenarios) >= 41, f"场景矩阵应保持 41+ 规模,当前 {len(scenarios)}"
+    blind = [s for s in scenarios if "盲标" in s.expect_note]
+    contrast = [s for s in scenarios if "对比核验" in s.expect_note]
+    assert blind, "场景矩阵缺少盲标核验相关场景,agent-setup 的门禁描述失去背书"
+    assert contrast, "场景矩阵缺少对比核验相关场景,agent-setup 的门禁描述失去背书"
