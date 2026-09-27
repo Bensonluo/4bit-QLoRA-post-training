@@ -4,8 +4,10 @@ import pytest
 
 pytest.importorskip("streamlit")
 
-from tests.unit.test_data_intake_ui import data_page
+from tests.unit import test_data_intake_ui as intake_ui
 from tests.unit.test_full_data import FULL, approved
+
+data_page = intake_ui.data_page
 
 
 @pytest.fixture()

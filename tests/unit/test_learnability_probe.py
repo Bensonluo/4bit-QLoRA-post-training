@@ -113,3 +113,22 @@ def test_label_error_candidates_cross_signal_ranking(store, tmp_path):
     if strong:
         assert candidates[0]["user_blind_answer"], "强证据排前"
         assert "强证据" in candidates[0]["evidence"]
+
+
+def test_candidates_csv_export_is_excel_friendly():
+    from src.workbench.learnability_probe import candidates_to_csv
+
+    data = candidates_to_csv(
+        [
+            {
+                "row_id": "r1",
+                "data_label": "质量",
+                "base_zero_shot": "物流",
+                "user_blind_answer": None,
+                "evidence": "弱信号",
+            },
+        ]
+    )
+    text = data.decode("utf-8-sig")
+    assert "行ID" in text and "r1" in text and "弱信号" in text
+    assert data.startswith(b"\xef\xbb\xbf")  # BOM: Excel 直接打开不乱码

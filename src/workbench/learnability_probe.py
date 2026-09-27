@@ -161,3 +161,24 @@ def save_probe(root: str | Path, result: dict) -> Path:
     path = root / f"{result['dataset_version']}-{content_digest(result)[:16]}.json"
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
+
+
+def candidates_to_csv(candidates: list[dict]) -> bytes:
+    """候选表导出为 CSV(带 BOM,Excel 直开);供人工核对的离线清单。"""
+    import csv
+    import io
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["行ID", "数据标签", "基座零样本输出", "你的盲标答案", "证据"])
+    for item in candidates:
+        writer.writerow(
+            [
+                item.get("row_id", ""),
+                item.get("data_label", ""),
+                item.get("base_zero_shot", ""),
+                item.get("user_blind_answer") or "",
+                item.get("evidence", ""),
+            ]
+        )
+    return buffer.getvalue().encode("utf-8-sig")

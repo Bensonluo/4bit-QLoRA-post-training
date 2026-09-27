@@ -2335,6 +2335,15 @@ if dataset is not None:
                             width="stretch",
                         )
                         st.caption(result.get("candidates_note", ""))
+                        from src.workbench.learnability_probe import candidates_to_csv
+
+                        st.download_button(
+                            "导出候选为 CSV(供人工核对)",
+                            data=candidates_to_csv(candidates),
+                            file_name="label_issue_candidates.csv",
+                            mime="text/csv",
+                            key=f"probe_candidates_csv_{session.session_id}",
+                        )
                     else:
                         st.info("没有发现值得优先核对的行。")
                 except (ValueError, RuntimeError, OSError, ImportError) as exc:
