@@ -1154,6 +1154,9 @@ def main() -> int:
                 args.session_id, args.revision, sample_size=args.size
             )
             print("请仅根据输入作答，不要查看数据中的现有答案。", file=sys.stderr)
+            # 抽题时如实预告本轮样本量最多能提供的证据强度：
+            # 小样本下即使全部一致，真实一致率的置信下界也远低于 100%。
+            print(pending["evidence_note"], file=sys.stderr)
             for item in pending["items"]:
                 print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
             result = {
