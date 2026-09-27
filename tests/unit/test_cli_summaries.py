@@ -108,3 +108,82 @@ def test_eval_compare_stderr_carries_comparison_sentences(eval_compare_cli, caps
     # 10 道题仍触发小样本提示:百分比受单题影响,只当方向参考
     assert "任何百分比都受单题影响很大" in err
     assert "以上是观察事实,不是业务达标结论" in err
+
+
+@pytest.fixture()
+def train_status_cli(tmp_path, monkeypatch):
+    import src.workbench.training_runs
+
+    IntakeService(tmp_path / "intake")  # train-status 不读任务,--store 只需可用
+    record = {
+        "run_id": "run-9",
+        "status": "running",
+        "model_path": "/models/Qwen3-1.7B",
+    }
+
+    class Training:
+        def __init__(self, root, project_root=None):
+            pass
+
+        def get_status(self, run_id):
+            return record
+
+    monkeypatch.setattr(src.workbench.training_runs, "TrainingRunService", Training)
+
+    def invoke(*args):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "data_intake.py",
+                "--store",
+                str(tmp_path / "intake"),
+                "--training-root",
+                str(tmp_path / "training"),
+                *map(str, args),
+            ],
+        )
+        return data_intake.main()
+
+    return invoke, record
+
+
+def test_train_status_appends_preflight_summary_when_record_carries_one(train_status_cli, capsys):
+    """记录带预检时,stderr 在训练摘要之外追加预检大白话(第二层,各说各的边界)。"""
+    invoke, record = train_status_cli
+    record.update(
+        {
+            "status": "succeeded",
+            "config": {"training": {"num_epochs": 2}},
+            "metrics": {"train_loss": 0.42},
+            "preflight": {
+                "status": "passed",
+                "max_length": 512,
+                "splits": {"train": {"rows": 6, "truncated_rows": 0, "answer_lost_rows": 0}},
+                "issues": [],
+            },
+        }
+    )
+    assert invoke("train-status", "run-9") == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["run_id"] == "run-9"
+    err = captured.err
+    assert "这次训练基于 Qwen3-1.7B" in err
+    assert "训练完成，产出了微调适配器。" in err
+    assert "0.4200" in err and "不代表业务效果" in err
+    assert "要用同一套开发题与基座对照" in err
+    assert "训练前检查通过：6 行数据" in err
+    assert "没有内容因长度超限被截断" in err
+    assert "不代表训练效果或业务达标" in err
+
+
+def test_train_status_without_preflight_does_not_invent_one(train_status_cli, capsys):
+    """记录没带预检就只给训练状态句,不编造预检结论。"""
+    invoke, record = train_status_cli
+    assert invoke("train-status", "run-9") == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "running"
+    err = captured.err
+    assert "这次训练基于 Qwen3-1.7B" in err
+    assert "正在训练中" in err and "关闭页面不影响后台训练" in err
+    assert "训练前检查" not in err
