@@ -145,6 +145,15 @@ def propose_baseline_analysis(
             )
         )
 
+    findings.append(
+        Finding(
+            kind="observed",
+            message=(
+                "基础分析范围说明：未做多源组合、时间分区、受限适配与业务问答，"
+                "本方案仅覆盖单表字段映射；任务确需这些能力时请配置 Agent 或补充说明后重新分析。"
+            ),
+        )
+    )
     recipe = DataRecipe.model_validate(
         {
             "instruction": instruction_text,
@@ -200,8 +209,8 @@ def propose_baseline_analysis(
             "next_steps": [
                 "核对真实转换预览并确认业务含义，随后提供全量数据并验证。",
             ],
-            "capability_gaps": [
-                "基础分析未做多源组合、时间分区、受限适配与业务问答；需要时请配置 Agent 或补充说明后重新分析。"
-            ],
+            # 范围说明放 findings（如实但不阻断）：capability_gaps 仅用于
+            # 「任务需要而当前能力缺失」的阻断场景；单表映射没有缺失。
+            "capability_gaps": [],
         }
     )
