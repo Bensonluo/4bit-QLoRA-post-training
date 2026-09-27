@@ -1167,7 +1167,9 @@ def main() -> int:
                 "sample_size": pending["sample_size"],
                 "row_ids": [item["row_id"] for item in pending["items"]],
                 "submit_hint": (
-                    "data_intake.py label-verify-submit SESSION --revision R "
+                    # 与 label-verify-submit 解析器严格一致：提交路径不收 --revision，
+                    # 核验结论由来源与处理方案摘要绑定（数据或方案变化自动失效）。
+                    "data_intake.py label-verify-submit SESSION "
                     "--verification-id VERIFICATION_ID --answer 行ID=你的答案（每行一个 --answer）"
                 ),
             }

@@ -140,3 +140,14 @@ def test_cli_submit_verdict_line_shows_lower_bound_when_failed(store, monkeypatc
     expected = f"{wilson_lower_bound(4, 5):.0%}"
     assert f"95% 置信下界约 {expected}" in err
     assert "训练不会开始" in err
+
+
+def test_cli_submit_hint_is_copyable_verbatim(store, monkeypatch, capsys):
+    """submit_hint 照抄就能用：提示里的参数与解析器一致，不含会被拒的 --revision。"""
+    service, session = store
+    assert _run_verify(monkeypatch, service, session) == 0
+    payload = json.loads(capsys.readouterr().out)
+    hint = payload["submit_hint"]
+    assert hint.startswith("data_intake.py label-verify-submit")
+    assert "--revision" not in hint, "提交路径不收 --revision，提示不得把用户引向报错"
+    assert "--verification-id" in hint and "--answer" in hint
