@@ -2509,7 +2509,15 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                     {"blocking": st.error, "warning": st.warning, "info": st.info}.get(
                         issue.get("severity"), st.info
                     )(issue.get("message", ""))
-                with st.expander("本轮配置与预检记录"):
+                from src.workbench.report_summary import summarize_preflight, summarize_training_run
+
+                with st.expander("用大白话看这轮训练与检查"):
+                    for line in summarize_training_run(run):
+                        st.write(line)
+                    st.write("")
+                    for line in summarize_preflight(preflight):
+                        st.write(line)
+                with st.expander("本轮配置与预检记录（原始数据）"):
                     st.json(run.get("config", {}))
                     st.json(preflight)
                 recovery = run.get("recovery") or {}

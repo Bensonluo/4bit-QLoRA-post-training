@@ -67,3 +67,58 @@ def test_generation_failures_are_named():
     )
     joined = "\n".join(summarize_comparison(report))
     assert "1 题生成失败" in joined
+
+
+def test_preflight_summary_names_truncation_and_blockers():
+    from src.workbench.report_summary import summarize_preflight
+
+    lines = summarize_preflight(
+        {
+            "status": "warnings",
+            "splits": {"train": {"rows": 8, "truncated_rows": 2, "answer_lost_rows": 0}},
+            "issues": [
+                {"severity": "warning", "message": "max_length 超过上下文。"},
+                {"severity": "info", "message": "全提示监督说明。"},
+            ],
+        }
+    )
+    joined = "\n".join(lines)
+    assert "需要你核对的风险" in joined
+    assert "train 2 行" in joined
+    assert "[warning] max_length" in joined
+    assert "不代表训练效果" in joined
+
+
+def test_preflight_summary_passed_and_empty():
+    from src.workbench.report_summary import summarize_preflight
+
+    assert summarize_preflight(None) == ["尚未执行训练前检查。"]
+    joined = "\n".join(
+        summarize_preflight(
+            {"status": "passed", "splits": {"train": {"rows": 4}}, "issues": []}
+        )
+    )
+    assert "检查通过" in joined and "没有内容因长度超限被截断" in joined
+
+
+def test_training_run_summary_status_and_honesty():
+    from src.workbench.report_summary import summarize_training_run
+
+    running = summarize_training_run(
+        {"status": "running", "model_path": "/models/Qwen3-1.7B", "config": {"training": {"num_epochs": 1}}}
+    )
+    assert any("正在训练中" in line and "关闭页面不影响" in line for line in running)
+
+    done = summarize_training_run(
+        {"status": "succeeded", "model_path": "/models/Qwen3-1.7B",
+         "config": {"training": {"num_epochs": 1}}, "metrics": {"train_loss": 0.42}}
+    )
+    joined = "\n".join(done)
+    assert "训练完成" in joined and "0.4200" in joined
+    assert "要用同一套开发题与基座对照" in joined
+
+    failed = summarize_training_run(
+        {"status": "failed", "model_path": "/m", "failure": {"stage": "training", "message": "显存不足"}}
+    )
+    joined = "\n".join(failed)
+    assert "training阶段：显存不足" in joined
