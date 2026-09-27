@@ -151,3 +151,55 @@ def test_cli_submit_hint_is_copyable_verbatim(store, monkeypatch, capsys):
     assert hint.startswith("data_intake.py label-verify-submit")
     assert "--revision" not in hint, "提交路径不收 --revision，提示不得把用户引向报错"
     assert "--verification-id" in hint and "--answer" in hint
+
+
+def test_cli_label_verify_export_csv_writes_blind_question_list(
+    store, tmp_path, monkeypatch, capsys
+):
+    """--export-csv 抽题后落盘：题目清单含行ID与题目输入，绝不含数据答案。
+
+    与 learnability-probe 的候选导出同款（BOM 表头、Excel 直开、父目录自动
+    创建）；差别是盲标清单不许泄露标签——导出文件泄露答案，核验就失效。
+    """
+    service, session = store
+    csv_path = tmp_path / "exports" / "questions.csv"
+    assert _run_verify(monkeypatch, service, session, "--export-csv", csv_path) == 0
+    out, err = capsys.readouterr()
+    payload = json.loads(out)
+    assert csv_path.exists()
+    text = csv_path.read_bytes().decode("utf-8-sig")
+    assert text.startswith("行ID")  # 表头：BOM 之后第一行就是列名
+    assert "行ID,题目输入（仅根据此列作答）,你的盲标答案（填写后提交）" in text
+    inputs = {
+        row.row_id: row.input for row in service.load(session.session_id).full_data.preview.rows
+    }
+    for row_id in payload["row_ids"]:
+        assert row_id in text
+        assert inputs[row_id] in text, "题目列必须是隐藏答案后的真实输入"
+    assert "yes" not in text, "数据标签 yes 不得出现在题目清单里，否则盲标失效"
+    listed = [line for line in text.splitlines() if line.strip()]
+    assert len(listed) == payload["sample_size"] + 1, "每条抽样题一行，外加表头"
+    assert "题目清单已导出" in err
+
+
+def test_cli_label_verify_export_csv_not_written_when_sampling_rejected(
+    store, tmp_path, monkeypatch, capsys
+):
+    """抽题被拒（版本过期）时不写文件，也不装作导出成功。"""
+    service, session = store
+    csv_path = tmp_path / "questions.csv"
+    assert (
+        _run_verify(
+            monkeypatch,
+            service,
+            session,
+            "--revision",
+            session.revision + 1,
+            "--export-csv",
+            csv_path,
+        )
+        == 2
+    )
+    _, err = capsys.readouterr()
+    assert not csv_path.exists()
+    assert "任务已更新" in err

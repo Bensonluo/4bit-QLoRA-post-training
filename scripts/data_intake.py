@@ -78,6 +78,25 @@ def _save_config(args: argparse.Namespace) -> None:
     print("已保存公共配置；密钥仅从环境变量读取。环境配置优先于此文件。", file=sys.stderr)
 
 
+def _verification_questions_to_csv(items: list[dict]) -> bytes:
+    """盲标题目清单导出为 CSV（带 BOM，Excel 直开），供线下作答核对。
+
+    与 learnability-probe 的候选清单导出同款口径；关键差别是盲标清单
+    只含行ID与隐藏答案后的题目输入，绝不含数据标签——盲标核验的价值在
+    独立复现业务含义，导出文件一旦泄露答案，核验就失效了。第三列留空，
+    供线下填写盲标答案后逐条照抄回 label-verify-submit 提交。
+    """
+    import csv
+    import io
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["行ID", "题目输入（仅根据此列作答）", "你的盲标答案（填写后提交）"])
+    for item in items:
+        writer.writerow([item["row_id"], item["input"], ""])
+    return buffer.getvalue().encode("utf-8-sig")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="业务目标＋样例 → 数据诊断与真实预览")
     parser.add_argument("--store", default="outputs/workbench/intake")
@@ -240,6 +259,11 @@ def main() -> int:
     label_verify.add_argument("session_id")
     label_verify.add_argument("--revision", type=int, required=True)
     label_verify.add_argument("--size", type=int, default=5, help="抽样条数（默认 5，上限 50）")
+    label_verify.add_argument(
+        "--export-csv",
+        type=Path,
+        help="抽题后把题目清单导出为 CSV 文件（Excel 直开），供线下作答核对；清单只含行ID与题目输入，不含数据答案",
+    )
     verify_submit = sub.add_parser("label-verify-submit", help="提交盲标核验答案并得到一致性判定")
     verify_submit.add_argument("session_id")
     verify_submit.add_argument("--verification-id", required=True)
@@ -1170,6 +1194,12 @@ def main() -> int:
                 print(pending["shortfall_note"], file=sys.stderr)
             for item in pending["items"]:
                 print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
+            # 题目清单可导出 CSV 供线下作答核对,与 learnability-probe 的候选导出同款;
+            # 导出发生在抽题成功之后,清单不含数据答案,盲标不因导出失效。
+            if args.export_csv is not None:
+                args.export_csv.parent.mkdir(parents=True, exist_ok=True)
+                args.export_csv.write_bytes(_verification_questions_to_csv(pending["items"]))
+                print(f"题目清单已导出：{args.export_csv}", file=sys.stderr)
             result = {
                 "verification_id": pending["verification_id"],
                 "sample_size": pending["sample_size"],
