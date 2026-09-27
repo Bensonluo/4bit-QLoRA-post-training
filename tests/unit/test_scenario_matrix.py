@@ -124,11 +124,47 @@ def test_builtin_new_scenarios_match_expected_verdicts(tmp_path):
         assert result.blocked_at is None, result.to_dict()
 
 
+def test_excel_data_on_second_sheet_blocked_at_baseline_analysis(tmp_path):
+    """场景 39:数据在第二个 sheet——入口把第一个 sheet(员工表)当数据读入,基础分析拦截;
+    读取范围标注已上线,create 即如实告知「只读了员工表、工单表未读取」。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "excel-data-on-second-sheet" in specs, "缺少场景 excel-data-on-second-sheet"
+
+    spec = specs["excel-data-on-second-sheet"]
+
+    # 夹具真实性:第一个 sheet 是员工表,工单数据在第二个 sheet
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    for blob in (spec.sample, spec.full):
+        assert load_workbook(BytesIO(blob), read_only=True).sheetnames == ["员工表", "工单表"]
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "baseline_analysis", result.to_dict()
+    assert "答案列" in result.blocked_message and "不在数据字段中" in result.blocked_message
+    # 报错把被读入的员工表列名原样列出——用户能看出读到的不是工单数据
+    assert "员工号" in result.blocked_message
+    # create 不拦:入口照旧把第一个 sheet 当数据读(读取行为不变),拦在列选择这一步
+    assert result.stages["create"] == "passed"
+
+    # 读取范围标注(探针实测):profile 在 create 即如实呈现「读的是员工表、工单表没读」
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "second-sheet-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert session.source.columns == ["员工号", "姓名", "部门"], session.source.columns
+    assert session.profile["sheet_note"] == (
+        "该文件含 2 个 sheet，仅读取第一个「员工表」；其余 1 个（工单表）未读取。"
+    )
+
+
 def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 38, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 39, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0

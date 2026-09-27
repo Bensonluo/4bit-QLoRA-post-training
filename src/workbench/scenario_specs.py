@@ -1136,6 +1136,28 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("lineage", "row-order", "full-data"),
         ),
+        ScenarioSpec(
+            scenario_id="excel-data-on-second-sheet",
+            goal="根据客户首次描述判断售后类别",
+            sample=_two_sheet_xlsx("staff-first-sample", _CLEAN_TEN_ROWS[:2], staff_first=True),
+            sample_name="工单.xlsx",
+            full=_two_sheet_xlsx("staff-first-full", _CLEAN_TEN_ROWS, staff_first=True),
+            full_name="full.xlsx",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:baseline_analysis",
+            expect_note=(
+                "实测结局:数据在第二个 sheet(第一个 sheet 是完全不同的员工表)——入口仍按 "
+                "sheet_name=0 把员工表当数据读入(列名 员工号/姓名/部门,2 行员工记录),"
+                "create 不拦;旅程在基础分析被拦:「答案列『类别』不在数据字段中(可用:"
+                "['员工号', '姓名', '部门'])」——被读入的列名原样列出,用户能看出读到的不是"
+                "工单数据。多 Sheet 读取范围提示已上线(profile sheet_note):会话在 create 即"
+                "如实标注「该文件含 2 个 sheet,仅读取第一个『员工表』,其余 1 个(工单表)"
+                "未读取」,数据放错 sheet 不再无声。已知边界:入口只读第一个 sheet、不做 "
+                "sheet 选择;把要分析的表放到第一个 sheet 后旅程可续"
+            ),
+            tags=("excel", "multi-sheet", "negative-scenario"),
+        ),
     ]
 
 
