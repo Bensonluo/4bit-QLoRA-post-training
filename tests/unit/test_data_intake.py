@@ -163,6 +163,23 @@ def test_encoding_and_json_structures_preserved():
     assert profile_source(source)["columns"]["label"]["missing_count"] == 2
 
 
+def test_utf16_with_bom_auto_detected_and_bomless_rejected():
+    """Excel「Unicode 文本」导出(UTF-16 BOM + Tab 分隔)自动识别;无 BOM 不猜。"""
+    text = "编号\t客户描述\t类别\n001\t杯子破损\t质量\n002\t物流未更新\t物流\n"
+    source = read_source("工单.csv", text.encode("utf-16"))
+    assert source.encoding == "utf-16"
+    assert source.delimiter == "\t"
+    assert source.rows[0].values == {"编号": "001", "客户描述": "杯子破损", "类别": "质量"}
+    # UTF-16 BE 同样按 BOM 识别(手动前置 FE FF,等价于 BE 平台的 BOM)
+    assert (
+        read_source("工单.csv", b"\xfe\xff" + text.encode("utf-16-be")).rows[1].values["编号"]
+        == "002"
+    )
+    # 无 BOM 的 UTF-16 不猜:明确拒绝而不是产出乱码
+    with pytest.raises(ValueError, match="无法解码"):
+        read_source("工单.csv", text.encode("utf-16-le"))
+
+
 @pytest.mark.parametrize("data", [b'{"a":1,"a":2}\n', b'{"a":NaN}\n', b"[]\n"])
 def test_ambiguous_or_nonfinite_json_rejected(data):
     with pytest.raises(ValueError):

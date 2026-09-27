@@ -66,6 +66,43 @@ _MIXED_FULL = (
     )
 ).encode()
 
+# Excel「Unicode 文本」导出:UTF-16(带 BOM)+ Tab 分隔,中文 Windows Excel 用户的常见产物。
+_UTF16_ROWS = "编号\t客户描述\t类别\n001\t杯子破损\t质量\n002\t物流未更新\t物流\n"
+_UTF16_SAMPLE = _UTF16_ROWS.encode("utf-16")
+_UTF16_FULL = (
+    "编号\t客户描述\t类别\n"
+    + "".join(f"{i:03d}\t问题{i}\t{'质量' if i % 2 else '物流'}\n" for i in range(1, 11))
+).encode("utf-16")
+
+# 超长单行:单个输入单元格里粘贴了数万字符的运行日志(含逗号,按 CSV 规范加引号),
+# 单行数十 KB。日志单元格由 csv 模块按规范写出:带引号单元格里的逗号不是分隔符。
+_LONG_CELL_PREFIX = (
+    "2026-09-27 10:23:01 INFO 收到客户端请求,开始处理订单流程,读取配置项共 42 项;"
+    "2026-09-27 10:23:02 WARN 缓存未命中,回源查询耗时 187ms;"
+)
+
+
+def _long_line_text() -> str:
+    import csv as _csv
+    import io as _io
+
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer, lineterminator="\n")
+    writer.writerow(("编号", "问题描述", "类别"))
+    writer.writerow(("001", _LONG_CELL_PREFIX * 520, "质量"))
+    writer.writerow(("002", "物流未更新", "物流"))
+    for i in range(3, 11):
+        writer.writerow(
+            (f"{i:03d}", _LONG_CELL_PREFIX * (300 + i * 20), "质量" if i % 2 else "物流")
+        )
+    return buffer.getvalue()
+
+
+# 样例只取表头 + 前两条(单元格内无换行,按行切分安全);全量含全部十条超长行。
+_LONG_LINE_LINES = _long_line_text().splitlines(keepends=True)
+_LONG_LINE_SAMPLE = "".join(_LONG_LINE_LINES[:3]).encode()
+_LONG_LINE_FULL = "".join(_LONG_LINE_LINES).encode()
+
 
 def builtin_scenarios() -> list[ScenarioSpec]:
     return [
@@ -337,6 +374,38 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "真实预览由用户核对。语义是否受影响由用户判断。"
             ),
             tags=("boundary", "punctuation"),
+        ),
+        ScenarioSpec(
+            scenario_id="utf16-excel-export",
+            goal="根据客户首次描述判断售后类别",
+            sample=_UTF16_SAMPLE,
+            sample_name="工单.csv",
+            full=_UTF16_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "Excel「Unicode 文本」导出(UTF-16 带 BOM + Tab 分隔)自动识别:"
+                "带 BOM 的 UTF-16 按证据解码(FF FE/FE FF 开头不可能是合法 UTF-8 或 GBK),"
+                "Tab 分隔由嗅探器识别;无 BOM 的 UTF-16 仍被明确拒绝——边界如实记录"
+            ),
+            tags=("encoding", "utf16", "excel"),
+        ),
+        ScenarioSpec(
+            scenario_id="ultra-long-single-line",
+            goal="根据客户粘贴的运行日志判断问题类别",
+            sample=_LONG_LINE_SAMPLE,
+            sample_name="日志工单.csv",
+            full=_LONG_LINE_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:单个输入单元格约数万字符(单行数十 KB)不被数据层拦截,"
+                "数据层只验证结构与答案保留;是否截断由训练前预检用真实 tokenizer 测量,"
+                "语义是否受影响由用户在真实预览核对"
+            ),
+            tags=("long-text", "boundary-note"),
         ),
     ]
 

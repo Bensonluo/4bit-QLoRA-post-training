@@ -63,7 +63,12 @@ def is_missing(value: Any) -> bool:
 
 
 def _decode(data: bytes, encoding: str | None) -> tuple[str, str]:
-    for candidate in [encoding] if encoding else ["utf-8-sig", "gb18030"]:
+    candidates = [encoding] if encoding else ["utf-8-sig", "gb18030"]
+    # UTF-16 BOM(FF FE / FE FF,Excel「Unicode 文本」导出的常见形态)是明确的编码证据:
+    # 0xFF/0xFE+0xFF 开头的字节永远不可能是合法 UTF-8 或 GBK,按 BOM 识别不会误判。
+    if not encoding and data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        candidates.append("utf-16")
+    for candidate in candidates:
         try:
             return data.decode(candidate), candidate
         except UnicodeDecodeError:

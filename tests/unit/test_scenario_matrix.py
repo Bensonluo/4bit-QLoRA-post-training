@@ -128,3 +128,17 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
     assert report["summary"]["error"] == 0
+
+
+def test_utf16_excel_export_and_ultra_long_single_line_scenarios(tmp_path):
+    """场景 17/18:Excel UTF-16 导出自动识别;超长单行边界如实记录。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    for scenario_id in ("utf16-excel-export", "ultra-long-single-line"):
+        assert scenario_id in specs, f"缺少场景 {scenario_id}"
+        result = run_scenario(specs[scenario_id], tmp_path / scenario_id)
+        assert result.verdict == "as_expected", result.to_dict()
+        assert result.blocked_at is None, result.to_dict()
+
+    # 超长单行场景确实覆盖「单行数十 KB」的量级,而不是普通长文本
+    long_full = specs["ultra-long-single-line"].full
+    assert max(len(line) for line in long_full.split(b"\n")) >= 40_000
