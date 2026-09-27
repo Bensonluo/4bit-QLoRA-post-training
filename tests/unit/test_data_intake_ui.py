@@ -644,3 +644,61 @@ def test_full_upload_form_reads_designated_excel_sheet(data_page, monkeypatch):
     assert current.full_data.sources["main"].sheet == "全量表"
     assert current.full_data.source.columns == ["编号", "客户描述", "类别", "处理结果"]
     assert current.full_data.preview.counts["ready"] == 3
+
+
+def test_composed_full_sources_form_reads_designated_excel_sheets(data_page, monkeypatch):
+    """组合全量表单与单文件表单对称：每份 Excel 旁的 sheet 输入逐份透传。
+
+    两份资料各指定不同 sheet，任一来源留空或读错 sheet 都无法蒙混成正确全量。
+    """
+    from tests.unit.test_multisource_cli import LABELS, MAIN, combined_plan
+
+    service, _, page = data_page
+    session = service.create("判断工单类别", "tickets.csv", MAIN)
+    session = service.add_source(
+        session.session_id, session.revision, "labels", "labels.csv", LABELS
+    )
+    session = service.apply_analysis(session, combined_plan())
+    session = service.confirm(session.session_id, session.revision)
+    holders = {"main": {"file": None}, "labels": {"file": None}}
+    patch_uploader(monkeypatch, "全量原始资料：main", holders["main"])
+    patch_uploader(monkeypatch, "全量原始资料：labels", holders["labels"])
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert not any(t.label == SHEET_INPUT_LABEL for t in page.text_input)
+    holders["main"]["file"] = uploaded_bytes(
+        _workbook_bytes(
+            ("说明", ("备注",), [("全量数据在下一个 sheet",)]),
+            (
+                "工单表",
+                ("ticket", "text"),
+                [("10", "新杯子损坏"), ("11", "新物流延迟"), ("12", "新配件缺陷")],
+            ),
+        ),
+        "全量工单.xlsx",
+    )
+    holders["labels"]["file"] = uploaded_bytes(
+        _workbook_bytes(
+            ("类别表", ("id", "category"), [("10", "质量"), ("11", "物流"), ("12", "质量")]),
+            ("说明", ("备注",), [("这份资料的数据在第一个 sheet",)]),
+        ),
+        "全量类别.xlsx",
+    )
+    page.run()
+    assert not page.exception
+    main_sheet = next(
+        t for t in page.text_input if t.key == f"full_sheet_{session.session_id}_main"
+    )
+    labels_sheet = next(
+        t for t in page.text_input if t.key == f"full_sheet_{session.session_id}_labels"
+    )
+    main_sheet.input("工单表")
+    labels_sheet.input("类别表")
+    button(page, "按组合方案验证全部全量资料").click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert next_action(current) == "review_full_data"
+    assert current.full_data.sources["main"].sheet == "工单表"
+    assert current.full_data.sources["labels"].sheet == "类别表"
+    assert current.full_data.preview.counts["ready"] == 3

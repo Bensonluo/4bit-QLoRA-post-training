@@ -2193,14 +2193,20 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
+            # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
+            # 按上传的文件类型显示 sheet 选择。
+            full_files = {
+                alias: st.file_uploader(
+                    f"全量原始资料：{alias}",
+                    type=["csv", "xlsx", "xls", "jsonl"],
+                    key=f"full_source_{session.session_id}_{alias}",
+                )
+                for alias in required_sources
+            }
             with st.form(f"full_sources_{session.session_id}"):
-                full_files = {
-                    alias: st.file_uploader(
-                        f"全量原始资料：{alias}",
-                        type=["csv", "xlsx", "xls", "jsonl"],
-                        key=f"full_source_{session.session_id}_{alias}",
-                    )
-                    for alias in required_sources
+                full_sheets = {
+                    alias: excel_sheet_input(upload, key=f"full_sheet_{session.session_id}_{alias}")
+                    for alias, upload in full_files.items()
                 }
                 validate_sources = st.form_submit_button("按组合方案验证全部全量资料")
             if validate_sources:
@@ -2220,6 +2226,13 @@ if session.confirmed_revision is not None or session.full_data is not None:
                                 alias: (upload.name, upload.getvalue())
                                 for alias, upload in full_files.items()
                             },
+                            # 只有用户填写了 sheet 的资料才进入指定;留空仍读第一个 sheet。
+                            sheets={
+                                alias: (value or "").strip() or None
+                                for alias, value in full_sheets.items()
+                                if value
+                            }
+                            or None,
                         )
                         st.rerun()
                     except (ValueError, OSError) as exc:
