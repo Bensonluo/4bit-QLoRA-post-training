@@ -100,7 +100,7 @@ def probe_learnability(
                 if user_also_disagrees
                 else None,
                 "evidence": (
-                    "基座零样本与用户盲标都不认同数据标签——强证据,优先人工核对"
+                    "基座零样本与用户盲标都不认同数据标签——强证据,优先人工核对,建议对照原始来源行"
                     if user_also_disagrees
                     else "仅基座零样本不认同——模型可能错,标签也可能错,弱信号供参考"
                 ),
@@ -124,6 +124,8 @@ def probe_learnability(
             f"{len(candidates)} 行是标签问题候选(基座零样本与数据标签不一致;"
             f"其中 {sum(1 for c in candidates if c['user_blind_answer'])} 行与用户盲标也不一致)。"
             "候选不等于错误——模型可能错;但优先人工核对这些行是性价比最高的数据清理。"
+            "与盲标也不一致的强证据行,建议对照原始来源行(row original 与来源文件行号)"
+            "溯源确认标签后再决定改不改,不要只凭模型输出下结论。"
         ),
         "note": (
             f"基座零样本 {accuracy:.0%} vs 全开发集多数类「{majority_label}」{majority_share:.0%}"
@@ -206,9 +208,10 @@ def describe_candidates(candidates: list[dict]) -> list[str]:
         blind = (
             f"，你的盲标「{item['user_blind_answer']}」" if item.get("user_blind_answer") else ""
         )
+        trace = "，建议对照原始来源行" if item.get("user_blind_answer") else ""
         lines.append(
             f"{marker} 行 {item.get('row_id', '')}：数据标签「{item.get('data_label', '')}」"
-            f"，基座零样本「{item.get('base_zero_shot', '')}」{blind}"
+            f"，基座零样本「{item.get('base_zero_shot', '')}」{blind}{trace}"
         )
     return lines
 

@@ -171,7 +171,19 @@ def show_temporal_exclusions(rows: list[dict], *, title: str) -> None:
         st.json(rows)
 
 
-def render_probe_result(result: dict) -> None:
+def probe_source_hints(session) -> dict[str, str]:
+    """候选行 → 原始来源行提示:行号取自全量来源记录,供人工对照原始行溯源。
+
+    探针只认识分区里的 source_row_id;溯源必须回到全量资料本身——
+    这里把 row_id 映射回全量文件中的真实行号,找不到就不编造。
+    """
+    full = getattr(session, "full_data", None)
+    if full is None:
+        return {}
+    return {row.row_id: f"全量资料第 {row.line} 行" for row in full.source.rows}
+
+
+def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = None) -> None:
     """渲染一次可学性探针结果:指标、判定与标签问题候选(证据强者在先)。"""
     delta = result["difference"]
     verdict = (
@@ -209,6 +221,7 @@ def render_probe_result(result: dict) -> None:
             )
         start = (page_number - 1) * page_size
         visible = candidates[start : start + page_size]
+        hints = source_hints or {}
         st.dataframe(
             [
                 {
@@ -217,6 +230,7 @@ def render_probe_result(result: dict) -> None:
                     "基座零样本输出": item["base_zero_shot"],
                     "你的盲标答案": item.get("user_blind_answer") or "—",
                     "证据": item["evidence"],
+                    "来源提示": hints.get(item["row_id"], "未在全量资料中定位到该行"),
                 }
                 for item in visible
             ],
@@ -2561,7 +2575,9 @@ if dataset is not None:
                             service.load(session.session_id), probe_model.strip()
                         )
                         save_probe(PROJECT_ROOT / "outputs" / "workbench" / "probes", result)
-                    render_probe_result(result)
+                    render_probe_result(
+                        result, source_hints=probe_source_hints(service.load(session.session_id))
+                    )
                 except (ValueError, RuntimeError, OSError, ImportError) as exc:
                     st.error(str(exc))
             else:
@@ -2577,7 +2593,7 @@ if dataset is not None:
                         f"显示最近一次已保存的探针结果（基座 `{saved.get('model_path', '未知')}`，"
                         "抽样见原始记录）；需要重新探测请再运行一次。"
                     )
-                    render_probe_result(saved)
+                    render_probe_result(saved, source_hints=probe_source_hints(session))
         with st.form(f"training_preflight_{session.session_id}"):
             tokenizer_path = st.text_input("本地 tokenizer 目录或已缓存标识")
             max_length = st.number_input("训练最大 token 长度", min_value=1, value=2048, step=1)

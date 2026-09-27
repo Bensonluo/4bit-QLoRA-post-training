@@ -208,3 +208,53 @@ def test_probe_result_survives_page_rerun_from_saved_record(probe_page, monkeypa
     assert len(calls) == 1, "回看结果不应重新运行探针(模型加载成本高)"
     assert any("显示最近一次已保存的探针结果" in c.value for c in page.caption)
     assert any("没有发现值得优先核对的行" in i.value for i in page.info)
+
+
+def test_probe_candidates_table_shows_source_hints(probe_page, monkeypatch):
+    """候选表带「来源提示」列:行号取自全量资料,定位不到的行如实说明。"""
+    service, session, page = probe_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    textbox = next(t for t in page.text_input if "本地基础模型目录" in t.label)
+    textbox.input("/tmp/local-base").run()
+
+    # FULL 文件第 1 行是表头:r000001 对应文件第 2 行
+    line_of = {row.row_id: row.line for row in session.full_data.source.rows}
+    assert line_of["r000001"] == 2
+
+    import src.workbench.learnability_probe as probe_module
+
+    monkeypatch.setattr(
+        probe_module,
+        "probe_learnability",
+        lambda current, model_path, **kw: _probe_result(
+            [
+                {
+                    "row_id": "r000002",
+                    "data_label": "物流",
+                    "base_zero_shot": "基座输出A",
+                    "user_blind_answer": "用户答案B",
+                    "evidence": "强证据,优先人工核对,建议对照原始来源行",
+                },
+                {
+                    "row_id": "r099999",
+                    "data_label": "质量",
+                    "base_zero_shot": "基座输出B",
+                    "user_blind_answer": None,
+                    "evidence": "弱信号供参考",
+                },
+            ],
+            version=session.dataset.version,
+        ),
+    )
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert not page.exception
+    table = next(frame.value for frame in page.dataframe if "证据" in frame.value.columns)
+    assert "来源提示" in table.columns, "候选表应有来源提示列供人工溯源"
+    hints = dict(zip(table["行ID"], table["来源提示"]))
+    assert hints["r000002"] == f"全量资料第 {line_of['r000002']} 行"
+    assert hints["r099999"] == "未在全量资料中定位到该行", "定位不到不编造行号"
+    # 强证据行的证据列带溯源建议
+    assert "建议对照原始来源行" in table.loc[table["行ID"] == "r000002", "证据"].iloc[0]
+    # 计数如实:两条候选都展示
+    assert any("共 2 条候选" in c.value for c in page.caption)

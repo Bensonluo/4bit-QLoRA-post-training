@@ -115,6 +115,11 @@ def test_label_error_candidates_cross_signal_ranking(store, tmp_path):
     if strong:
         assert candidates[0]["user_blind_answer"], "强证据排前"
         assert "强证据" in candidates[0]["evidence"]
+        # 强证据行必须带溯源提示:建议对照原始来源行,不要只凭模型输出改数据
+        assert "原始来源行" in candidates[0]["evidence"]
+        weak = [c for c in candidates if not c["user_blind_answer"]]
+        assert all("原始来源行" not in c["evidence"] for c in weak), "弱信号不冒充溯源建议"
+    assert "原始来源行" in result["candidates_note"]
 
 
 def test_describe_candidates_plain_lines_and_empty_message():
@@ -145,7 +150,9 @@ def test_describe_candidates_plain_lines_and_empty_message():
     assert "候选 2 行" in lines[0] and "强证据 1 行" in lines[0]
     assert "候选不等于错误" in lines[0]
     assert lines[1].startswith("⚠") and "r1" in lines[1] and "服务" in lines[1]
+    assert "原始来源行" in lines[1], "强证据行在 CLI 清单里也提示对照原始来源行"
     assert lines[2].startswith("·") and "r2" in lines[2] and "⚠" not in lines[2]
+    assert "原始来源行" not in lines[2]
 
 
 def test_candidates_csv_export_is_excel_friendly():
