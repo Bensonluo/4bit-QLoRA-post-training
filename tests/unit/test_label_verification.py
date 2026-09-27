@@ -240,3 +240,23 @@ def test_stale_verification_is_visible_after_revision(store, tmp_path):
     record = training.prepare(rematerialized, tmp_path, max_length=32)
     assert record["status"] == "blocked"
     assert "盲标核验" in record["issues"][-1]["message"]
+
+
+def test_blind_sampling_covers_rare_classes(tmp_path):
+    """抽样数少于类别数时按标签轮转:稀有类必须被抽到。"""
+    from tests.unit.test_data_intake import CSV, analysis
+    from tests.unit.test_full_data import FULL as TWO_CLASS_FULL
+    from tests.unit.test_data_materialize import _full as _materialize_full
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
+    session = service.apply_analysis(session, analysis())
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, "full.csv", TWO_CLASS_FULL
+    )
+    session = service.confirm_full_data(session.session_id, session.revision)
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=2)
+    targets = {r.row_id: r.target for r in session.full_data.preview.rows}
+    sampled = {targets[item["row_id"]] for item in pending["items"]}
+    assert len(sampled) == 2, f"两个名额应覆盖两个不同类别,实得 {sampled}"

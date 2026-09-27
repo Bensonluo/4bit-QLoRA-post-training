@@ -79,6 +79,41 @@ def next_action(session: IntakeSession) -> str:
     return "awaiting_full_data" if session.source.scope == "sample" else "awaiting_full_validation"
 
 
+def _stratified_sample(rows: list, size: int, seed: int) -> list[int]:
+    """分层抽样:样本少于类别数时,按标签轮转保证每个类别至少一条被抽到。
+
+    稀有类恰恰是核验最关键的——随机抽样可能整轮都抽不到它们。
+    """
+    if size >= len(rows):
+        return list(range(len(rows)))
+    generator = random.Random(seed)
+    by_label: dict[str, list[int]] = {}
+    for index, row in enumerate(rows):
+        by_label.setdefault(row.target, []).append(index)
+    for members in by_label.values():
+        generator.shuffle(members)
+    labels = sorted(by_label, key=lambda label: (len(by_label[label]), label))
+    picked: list[int] = []
+    cursor = 0
+    while len(picked) < size:
+        label = labels[cursor % len(labels)]
+        members = by_label[label]
+        slot = len(picked) // len(labels)
+        if slot < len(members):
+            picked.append(members[slot])
+        if all(
+            len(by_label[other])
+            <= len(picked) // len(labels) + (0 if i >= cursor % len(labels) else 1)
+            for i, other in enumerate(labels)
+        ) and slot >= min(len(by_label[other]) for other in labels):
+            # 轮转一圈都取满时退回纯随机补足,避免死循环
+            remaining = [i for i in range(len(rows)) if i not in set(picked)]
+            picked.extend(generator.sample(remaining, size - len(picked)))
+            break
+        cursor += 1
+    return sorted(set(picked))
+
+
 class IntakeService:
     def __init__(self, root: str | Path):
         self.root = Path(root)
@@ -660,7 +695,7 @@ class IntakeService:
         size = min(sample_size, len(labelled))
         binding = report.source.digest + report.approved_recipe_digest
         seed = zlib.crc32(binding.encode("utf-8"))
-        picked = sorted(random.Random(seed).sample(range(len(labelled)), size))
+        picked = _stratified_sample(labelled, size, seed)
         rows = [labelled[index] for index in picked]
         verification_id = uuid4().hex
         with sqlite3.connect(self.database) as connection:
