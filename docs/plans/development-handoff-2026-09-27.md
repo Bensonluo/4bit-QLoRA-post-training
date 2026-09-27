@@ -609,9 +609,30 @@ add-source/full-sources 的 sheet 参数对称补齐、服务层 sheet 选择的
   跑 label-verify/label-verify-submit 逐字比对(stderr 与 JSON 键),不凭记忆书写。
 - **本记录**(第三提交)。
 
-**A 线(另一并行 agent,页面方向):**(待其交付后由协调员或本人补记——预期涉及
-ui/pages/07_Data_Intake.py 与 test_data_intake_ui/test_workbench_training_ui,
-页面盲标/训练工作台方向。)
+**A 线(页面域并行 agent,交付后补记):**页面三处 sheet 入口全部落地
+(ca2a09d/94345f6/b5d7d48),第 19 轮遗留候选中的「页面入口接 sheet 选择」与
+「add-source 的 sheet 参数对称补齐」就此清偿;full-sources 的 sheet 参数仍留作
+后续候选。三处同款约束:上传控件移到表单外——表单内部件要到提交才提交值,
+放里面就无法在提交前按上传的文件类型显示 sheet 选择;仅 Excel 上传显示可选
+sheet 输入,留空读第一个 sheet,按名称或 1 起始序号指定。
+
+- **新建任务表单接 sheet 选择**(ca2a09d):「文件读取设置」expander 内新增可选
+  sheet 输入,透传 `service.create`。
+- **补充资料入口对称接 sheet**(94345f6):「保存补充资料」与新建任务同款;
+  `service.add_source` 增加可选 sheet 参数(签名与 read_source 透传,已确认的
+  最小增量改动),主来源摘要不受影响。
+- **全量文件读取设置接 sheet**(b5d7d48):走查发现的真缺口——validate_full_data
+  服务层与 CLI --sheet 已就绪,页面「全量文件读取设置」却不能指定 sheet
+  (全量数据在第二个 sheet 时页面上无解);与新建任务同款处理,透传
+  `validate_full_data`。
+
+测试 test_data_intake_ui 用 openpyxl 现场生成多 Sheet 工作簿,三处入口各实测:
+选第二个 sheet 后新建/补充资料读到员工表数据、主来源摘要不受影响,全量验证
+通过并进入 review_full_data(列与就绪行数均来自全量表);并覆盖未上传、CSV
+上传时不显示 sheet 输入。预期中的 test_workbench_training_ui 未涉及——本批
+交付只落在数据入口域,页面盲标/训练工作台方向无改动。A 线三提交各自
+ruff check/format clean;并入后全量回归 tests/unit 1680 passed(--no-cov,
+较 B 线记录的 1674 净增 6 项 sheet 入口测试)。
 
 回归:tests/unit 1674 passed(--no-cov;第 19 轮 1672 → +2 为本轮新增 label-verify
 导出测试);ruff check/format clean。本批只动 scripts/data_intake.py(仅 label-verify
