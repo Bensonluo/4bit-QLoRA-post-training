@@ -144,6 +144,9 @@ def main() -> int:
     create.add_argument("--scope", choices=["sample", "full"], default="sample")
     create.add_argument("--encoding")
     create.add_argument("--delimiter")
+    create.add_argument(
+        "--sheet", help="读取 Excel 的指定 sheet（名称或序号，1 表示第一个；默认第一个）"
+    )
     add_source = sub.add_parser("add-source", help="增加或替换具名原始资料，重新分析业务方案")
     add_source.add_argument("session_id")
     add_source.add_argument("--revision", type=int, required=True)
@@ -178,6 +181,9 @@ def main() -> int:
     full_validate.add_argument("--input", type=Path, help="首次已声明全量时可省略并复用原文件")
     full_validate.add_argument("--encoding")
     full_validate.add_argument("--delimiter")
+    full_validate.add_argument(
+        "--sheet", help="读取 Excel 的指定 sheet（名称或序号，1 表示第一个；默认第一个）"
+    )
     full_sources = sub.add_parser(
         "full-sources", help="按已确认组合方案验证每份全量原始资料，无需自行拼表"
     )
@@ -967,6 +973,7 @@ def main() -> int:
                 scope=args.scope,
                 encoding=args.encoding,
                 delimiter=args.delimiter,
+                sheet=args.sheet,
             )
         elif args.command == "add-source":
             session = service.add_source(
@@ -998,6 +1005,7 @@ def main() -> int:
                 args.input.read_bytes() if args.input else None,
                 encoding=args.encoding,
                 delimiter=args.delimiter,
+                sheet=args.sheet,
             )
         elif args.command == "full-sources":
             files = {}

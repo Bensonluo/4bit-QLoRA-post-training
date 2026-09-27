@@ -4,6 +4,8 @@ sheet 选择(按名称或 1 起始序号指定工作表)随多 Sheet 读取一�
 sheet 的行为不变,显式指定的读取与标注以实测为准;标注随来源对象携带,不共用摘要。
 """
 
+import json
+import sys
 from io import BytesIO
 
 import pytest
@@ -143,3 +145,51 @@ def test_same_workbook_selections_annotated_independently():
     assert first.digest == second.digest  # 同一份字节
     assert "按指定读取「工单表」" in profile_source(first)["sheet_note"]
     assert "按指定读取「员工表」" in profile_source(second)["sheet_note"]
+
+
+def test_service_create_honors_sheet_and_survives_roundtrip(tmp_path):
+    """创建入口(服务层)透传 sheet 选择:会话建在指定的 sheet 上,存档回读后标注仍在。"""
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(
+        "根据客户首次描述判断售后类别", "工作簿.xlsx", _TWO_SHEET_DATA, sheet="员工表"
+    )
+    assert session.source.sheet == "员工表"
+    assert session.source.columns == ["员工号", "部门"], session.source.columns
+    assert "按指定读取「员工表」" in session.profile["sheet_note"]
+    reloaded = service.load(session.session_id)
+    assert reloaded.source.sheet == "员工表"
+    assert "按指定读取「员工表」" in reloaded.profile["sheet_note"]
+
+
+def test_cli_create_sheet_flag_reads_designated_sheet(tmp_path, monkeypatch, capsys):
+    """CLI create --sheet 接线冒烟:--sheet 2 建出的会话读到第二个 sheet 员工表数据。
+
+    详细 CLI 行为回归归 test_data_intake 域;这里只钉住参数透传到服务层的链路。
+    """
+    from scripts import data_intake as cli
+
+    path = tmp_path / "工作簿.xlsx"
+    path.write_bytes(_TWO_SHEET_DATA)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "store"),
+            "create",
+            "--input",
+            str(path),
+            "--goal",
+            "根据客户首次描述判断售后类别",
+            "--sheet",
+            "2",
+        ],
+    )
+    assert cli.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source"]["sheet"] == "员工表"
+    assert payload["source"]["columns"] == ["员工号", "部门"]
+    assert "按指定读取「员工表」" in payload["profile"]["sheet_note"]

@@ -220,10 +220,13 @@ class IntakeService:
         scope: Literal["sample", "full"] = "sample",
         encoding: str | None = None,
         delimiter: str | None = None,
+        sheet: str | int | None = None,
     ) -> IntakeSession:
         if not goal.strip():
             raise ValueError("请先描述希望模型完成的业务任务。")
-        source = read_source(name, data, scope=scope, encoding=encoding, delimiter=delimiter)
+        source = read_source(
+            name, data, scope=scope, encoding=encoding, delimiter=delimiter, sheet=sheet
+        )
         session = IntakeSession(
             session_id=uuid4().hex,
             goal=goal.strip(),
@@ -627,6 +630,7 @@ class IntakeService:
         *,
         encoding: str | None = None,
         delimiter: str | None = None,
+        sheet: str | int | None = None,
     ) -> IntakeSession:
         """Validate an upload, or the original source when it was declared full data."""
         session = self.load(session_id)
@@ -651,9 +655,15 @@ class IntakeService:
             data = original.read_bytes()
             encoding = encoding or raw_source.encoding or None
             delimiter = delimiter or raw_source.delimiter or None
+            # 原文件按 Excel 的某个 sheet 读入过:sheet 选择随来源持久化,复用时沿用,
+            # 用户显式传入的 --sheet 优先。
+            if sheet is None:
+                sheet = raw_source.sheet or None
         if name is None or data is None:
             raise ValueError("请提供本次任务的全量文件；原文件只声明为样例，不能自动当作全量。")
-        source = read_source(name, data, scope="full", encoding=encoding, delimiter=delimiter)
+        source = read_source(
+            name, data, scope="full", encoding=encoding, delimiter=delimiter, sheet=sheet
+        )
         original_source = source
         adapted = None
         adapter_error = None
