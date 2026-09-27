@@ -355,10 +355,11 @@ _UTF8_BOM_FULL = _bom_crlf(
 
 
 # 多 Sheet Excel:xlsx 含两个 sheet——第一个 sheet 是工单数据,第二个是完全不同的
-# 员工表(一份工作簿装多个业务表的常见形态)。入口只读第一个 sheet
+# 员工表(一份工作簿装多个业务表的常见形态)。入口默认只读第一个 sheet
 # (pd.read_excel 默认 sheet_name=0,读取行为不变),profile 如实标注读取范围
 # 「该文件含 N 个 sheet,仅读取第一个(名称)」(增强提示已上线,曾为静默忽略);
-# 数据在第二个 sheet 的反例见 excel-data-on-second-sheet。
+# 数据在第二个 sheet 的反例见 excel-data-on-second-sheet,显式指定 sheet
+# (--sheet,名称或 1 起始序号)后走通的正例见 excel-second-sheet-selected。
 _XLSX_CACHE: dict[str, bytes] = {}
 
 
@@ -1089,9 +1090,10 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "pd.read_excel 默认 sheet_name=0 只读第一个 sheet,列名/数据/全旅程全部只"
                 "来自工单表,八关全过。多 Sheet 读取范围提示已上线:profile 如实标注"
                 "「该文件含 2 个 sheet,仅读取第一个『工单表』,其余 1 个(员工表)未读取」"
-                "——此前第二个 sheet 被静默忽略(不报错、不提示),现读取即可见。已知边界:"
-                "入口只读第一个 sheet、不做 sheet 选择,其余 sheet 不参与分析;数据在第二个 "
-                "sheet 的反例见 excel-data-on-second-sheet"
+                "——此前第二个 sheet 被静默忽略(不报错、不提示),现读取即可见。边界如实记录:"
+                "不带 --sheet 时默认仍只读第一个 sheet,sheet 选择已上线(服务层/CLI --sheet);"
+                "数据在第二个 sheet 的反例与指定后的走通实测见 excel-data-on-second-sheet、"
+                "excel-second-sheet-selected"
             ),
             tags=("excel", "multi-sheet", "boundary-note"),
         ),
@@ -1154,8 +1156,9 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "['员工号', '姓名', '部门'])」——被读入的列名原样列出,用户能看出读到的不是"
                 "工单数据。多 Sheet 读取范围提示已上线(profile sheet_note):会话在 create 即"
                 "如实标注「该文件含 2 个 sheet,仅读取第一个『员工表』,其余 1 个(工单表)"
-                "未读取」,数据放错 sheet 不再无声。已知边界:入口只读第一个 sheet、不做 "
-                "sheet 选择;把要分析的表放到第一个 sheet 后旅程可续"
+                "未读取」,数据放错 sheet 不再无声。边界如实记录:不带 --sheet 时仍只读第一个 "
+                "sheet;sheet 选择已上线(服务层/CLI create 与 full-validate 的 --sheet,数据在"
+                "第二个 sheet 指定后旅程可走通,见 excel-second-sheet-selected),页面入口待接入"
             ),
             tags=("excel", "multi-sheet", "negative-scenario"),
         ),
@@ -1180,6 +1183,32 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "脏也不会带病物化」"
             ),
             tags=("dirty-data", "header-hygiene"),
+        ),
+        ScenarioSpec(
+            scenario_id="excel-second-sheet-selected",
+            goal="根据客户首次描述判断售后类别",
+            sample=_two_sheet_xlsx("staff-first-sample", _CLEAN_TEN_ROWS[:2], staff_first=True),
+            sample_name="工单.xlsx",
+            full=_two_sheet_xlsx("staff-first-full", _CLEAN_TEN_ROWS, staff_first=True),
+            full_name="full.xlsx",
+            sample_sheet=2,
+            full_sheet=2,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:同一份「数据在第二个 sheet」的工作簿(与 excel-data-on-second-sheet "
+                "同源字节,摘要相同),创建入口 --sheet 2 指定后旅程走通——入口按序号读取第二个 "
+                "sheet「工单表」(1 表示第一个),列名/数据/预览全部来自工单表,基础分析、对比核验、"
+                "样例确认照常;全量验证同样 --sheet 2 按指定读取,10 行工单记录无 blocking/"
+                "review,八关全过,盲标 5/5 一致,物化 train 8/validation 1/test 1。读取范围如实"
+                "标注:样例与全量 profile sheet_note 均为「该文件含 2 个 sheet,按指定读取『工单表』"
+                ";其余 1 个(员工表)未读取」;同一份字节不带 --sheet 时标注仍是「仅读取第一个"
+                "『员工表』」——标注随来源对象生成并持久化,同摘要不同选择不串味。边界如实记录:"
+                "sheet 选择当前在服务层与 CLI(create/full-validate 的 --sheet,名称或 1 起始序号,"
+                "不指定默认读第一个),页面入口待接入"
+            ),
+            tags=("excel", "multi-sheet", "sheet-selection"),
         ),
     ]
 

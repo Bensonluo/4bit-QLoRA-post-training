@@ -40,6 +40,9 @@ class ScenarioSpec:
     target_column: str = "类别"
     group_columns: tuple[str, ...] = ()
     excluded_columns: tuple[str, ...] = ()
+    # Excel 场景专用:sheet 选择(名称或 1 起始序号);None 沿用默认(第一个 sheet)。
+    sample_sheet: str | int | None = None
+    full_sheet: str | int | None = None
     expect: str = "passes"  # "passes" | "blocked_at:<stage>"
     expect_note: str = ""
     user_answers: Callable[[dict], dict[str, str]] | None = None
@@ -90,7 +93,7 @@ def run_scenario(spec: ScenarioSpec, root: str | Path) -> ScenarioResult:
     service = IntakeService(Path(root) / "intake")
     session = None
     try:
-        session = service.create(spec.goal, spec.sample_name, spec.sample)
+        session = service.create(spec.goal, spec.sample_name, spec.sample, sheet=spec.sample_sheet)
         result.stages["create"] = "passed"
 
         analysis = propose_baseline_analysis(
@@ -125,7 +128,11 @@ def run_scenario(spec: ScenarioSpec, root: str | Path) -> ScenarioResult:
 
         if result.blocked_at is None:
             session = service.validate_full_data(
-                session.session_id, session.revision, spec.full_name, spec.full
+                session.session_id,
+                session.revision,
+                spec.full_name,
+                spec.full,
+                sheet=spec.full_sheet,
             )
             blocking = [issue for issue in session.full_data.issues if issue.severity == "blocking"]
             result.stages["validate_full"] = "blocked" if blocking else "passed"

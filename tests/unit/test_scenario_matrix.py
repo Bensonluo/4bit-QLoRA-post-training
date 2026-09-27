@@ -160,6 +160,70 @@ def test_excel_data_on_second_sheet_blocked_at_baseline_analysis(tmp_path):
     )
 
 
+def test_excel_second_sheet_selected_passes_full_journey(tmp_path):
+    """场景 41:数据在第二个 sheet + --sheet 指定——入口按指定读取,八关走通,标注如实。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "excel-second-sheet-selected" in specs, "缺少场景 excel-second-sheet-selected"
+
+    spec = specs["excel-second-sheet-selected"]
+
+    # 夹具真实性:与场景 39 同源字节(员工表在前,工单表在第二个),按序号指定 2
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    assert spec.sample_sheet == 2 and spec.full_sheet == 2
+    for blob in (spec.sample, spec.full):
+        assert load_workbook(BytesIO(blob), read_only=True).sheetnames == ["员工表", "工单表"]
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 标注实测:按指定读取「工单表」;同一份字节不带 --sheet(场景 39 路径)时标注仍是
+    # 「仅读取第一个『员工表』」——标注随来源对象生成并持久化,同摘要不同选择不串味
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "selected-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample, sheet=spec.sample_sheet)
+    assert session.source.sheet == "工单表"
+    assert session.source.columns == ["编号", "客户描述", "类别"], session.source.columns
+    assert [row.values["编号"] for row in session.source.rows] == ["001", "002"]
+    assert session.profile["sheet_note"] == (
+        "该文件含 2 个 sheet，按指定读取「工单表」；其余 1 个（员工表）未读取。"
+    )
+    default_session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert default_session.source.digest == session.source.digest
+    assert default_session.source.sheet == "员工表"
+    assert default_session.profile["sheet_note"] == (
+        "该文件含 2 个 sheet，仅读取第一个「员工表」；其余 1 个（工单表）未读取。"
+    )
+
+    # 全量侧同样按指定读取:验证标注与结论(旅程内的 validate_full 已按 sheet=2 走过)
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    service.submit_contrast_check(
+        session.session_id,
+        pending["check_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full, sheet=spec.full_sheet
+    )
+    assert session.full_data.source.sheet == "工单表"
+    assert session.full_data.profile["record_count"] == 10
+    assert not [issue for issue in session.full_data.issues if issue.severity == "blocking"]
+    assert session.full_data.profile["sheet_note"] == (
+        "该文件含 2 个 sheet，按指定读取「工单表」；其余 1 个（员工表）未读取。"
+    )
+
+
 def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
     """场景 40:重复表头行两侧同现——样例侧不拦(同场景 30 的不对称边界),全量侧硬拦
     (同场景 22),组合结局由全量侧决定:validate_full 拦下,不会带病物化。"""
@@ -189,7 +253,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 40, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 41, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
