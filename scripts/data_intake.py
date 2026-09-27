@@ -860,6 +860,12 @@ def main() -> int:
             else:
                 result = suites.load(_suite_reference(args.suite_root, args.suite_id))
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            # 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加人话。
+            # suite-freeze 返回引用、suite-show 读出完整清单，摘要函数两种形态都兼容。
+            from src.workbench.report_summary import summarize_suite
+
+            for line in summarize_suite(result):
+                print(line, file=sys.stderr)
             return 0
         if args.command == "eval-analyze":
             from src.agent.evaluation import assess_evaluation

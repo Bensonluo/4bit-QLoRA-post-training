@@ -651,3 +651,42 @@ def summarize_scoring(record: dict) -> list[str]:
         lines.append("草稿待你核对实际正反例分数与理由后确认；软件不会自动确认评分规则。")
     lines.append("业务评分均值与通过率是规则口径的描述，不等于严格准确率，也不构成业务达标的判断。")
     return lines
+
+
+def summarize_suite(record: dict) -> list[str]:
+    """把固定评测题集翻译成人话：多少题、内容锁定不可改、复用方式与比较基线边界。
+
+    兼容两种记录形态：suite-freeze 返回的引用（只有题数与内容摘要）与
+    suite-show 读出的完整清单（另有锚定版本与固定范围原文）。只复述记录里的
+    事实：题目内容按摘要锁定，原评分题不能修改；同对象新增行不自动扩充评分题。
+    """
+    counts = record.get("case_counts") or {}
+    dev = counts.get("validation")
+    test = counts.get("test")
+    if dev is not None or test is not None:
+        parts = []
+        if dev is not None:
+            parts.append(f"开发题 {dev} 道")
+        if test is not None:
+            parts.append(f"最终测试题 {test} 道")
+        lines = [f"这套固定题集含{'、'.join(parts)}，供后续各轮用同一套题比较。"]
+    else:
+        lines = ["这套固定题集没有记录题数。"]
+    digest = str(record.get("cases_digest") or "").strip()
+    if digest:
+        lines.append(f"题目内容已按摘要 {digest[:12]}… 锁定，原评分题不能修改。")
+    scope = str(record.get("scope_note") or "").strip()
+    lines.append(
+        scope or "原开发/最终测试评分题固定；同对象新增行保留在对应分区，不自动扩充评分题。"
+    )
+    anchor = record.get("anchor_dataset") or {}
+    name = str(anchor.get("name") or "").strip()
+    version = anchor.get("version")
+    if name or version is not None:
+        anchor_text = f"锚定数据版本：{name or '未记录'}"
+        if version is not None:
+            anchor_text += f"（version {version}）"
+        lines.append(anchor_text + "。")
+    lines.append("materialize 时用 --suite-id 指定即可复用这套题集。")
+    lines.append("固定题集只保证各轮比较基线一致，不代表业务效果达标。")
+    return lines

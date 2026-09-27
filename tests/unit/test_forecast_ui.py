@@ -35,6 +35,9 @@ def test_temporal_dataset_shows_exclusions_and_hides_random_controls(tmp_path, m
     selector.select(ref["suite_id"]).run()
     assert not page.exception
     assert any("新增资料按已确认时间归属" in item.value for item in page.info)
+    # 页面与 CLI 同源的人话摘要：题数+锁定+不自动扩充+比较基线边界。
+    assert any("这套固定题集含开发题" in item.value for item in page.markdown)
+    assert any("不代表业务效果达标" in item.value for item in page.markdown)
     assert not any("比例" in item.label or "种子" in item.label for item in page.number_input)
     button(page, "生成数据集版本").click().run()
     assert not page.exception

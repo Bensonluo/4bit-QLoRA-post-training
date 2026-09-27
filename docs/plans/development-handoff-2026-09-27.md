@@ -1519,3 +1519,40 @@ iteration-*、execution-* 等 CLI stderr 人话摘要补齐,但同一批记录�
   ui/pages/07_Data_Intake.py、tests/unit/test_report_summary.py、
   tests/unit/test_scoring_cli.py、tests/unit/test_business_scoring_ui.py、
   tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+### 第 40 轮 = 固定题集人话摘要（恢复循环第 21 轮）
+
+**痛点**：suite-freeze/suite-show 是 CLI 覆盖图剩余的零人话业务面（与 eval-analyze
+并列最后两块）。固定题集是盲测保护的载体——题目内容按摘要锁定、原评分题不能
+修改、同对象新增行不自动扩充评分题，这些语义安全边界此前在 CLI 上只有纯 JSON
+（suite-freeze 返回 5 键引用，suite-show 返回含全部题目的完整清单）。页面
+「分区设置」选择题集后只有一句固定 st.info，没有与 CLI 同源的整体摘要。
+
+- **summarize_suite 函数**(report_summary.py 第 11 个摘要函数):两种记录形态
+  同口径——suite-freeze 返回的引用(只有题数+内容摘要)与 suite-show 读出的
+  完整清单(另有锚定版本与固定范围原文)。句子:题数句(开发题 N 道、最终测试题
+  M 道分列)→「题目内容已按摘要 xxxx… 锁定，原评分题不能修改」→固定范围句
+  (清单形态渲染 scope_note 原文，引用形态用同词汇自述)→清单形态另附
+  「锚定数据版本：name（version V）」→「materialize 时用 --suite-id 指定即可
+  复用」→边界句「固定题集只保证各轮比较基线一致，不代表业务效果达标」。
+  裸记录降级:「这套固定题集没有记录题数。」+边界句,无摘要值不编锁定句。
+- **CLI 接线**(data_intake.py suite 分支):freeze 与 show 输出 JSON 后对
+  result 追加 stderr 摘要;无 suite-list 子命令,无需清单例外。
+- **页面接线**(07_Data_Intake.py 分区设置 expander):选定固定题集后、原有
+  st.info 之下渲染 summarize_suite(available_suites[selected]),页面与 CLI
+  同源同词汇;disabled 态(改进轮次已绑定)同样可达(active iteration 的引用
+  已并入 available_suites)。
+- **测试 +2 个新函数+2 处既有扩展**:test_report_summary 新增
+  test_suite_summary_counts_lock_scope_and_boundary(引用/清单/裸三态:精确
+  题数句、锁定句、锚定句、引用形态不得编锚定、裸记录不得编锁定);test_eval_suite_cli
+  扩展(freeze stderr 含题数/锁定/边界句,show stderr 含 scope 原文+锚定句);
+  test_forecast_ui 扩展(选定题集后 page.markdown 含题数句+边界句);test_readme_alignment
+  新增 test_suite_summary_docs_pinned(10 断言钉死文档段)。定向 68 passed。
+- **文档**(agent-setup.md 轮次节新增一段):stderr 位点+两种形态同口径+题数/
+  锁定/不扩充/复用/边界句+锚定版本+页面位点(分区设置选择题集后,同源同词汇)。
+- 回归:ruff check/format clean;定向 4 文件 68 passed。全量回归
+  **tests/unit 1770 passed / 0 failed**(--no-cov,基线 1768 + 2 个新测试
+  函数)。本批只动 src/workbench/report_summary.py、scripts/data_intake.py、
+  ui/pages/07_Data_Intake.py、tests/unit/test_report_summary.py、
+  tests/unit/test_eval_suite_cli.py、tests/unit/test_forecast_ui.py、
+  tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

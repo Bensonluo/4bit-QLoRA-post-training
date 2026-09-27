@@ -406,6 +406,8 @@ python scripts/data_intake.py iteration-list SESSION_ID
 
 若只需先固定题集，可点击「固定当前开发与测试题集」，或运行 `suite-freeze SESSION_ID --revision CURRENT_REVISION`；这一步不修改父轮数据版本。`suite-show SUITE_ID` 查看来源与题数，后续 `materialize ... --suite-id SUITE_ID` 显式复用。全局 `--suite-root` 控制独立题集目录；改进提案自带题集引用，使用 `--iteration-id` 时无需手工查找目录。固定题集时，新独立行进入训练，原题保持不变，分区比例及随机种子不再重新分配原题。
 
+`suite-freeze` 与 `suite-show` 在 stdout 输出 JSON 的同时向 stderr 追加人话摘要（`summarize_suite`，冻结返回的引用与展示读出的完整清单两种形态同口径）：题数（开发题与最终测试题分列）、题目内容按摘要锁定且原评分题不能修改、同对象新增行不自动扩充评分题、materialize 用 `--suite-id` 复用，并以「固定题集只保证各轮比较基线一致，不代表业务效果达标」收尾；`suite-show` 的完整清单另附锚定数据版本名与版本号。页面「分区设置」选择固定题集后渲染同一份摘要，页面与 CLI 同源同词汇。
+
 ## 配置文件与优先级
 
 页面与 CLI 默认共享项目目录下的 `outputs/workbench/agent-settings.json`，文件仅包含 `provider`、`base_url`、`model`。CLI 可用全局参数覆盖文件路径，须放在子命令前：

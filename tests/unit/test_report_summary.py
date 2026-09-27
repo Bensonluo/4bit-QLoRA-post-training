@@ -827,3 +827,39 @@ def test_scoring_summary_needs_business_input_and_bare_records_do_not_invent():
     assert bare[0] == "这套规则没有写明业务标准。"
     assert "软件不会自动确认评分规则" in "\n".join(bare)
     assert "不等于严格准确率" in bare[-1]
+
+
+def test_suite_summary_counts_lock_scope_and_boundary():
+    """固定题集摘要:引用与完整清单两形态都报题数+锁定+不扩充+比较基线边界。"""
+    from src.workbench.report_summary import summarize_suite
+
+    reference = {
+        "suite_id": "a" * 64,
+        "case_counts": {"validation": 12, "test": 5},
+        "cases_digest": "b" * 64,
+    }
+    lines = summarize_suite(reference)
+    joined = "\n".join(lines)
+    assert lines[0] == "这套固定题集含开发题 12 道、最终测试题 5 道，供后续各轮用同一套题比较。"
+    assert "题目内容已按摘要 bbbbbbbbbbbb… 锁定，原评分题不能修改。" in lines
+    assert "同对象新增行保留在对应分区，不自动扩充评分题" in joined
+    assert "锚定数据版本" not in joined, "引用形态没有锚定信息,不得编造"
+    assert "--suite-id 指定即可复用" in joined
+    assert lines[-1] == "固定题集只保证各轮比较基线一致，不代表业务效果达标。"
+
+    manifest = {
+        "suite_id": "a" * 64,
+        "case_counts": {"validation": 12, "test": 5},
+        "cases_digest": "b" * 64,
+        "scope_note": "原开发/最终测试评分题固定；同对象新增行保留在对应分区但不自动扩充评分题。",
+        "anchor_dataset": {"name": "my-domain", "version": 3},
+    }
+    lines = summarize_suite(manifest)
+    joined = "\n".join(lines)
+    assert "原开发/最终测试评分题固定；同对象新增行保留在对应分区但不自动扩充评分题。" in lines
+    assert "锚定数据版本：my-domain（version 3）。" in lines
+
+    bare = summarize_suite({})
+    assert bare[0] == "这套固定题集没有记录题数。"
+    assert bare[-1] == "固定题集只保证各轮比较基线一致，不代表业务效果达标。"
+    assert "锁定" not in "\n".join(bare), "裸记录没有摘要值,不得编造锁定句"

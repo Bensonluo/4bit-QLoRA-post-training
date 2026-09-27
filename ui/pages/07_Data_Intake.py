@@ -2582,6 +2582,10 @@ if session.confirmed_revision is not None or session.full_data is not None:
                         if temporal_policy
                         else "保持原开发和测试题目不变；新增独立资料进入训练集。同一业务对象不能跨入训练集。"
                     )
+                    from src.workbench.report_summary import summarize_suite
+
+                    for line in summarize_suite(available_suites[selected_suite]):
+                        st.write(line)
                 dataset_name = st.text_input("数据集名称（留空自动生成）")
                 validation_fraction, test_fraction, split_seed = 0.1, 0.1, 42
                 if temporal_policy:

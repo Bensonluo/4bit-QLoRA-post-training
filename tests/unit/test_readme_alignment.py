@@ -499,6 +499,25 @@ def test_scoring_summary_docs_pinned():
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
 
 
+def test_suite_summary_docs_pinned():
+    """suite-freeze/show CLI stderr 人话摘要口径钉死:题数、内容锁定与比较基线边界。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 从评测结果进入下一轮改进",
+        "## 配置文件与优先级",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "summarize_suite" in section, "摘要函数必须点名"
+    assert "原评分题不能修改" in section, "内容锁定边界必须写明"
+    assert "不自动扩充评分题" in section, "新增行不扩充原题必须写明"
+    assert "--suite-id" in section, "复用方式必须写明"
+    assert "锚定数据版本" in section, "完整清单的锚定版本必须写明"
+    assert "固定题集只保证各轮比较基线一致" in section, "固定边界句必须写明"
+    assert "不代表业务效果达标" in section, "不作业务结论边界必须写明"
+    assert "页面「分区设置」选择固定题集后渲染同一份摘要" in section, "页面位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+
+
 def test_acceptance_summary_docs_pinned():
     """最终验收 CLI stderr 人话摘要口径钉死:冻结标准、五态结论、分母口径与不作数边界。"""
     section = _section(

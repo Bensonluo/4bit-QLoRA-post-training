@@ -41,10 +41,16 @@ def test_cli_freezes_original_questions_and_materializes_with_same_suite(tmp_pat
     ref = json.loads(result.stdout)
     assert len(ref["suite_id"]) == 64
     assert set(ref["case_counts"]) == {"validation", "test"}
+    # 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加题集人话摘要。
+    assert "这套固定题集含开发题" in result.stderr
+    assert "原评分题不能修改" in result.stderr
+    assert "不代表业务效果达标" in result.stderr
     assert service.load(session.session_id).dataset.version == original_version
     shown = invoke(service, root, "suite-show", ref["suite_id"])
     assert shown.returncode == 0, shown.stderr
     assert ref["suite_id"] in shown.stdout
+    assert "原开发/最终测试评分题固定" in shown.stderr
+    assert "锚定数据版本" in shown.stderr
     materialized = invoke(
         service,
         root,
