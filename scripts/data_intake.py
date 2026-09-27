@@ -1189,7 +1189,8 @@ def main() -> int:
                 else "存在不一致，训练不会开始；请核对数据标签或业务定义后重新核验。"
             )
             print(
-                f"\n判定：{result['verdict']}（{result['matched']}/{result['sample_size']} 一致）",
+                f"\n判定：{result['verdict']}（{result['matched']}/{result['sample_size']} 一致，"
+                f"95% 置信下界约 {result['agreement_lower_bound']:.0%}）",
                 file=sys.stderr,
             )
             print(verdict_note, file=sys.stderr)

@@ -59,10 +59,10 @@ def _run_submit(monkeypatch, service, session, verification_id, answers: dict):
 
 
 def _answers_for(pending: dict, wrong_row_id: str | None = None) -> dict:
-    """构造提交答案：wrong_row_id 之外的行都给正确答案。"""
+    """构造提交答案：wrong_row_id 之外的行都给正确答案（全量数据的标签都是 yes）。"""
     return {
-        item["row_id"]: ("故意答错的答案" if item["row_id"] == wrong_row_id else "yes")
-        for item in pending["items"]
+        row_id: ("故意答错的答案" if row_id == wrong_row_id else "yes")
+        for row_id in pending["row_ids"]
     }
 
 
@@ -78,3 +78,54 @@ def test_cli_label_verify_previews_sample_lower_bound(store, monkeypatch, capsys
     attached = service.load(session.session_id).label_verification
     assert attached["verification_id"] == payload["verification_id"]
     assert attached["status"] == "pending"
+
+
+def test_cli_submit_verdict_line_shows_lower_bound_when_verified(store, monkeypatch, capsys):
+    """判定行补上下界（通过态）：5/5 一致的下界远低于 100%，观测一致率不许被当成真实水平。"""
+    service, session = store
+    assert _run_verify(monkeypatch, service, session) == 0
+    pending = json.loads(capsys.readouterr().out)
+    capsys.readouterr()
+
+    from src.workbench.intake_service import wilson_lower_bound
+
+    assert (
+        _run_submit(
+            monkeypatch, service, session, pending["verification_id"], _answers_for(pending)
+        )
+        == 0
+    )
+    _, err = capsys.readouterr()
+    assert "verified" in err
+    assert "5/5 一致" in err
+    expected = f"{wilson_lower_bound(5, 5):.0%}"
+    assert f"95% 置信下界约 {expected}" in err, "通过判定也必须亮出下界数字"
+    assert "下界约 100%" not in err, "小样本全对的下界不许冒充 100%"
+
+
+def test_cli_submit_verdict_line_shows_lower_bound_when_failed(store, monkeypatch, capsys):
+    """判定行补上下界（未通过态）：存在不一致时判定行同样给出下界数字。"""
+    service, session = store
+    assert _run_verify(monkeypatch, service, session) == 0
+    pending = json.loads(capsys.readouterr().out)
+    capsys.readouterr()
+
+    from src.workbench.intake_service import wilson_lower_bound
+
+    wrong_row = pending["row_ids"][0]
+    assert (
+        _run_submit(
+            monkeypatch,
+            service,
+            session,
+            pending["verification_id"],
+            _answers_for(pending, wrong_row_id=wrong_row),
+        )
+        == 0
+    )
+    _, err = capsys.readouterr()
+    assert "insufficient_agreement" in err
+    assert "4/5 一致" in err
+    expected = f"{wilson_lower_bound(4, 5):.0%}"
+    assert f"95% 置信下界约 {expected}" in err
+    assert "训练不会开始" in err
