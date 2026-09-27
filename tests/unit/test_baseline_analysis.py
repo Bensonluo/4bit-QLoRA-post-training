@@ -59,6 +59,17 @@ def test_baseline_applies_through_the_real_preview_pipeline(store):
     assert rows
     assert "客户描述" in rows[0].input
     assert rows[0].target in {"质量", "物流"}
-    assert any(
-        finding.kind == "needs_business_input" for finding in updated.analysis.findings
-    )
+    assert any(finding.kind == "needs_business_input" for finding in updated.analysis.findings)
+
+
+def test_forecast_shaped_goal_gets_leakage_warning(store):
+    """预测型目标在零密钥路径得到泄漏预警:不做时间分区=假效果,如实告知。"""
+    _, original = store
+    forecast = original.model_copy(deep=True)
+    object.__setattr__(forecast, "goal", "根据披露文本预测未来20个交易日是否上涨")
+    analysis = propose_baseline_analysis(forecast, target_column="类别")
+    warnings = [f for f in analysis.findings if "泄漏" in f.message]
+    assert warnings, "预测型目标必须有泄漏预警"
+    assert "泄漏" in warnings[0].message
+    plain = propose_baseline_analysis(original, target_column="类别")
+    assert not any("泄漏" in f.message for f in plain.findings)

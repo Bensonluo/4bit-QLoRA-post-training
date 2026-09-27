@@ -159,13 +159,24 @@ def run_scenario(spec: ScenarioSpec, root: str | Path) -> ScenarioResult:
                 )
 
         if result.blocked_at is None:
-            session = service.materialize_dataset(session.session_id, session.revision)
+            independent = not session.analysis.recipe.group_columns
+            session = service.materialize_dataset(
+                session.session_id,
+                session.revision,
+                independent_rows_confirmed=independent,
+            )
             result.stages["materialize"] = "passed"
     except ValueError as exc:
+        # ValueError 是服务的常规业务阻断通道:记为 blocked 而非程序错误。
+        stage = next((s for s in STAGES if s not in result.stages), "create")
+        result.stages[stage] = "blocked"
+        result.blocked_at = stage
+        result.blocked_message = str(exc)
+    except Exception as exc:  # 程序错误与业务阻断分开统计
         stage = next((s for s in STAGES if s not in result.stages), "create")
         result.stages[stage] = "error"
         result.blocked_at = stage
-        result.blocked_message = str(exc)
+        result.blocked_message = f"{type(exc).__name__}: {exc}"
 
     expected_block = spec.expect.startswith("blocked_at:")
     expected_stage = spec.expect.split(":", 1)[1] if expected_block else None

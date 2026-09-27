@@ -145,6 +145,17 @@ def propose_baseline_analysis(
             )
         )
 
+    if any(marker in session.goal for marker in ("预测", "未来", "走势", "行情", "涨跌", "收益")):
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    "目标像是对未来结果的预测。基础分析没有做时间分区：随机切分会把"
+                    "未来信息泄漏进训练，得到虚高的假效果。请配置 Agent 建立时间方案，"
+                    "或确认这确实不是预测任务后再继续。"
+                ),
+            )
+        )
     findings.append(
         Finding(
             kind="observed",

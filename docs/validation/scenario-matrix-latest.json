@@ -1,0 +1,118 @@
+{
+  "kind": "scenario_matrix",
+  "created_at": "2026-09-27T05:36:05.850429+00:00",
+  "scenarios": [
+    {
+      "scenario_id": "clean-classification",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "dirty-missing-label-column",
+      "expect": "blocked_at:validate_full",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "blocked"
+      },
+      "blocked_at": "validate_full",
+      "blocked_message": "全量文件缺少当前方案必需字段：类别。请补充字段或修订方案；没有覆盖原样例方案。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "ambiguous-labels-user-mismatch",
+      "expect": "blocked_at:blind_verification",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "blocked"
+      },
+      "blocked_at": "blind_verification",
+      "blocked_message": "盲标不一致 4/5",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "too-few-groups",
+      "expect": "blocked_at:materialize",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "blocked"
+      },
+      "blocked_at": "materialize",
+      "blocked_message": "仅有 2 个独立分组，至少需要 3 个才能形成非空训练、验证和测试集；请补充独立业务对象，不能拆开同一对象或相同模型输入来凑数。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "forecast-shaped-goal",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "high-cardinality-target",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "as_expected": 6,
+    "unexpected_pass": 0,
+    "unexpected_block": 0,
+    "error": 0,
+    "note": "矩阵测的是产品在场景多样性下的判断与拦截(零密钥路径),不测模型效果;unexpected_* 是需要修复的产品缺陷。"
+  }
+}
