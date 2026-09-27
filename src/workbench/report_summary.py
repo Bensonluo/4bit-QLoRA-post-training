@@ -240,6 +240,73 @@ def summarize_dataset(statistics: dict) -> list[str]:
     return lines
 
 
+_PLAN_STATUS_NAMES = {
+    "ready": "方案可供确认",
+    "needs_data": "需要先完善数据",
+    "unsupported": "当前条件不支持",
+}
+
+
+def summarize_plan(record: dict) -> list[str]:
+    """把一份 Agent 训练方案翻译成人话:建议用什么、关键参数、理由与边界。
+
+    只复述记录里的事实:推荐理由与限制是 Agent 写下的原文;就绪只说明参数、
+    数据与实际预检检查通过。确认准备不会自动启动训练,方案就绪也不代表
+    训练效果或业务达标。
+    """
+    proposal = record.get("proposal") or {}
+    status = record.get("status") or proposal.get("status")
+    model_path = str(proposal.get("model_path") or "").rstrip("/")
+    training = proposal.get("training_options") or {}
+    lora = proposal.get("lora_options") or {}
+    model_options = proposal.get("model_options") or {}
+    parts: list[str] = []
+    if proposal.get("max_length") is not None:
+        parts.append(f"最大长度 {proposal['max_length']}")
+    if training.get("num_epochs") is not None:
+        parts.append(f"训练 {training['num_epochs']} 轮")
+    if training.get("batch_size") is not None:
+        parts.append(f"batch size {training['batch_size']}")
+    if training.get("learning_rate") is not None:
+        parts.append(f"学习率 {training['learning_rate']}")
+    if lora.get("r") is not None:
+        parts.append(f"LoRA rank {lora['r']}")
+    if model_options.get("quantization_bits"):
+        parts.append(f"{model_options['quantization_bits']}-bit 量化")
+    if model_path:
+        head = f"这份方案建议用 {model_path.split('/')[-1]}"
+        if parts:
+            head += "（" + "、".join(parts) + "）"
+        lines = [head + "。"]
+    else:
+        lines = ["这份方案还没有选择基础模型。"]
+    if status:
+        lines.append(f"当前状态：{_PLAN_STATUS_NAMES.get(status, status)}。")
+    rationale = [str(item) for item in (proposal.get("rationale") or []) if str(item).strip()]
+    if rationale:
+        lines.append("推荐理由：" + "；".join(rationale))
+    limitations = [str(item) for item in (proposal.get("limitations") or []) if str(item).strip()]
+    if limitations:
+        lines.append("尚未验证的限制：" + "；".join(limitations))
+    questions = [
+        str(item) for item in (proposal.get("business_questions") or []) if str(item).strip()
+    ]
+    if questions:
+        lines.append(
+            "还有需要你先回答的业务问题：" + "；".join(questions) + "——回答确认前不能准备训练。"
+        )
+    if status == "ready":
+        lines.append(
+            "就绪只说明参数、数据与实际预检检查通过；确认这份方案只会准备训练，不会自动启动。"
+        )
+    elif status == "needs_data":
+        lines.append("先完善数据或回答业务问题，再让 Agent 重新生成方案。")
+    elif status == "unsupported":
+        lines.append("换用支持的模型或机器后重新生成方案。")
+    lines.append("方案就绪与推荐理由不构成训练效果或业务达标的判断，是否采用由你按业务决定。")
+    return lines
+
+
 def summarize_preflight(preflight: dict) -> list[str]:
     """把训练前检查报告翻译成人话:答案是否保留、截断多少、问题在哪。"""
     if not preflight:

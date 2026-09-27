@@ -708,11 +708,27 @@ def main() -> int:
                         training_root=args.training_root,
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
-            if isinstance(result, dict) and result.get("preflight"):
-                from src.workbench.report_summary import summarize_preflight
+            if isinstance(result, dict):
+                # 方案域两层人话:第一层翻译方案本身(模型/参数/状态/理由),第二层在
+                # 方案带真实预检证据时翻译预检;plan-prepare 结果复用训练记录摘要。
+                # 真实 save() 记录的预检在 probe.preflight,顶层 preflight 键为兼容
+                # 既有形状保留;plan-list 返回 list,自然跳过。
+                from src.workbench.report_summary import (
+                    summarize_plan,
+                    summarize_preflight,
+                    summarize_training_run,
+                )
 
-                for line in summarize_preflight(result["preflight"]):
-                    print(line, file=sys.stderr)
+                if result.get("training_run"):
+                    for line in summarize_training_run(result["training_run"]):
+                        print(line, file=sys.stderr)
+                else:
+                    for line in summarize_plan(result):
+                        print(line, file=sys.stderr)
+                preflight = (result.get("probe") or {}).get("preflight") or result.get("preflight")
+                if preflight:
+                    for line in summarize_preflight(preflight):
+                        print(line, file=sys.stderr)
             return 0
         if args.command in {
             "iteration-execute",

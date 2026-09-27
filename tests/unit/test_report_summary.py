@@ -709,3 +709,64 @@ def test_execution_summary_state_machine_translates_user_action_states():
     joined = "\n".join(stopped)
     assert "已按请求停止自动执行" in joined
     assert "不代表业务效果达标" in joined
+
+
+def test_plan_summary_ready_states_model_params_reasons_and_boundaries():
+    """ready 方案摘要:模型+关键参数+状态+理由/限制原文+确认不自动启动边界。"""
+    from src.workbench.report_summary import summarize_plan
+
+    record = {
+        "status": "ready",
+        "proposal": {
+            "model_path": "/models/qwen-base",
+            "max_length": 1024,
+            "rationale": ["任务量级适合小参数模型", "本机显存可容纳 4-bit"],
+            "limitations": ["未在业务留出题上验证"],
+            "business_questions": [],
+            "training_options": {"num_epochs": 2, "batch_size": 1, "learning_rate": 0.0002},
+            "lora_options": {"r": 16},
+            "model_options": {"quantization_bits": 4},
+        },
+    }
+    lines = summarize_plan(record)
+    joined = "\n".join(lines)
+    head = lines[0]
+    assert head.startswith("这份方案建议用 qwen-base（")
+    assert "最大长度 1024" in head and "训练 2 轮" in head and "batch size 1" in head
+    assert "学习率 0.0002" in head and "LoRA rank 16" in head and "4-bit 量化" in head
+    assert "当前状态：方案可供确认。" in lines
+    assert "推荐理由：任务量级适合小参数模型；本机显存可容纳 4-bit" in lines
+    assert "尚未验证的限制：未在业务留出题上验证" in lines
+    assert "确认这份方案只会准备训练，不会自动启动" in joined
+    assert "不构成训练效果或业务达标的判断" in joined
+
+
+def test_plan_summary_needs_data_questions_and_bare_records_do_not_invent():
+    """needs_data 点名待答业务问题;无状态/无模型的裸记录如实降级不编造。"""
+    from src.workbench.report_summary import summarize_plan
+
+    record = {
+        "status": "needs_data",
+        "proposal": {
+            "model_path": "/tmp/x",
+            "rationale": ["样例不足"],
+            "limitations": ["无法预检"],
+            "business_questions": ["留存答案口径是哪个字段？"],
+        },
+    }
+    lines = summarize_plan(record)
+    joined = "\n".join(lines)
+    assert "当前状态：需要先完善数据。" in lines
+    assert "还有需要你先回答的业务问题：留存答案口径是哪个字段？" in joined
+    assert "回答确认前不能准备训练" in joined
+    assert "先完善数据或回答业务问题" in joined
+
+    unsupported = summarize_plan({"status": "unsupported", "proposal": {"model_path": "/tmp/y"}})
+    joined = "\n".join(unsupported)
+    assert "当前状态：当前条件不支持。" in joined
+    assert "换用支持的模型或机器后重新生成方案" in joined
+
+    bare = summarize_plan({})
+    assert "这份方案还没有选择基础模型。" in bare[0]
+    assert len(bare) == 2, "裸记录只剩模型缺位句+固定边界句,不得编造状态"
+    assert "不构成训练效果或业务达标的判断" in bare[-1]

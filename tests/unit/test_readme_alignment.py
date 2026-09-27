@@ -529,3 +529,23 @@ def test_materialize_summary_docs_pinned():
     assert "分区就绪只说明数据已按规则隔离" in section, "固定边界句必须写明"
     assert "逐原因排除计数" in section, "时间方案逐原因计数补充行必须写明"
     assert "metadata.excluded_rows" in section, "manifest 原行明细指引必须写明"
+
+
+def test_plan_summary_docs_pinned():
+    """plan-* CLI stderr 人话摘要口径钉死:分层位点、状态三态、理由原文与不自动启动边界。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 让 Agent 推荐训练方案",
+        "## 在同一任务中启动真实训练",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "plan-list` 只列清单" in section, "list 例外必须写明"
+    assert "方案可供确认" in section, "状态三态(ready)必须写明"
+    assert "需要先完善数据" in section, "状态三态(needs_data)必须写明"
+    assert "当前条件不支持" in section, "状态三态(unsupported)必须写明"
+    assert "推荐理由与尚未验证的限制原文" in section, "理由/限制如实复述必须写明"
+    assert "需要你先回答的业务问题" in section, "待答业务问题必须写明"
+    assert "LoRA rank" in section, "关键参数点名必须写明"
+    assert "probe" in section, "预检证据的真实存放位点必须写明"
+    assert "不会自动启动" in section, "确认准备的不启动边界必须写明"
+    assert "不构成训练效果或业务达标的判断" in section, "固定边界句必须写明"

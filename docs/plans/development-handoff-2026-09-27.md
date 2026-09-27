@@ -1388,3 +1388,46 @@ duplicate_note 两条披露在 CLI 上是 raw 打印、页面才有人话定位�
   src/workbench/report_summary.py、tests/unit/test_temporal_intake_entrypoints.py、
   tests/unit/test_cli_summaries.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 37 轮 = 训练方案 CLI 人话摘要（恢复循环第 18 轮）
+
+(恢复的北极星打磨循环,第 18 轮。)核心痛点:plan-* 家族(recommend/show/
+prepare)是 CLI 摘要覆盖图上最后一块零人话的业务表面——`plan-recommend` 与
+`plan-show` 收敛到纯 JSON,而方案恰是「Agent 建议用什么模型、什么参数、为什么」
+的关键决策点,页面(07 推荐方案区)有完整渲染,CLI 平权缺口与第 34-36 轮同型。
+侦查中另发现一处死代码:分派尾的 `result.get("preflight")` 检查——真实 save()
+记录的预检存放在 `probe.preflight`,顶层没有 preflight 键,即 plan-recommend
+的第二层预检摘要此前从未对真实记录触发过,只有测试夹具(顶层 preflight 形状)
+碰巧让它亮过。
+
+- **summarize_plan(report_summary.py)**:首句「这份方案建议用 <模型名>（最大
+  长度 X、训练 N 轮、batch size B、学习率 LR、LoRA rank R、N-bit 量化）」
+  (仅渲染存在的参数;无模型路径如实降级「这份方案还没有选择基础模型。」);
+  状态行用页面同一词汇三态:ready=方案可供确认/needs_data=需要先完善数据/
+  unsupported=当前条件不支持;推荐理由与尚未验证的限制按 Agent 原文逐条拼接;
+  有待答业务问题时点名原文+「回答确认前不能准备训练」;状态专属收尾——ready
+  「就绪只说明参数、数据与实际预检检查通过;确认这份方案只会准备训练,不会
+  自动启动」、needs_data「先完善数据或回答业务问题,再让 Agent 重新生成方案」、
+  unsupported「换用支持的模型或机器后重新生成方案」;固定边界句「方案就绪与
+  推荐理由不构成训练效果或业务达标的判断,是否采用由你按业务决定」。全程
+  .get 链,裸 dict 不崩溃不编造状态。
+- **CLI 接线**(data_intake.py plan 分派尾):dict 结果两层人话——plan-recommend/
+  plan-show 走 summarize_plan;plan-prepare 结果带 training_run 时复用既有
+  summarize_training_run(「方案已准备好并通过检查,还没有开始训练」);预检
+  证据第二层同时检查 `probe.preflight`(真实形状)与顶层 `preflight`(夹具/
+  兼容形状),修复死代码。plan-list 返回 list 自然跳过,stdout 纯 JSON 不变。
+- **测试 +4**:test_report_summary +2(ready 全参数句+理由/限制原文+确认不自动
+  启动边界;needs_data 待答问题点名+unsupported 指引+裸 dict 只剩两句不编造);
+  test_training_plan_cli +1(plan-show 双层人话:list 只列清单不追加;prepare
+  复用训练记录摘要——夹具 prepare 返回值同步为真实形状 {plan_id, run_id,
+  training_run});test_readme_alignment +1 钉文档十一句(stderr 位点/list
+  例外/状态三态/理由限制原文/待答问题/LoRA rank/probe 位点/不自动启动/边界句)。
+- **文档**(agent-setup.md「## 让 Agent 推荐训练方案」):CLI 示例段后新增
+  plan 子命令 stderr 口径段——分层位点、状态三态、理由/限制原文、待答业务
+  问题、probe 预检位点、prepare 复用训练摘要、不自动启动与不构成达标判断。
+- 回归:ruff check/format clean;定向套件(report_summary+training_plan_cli+
+  training_plan_ui+training_plans+readme_alignment+cli_summaries)95 passed。
+  全量回归 **tests/unit 1765 passed / 0 failed**(--no-cov,无排除;基线 1761
+  + 新增 4)。本批只动 src/workbench/report_summary.py、scripts/data_intake.py、
+  tests/unit/test_report_summary.py、tests/unit/test_training_plan_cli.py、
+  tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
