@@ -98,8 +98,8 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             group_columns=(),
             expect="passes",
             expect_note=(
-                "已知待办:高基数目标(每行唯一)目前不被任何关卡拦截——"
-                "学习逐行唯一标签几乎必然失败,应在旅程更早处给出警告/拦截(M5 候选)"
+                "通过且带「可能选错答案列」预警(高基数目标早期警告已上线,M5/task-001);"
+                "抽取类任务的高基数是合法的,预警不阻断"
             ),
             tags=("high-cardinality", "known-gap"),
         ),

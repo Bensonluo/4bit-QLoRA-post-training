@@ -1,0 +1,13 @@
+id: "milestone-005"
+title: "known-gap 清偿 + 试用反馈驱动"
+priority: "high"
+category: "feature"
+timeline: { estimated_start: "2026-09-27", estimated_end: "2026-10-10", estimated_hours: 30, buffer_percentage: 20 }
+success_criteria:
+  - "矩阵 known-gap 队列逐项清偿并回跑矩阵保持全 as_expected"
+  - "用户试用记录回收后有对应处理(暂缺真实反馈时按 known-gap 队列推进)"
+tasks:
+  - { id: task-001, title: "高基数目标早期警告(选错答案列提示)", status: in_progress, hours: 5 }
+  - { id: task-002, title: "矩阵场景扩展至 8+(长文本/多标签脏值)", status: pending, hours: 6 }
+  - { id: task-003, title: "按试用反馈迭代(有反馈时)或继续 known-gap", status: pending, hours: 8 }
+  - { id: task-004, title: "全量回归+交接+提交", status: pending, hours: 4 }

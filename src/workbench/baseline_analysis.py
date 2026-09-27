@@ -145,6 +145,18 @@ def propose_baseline_analysis(
             )
         )
 
+    target_distinct = len(distribution)
+    if len(target_values) >= 8 and target_distinct / max(len(target_values), 1) >= 0.9:
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    f"答案列「{target_column}」几乎每行唯一（{target_distinct}/{len(target_values)}）。"
+                    "模型难以从逐行唯一的标签学到可泛化规律——常见原因是把编号/ID 类字段选成了答案列。"
+                    "如果这不是抽取类任务，请改选真正的业务答案列。"
+                ),
+            )
+        )
     if any(marker in session.goal for marker in ("预测", "未来", "走势", "行情", "涨跌", "收益")):
         findings.append(
             Finding(

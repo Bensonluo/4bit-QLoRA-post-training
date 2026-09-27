@@ -9,9 +9,9 @@ success_criteria:
   - "报告明确统计:LLM 判断点 0、用户核验点(盲标/对比)、诚实拒绝点(不支持形态如实拦)"
   - "全量回归全绿;矩阵结果落 docs/validation/"
 tasks:
-  - { id: task-001, title: "矩阵跑台核心(场景定义+runner+报告)", status: in_progress, hours: 10 }
-  - { id: task-002, title: "种子场景×3(干净分类/脏数据/歧义标签)", status: pending, hours: 8 }
-  - { id: task-003, title: "种子场景×3(时间预测/小样本/开放任务拒绝)", status: pending, hours: 8 }
-  - { id: task-004, title: "CLI: scenario-matrix 运行与汇总", status: pending, hours: 5 }
-  - { id: task-005, title: "首次全矩阵运行+结果记录到 docs/validation", status: pending, hours: 6 }
-  - { id: task-006, title: "全量回归+交接记录+提交", status: pending, hours: 4 }
+  - { id: task-001, title: "矩阵跑台核心(场景定义+runner+报告)", status: completed, hours: 10 }
+  - { id: task-002, title: "种子场景×3(干净分类/脏数据/歧义标签)", status: completed, hours: 8 }
+  - { id: task-003, title: "种子场景×3(时间预测/小样本/开放任务拒绝)", status: completed, hours: 8 }
+  - { id: task-004, title: "CLI: scenario-matrix 运行与汇总", status: completed, hours: 5 }
+  - { id: task-005, title: "首次全矩阵运行+结果记录到 docs/validation", status: completed, hours: 6 }
+  - { id: task-006, title: "全量回归+交接记录+提交", status: completed, hours: 4 }

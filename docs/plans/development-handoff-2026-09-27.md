@@ -183,6 +183,12 @@ stop(iteration_id)
 
 北极星三差距(旅程串联/非专家可视化/三角血缘+成本)全部闭合。回归 1536 项全绿。
 
+### 第 5 轮 = 里程碑 M4 场景矩阵测量台（2026-09-27 完成）
+
+场景矩阵核心(ScenarioSpec/run_scenario/run_matrix)+6 内置场景+CLI+首跑 6/6 as_expected
+(报告 docs/validation/scenario-matrix-latest.json)。新增预测型目标的时间分区泄漏
+预警。已知缺口入 M5 队列:高基数目标早期警告。提交 c480380、b72498f。
+
 ### 候选下一轮（按用户试用反馈排序）
 
 - 试用模板（user-trial-log.md）回收后按专家介入点清单迭代

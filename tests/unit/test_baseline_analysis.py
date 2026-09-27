@@ -73,3 +73,21 @@ def test_forecast_shaped_goal_gets_leakage_warning(store):
     assert "泄漏" in warnings[0].message
     plain = propose_baseline_analysis(original, target_column="类别")
     assert not any("泄漏" in f.message for f in plain.findings)
+
+
+def test_high_cardinality_target_gets_wrong_column_warning(tmp_path):
+    """近乎全唯一的答案列得到「可能选错答案列」预警;抽取类任务不阻断。"""
+    service = IntakeService(tmp_path / "intake")
+    rows = "描述,工单编号\n" + "".join(f"问题{i},GD-{i:03d}\n" for i in range(1, 11))
+    session = service.create("根据描述生成工单编号", "tickets.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="工单编号")
+    warnings = [f for f in analysis.findings if "选错" in f.message or "唯一" in f.message]
+    assert warnings and "编号/ID" in warnings[0].message
+    # 正常分类目标不触发
+    normal = IntakeService(tmp_path / "intake2")
+    normal_rows = "描述,类别\n" + "".join(
+        f"问题{i},{'质量' if i % 2 else '物流'}\n" for i in range(1, 11)
+    )
+    session2 = normal.create("判断类别", "t.csv", normal_rows.encode())
+    analysis2 = propose_baseline_analysis(session2, target_column="类别")
+    assert not any("唯一" in f.message for f in analysis2.findings)
