@@ -114,3 +114,15 @@ def test_label_variants_are_flagged_for_cleanup(tmp_path):
         "多种写法" in f.message
         for f in propose_baseline_analysis(session2, target_column="类别").findings
     )
+
+
+def test_open_text_target_gets_honest_expectation_statement(tmp_path):
+    """开放文本答案在旅程开始就被告知:无自动评分,输出靠人工核对。"""
+    service = IntakeService(tmp_path / "intake")
+    long = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度。" * 3
+    rows = "描述,答复\n" + "".join(f"问题{i},{long}（变体{i}）\n" for i in range(1, 10))
+    session = service.create("根据客户问题生成标准答复", "replies.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="答复")
+    statements = [f for f in analysis.findings if "没有可执行的自动评分规则" in f.message]
+    assert statements and "人工核对" in statements[0].message
+    assert "业务评分规则" in statements[0].message

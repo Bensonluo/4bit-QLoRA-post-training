@@ -33,11 +33,15 @@ def _value_kind(session: IntakeSession, column: str) -> str:
     values = _column_values(session, column)
     if not values:
         return "unspecified"
+    # 长度优先:平均长度达到开放文本阈值的列即使取值不多也是开放任务
+    # (少样本的开放答复不应因去重数小被误判为类别)。
+    avg = sum(len(value) for value in values) / len(values)
+    if avg >= _OPEN_TEXT_MIN_AVG_LENGTH:
+        return "open_text"
     distinct = {value for value in values if value != ""}
     if len(distinct) <= _CATEGORICAL_MAX_DISTINCT:
         return "categorical"
-    avg = sum(len(value) for value in values) / len(values)
-    return "open_text" if avg >= _OPEN_TEXT_MIN_AVG_LENGTH else "unspecified"
+    return "unspecified"
 
 
 def propose_baseline_analysis(
@@ -161,6 +165,17 @@ def propose_baseline_analysis(
                 message=(
                     f"答案列存在同一业务含义的多种写法（{shown}）。模型会把它们当不同答案学习，"
                     "评测也会被判错；建议在原始数据中统一写法，或用转换规则(map_values)归一。"
+                ),
+            )
+        )
+    if _value_kind(session, target_column) == "open_text":
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    f"答案列「{target_column}」是开放文本。开放任务没有可执行的自动评分规则："
+                    "训练和对照可以正常进行,但对照只保留各模型的完整输出供你逐条人工核对,"
+                    "不会自动给出好坏分数。需要自动评分时,须先定义并确认业务评分规则。"
                 ),
             )
         )
