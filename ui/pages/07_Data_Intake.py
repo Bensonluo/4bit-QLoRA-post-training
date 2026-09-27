@@ -2677,6 +2677,34 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                     st.json(run["artifacts"])
                 if run["status"] == "succeeded":
                     st.success("本轮训练已完成。先比较开发集表现，独立测试集留待最终业务验收。")
+                    with st.expander("这次训练花了多少成本（如实估算）"):
+                        from src.utils.platform_utils import get_platform
+                        from src.workbench.cost_summary import cost_lines, summarize_run_cost
+
+                        api_price = st.number_input(
+                            "对比用 API 单价（元/百万 token，留 0 不对比）",
+                            min_value=0.0,
+                            value=0.0,
+                            step=1.0,
+                            key=f"api_price_{run_id}",
+                        )
+                        monthly = st.number_input(
+                            "预计月调用量（次，0 不对比）",
+                            min_value=0,
+                            value=0,
+                            step=10000,
+                            key=f"api_queries_{run_id}",
+                        )
+                        account = summarize_run_cost(
+                            run,
+                            device=get_platform().device,
+                            api_price_per_million_tokens=api_price or None,
+                            expected_monthly_queries=monthly or None,
+                        )
+                        for line in cost_lines(account):
+                            st.write(line)
+                        with st.expander("原始成本数据"):
+                            st.json(account)
                     from src.workbench.business_evaluation import (
                         BusinessEvaluationService,
                         EvaluationModel,

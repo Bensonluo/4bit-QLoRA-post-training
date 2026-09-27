@@ -188,6 +188,9 @@ def main():
         stopped.set()
         if "mlflow_status" not in result:
             result.update(mlflow_reference(config, record))
+        from datetime import datetime, timezone
+
+        result.update(finished_at=datetime.now(timezone.utc).isoformat())
         write_json(result_path, result)
     if (
         result["status"] == "failed"

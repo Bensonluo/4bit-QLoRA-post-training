@@ -1,0 +1,16 @@
+id: "milestone-003"
+title: "三角血缘打通 + 成本叙事"
+priority: "high"
+category: "feature"
+timeline: { estimated_start: "2026-09-27", estimated_end: "2026-10-05", estimated_hours: 40, buffer_percentage: 20 }
+success_criteria:
+  - "每个成功训练给出如实成本账:时长、设备、电费估算(假设明示)、可选 API 对比;页面与语言化摘要呈现"
+  - "模型↔实验↔数据版本三角可互查:从 MLflow Registry 版本反查 workbench run/数据版本,从 run 查 Registry 注册状态"
+  - "全量回归全绿 + 浏览器实测"
+tasks:
+  - { id: task-001, title: "成本账模块+worker计时+页面呈现", status: in_progress, hours: 8 }
+  - { id: task-002, title: "语言化成本摘要(大白话)", status: pending, hours: 4 }
+  - { id: task-003, title: "run→Registry 注册状态反查", status: pending, hours: 8 }
+  - { id: task-004, title: "Registry 版本→run/数据版本反查(CLI+页面)", status: pending, hours: 8 }
+  - { id: task-005, title: "三角血缘集成测试", status: pending, hours: 6 }
+  - { id: task-006, title: "全量回归+走查记录+提交", status: pending, hours: 4 }
