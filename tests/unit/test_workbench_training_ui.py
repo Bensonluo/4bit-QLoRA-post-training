@@ -556,3 +556,29 @@ def test_stale_prepared_run_cannot_offer_a_dead_start_button(training_page, monk
     assert [b.disabled for b in starts] == [False]  # 只有当前数据版本的方案可启动
     assert any("旧数据版本" in caption.value for caption in page.caption)
     assert calls == []
+
+
+def test_manual_training_parameters_have_plain_language_guidance(training_page):
+    """手工训练参数表单带大白话指引与推荐起步值,零密钥用户不必盲填参数。"""
+    _, session, page, _, _ = training_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    captions = "\n".join(caption.value for caption in page.caption)
+    assert "参数大白话" in captions
+    for keyword in (
+        "训练轮数",
+        "每设备 batch size",
+        "梯度累积步数",
+        "学习率",
+        "LoRA rank",
+        "4-bit 量化",
+        "最大 token 长度",
+    ):
+        assert keyword in captions, f"缺少参数「{keyword}」的大白话解释"
+    assert "推荐起步值（小数据）" in captions
+    assert "0.0002" in captions and "2e-4" in captions
+    assert "LoRA rank 8" in captions
+    # 指引与表单同时在场:默认值即推荐起步值,用户可以直接准备训练
+    next(t for t in page.text_input if t.label == "本地基础模型目录")
+    next(b for b in page.button if b.label == "准备本轮训练方案")

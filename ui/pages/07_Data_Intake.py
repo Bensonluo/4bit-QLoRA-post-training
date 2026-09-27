@@ -2551,6 +2551,19 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
     if next_action(session) == "ready_for_training_preflight":
         show_training_recommendations()
         with st.expander("高级：手工配置训练参数"):
+            st.caption(
+                "参数大白话：**训练轮数**＝全部数据过几遍，少了学不会、多了把题背死；"
+                "**每设备 batch size**＝每一步一起看几条数据，显存不够就保持 1；"
+                "**梯度累积步数**＝攒几步再更新一次，相当于变相加大 batch；"
+                "**学习率**＝每一步改动多大，太大训练发飘、太小学得慢；"
+                "**LoRA rank**＝适配器记多大本事的容量，小任务 8 够用，越大越占显存；"
+                "**4-bit 量化**＝显存放不下完整模型才开（仅限兼容的 NVIDIA 显卡）；"
+                "**最大 token 长度**＝每条样本最多装多少内容，按训练前检查的建议填。"
+            )
+            st.caption(
+                "推荐起步值（小数据）：训练轮数 1–2、每设备 batch size 1、梯度累积步数 4、"
+                "学习率 0.0002（即 2e-4）、LoRA rank 8——与下方表单默认值一致；先跑通再调。"
+            )
             with st.form(f"prepare_training_{session.session_id}"):
                 training_model_path = st.text_input(
                     "本地基础模型目录", placeholder="包含基础模型权重、配置和 tokenizer 的目录"
