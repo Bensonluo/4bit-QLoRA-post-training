@@ -133,3 +133,13 @@ def test_zero_agent_journey_from_goal_to_trained_adapter(journey):
     assert result["status"] == "succeeded", training.read_logs(record["run_id"], tail=50)
     manifest = json.loads(Path(result["artifacts"]["manifest"]).read_text())
     assert manifest["dataset_version"] == session.dataset.version
+    # ⑩ 文档-产品漂移守卫：试用剧本引用的盲标核验文案必须与服务层真实文案逐字一致。
+    trial_log = (
+        Path(__file__).resolve().parents[2] / "docs" / "validation" / "user-trial-log.md"
+    ).read_text(encoding="utf-8")
+    marker = "盲标核验 verdict_note:"
+    anchored = [line for line in trial_log.splitlines() if marker in line]
+    assert anchored, "试用文档缺少「产品原文锚点」中的盲标核验 verdict_note 行"
+    assert anchored[0].split(marker, 1)[1].strip() == verdict["verdict_note"], (
+        "试用文档与产品文案漂移：请同步更新 docs/validation/user-trial-log.md 的锚点行"
+    )
