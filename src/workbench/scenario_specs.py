@@ -193,6 +193,39 @@ _WHITESPACE_TARGET_FULL = (
     "编号,客户描述,类别\n" + "".join(f"{i:03d},问题{i},   \n" for i in range(1, 11))
 ).encode()
 
+# 单格 3 万字符:一条记录的输入单元格粘贴了精确 30 000 字符的运行日志(含逗号,
+# 按 CSV 规范加引号,引号内逗号不是分隔符);其余行是普通短文本。
+# 行号嵌入日志开头,保证长格内容唯一(内容全同的长格会按重复输入被检出)。
+_LOG_LINE_UNIT = "2026-09-27 10:23:01 INFO 收到客户端请求,开始处理订单,读取配置42项,回源187ms;"
+
+
+def _long_single_cell(row_tag: str) -> str:
+    head = f"{row_tag} 2026-09-27 10:23:01 收到客户端请求,开始处理订单;"
+    return (head + _LOG_LINE_UNIT * 700)[:30_000]
+
+
+def _long_single_cell_text(full: bool) -> str:
+    import csv as _csv
+    import io as _io
+
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer, lineterminator="\n")
+    writer.writerow(("编号", "客户描述", "类别"))
+    for i in range(1, 11):
+        if not full and i == 2:  # 样例第 2 行带 3 万字符长格
+            writer.writerow(("002", _long_single_cell("工单002"), "物流"))
+        elif full and i == 5:  # 全量第 5 行带同形态长格(行号嵌入,内容不同)
+            writer.writerow(("005", _long_single_cell("工单005"), "物流"))
+        else:
+            writer.writerow((f"{i:03d}", f"问题{i}", "质量" if i % 2 else "物流"))
+    return buffer.getvalue()
+
+
+_LONG_SINGLE_CELL_SAMPLE = "".join(
+    _long_single_cell_text(full=False).splitlines(keepends=True)[:3]
+).encode()
+_LONG_SINGLE_CELL_FULL = _long_single_cell_text(full=True).encode()
+
 
 def _long_line_text() -> str:
     import csv as _csv
@@ -690,6 +723,26 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "但既不静默跳过也不带病通过,拦截关卡与报错同真空值完全一致;用户须补真标签"
             ),
             tags=("dirty-data", "whitespace"),
+        ),
+        ScenarioSpec(
+            scenario_id="extreme-long-single-cell",
+            goal="根据客户粘贴的运行日志判断问题类别",
+            sample=_LONG_SINGLE_CELL_SAMPLE,
+            sample_name="工单.csv",
+            full=_LONG_SINGLE_CELL_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:单个输入单元格精确 3 万字符(按 CSV 规范加引号,引号内逗号"
+                "不是分隔符),入口读取完整无截断,预览原样进入(零密钥数据层不截断),"
+                "全量验证无 blocking,全旅程通过。已知边界:「2000 字符展示截断」只是 "
+                "Agent 工具的展示层惯例(原始值保留本地,read_cell_content 按 offset/limit"
+                " 分页可读全),不是数据层截断;训练期是否截断由训练前预检用真实 tokenizer"
+                " 测量,语义是否受影响由用户在真实预览核对。对照事实:未按 CSV 规范加引号的"
+                "长格(逗号裸奔)在 create 即按「列数与表头不一致」拒绝,规范内的完整通过"
+            ),
+            tags=("long-text", "boundary-note"),
         ),
     ]
 

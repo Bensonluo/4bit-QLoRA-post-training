@@ -1,5 +1,8 @@
 """场景矩阵:干净分类场景应一路通过;脏数据与歧义标签应被对应关卡诚实拦下。"""
 
+import csv
+import io
+
 from src.workbench.scenario_matrix import ScenarioSpec, run_matrix, run_scenario
 from src.workbench.scenario_specs import builtin_scenarios
 
@@ -123,7 +126,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 28, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 29, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -354,3 +357,40 @@ def test_whitespace_only_values_treated_as_missing(tmp_path):
     for row in session.preview.rows:
         assert row.target is None, row
         assert any("缺少监督答案" in issue for issue in row.issues), row
+
+
+def test_extreme_long_single_cell_passes_full_journey(tmp_path):
+    """场景 29:单格精确 3 万字符——入口与预览完整无截断,全旅程通过;截断风险边界如实钉住。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "extreme-long-single-cell" in specs, "缺少场景 extreme-long-single-cell"
+
+    spec = specs["extreme-long-single-cell"]
+    # 夹具真实性:样例与全量各含一条精确 30 000 字符的输入单元格(按 CSV 规范加引号)
+    def cell_lengths(blob: bytes) -> list[int]:
+        rows = list(csv.reader(io.StringIO(blob.decode())))
+        return [len(row[1]) for row in rows[1:]]
+
+    assert 30_000 in cell_lengths(spec.sample), "样例应含一条 3 万字符单元格"
+    assert 30_000 in cell_lengths(spec.full), "全量应含一条 3 万字符单元格"
+    assert max(cell_lengths(spec.full)) == 30_000, "全量最长单元格就是这 3 万字符"
+
+    result = run_scenario(spec, tmp_path / "extreme-long-single-cell")
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 入口与预览事实:单元格原样保留(零密钥数据层不截断),预览完整进入
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "extreme-long-single-cell-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    long_cell = max(
+        (row.values["客户描述"] for row in session.source.rows), key=len
+    )
+    assert len(long_cell) == 30_000, "入口读取不应截断单元格"
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    long_row = max(session.preview.rows, key=lambda row: len(row.input))
+    assert len(long_row.input) >= 30_000, "预览应原样携带 3 万字符输入"
+    assert long_row.status == "ready", long_row
