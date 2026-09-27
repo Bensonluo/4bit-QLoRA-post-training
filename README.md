@@ -2,7 +2,7 @@
 
 # TuneSmith 🔨
 
-**A fine-tuning workbench for small businesses and individuals who cannot hire an algorithm engineer. Start with a business goal and sample data; an Agent helps clarify the task, diagnose data gaps and preview a processing recipe. Existing local training, evaluation and model management support the next steps.**
+**A fine-tuning workbench for small businesses and individuals who cannot hire an algorithm engineer. Start with a business goal and sample data; an Agent helps clarify the task, diagnose data gaps and preview a processing recipe. A built-in semantic safety layer — blind label verification, contrast checks and a learnability probe — keeps the business judgments only you can make from silently passing. Existing local training, evaluation and model management support the next steps.**
 
 The goal-and-data workflow is under active development. Sample analysis, real conversion previews, full-data validation, training and iteration are connected and have been exercised with fictional data on local hardware. Real customer acceptance and demonstrated business benefit remain open. [North star & product goals](docs/plans/north-star.md) · [Configure your Agent provider (BYOK)](docs/agent-setup.md)
 
@@ -79,11 +79,11 @@ The existing implementation provides the training and evaluation foundation: SFT
 | Up to 14B on 64GB | 84% VRAM savings | Cost estimation |
 | Zero-config detect | Multi-GPU scale-out | Deploy recommendations |
 
-| 🤝 Agent Intake | 🛡️ Long-Tail | 🔁 Iteration |
-|:---:|:---:|:---:|
-| BYOK analysis agent | Sandboxed adapter code | Frozen eval suites |
-| Goal + data joint diagnosis | Real OS isolation | Base / parent / round compare |
-| Real before/after previews | Business cases + counterexamples | Adopt / iterate / stop |
+| 🤝 Agent Intake | 🛡️ Semantic Safety | 🧪 Long-Tail | 🔁 Iteration |
+|:---:|:---:|:---:|:---:|
+| BYOK analysis agent | Blind label verification | Sandboxed adapter code | Frozen eval suites |
+| Goal + data joint diagnosis | Contrast checks (no blind nodding) | Real OS isolation | Base / parent / round compare |
+| Real before/after previews | Learnability probe + scenario matrix | Business cases + counterexamples | Adopt / iterate / stop |
 
 | 📈 Stats | | |
 |:---:|:---:|:---:|
@@ -109,7 +109,7 @@ The primary entry point. Describe a business goal in plain language, upload samp
 
 ```text
 goal + samples ─▶ joint diagnosis & clarifying questions ─▶ data recipe + real before/after previews
-  ─▶ user confirms meaning ─▶ full-data validation ─▶ grouped train/val/test partitions (content-hash versioned)
+  ─▶ user proves meaning (contrast pairing + blind labeling) ─▶ full-data validation ─▶ grouped train/val/test partitions (content-hash versioned)
   ─▶ tokenizer preflight (real truncation & answer-loss stats) ─▶ agent-recommended training plan
   ─▶ local training (one authorized OOM recovery) ─▶ baseline vs fine-tuned on the same frozen dev set
   ─▶ bad-case evidence ─▶ next-round hypothesis ─▶ second round under a frozen eval suite
@@ -122,6 +122,8 @@ The whole loop lives on one page (**目标与数据**, `ui/pages/07_Data_Intake.
 
 | Property | What it means |
 |---|---|
+| Semantic safety layer (task-agnostic) | 盲标核验 hides existing answers and asks you to label samples yourself; 对比核验 makes you pair answers to the right inputs instead of nodding through a preview; a learnability probe estimates whether the data can learn the task before GPU-hours are spent — these checks block training when they fail, because misjudged business meaning silently poisons everything downstream |
+| Scenario matrix regression | A growing matrix of 16+ input scenarios (GBK encodings, wide tables, mixed types, punctuation variants, …) runs as honest regression — each scenario records expected-vs-actual so coverage claims stay checkable |
 | Business confirmation, not code review | Users validate meaning through real transformation previews (raw row → model input → answer); agent-drafted long-tail adapter code is verified against business cases **and counterexamples** before use, never executed unreviewed on real data |
 | Real isolation for long-tail code | Adapter / custom-scoring code runs only inside Docker (`--network=none`, read-only, `--cap-drop=ALL`, non-root, pids/memory limits) or macOS Seatbelt (deny-by-default profile); no host fallback — an unavailable backend returns `unavailable`, not a silent bypass |
 | Content-hash identity | Base weights, data versions, and eval protocols are identified by SHA-256 of actual content; a changed file invalidates stale confirmations and cached comparisons instead of reusing them |
@@ -516,6 +518,7 @@ python scripts/launch_dashboard.py  # Starts both MLflow + Streamlit
 **Platform foundation (shipped):**
 
 - [x] Cross-platform training (NVIDIA / Apple Silicon / CPU)
+- [x] Semantic safety layer: blind label verification, contrast checks, learnability probe, scenario matrix regression
 - [x] SFT + DPO + GRPO + Domain Adaptation
 - [x] Streamlit dashboard (8 pages) + MLflow tracking + Model Registry
 - [x] Distributed training (FSDP / DeepSpeed / DDP)
@@ -552,13 +555,14 @@ If this project helped you fine-tune on budget hardware, please ⭐ star the rep
 
 ## 🇨🇳 中文说明
 
-**面向小公司和个人使用者的微调工作台** — 从业务目标和样例数据出发:分析 Agent(自带模型服务,支持智谱 GLM / 本地模型 / OpenAI 兼容端点)联合分析目标与数据、产出可执行的数据处理方案与真实转换预览;再经全量数据校验、独立分区物化、训练前 token 预检、训练方案推荐、本地训练、基座/微调同开发集对照、坏例诊断,进入固定题集下的第二轮改进与最终业务验收。训练底座在消费级硬件上微调 0.6B–14B 大模型(前身为 4-bit QLoRA 后训练框架)。
+**面向小公司和个人使用者的微调工作台** — 从业务目标和样例数据出发:分析 Agent(自带模型服务,支持智谱 GLM / 本地模型 / OpenAI 兼容端点)联合分析目标与数据、产出可执行的数据处理方案与真实转换预览;再经对比核验与盲标核验确认监督语义、全量数据校验、独立分区物化、训练前 token 预检、训练方案推荐、本地训练、基座/微调同开发集对照、坏例诊断,进入固定题集下的第二轮改进与最终业务验收。训练底座在消费级硬件上微调 0.6B–14B 大模型(前身为 4-bit QLoRA 后训练框架)。
 
 > 当前状态:完整闭环已在本地用虚构数据端到端验证(真实 Qwen3 训练 + 真实 GLM 分析,证据见 `docs/validation/`);真实客户任务与业务验收尚未完成。
 
 ### 核心亮点
 
 - **目标与数据主线**:目标 + 样例 → Agent 联合分析 → 预览确认 → 全量校验 → 分区 → 训练 → 对照 → 下一轮
+- **语义安全层(与任务类型无关)**:盲标核验(隐藏答案让用户自己标)、对比核验(配对选择,防盲点头)、可学性探针(训练前探明可学性)、确定性门禁——业务语义判断不静默通过;场景矩阵持续回归输入形态边界(编码、宽表、混合类型、标点变体等)
 - **跨平台训练**:自动检测 NVIDIA GPU(4-bit QLoRA)/ Apple Silicon(bf16 MPS)/ CPU
 - **四种后训练技术**:SFT(监督微调)、DPO(直接偏好优化)、GRPO(组相对策略优化,可插拔奖励)、领域适配
 - **Streamlit 全生命周期面板**:目标与数据 → 配置训练 → 监控 → 评估 → 对比 → 对话,8 个页面
