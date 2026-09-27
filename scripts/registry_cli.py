@@ -256,5 +256,39 @@ def register(
     )
 
 
+@app.command()
+def lineage(
+    model_name: str = typer.Option(..., "--model-name", "-n"),
+    version: str = typer.Option(..., "--version", "-v"),
+    tracking_uri: str | None = typer.Option(None, "--tracking-uri"),
+):
+    """Trace a registry version back to its workbench run and dataset version.
+
+    模型 → 训练运行 → 数据版本,三角血缘的反向边;只读查询。
+    """
+    from src.workbench.registry_link import version_lineage
+
+    uri = tracking_uri or str(Path("outputs/workbench/training/mlflow.db"))
+    if not Path(uri.removeprefix("sqlite:///")).exists() and tracking_uri is None:
+        uri = str(Path("outputs/mlruns"))
+    result = version_lineage(model_name, version, uri if "sqlite" in uri else f"sqlite:///{uri}")
+    if result.get("status") == "workbench":
+        console.print(
+            Panel(
+                f"模型: {result['model']}\n"
+                f"训练运行: {result['workbench_run_id']}\n"
+                f"数据版本: {result['dataset_version']}\n"
+                f"训练数据: {result.get('training_dataset', '-')}\n"
+                f"配置摘要: {result.get('config_digest', '-')[:12]}…",
+                title="三角血缘(workbench)",
+            )
+        )
+    else:
+        console.print(
+            f"[yellow]{result.get('model', '')} — {result.get('status')}[/yellow]"
+            f" {result.get('message', '')}"
+        )
+
+
 if __name__ == "__main__":
     app()

@@ -72,3 +72,48 @@ def run_registration_status(run_id: str, tracking_uri: str) -> dict[str, Any]:
             "status": "lookup_failed",
             "message": f"模型库查询失败:{exc}",
         }
+
+
+def version_lineage(model_name: str, version: str | int, tracking_uri: str) -> dict[str, Any]:
+    """Reverse edge: registry version → workbench run → dataset version (read-only)."""
+    try:
+        from mlflow.tracking import MlflowClient
+    except ImportError:
+        return {"model": f"{model_name} v{version}", "status": "mlflow_unavailable"}
+    try:
+        client = MlflowClient(tracking_uri=tracking_uri)
+        model_version = client.get_model_version(name=model_name, version=str(version))
+        mlflow_run_id = getattr(model_version, "run_id", None) or ""
+        if not mlflow_run_id:
+            return {
+                "model": f"{model_name} v{version}",
+                "status": "no_source_run",
+                "message": "该版本没有关联的训练运行记录（可能是手工注册的目录）。",
+            }
+        run = client.get_run(mlflow_run_id)
+        tags = run.data.tags
+        params = run.data.params
+        if "workbench.run_id" in tags:
+            return {
+                "model": f"{model_name} v{version}",
+                "status": "workbench",
+                "workbench_run_id": tags["workbench.run_id"],
+                "mlflow_run_id": mlflow_run_id,
+                "dataset_version": tags.get("workbench.dataset_version"),
+                "config_digest": tags.get("workbench.config_digest"),
+                "training_dataset": params.get("data.dataset_name"),
+                "metrics": dict(run.data.metrics),
+            }
+        return {
+            "model": f"{model_name} v{version}",
+            "status": "external",
+            "mlflow_run_id": mlflow_run_id,
+            "base_model": params.get("model.name"),
+            "message": "该版本来自旧体系或其他训练入口;血缘以 MLflow 参数为准。",
+        }
+    except Exception as exc:
+        return {
+            "model": f"{model_name} v{version}",
+            "status": "lookup_failed",
+            "message": f"血缘查询失败:{exc}",
+        }
