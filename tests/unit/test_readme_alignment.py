@@ -308,3 +308,27 @@ def test_formula_cells_docs_pinned_and_backed_by_matrix():
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "formula-cells-in-target-column" in scenarios, "场景矩阵缺少公式格场景"
     assert scenarios["formula-cells-in-target-column"].expect == "blocked_at:confirm_sample"
+
+
+def test_hidden_rows_docs_pinned_and_backed_by_matrix():
+    """Excel 隐藏行/列文档:hidden_note/照常读入/不自动排除/xls 边界关键句钉死,
+    由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 多份资料一起分析",
+        "### 长尾字段解析与受限适配",
+    )
+    assert "hidden_note" in section
+    assert "隐藏行照常读入" in section
+    assert "Excel 中看不到的行也会进入分析与训练" in section
+    assert "没有自动排除" in section, "不自动排除的语义安全边界必须写明"
+    assert "隐藏列仍出现在可用字段中" in section, "隐藏列的影响面必须写明"
+    assert "未读取 sheet 的隐藏不列入" in section
+    assert "xls 引擎不提供隐藏标志，不检测" in section
+
+    # 场景矩阵背书:hidden-rows-in-sheet 场景真实存在且结局被钉住(披露不阻断)
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "hidden-rows-in-sheet" in scenarios, "场景矩阵缺少隐藏行场景"
+    assert scenarios["hidden-rows-in-sheet"].expect == "passes"

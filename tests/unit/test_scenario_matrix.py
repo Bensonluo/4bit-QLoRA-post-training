@@ -332,6 +332,57 @@ def test_formula_cells_in_target_column_blocked_at_confirm_sample(tmp_path):
     # 有缓存值的公式格正常读取不误报(cached fixture 由 test_sources 的 XML 补丁夹具钉住)
 
 
+def test_hidden_rows_in_sheet_passes_with_disclosure(tmp_path):
+    """场景 44:隐藏行照常读入且全程不拦(隐藏行带着有效标签,筛选只是视图)——
+    hidden_note 在 create 即点名行号与「没有自动排除」;夹具真实隐藏由 openpyxl 复核。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "hidden-rows-in-sheet" in specs, "缺少场景 hidden-rows-in-sheet"
+
+    spec = specs["hidden-rows-in-sheet"]
+
+    # 夹具真实性:样例/全量的数据区确有隐藏行(openpyxl 重读复核,防夹具漂移成普通表)
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    for blob, expected in ((spec.sample, {3, 4}), (spec.full, {7, 8})):
+        sheet = load_workbook(BytesIO(blob), read_only=False)["工单表"]
+        hidden = {index for index, dim in sheet.row_dimensions.items() if dim.hidden}
+        assert hidden == expected, f"夹具隐藏行 {hidden} 应为 {expected}"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()  # 披露不阻断:八关全过
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # create 即点名:隐藏行照常读入(002/003 都在数据里),hidden_note 点名行号与不自动排除
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "hidden-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert [row.values["编号"] for row in session.source.rows] == [
+        "001",
+        "002",
+        "003",
+        "004",
+    ], "隐藏行照常读入,Excel 里看不到的行也在数据里"
+    assert [row.values["类别"] for row in session.source.rows] == [
+        "质量",
+        "物流",
+        "质量",
+        "物流",
+    ]
+    note = session.source.hidden_note
+    assert (
+        "2 个隐藏行" in note
+        and "第 3 行" in note
+        and "第 4 行" in note
+        and "照常读入" in note
+        and "没有自动排除" in note
+    ), note
+    assert session.profile["hidden_note"] == note  # profile 同步如实呈现
+
+
 def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
     """场景 40:重复表头行两侧同现——样例侧不拦(同场景 30 的不对称边界),全量侧硬拦
     (同场景 22),组合结局由全量侧决定:validate_full 拦下,不会带病物化。"""
@@ -361,7 +412,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 43, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 44, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0

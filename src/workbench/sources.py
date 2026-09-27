@@ -145,32 +145,47 @@ def _excel_sheet_note(sheet_names: list[str], read_name: str, explicit: bool) ->
 
 def _excel_notes(
     data: bytes, sheet_name: str, columns: list[str], row_count: int
-) -> tuple[str, str]:
-    """xlsx 合并单元格与无缓存公式格的如实说明:点名数据区内的两类空值根因,不自动修复。
+) -> tuple[str, str, str]:
+    """xlsx 合并单元格、无缓存公式格与隐藏行/列的如实说明:点名事实,不自动修复。
 
     pandas 走 openpyxl 只读模式读值:合并区除左上角外均读为空串;公式格只有
     缓存计算结果才读得到值,由脚本/报表工具写出的 xlsx 常常没有缓存,同样读为
     空串——用户被「缺少监督答案」拦下时无从知道根因。openpyxl 完整加载能拿到
     合并范围与公式格清单(只读模式没有这些),据此如实点名;带缓存值的公式格
-    正常读取,不列入。完全落在数据区之外或未读取 sheet 的情况不涉及本次读取,
-    不列入。
+    正常读取,不列入。隐藏行/列(筛选后保存或手工隐藏)读取时照常进数据——
+    Excel 里看不到的行也会进入分析与训练,同样点名;是否取消隐藏、删除不需要
+    的行列由用户决定,没有自动排除。完全落在数据区之外或未读取 sheet 的情况
+    不涉及本次读取,不列入。
     """
     from openpyxl import load_workbook
+    from openpyxl.utils import column_index_from_string
 
     book = load_workbook(io.BytesIO(data), read_only=False)
     try:
-        merged = sorted(
-            book[sheet_name].merged_cells.ranges, key=lambda item: (item.min_row, item.min_col)
-        )
+        sheet = book[sheet_name]
+        merged = sorted(sheet.merged_cells.ranges, key=lambda item: (item.min_row, item.min_col))
         # 数据区公式格:(表头名, 坐标)。data_type=='f' 的格读取时若无比文件缓存值则读空。
         formulas = [
             (columns[cell.column - 1], cell.coordinate)
-            for row in book[sheet_name].iter_rows(
+            for row in sheet.iter_rows(
                 min_row=2, max_row=row_count + 1, min_col=1, max_col=len(columns)
             )
             for cell in row
             if cell.data_type == "f"
         ]
+        # 隐藏行/列(数据区内):筛选后保存或手工隐藏的行列读取时照常进数据。
+        hidden_rows = sorted(
+            index
+            for index, dim in sheet.row_dimensions.items()
+            if dim.hidden and 2 <= index <= row_count + 1
+        )
+        hidden_columns = []
+        for letter, dim in sorted(sheet.column_dimensions.items()):
+            if not dim.hidden:
+                continue
+            position = column_index_from_string(letter)
+            if 1 <= position <= len(columns):
+                hidden_columns.append(columns[position - 1])
     finally:
         book.close()
     cached: set[str] = set()
@@ -207,7 +222,23 @@ def _excel_notes(
             "这些公式读为空值，涉及答案列时这些行会按缺少监督答案处理。"
             "请用 Excel 等软件打开并保存以生成计算结果；没有自动计算。"
         )
-    return merged_note, formula_note
+    hidden_note = ""
+    if hidden_rows:
+        described = [f"第 {index} 行" for index in hidden_rows[:5]]
+        listing = "、".join(described) + ("等" if len(hidden_rows) > 5 else "")
+        hidden_note += (
+            f"该 sheet 含 {len(hidden_rows)} 个隐藏行（{listing}）："
+            "隐藏行照常读入——Excel 中看不到的行也会进入分析与训练。"
+            "请取消隐藏并删除不需要的行；没有自动排除。"
+        )
+    if hidden_columns:
+        listed = "、".join(hidden_columns[:5]) + ("等" if len(hidden_columns) > 5 else "")
+        hidden_note += (
+            f"该 sheet 含 {len(hidden_columns)} 个隐藏列（{listed}）："
+            "隐藏列照常读入——Excel 中看不到的列也会出现在可用字段中。"
+            "请删除不需要的列；没有自动排除。"
+        )
+    return merged_note, formula_note, hidden_note
 
 
 def read_source(
@@ -223,15 +254,16 @@ def read_source(
 
     sheet 选择仅对 Excel 有效：按名称或 1 起始的序号指定工作表，None（默认）
     读第一个 sheet，读取行为与此前完全一致。xlsx 读取的 sheet 存在与数据区
-    相交的合并单元格、或数据区存在没有缓存计算结果的公式格时，来源分别携带
-    merged_note / formula_note 如实点名（合并区除左上角外、无缓存公式格均读
-    为空值）；不自动填充、不自动计算，修复由用户决定。
+    相交的合并单元格、数据区存在没有缓存计算结果的公式格、或数据区存在
+    隐藏行/列时，来源分别携带 merged_note / formula_note / hidden_note
+    如实点名（合并区除左上角外、无缓存公式格均读为空值；隐藏行/列照常
+    读入）；不自动填充、不自动计算、不自动排除，修复由用户决定。
     """
     suffix = Path(name).suffix.lower().lstrip(".")
     digest = hashlib.sha256(data).hexdigest()
     records: list[tuple[int, dict[str, Any]]] = []
     actual_encoding, actual_delimiter = "", ""
-    resolved_sheet, sheet_note, merged_note, formula_note = "", "", "", ""
+    resolved_sheet, sheet_note, merged_note, formula_note, hidden_note = "", "", "", "", ""
     if suffix in {"csv", "jsonl"}:
         if sheet is not None:
             raise ValueError(f"sheet 选择仅对 Excel 文件有效；当前文件是 {suffix}。")
@@ -287,12 +319,12 @@ def read_source(
         sheet_names = list(book.sheet_names)
         if len(sheet_names) > 1:
             sheet_note = _excel_sheet_note(sheet_names, resolved_sheet, explicit)
-        # xlsx 检测与数据区相交的合并单元格和数据区内无缓存值的公式格
-        # (xls 引擎不提供合并范围与公式清单,不检测——如实边界)。
-        merged_note, formula_note = (
+        # xlsx 检测与数据区相交的合并单元格、数据区内无缓存值的公式格与
+        # 数据区内的隐藏行/列 (xls 引擎不提供这些信息,不检测——如实边界)。
+        merged_note, formula_note, hidden_note = (
             _excel_notes(data, resolved_sheet, columns, len(records))
             if suffix == "xlsx"
-            else ("", "")
+            else ("", "", "")
         )
     else:
         raise ValueError("当前数据入口支持 CSV、Excel、JSONL。")
@@ -313,6 +345,7 @@ def read_source(
         sheet_note=sheet_note,
         merged_note=merged_note,
         formula_note=formula_note,
+        hidden_note=hidden_note,
         columns=columns,
         rows=rows,
     )
@@ -407,4 +440,6 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
         profile["merged_note"] = source.merged_note
     if source.formula_note:
         profile["formula_note"] = source.formula_note
+    if source.hidden_note:
+        profile["hidden_note"] = source.hidden_note
     return profile

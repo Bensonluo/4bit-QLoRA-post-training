@@ -48,6 +48,13 @@ class SampleSource(Contract):
         "是否用 Excel 打开保存以生成计算结果由用户决定。带缓存值的公式格正常读取、"
         "不列入。当前仅 xlsx 检测，xls 不检测。",
     )
+    hidden_note: str = Field(
+        default="",
+        description="Excel 隐藏行/列的如实说明（读取的 sheet 的数据区存在隐藏行或隐藏列时"
+        "非空）：点名行号/列名、说明隐藏行/列照常读入——Excel 中看不到的行列也会进入"
+        "分析与训练；不自动排除，是否取消隐藏、删除不需要的行列由用户决定。"
+        "当前仅 xlsx 检测，xls 不检测。",
+    )
     columns: list[str]
     rows: list[SourceRow]
 

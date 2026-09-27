@@ -842,3 +842,52 @@ full-sources)。历史记录不改写,本条如实更正:对称性在本轮补�
   sources.py、src/workbench/scenario_specs.py、tests/unit/test_sources.py、
   tests/unit/test_scenario_matrix.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 26 轮 = Excel 隐藏行/列如实点名 hidden_note + 矩阵场景 44(恢复循环第 7 轮)
+
+(恢复的北极星打磨循环,第 7 轮。)核心痛点:AutoFilter 筛选后直接保存、或手工隐藏
+旧行/列的 Excel,读取时隐藏行/列照常进数据——用户以为「筛选掉的就是排除了」,
+实际 Excel 里看不到的行全部进入分析与训练,隐藏列也仍出现在可用字段中。与多
+Sheet 静默忽略(第 18 轮)、合并单元格静默空读(第 24 轮)、公式无缓存静默空读
+(第 25 轮)同源:事实不可见,不是判断错误。
+
+- **hidden_note 如实点名**(`sources.py` + `intake_models.py`):探针实测
+  pd.read_excel/ExcelFile 把隐藏行/列当普通数据读入,openpyxl 完整加载
+  (`load_workbook(read_only=False)`,与 merged/formula 检测共享同一次加载,
+  `_excel_notes` 因此从二元组扩为三元组,隐藏检测零额外 IO)暴露
+  `row_dimensions[N].hidden` 与 `column_dimensions[字母].hidden`。数据区(行
+  2..行数+1、列 1..列数——表头行与数据区之外不列入)存在隐藏行/列时,来源携带
+  hidden_note:「该 sheet 含 2 个隐藏行（第 3 行、第 4 行）：隐藏行照常读入——
+  Excel 中看不到的行也会进入分析与训练。请取消隐藏并删除不需要的行；没有自动
+  排除。」隐藏列按表头名列出、追加第二段(隐藏列照常读入、仍出现在可用字段中);
+  行/列各自超过 5 个以「等」收尾(与 sheet_note/merged_note/formula_note 同口径);
+  未读取 sheet 的隐藏不列入;随 SampleSource 契约字段持久化(第 19 轮正道),
+  profile 同步呈现。读取行为不变:**不自动排除**——隐藏行可能是有意保留的数据
+  (筛选只是视图),是否取消隐藏、删除不需要的行列由用户决定(语义安全原则:不猜
+  业务语义)。仅 xlsx(xls 引擎不提供隐藏标志,如实不检测)。
+- **矩阵场景 44「隐藏行照常读入」**(`hidden-rows-in-sheet`,先探针后定局):
+  样例第 3/4 行隐藏(002/003,AutoFilter 筛选后保存的形态)且隐藏行带有效标签
+  (物流/质量),全量第 7/8 行隐藏(006/007)。实测结局:create 不拦、hidden_note
+  即时点名,隐藏行照常读入参与全部旅程——对比核验用答案不同的已标注行配对,
+  样例确认/全量验证/盲标/物化全部通过,**八关全过,expect=passes**。定局:**披露
+  不阻断**——与前两轮(合并/公式→缺标签硬拦)方向相反但原则同一:合并区非首格
+  与无缓存公式读为空值,走通用缺标签门拦下,根因披露是锦上添花;隐藏行是完整
+  有效数据,拦下反而错(用户可能有意保留),hidden_note 的价值是把「Excel 里
+  看不到却在训练里」的事实点名给用户,去留由用户裁决。对照事实(探针实测并入
+  expect_note):隐藏列同样照常读入且按表头名列出;表头行/数据区之外/未读取
+  sheet 的隐藏不列入;xls 不检测。测试另钉:夹具真实隐藏由 openpyxl 重读复核
+  (防夹具漂移成普通表)、create 后 002/003 都在数据里、profile 与来源的
+  hidden_note 一致。矩阵 43→44,44/44 as_expected。
+- **文档钉死**(agent-setup.md + test_readme_alignment 18→19):多份资料小节新增
+  隐藏行/列段——hidden_note 逐字示例、隐藏行照常读入(Excel 中看不到的行也会
+  进入分析与训练)、隐藏列仍出现在可用字段中、没有自动排除、表头行/数据区
+  之外/未读取 sheet 不列入、xls 不检测;钉测试断言关键句且由场景矩阵
+  hidden-rows-in-sheet 真实存在(expect=passes)背书。
+- 回归:test_sources 20→25(照常读入/隐藏列按表头名/区域与 sheet 过滤/前五上限/
+  服务层持久化)、test_scenario_matrix 31→32(全集下限 43→44)、test_readme_
+  alignment 18→19;邻接套件(multisource/full_data/composed/data_intake/
+  baseline_analysis 域)83 passed;ruff check/format clean。全量回归 **tests/unit
+  1720 passed / 0 failed**(--no-cov,无排除,170.44s)。本批只动 src/workbench/
+  intake_models.py、src/workbench/sources.py、src/workbench/scenario_specs.py、
+  tests/unit/test_sources.py、tests/unit/test_scenario_matrix.py、
+  tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

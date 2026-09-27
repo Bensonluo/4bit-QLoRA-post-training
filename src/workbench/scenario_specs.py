@@ -536,6 +536,58 @@ _FORMULA_FULL = _formula_xlsx(
 )
 
 
+# Excel 隐藏行/列:AutoFilter 筛选后保存或手工隐藏的行/列,读取时照常进数据——
+# Excel 里看不到的行也会进入分析与训练。read_source 检测数据区内的隐藏行/列,
+# hidden_note 如实点名行号/列名、说明没有自动排除;是否取消隐藏由用户决定。
+def _hidden_xlsx(
+    key: str,
+    rows: tuple[tuple[str, str, str | None], ...],
+    hidden_rows: tuple[int, ...],
+    hidden_columns: tuple[str, ...] = (),
+) -> bytes:
+    """生成数据区含隐藏行/列的单 sheet 工作簿;hidden_rows 是 1 起始物理行号。"""
+
+    cached = _XLSX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    from datetime import datetime
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "客户描述", "类别"))
+    for row in rows:
+        sheet.append(row)
+    for index in hidden_rows:
+        sheet.row_dimensions[index].hidden = True
+    for letter in hidden_columns:
+        sheet.column_dimensions[letter].hidden = True
+    stamp = datetime(2026, 9, 27, 8, 0, 0)  # 固定文档时间戳,同夹具字节可复现
+    workbook.properties.created = stamp
+    workbook.properties.modified = stamp
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+    _XLSX_CACHE[key] = data
+    return data
+
+
+_HIDDEN_SAMPLE_ROWS = (
+    ("001", "杯子破损", "质量"),
+    ("002", "物流未更新", "物流"),
+    ("003", "屏幕碎裂", "质量"),
+    ("004", "快递丢失", "物流"),
+)
+# 样例:第 3/4 行隐藏(002/003,AutoFilter 筛选后保存的形态)→ 隐藏行带有效标签,
+# 照常读入参与全部旅程;hidden_note 点名行号与「没有自动排除」。
+_HIDDEN_SAMPLE = _hidden_xlsx("hidden-sample", _HIDDEN_SAMPLE_ROWS, (3, 4))
+# 全量:第 7/8 行隐藏(006/007)→ 同样照常读入,hidden_note 在全量来源同样点名。
+_HIDDEN_FULL = _hidden_xlsx("hidden-full", _CLEAN_TEN_ROWS, (7, 8))
+
+
 # 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
 # 全量含样例未覆盖的新测量值。value_kind 判定与旅程行为以实测为准。
 _CONTINUOUS_SAMPLE = _rows_as_csv(
@@ -1378,6 +1430,33 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "自动计算,用 Excel 打开保存生成缓存值由用户决定;xls 引擎不提供公式清单,不检测"
             ),
             tags=("excel", "formula-cells", "negative-scenario"),
+        ),
+        ScenarioSpec(
+            scenario_id="hidden-rows-in-sheet",
+            goal="根据客户首次描述判断售后类别",
+            sample=_HIDDEN_SAMPLE,
+            sample_name="工单.xlsx",
+            full=_HIDDEN_FULL,
+            full_name="full.xlsx",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:隐藏行(AutoFilter 筛选后保存或手工隐藏)照常读入——Excel 中"
+                "看不到的行也会进入分析与训练,绝不猜业务语义去排除。create 不拦,"
+                "hidden_note 已上线且 create 即如实点名:「该 sheet 含 2 个隐藏行"
+                "（第 3 行、第 4 行）：隐藏行照常读入——Excel 中看不到的行也会进入分析与"
+                "训练。请取消隐藏并删除不需要的行；没有自动排除。」——隐藏行带着有效标签"
+                "(002 物流、003 质量),样例四关照常通过(对比核验用答案不同的已标注行"
+                "配对),全量侧隐藏行(第 7、8 行,006/007)同样点名且不拦,盲标按数据标签"
+                "照常通过,八关全过。定局:披露不阻断——隐藏行可能是有意保留的数据"
+                "(筛选只是视图),是否取消隐藏、删除不需要的行由用户决定,没有自动排除;"
+                "hidden_note 的价值是把「Excel 里看不到却在训练里」的事实点名给用户。"
+                "对照事实(探针实测):隐藏列同样照常读入且仍出现在可用字段中"
+                "(hidden_note 按表头名列出);数据区之外/表头行的隐藏、未读取 sheet 的"
+                "隐藏不列入;xls 引擎不提供隐藏标志,不检测"
+            ),
+            tags=("excel", "hidden-rows"),
         ),
     ]
 

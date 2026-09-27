@@ -440,3 +440,121 @@ def test_service_create_persists_formula_note(tmp_path):
     reloaded = service.load(session.session_id)
     assert "类别 C2" in reloaded.source.formula_note
     assert "formula_note" in reloaded.profile
+
+
+def _hidden_workbook_bytes(
+    rows: list[int], columns: list[str] | None = None, *, sheet_name: str = "工单表"
+) -> bytes:
+    """生成数据区含隐藏行/列的工作簿:rows 是 1 起始物理行号,columns 是列字母。"""
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = sheet_name
+    sheet.append(("编号", "客户描述", "类别"))
+    for number, text, label in (
+        ("001", "杯子破损", "质量"),
+        ("002", "物流未更新", "物流"),
+        ("003", "屏幕碎裂", "质量"),
+        ("004", "快递丢失", "物流"),
+    ):
+        sheet.append((number, text, label))
+    for index in rows:
+        sheet.row_dimensions[index].hidden = True
+    for letter in columns or []:
+        sheet.column_dimensions[letter].hidden = True
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def test_hidden_rows_read_as_normal_rows_and_annotated():
+    """隐藏行如实点名:照常读入(不自动排除),hidden_note 说出根因与修法。"""
+    data = _hidden_workbook_bytes([3, 4])  # 隐藏 002/003 两行(AutoFilter 筛选后保存的形态)
+    source = read_source("工单.xlsx", data, scope="sample")
+    # 读取行为不变:隐藏行照常读入,Excel 里看不到的行也进入数据,绝不猜业务语义去排除
+    assert [row.values["编号"] for row in source.rows] == ["001", "002", "003", "004"]
+    assert [row.values["类别"] for row in source.rows] == ["质量", "物流", "质量", "物流"]
+    note = source.hidden_note
+    assert "2 个隐藏行" in note, note
+    assert "第 3 行" in note and "第 4 行" in note, note  # 数据区内行号点名
+    assert "隐藏行照常读入" in note and "进入分析与训练" in note, note
+    assert "没有自动排除" in note, note
+    assert profile_source(source)["hidden_note"] == note  # profile 同步如实呈现
+
+
+def test_hidden_columns_annotated_by_header_name():
+    """隐藏列如实点名:隐藏列照常读入、字段仍可用,hidden_note 按表头名列出。"""
+    data = _hidden_workbook_bytes([], ["C"])  # 隐藏类别列(手工隐藏旧列的常见形态)
+    source = read_source("工单.xlsx", data, scope="sample")
+    # 隐藏列不在视觉上消失:列名与值照常读入,仍出现在可用字段中
+    assert "类别" in source.columns
+    assert [row.values["类别"] for row in source.rows] == ["质量", "物流", "质量", "物流"]
+    note = source.hidden_note
+    assert "1 个隐藏列（类别）" in note, note
+    assert "隐藏列照常读入" in note and "可用字段" in note, note
+    assert "没有自动排除" in note, note
+
+
+def test_hidden_note_skips_out_of_region_and_unread_sheet():
+    """数据区之外/表头行的隐藏、未读取 sheet 的隐藏不点名;干净文件与 CSV 形状不变。"""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "类别"))
+    sheet.append(("001", "质量"))
+    sheet.append(("002", "物流"))
+    sheet.row_dimensions[1].hidden = True  # 表头行:不在数据区口径内(行 2..行数+1)
+    sheet.row_dimensions[9].hidden = True  # 完全在数据区之外
+    sheet.column_dimensions["D"].hidden = True  # 超出列范围的隐藏列
+    other = workbook.create_sheet("备注表")
+    other.append(("备注",))
+    other.append(("内部备注",))
+    other.row_dimensions[2].hidden = True  # 隐藏行在另一个 sheet
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+
+    default = read_source("工作簿.xlsx", data)
+    assert default.hidden_note == ""
+    assert "hidden_note" not in profile_source(default)
+    second = read_source("工作簿.xlsx", data, sheet="备注表")
+    assert "1 个隐藏行（第 2 行）" in second.hidden_note, second.hidden_note  # 只看实际读取的 sheet
+
+    csv_source = read_source("工单.csv", "编号,类别\n001,质量\n".encode())
+    assert csv_source.hidden_note == ""
+    assert "hidden_note" not in profile_source(csv_source)
+
+
+def test_hidden_note_lists_first_five_and_caps_long_lists():
+    """隐藏行超过 5 个时不逐一罗列,以「等」收尾——与 sheet_note/merged_note 同款口径。"""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "类别"))
+    for i in range(1, 9):
+        sheet.append((f"{i:03d}", "质量" if i % 2 else "物流"))
+    for index in range(2, 10):  # 隐藏全部 8 条数据行
+        sheet.row_dimensions[index].hidden = True
+    buffer = BytesIO()
+    workbook.save(buffer)
+    source = read_source("工作簿.xlsx", buffer.getvalue())
+    note = source.hidden_note
+    assert "8 个隐藏行" in note, note
+    assert "第 6 行" in note, note  # 只列前 5 个(第 2..6 行)
+    assert "第 7 行" not in note, note
+    assert "等" in note, note
+
+
+def test_service_create_persists_hidden_note(tmp_path):
+    """创建入口(服务层)透传:会话建在含隐藏行的文件上,存档回读后标注仍在。"""
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(
+        "根据客户首次描述判断售后类别", "工单.xlsx", _hidden_workbook_bytes([3])
+    )
+    assert "第 3 行" in session.source.hidden_note
+    assert "hidden_note" in session.profile
+    reloaded = service.load(session.session_id)
+    assert "第 3 行" in reloaded.source.hidden_note
+    assert "hidden_note" in reloaded.profile
