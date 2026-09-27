@@ -1157,6 +1157,9 @@ def main() -> int:
             # 抽题时如实预告本轮样本量最多能提供的证据强度：
             # 小样本下即使全部一致，真实一致率的置信下界也远低于 100%。
             print(pending["evidence_note"], file=sys.stderr)
+            # 已标注行不足所选条数时不静默缩水：CLI 人读输出同样如实说明。
+            if pending.get("shortfall_note"):
+                print(pending["shortfall_note"], file=sys.stderr)
             for item in pending["items"]:
                 print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
             result = {

@@ -80,6 +80,17 @@ def test_cli_label_verify_previews_sample_lower_bound(store, monkeypatch, capsys
     assert attached["status"] == "pending"
 
 
+def test_cli_label_verify_discloses_shortfall_when_labelled_rows_fewer(store, monkeypatch, capsys):
+    """已标注行不足所选条数时，stderr 如实说明缩水，不冒充按请求数抽题。"""
+    service, session = store
+    assert _run_verify(monkeypatch, service, session, "--size", 50) == 0
+    out, err = capsys.readouterr()
+    payload = json.loads(out)
+    assert payload["sample_size"] == 9, "FULL 全量只有 9 条已标注行"
+    assert "已标注行只有 9 条" in err and "不足你选择的 50 条" in err
+    assert "本轮 9 条即使全部一致" in err, "证据说明按缩水后的实际样本量口径"
+
+
 def test_cli_submit_verdict_line_shows_lower_bound_when_verified(store, monkeypatch, capsys):
     """判定行补上下界（通过态）：5/5 一致的下界远低于 100%，观测一致率不许被当成真实水平。"""
     service, session = store
