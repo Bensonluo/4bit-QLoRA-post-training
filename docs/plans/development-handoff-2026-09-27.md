@@ -1431,3 +1431,48 @@ prepare)是 CLI 摘要覆盖图上最后一块零人话的业务表面——`pla
   + 新增 4)。本批只动 src/workbench/report_summary.py、scripts/data_intake.py、
   tests/unit/test_report_summary.py、tests/unit/test_training_plan_cli.py、
   tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+### 第 38 轮 = 验收/迭代/执行人话摘要上页面（恢复循环第 19 轮）
+
+(恢复的北极星打磨循环,第 19 轮。)核心痛点:第 34-37 轮把 acceptance-*、
+iteration-*、execution-* 等 CLI stderr 人话摘要补齐,但同一批记录在页面
+（07_Data_Intake.py）上仍只有各区块自写的 UI 文案——页面用户读不到「条款已
+冻结、验收尚未执行」「当前结论:证据不足,不能确认可交付」「以上结论只对这次
+冻结的条款与固定测试题负责」「关闭页面不影响执行」「在原入口勾选确认继续才
+会恢复」这些边界句。同一个产品两个入口各说各话,CLI 用户与页面用户得到的
+诚实口径不一致——这是「语义错误不能无声通过」在披露层的最后一块不对称。
+
+- **页面接线 ×4**(ui/pages/07_Data_Intake.py,零新函数,复用第 34-35 轮的
+  summarize_acceptance/summarize_iteration/summarize_execution;沿用页面既有
+  渲染范式:懒导入 + `for line in summarize_x(...): st.write(line)`,直接渲染
+  不加 expander):
+  1. 最终验收记录循环(loop 级,reason 提示块之后、report 读取之前)——
+     prepared/needs_business_review/completed 各态都渲染同一摘要:冻结条款、
+     五态结论、分母口径与「达到标准也不会自动部署模型」收尾;
+  2. 后台执行进度区(开发集报告 caption 之后、刷新按钮之前)——状态机各态
+     实时翻译:训练中「自动执行正在后台推进：训练已按确认方案启动。」+「关闭
+     页面不影响执行」,暂停等确认「自动执行已暂停…在原入口勾选确认继续才会
+     恢复;不会跳过提示自动训练」;
+  3. 待决策轮次(三模型结果展示与「请核对结果后作出业务决策」提示之后、
+     决策单选之前)——「三模型同题对照已完成，正等待你的业务决定」+ 流程
+     状态边界收尾;
+  4. 已决策轮次(st.success 回显之后)——决定名+业务理由人话回显,已决策态
+     与待决策态互斥渲染。
+- **测试 +0 个新函数,5 处既有 UI 测试加精确句断言**:test_acceptance_ui
+  (prepared 态「条款已冻结、验收尚未执行」;completed 态结论三句:证据不足
+  口径+原因+冻结条款边界收尾)、test_iteration_decide_ui(evaluated 态对照
+  完成待决定+边界收尾;decided 态决定名+理由回显)、test_iteration_execution_ui
+  (training 态后台推进+关闭页面不影响执行;awaiting_warning_ack 态已暂停+
+  勾选确认才恢复)。定向 7 passed。
+- **文档**(agent-setup.md 两段补页面位点句):验收节尾「页面最终验收区在每条
+  记录的结论下方渲染同一份摘要（summarize_acceptance）…不再各说各话」;轮次
+  节尾「页面改进轮次区渲染同一对摘要函数（summarize_iteration／
+  summarize_execution）…页面与 CLI 同源同词汇」。test_readme_alignment 两个
+  钉测试同步扩展(+3/+5 句:函数点名、位点句、同口径承诺)。
+- 回归:ruff check/format clean;定向套件(acceptance_ui+iteration_decide_ui+
+  iteration_execution_ui)7 passed,readme_alignment 定向通过。全量回归
+  **tests/unit 1765 passed / 0 failed**(--no-cov,无排除;无新增测试函数故
+  数字与基线一致)。本批只动 ui/pages/07_Data_Intake.py、
+  tests/unit/test_acceptance_ui.py、tests/unit/test_iteration_decide_ui.py、
+  tests/unit/test_iteration_execution_ui.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

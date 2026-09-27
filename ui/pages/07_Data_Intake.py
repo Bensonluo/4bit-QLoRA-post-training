@@ -592,6 +592,10 @@ def show_final_acceptance(run: dict) -> None:
                     st.write(f"已记录 {result['reviewed_cases']} 题判断，剩余题目需核对。")
                 if result.get("reason"):
                     st.info(result["reason"])
+            from src.workbench.report_summary import summarize_acceptance
+
+            for line in summarize_acceptance(record):
+                st.write(line)
             report = record.get("report") or {}
             evaluated_model = (report.get("models") or [{}])[0]
             if report.get("protocol", {}).get("scorer") == "custom_rules":
@@ -1403,6 +1407,10 @@ if iterations:
                     st.caption(
                         f"开发集报告：{execution['evaluation_id']}；请核对结果后决定下一步。"
                     )
+                from src.workbench.report_summary import summarize_execution
+
+                for line in summarize_execution(execution):
+                    st.write(line)
                 if st.button("刷新本轮执行状态", key=f"refresh_execution_{identity}"):
                     st.rerun()
                 if execution["status"] == "awaiting_warning_ack":
@@ -1590,6 +1598,10 @@ if iterations:
                 st.write(
                     "请核对结果后作出业务决策；决策与理由记录在本轮，作为采用、继续或停止的依据。"
                 )
+                from src.workbench.report_summary import summarize_iteration
+
+                for line in summarize_iteration(iteration):
+                    st.write(line)
                 decision_label = st.radio(
                     "本轮决策",
                     ["采用", "继续（提出下一轮改进）", "停止", "证据不足"],
@@ -1629,6 +1641,10 @@ if iterations:
                     f"已记录决策：{decision_names.get(iteration['decision'], iteration['decision'])}"
                     f" — {iteration.get('decision_reason', '')}"
                 )
+                from src.workbench.report_summary import summarize_iteration
+
+                for line in summarize_iteration(iteration):
+                    st.write(line)
             if iteration.get("data_revision"):
                 revision = iteration["data_revision"]
                 component_names = {

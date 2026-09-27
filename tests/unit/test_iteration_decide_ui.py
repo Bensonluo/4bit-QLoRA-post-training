@@ -75,6 +75,15 @@ def test_evaluated_iteration_shows_results_and_records_decision(decide_page):
     assert not page.exception
     assert any("同题三模型结果" in block.value for block in page.markdown)
     assert any("开发集报告" in caption.value for caption in page.caption)
+    # 与 CLI 同口径的人话摘要：三模型对照完成待业务决定 + 流程状态边界收尾。
+    assert any(
+        "基座、父轮与本轮的三模型同题对照已完成，正等待你的业务决定" in block.value
+        for block in page.markdown
+    )
+    assert any(
+        "以上只是流程状态与已记录的决定，不代表业务效果达标" in block.value
+        for block in page.markdown
+    )
     record = next(b for b in page.button if b.label == "记录本轮决策")
     assert record.disabled
     next(t for t in page.text_area if t.label == "业务理由（必填）").input(
@@ -99,3 +108,6 @@ def test_decided_iteration_shows_recorded_decision_without_new_controls(decide_p
     assert any("已记录决策：停止" in message.value for message in page.success)
     assert not any(c.label == "本轮决策" for c in page.radio)
     assert decisions == []
+    # 已决策态的人话摘要与 CLI 同源：决定名 + 业务理由回显。
+    assert any("已记录你的业务决定：停止本轮路线" in block.value for block in page.markdown)
+    assert any("业务理由：试点完成，停止迭代。" in block.value for block in page.markdown)

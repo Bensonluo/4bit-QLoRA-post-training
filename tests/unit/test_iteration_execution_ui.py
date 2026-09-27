@@ -96,6 +96,14 @@ def test_confirmed_iteration_executes_once_and_only_through_explicit_click(execu
     # After submission the page shows progress and the start entry is gone.
     assert any("正在训练" in message.value for message in page.info)
     assert not any(b.label == "按确认方案执行到开发集对照" for b in page.button)
+    # 与 CLI 同口径的人话摘要：后台推进 + 关闭页面不影响执行边界。
+    assert any(
+        "自动执行正在后台推进：训练已按确认方案启动。" in block.value for block in page.markdown
+    )
+    assert any(
+        "后台进程独立于页面与终端运行，关闭页面不影响执行。" in block.value
+        for block in page.markdown
+    )
 
 
 def test_running_execution_can_be_stopped_from_the_page(execution_page):
@@ -135,6 +143,11 @@ def test_warning_ack_resume_requires_the_explicit_checkbox(execution_page, monke
     monkeypatch.setattr(page_execution, "start", start_with_pause)
     button(page, "按确认方案执行到开发集对照").click().run()
     assert any("需要您核对" in block.value for block in page.markdown)
+    # 暂停态人话摘要与 CLI 同源：需原入口勾选确认才会恢复，不会跳过提示自动训练。
+    assert any("自动执行已暂停：预检存在需核对的提示。" in block.value for block in page.markdown)
+    assert any(
+        "请查看提示内容后，在原入口勾选确认继续才会恢复" in block.value for block in page.markdown
+    )
     resume = next(b for b in page.button if b.label == "核对后继续到开发集对照")
     assert resume.disabled
     next(c for c in page.checkbox if c.label.startswith("已核对上述预检提示")).check().run()

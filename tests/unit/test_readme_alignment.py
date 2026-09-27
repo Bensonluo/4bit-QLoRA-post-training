@@ -494,6 +494,9 @@ def test_acceptance_summary_docs_pinned():
     assert "数值不能作为独立业务验收的结论" in section, "隔离未核验不作数边界必须写明"
     assert "仅作描述" in section, "自定义规则业务评分均值的口径必须写明"
     assert "不会自动部署模型" in section, "收尾边界必须写明"
+    assert "summarize_acceptance" in section, "页面渲染位点必须点名摘要函数"
+    assert "页面最终验收区在每条记录的结论下方渲染同一份摘要" in section, "页面位点必须写明"
+    assert "同一口径" in section, "页面与 CLI 同口径承诺必须写明"
 
 
 def test_iteration_execution_summary_docs_pinned():
@@ -511,6 +514,11 @@ def test_iteration_execution_summary_docs_pinned():
     assert "勾选确认继续才会恢复" in section, "等确认暂停的用户动作必须写明"
     assert "重复提交不会再次训练" in section, "completed 幂等边界必须写明"
     assert "worker.log" in section, "被阻断/失败的排查指向必须写明"
+    assert "summarize_iteration" in section, "页面轮次摘要位点必须点名函数"
+    assert "summarize_execution" in section, "页面执行摘要位点必须点名函数"
+    assert "页面改进轮次区渲染同一对摘要函数" in section, "页面位点必须写明"
+    assert "刷新按钮上方" in section, "执行摘要的页面锚点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
 
 
 def test_materialize_summary_docs_pinned():

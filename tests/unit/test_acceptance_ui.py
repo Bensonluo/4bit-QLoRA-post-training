@@ -108,10 +108,16 @@ def test_business_criteria_have_no_default_and_final_execution_is_separate(accep
     assert records[0]["status"] == "prepared"
     page.run()
     assert len(calls) == 1
+    # 冻结后、执行前：与 CLI 同口径的人话摘要说明条款已冻结、留出题尚未占用。
+    assert any("条款已冻结、验收尚未执行" in item.value for item in page.markdown)
     button(page, "按冻结标准执行最终验收").click().run()
     assert not page.exception
     assert calls[-1][0] == "run"
     assert any("证据不足" in item.value for item in page.warning)
+    # 结论人话与 CLI 同源：证据不足口径 + 原因 + 冻结条款边界收尾。
+    assert any("当前结论：证据不足，不能确认可交付" in item.value for item in page.markdown)
+    assert any("原因：测试题数低于业务确认门槛" in item.value for item in page.markdown)
+    assert any("以上结论只对这次冻结的条款与固定测试题负责" in item.value for item in page.markdown)
     assert any(item.value == "最终独立业务题" for item in page.code)
     assert any(item.value == "实际模型回答" for item in page.code)
     assert not any(item.label == "让 Agent 分析结果与下一步" for item in page.button)
