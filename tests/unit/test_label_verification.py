@@ -212,6 +212,58 @@ def test_contrast_check_third_round_streak_keeps_counting(tmp_path):
     assert status["needs_second_round"] is True
 
 
+def test_contrast_check_status_records_every_round_history(tmp_path):
+    """状态带逐轮历史:每轮的题目、选择与对错可回查,二连对有据可查。"""
+    service, session = _contrast_store(tmp_path)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    inputs = {row.row_id: row.input for row in session.preview.rows}
+
+    # 第 1 轮故意配错,第 2、3 轮配对:历史按轮次如实留痕
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    wrong = {
+        pending["items"][0]["row_id"]: targets[pending["items"][1]["row_id"]],
+        pending["items"][1]["row_id"]: targets[pending["items"][0]["row_id"]],
+    }
+    service.submit_contrast_check(session.session_id, pending["check_id"], wrong)
+    for _ in range(2):
+        pending = service.start_contrast_check(session.session_id, session.revision)
+        right = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+        service.submit_contrast_check(session.session_id, pending["check_id"], right)
+
+    status = service.contrast_check_status(session.session_id)
+    history = status["history"]
+    assert [entry["round"] for entry in history] == [1, 2, 3]
+    assert [entry["verdict"] for entry in history] == ["mismatch", "verified", "verified"]
+    for entry in history:
+        assert len(entry["items"]) == 2
+        for item in entry["items"]:
+            assert item["row_id"] in inputs
+            assert item["input"] == inputs[item["row_id"]], "题目取自当前预览行,不是空话"
+            assert item["correct_answer"] == targets[item["row_id"]]
+            assert item["chosen"], "每一轮都有真实作答记录"
+            assert (item["chosen"] == item["correct_answer"]) is item["match"]
+        assert all(item["match"] is (entry["verdict"] == "verified") for item in entry["items"])
+    # 连胜只数最近连续 verified:第 1 轮错、第 2/3 轮对 → 恰好 2,不需要再核验
+    assert status["streak"] == 2
+    assert status["needs_second_round"] is False
+    # 最近一轮的明细仍在(向后兼容既有字段)
+    assert status["verdict"] == "verified"
+
+
+def test_contrast_check_history_empty_before_any_round(tmp_path):
+    """没做过核验时状态为 None,不伪造历史;做过一轮只回一轮。"""
+    service, session = _contrast_store(tmp_path)
+    assert service.contrast_check_status(session.session_id) is None
+
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    mapping = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+    service.submit_contrast_check(session.session_id, pending["check_id"], mapping)
+    status = service.contrast_check_status(session.session_id)
+    assert [entry["round"] for entry in status["history"]] == [1]
+    assert status["history"][0]["verdict"] == "verified"
+
+
 def test_contrast_check_rejects_bad_submissions_and_stale_binding(tmp_path):
     service, session = _contrast_store(tmp_path)
     pending = service.start_contrast_check(session.session_id, session.revision)

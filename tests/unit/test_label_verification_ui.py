@@ -215,6 +215,56 @@ def test_contrast_unanswered_selection_is_not_recorded(data_page, monkeypatch):
     assert status and status["verdict"] == "verified" and status["streak"] == 1
 
 
+def test_contrast_history_rounds_visible_after_two_rounds(data_page, monkeypatch):
+    """二连对后页面展示轮次历史:第几轮/题目/选择/对错逐轮可查,不是一句口号。"""
+    import src.agent.intake
+    from tests.unit.test_data_intake import analysis, model_for
+
+    service, session, page = data_page
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "联合分析目标与数据").click().run()
+    assert not page.exception
+    targets = {row.row_id: row.target for row in service.load(session.session_id).preview.rows}
+    inputs = {row.row_id: row.input for row in service.load(session.session_id).preview.rows}
+
+    def history_table():
+        tables = [
+            frame.value for frame in page.dataframe if "轮次" in getattr(frame.value, "columns", ())
+        ]
+        assert tables, "对比核验区应渲染轮次历史表"
+        return tables[-1]
+
+    # 没做过核验时不渲染空历史表
+    assert not any("轮次" in getattr(f.value, "columns", ()) for f in page.dataframe)
+
+    for expected_rounds in ([1], [1, 2]):
+        next(b for b in page.button if b.label == "开始配对对比").click().run()
+        for box in [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]:
+            row_id = str(box.key).rsplit("_", 1)[-1]
+            box.select(targets[row_id]).run()
+        next(b for b in page.button if b.label == "提交配对").click().run()
+        assert not page.exception
+        table = history_table()
+        # 每轮两道题:历史表一行一题,轮次按题重复
+        assert list(table["轮次"]) == [
+            f"第 {number} 轮" for number in expected_rounds for _ in range(2)
+        ]
+        assert list(table["对错"]) == ["对"] * (2 * len(expected_rounds))
+        assert all(value in set(targets.values()) for value in table["正确答案"])
+        # 题目列展示的是预览行的真实输入原文
+        assert all(value in set(inputs.values()) for value in table["题目"])
+
+    # 二连对达标后历史依然可见(有据可查),两轮四题都在表里
+    assert any("对比核验二连对" in message.value for message in page.success)
+    final_table = history_table()
+    assert list(dict.fromkeys(final_table["轮次"])) == ["第 1 轮", "第 2 轮"]
+    assert len(final_table) == 4
+
+
 def test_stale_warning_renders_after_revision(verify_page):
     """数据修订后,页面明确显示「核验已失效请重验」,而不是静默回到初始状态。"""
     from copy import deepcopy

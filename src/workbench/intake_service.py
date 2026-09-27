@@ -487,10 +487,12 @@ class IntakeService:
         return result
 
     def contrast_check_status(self, session_id: str) -> dict | None:
-        """当前绑定下最近结论与连胜轮数(二连对才算真正看清,防瞎蒙)。
+        """当前绑定下最近结论、连胜轮数与逐轮历史(二连对才算真正看清,防瞎蒙)。
 
         连胜是真实的连续 verified 轮数:用户可选继续第三轮及以后,
         needs_second_round 语义不变(连胜不足两轮即需要再核验)。
+        history 按轮次升序记录每一轮的题目、选择与对错——「二连对」不是
+        口号,页面上每一轮都可回查核对。
         """
         session = self.load(session_id)
         if session.preview is None:
@@ -515,10 +517,34 @@ class IntakeService:
                 streak += 1
             else:
                 break
+        # 题目原文从当前预览行取:绑定一致说明预览行未变,按 row_id 回查;
+        # 万一预览行已被替换,保留 row_id 本身,不编造题目。
+        by_id = {row.row_id: row.input for row in session.preview.rows}
+        history = []
+        for round_number, (verdict, result_json) in enumerate(reversed(rows), start=1):
+            parsed = json.loads(result_json) if result_json else {}
+            history.append(
+                {
+                    "round": round_number,
+                    "verdict": verdict,
+                    "items": [
+                        {
+                            "row_id": item.get("row_id", ""),
+                            "input": by_id.get(item.get("row_id"), item.get("row_id", "")),
+                            "chosen": item.get("chosen"),
+                            "correct_answer": item.get("correct_answer"),
+                            "match": bool(item.get("match")),
+                        }
+                        for item in (parsed.get("items") or [])
+                        if isinstance(item, dict)
+                    ],
+                }
+            )
         return {
             "verdict": rows[0][0],
             "streak": streak,
             "needs_second_round": streak < 2,
+            "history": history,
             **(json.loads(rows[0][1]) if rows[0][1] else {}),
         }
 

@@ -2049,6 +2049,28 @@ if session.preview:
                         except (ValueError, RuntimeError, OSError) as exc:
                             st.error(str(exc))
 
+        def render_contrast_history() -> None:
+            """轮次历史逐轮可查:第几轮、题目、你的选择、正确答案、对错。"""
+            history = (contrast or {}).get("history") or []
+            if not history:
+                return
+            st.caption("核验轮次历史：每一轮的题目、你的选择与对错都可回查，二连对有据可依。")
+            st.dataframe(
+                [
+                    {
+                        "轮次": f"第 {entry['round']} 轮",
+                        "题目": item["input"],
+                        "你的选择": item["chosen"],
+                        "正确答案": item["correct_answer"],
+                        "对错": "对" if item["match"] else "错",
+                    }
+                    for entry in history
+                    for item in entry["items"]
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+
         verified_streak = (
             contrast.get("streak", 0) if contrast and contrast.get("verdict") == "verified" else 0
         )
@@ -2063,6 +2085,8 @@ if session.preview:
                 st.info("第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。")
             if contrast and contrast.get("verdict") == "mismatch":
                 st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
+        render_contrast_history()
+        if verified_streak < 2:
             render_contrast_round()
         if verified_streak >= 2:
             # 二连对后核验已达标;第三轮起只是自愿加练,不强制——文案必须与行为一致。
