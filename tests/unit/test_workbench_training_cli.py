@@ -132,6 +132,15 @@ def test_status_logs_stop_and_list_share_record_interface(training_cli, capsys):
     assert json.loads(capsys.readouterr().out)[0]["session_id"] == session.session_id
 
 
+def test_train_status_prints_plain_language_summary(training_cli, capsys):
+    """train-status 在 JSON 之外输出大白话状态(观察事实,不是业务结论)。"""
+    run, _, _ = training_cli
+    assert run("train-status", "run-1") == 0
+    err = capsys.readouterr().err
+    assert "训练完成" in err
+    assert "对照" in err
+
+
 def test_train_start_forwards_explicit_technical_recovery_authorization(training_cli, capsys):
     run, session, calls = training_cli
     assert (

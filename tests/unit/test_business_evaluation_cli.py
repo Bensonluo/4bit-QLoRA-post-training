@@ -96,7 +96,10 @@ def test_eval_compare_derives_base_adapter_and_categorical_protocol(evaluation_c
     assert protocol.scorer == "classification_exact"
     assert protocol.max_new_tokens == 32 and not protocol.strip_whitespace
     assert invoke("eval-show", report.evaluation_id) == 0
-    assert json.loads(capsys.readouterr().out)["status"] == "completed"
+    output = capsys.readouterr()
+    assert json.loads(output.out)["status"] == "completed"
+    # 对照报告附带大白话解读(空报告如实说明没有模型结果)
+    assert "该报告没有模型结果。" in output.err
 
 
 @pytest.mark.parametrize(

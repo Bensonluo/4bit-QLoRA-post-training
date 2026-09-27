@@ -648,6 +648,11 @@ def main() -> int:
                         training_root=args.training_root,
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if isinstance(result, dict) and result.get("preflight"):
+                from src.workbench.report_summary import summarize_preflight
+
+                for line in summarize_preflight(result["preflight"]):
+                    print(line, file=sys.stderr)
             return 0
         if args.command in {
             "iteration-execute",
@@ -879,6 +884,10 @@ def main() -> int:
                         iteration["iteration_id"], session, result.evaluation_id
                     )
             print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+            from src.workbench.report_summary import summarize_comparison
+
+            for line in summarize_comparison(result):
+                print(line, file=sys.stderr)
             return 0
         if args.command.startswith("train-"):
             from src.workbench.training_runs import TrainingRunService
@@ -923,6 +932,16 @@ def main() -> int:
                 print(training.read_logs(args.run_id, tail=args.tail))
                 return 0
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if isinstance(result, dict):
+                from src.workbench.report_summary import summarize_training_run
+
+                for line in summarize_training_run(result):
+                    print(line, file=sys.stderr)
+                if result.get("preflight"):
+                    from src.workbench.report_summary import summarize_preflight
+
+                    for line in summarize_preflight(result["preflight"]):
+                        print(line, file=sys.stderr)
             return 0
         if args.command == "create":
             session = service.create(

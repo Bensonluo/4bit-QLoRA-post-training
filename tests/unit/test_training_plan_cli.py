@@ -24,6 +24,7 @@ def plan_cli(tmp_path, monkeypatch):
         "session_id": session.session_id,
         "status": "ready",
         "proposal": {"model_path": "/tmp/local-a"},
+        "preflight": {"status": "passed", "splits": {"train": {"rows": 3}}},
     }
 
     class Plans:
@@ -100,8 +101,10 @@ def test_saved_plan_prepare_checks_revision_and_requires_separate_action(plan_cl
     assert invoke("plan-list", session.session_id) == 0
     assert json.loads(capsys.readouterr().out)[0]["plan_id"] == record["plan_id"]
     assert invoke("plan-show", record["plan_id"]) == 0
-    capsys.readouterr()
+    shown = capsys.readouterr()
     assert calls == []
+    # 方案附带的预检证据翻译成大白话(stderr),与 JSON 原始记录并存
+    assert "训练前检查通过" in shown.err
     assert (
         invoke(
             "plan-prepare",
