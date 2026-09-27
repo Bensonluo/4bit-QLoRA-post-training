@@ -16,12 +16,33 @@ from src.workbench.intake_models import SampleSource, SourceRow
 
 _CSV_READ_LOCK = threading.Lock()
 
-# 多 Sheet 工作簿的读取范围标注:read_source 读 Excel 时探测 sheet 结构,把
-# 「含 N 个 sheet、仅读取第一个」的说明按内容摘要记下,profile_source 取用。
-# 按摘要键控是内容寻址的记忆:同一摘要必是同一文件,标注确定性一致;进程重启后
-# 历史会话里已序列化的 profile 快照仍带标注,仅重新计算依赖同进程的读取记录。
-_EXCEL_SHEET_NOTES: dict[str, str] = {}
-_EXCEL_SHEET_NOTES_LOCK = threading.Lock()
+
+def _resolve_excel_sheet(book: Any, sheet: str | int | None) -> tuple[str, bool]:
+    """把 sheet 选择解析为确定的工作表名，返回（名称, 是否为显式指定）。
+
+    None 读第一个 sheet（默认行为不变）；int 是 1 起始的序号（1=第一个）；
+    str 先按名称精确匹配，无匹配且为纯数字时按序号（CLI 传参皆为字符串）。
+    解析不到即报错并如实列出全部 sheet，不静默回退。
+    """
+    names = list(book.sheet_names)
+    if sheet is None:
+        return names[0], False
+    hint = f"该文件含 {len(names)} 个 sheet：{'、'.join(names)}。序号从 1 开始（1=第一个）。"
+    if isinstance(sheet, int):
+        if not 1 <= sheet <= len(names):
+            raise ValueError(f"sheet 序号 {sheet} 超出范围；{hint}")
+        return names[sheet - 1], True
+    text = str(sheet).strip()
+    if not text:
+        return names[0], False
+    if text in names:
+        return text, True
+    if text.isdigit():
+        ordinal = int(text)
+        if 1 <= ordinal <= len(names):
+            return names[ordinal - 1], True
+        raise ValueError(f"sheet 序号 {ordinal} 超出范围；{hint}")
+    raise ValueError(f"找不到 sheet「{text}」；{hint}")
 
 
 def _read_csv(text: str, delimiter: str) -> tuple[list[str], list[tuple[int, dict[str, Any]]]]:
@@ -109,20 +130,17 @@ def parse_json_value(text: str) -> Any:
     return value
 
 
-def _excel_sheet_note(sheet_names: list[str]) -> str:
+def _excel_sheet_note(sheet_names: list[str], read_name: str, explicit: bool) -> str:
     """多 Sheet 工作簿的读取范围说明:如实列出读了哪个 sheet、哪些未读取。"""
 
-    first, rest = sheet_names[0], sheet_names[1:]
-    listed = "、".join(rest[:5]) + ("等" if len(rest) > 5 else "")
-    return (
-        f"该文件含 {len(sheet_names)} 个 sheet，仅读取第一个「{first}」；"
-        f"其余 {len(rest)} 个（{listed}）未读取。"
+    unread = [name for name in sheet_names if name != read_name]
+    listed = "、".join(unread[:5]) + ("等" if len(unread) > 5 else "")
+    head = (
+        f"该文件含 {len(sheet_names)} 个 sheet，按指定读取「{read_name}」"
+        if explicit
+        else f"该文件含 {len(sheet_names)} 个 sheet，仅读取第一个「{sheet_names[0]}」"
     )
-
-
-def _excel_sheet_note_for(digest: str) -> str:
-    with _EXCEL_SHEET_NOTES_LOCK:
-        return _EXCEL_SHEET_NOTES.get(digest, "")
+    return f"{head}；其余 {len(unread)} 个（{listed}）未读取。"
 
 
 def read_source(
@@ -132,13 +150,21 @@ def read_source(
     scope: Literal["sample", "full"] = "sample",
     encoding: str | None = None,
     delimiter: str | None = None,
+    sheet: str | int | None = None,
 ) -> SampleSource:
-    """Read supplied bytes only; never follow paths mentioned inside the data."""
+    """Read supplied bytes only; never follow paths mentioned inside the data.
+
+    sheet 选择仅对 Excel 有效：按名称或 1 起始的序号指定工作表，None（默认）
+    读第一个 sheet，读取行为与此前完全一致。
+    """
     suffix = Path(name).suffix.lower().lstrip(".")
     digest = hashlib.sha256(data).hexdigest()
     records: list[tuple[int, dict[str, Any]]] = []
     actual_encoding, actual_delimiter = "", ""
+    resolved_sheet, sheet_note = "", ""
     if suffix in {"csv", "jsonl"}:
+        if sheet is not None:
+            raise ValueError(f"sheet 选择仅对 Excel 文件有效；当前文件是 {suffix}。")
         text, actual_encoding = _decode(data, encoding)
         if suffix == "csv":
             if delimiter is not None and delimiter not in (",", ";", "\t", "|"):
@@ -170,10 +196,14 @@ def read_source(
         import pandas as pd
 
         try:
-            # ExcelFile 与 read_excel(BytesIO, sheet_name=0) 走同一条解析路径,
-            # 读取行为不变;借此拿到 sheet 清单,多 Sheet 时如实告知读取范围。
+            # ExcelFile 与 read_excel(BytesIO, sheet_name=0) 走同一条解析路径:
+            # 默认仍读第一个 sheet(行为不变),指定 sheet 时按名称选中同一解析器;
+            # 借此拿到 sheet 清单,多 Sheet 时如实告知读取范围。
             book = pd.ExcelFile(io.BytesIO(data))
-            frame = book.parse(header=None, dtype=object, keep_default_na=False)
+            resolved_sheet, explicit = _resolve_excel_sheet(book, sheet)
+            frame = book.parse(
+                sheet_name=resolved_sheet, header=None, dtype=object, keep_default_na=False
+            )
         except ImportError as exc:
             raise ValueError(
                 "读取 Excel 缺少对应引擎，请安装 openpyxl（xlsx）或 xlrd（xls）。"
@@ -186,8 +216,7 @@ def read_source(
             records.append((i, dict(zip(columns, normalized))))
         sheet_names = list(book.sheet_names)
         if len(sheet_names) > 1:
-            with _EXCEL_SHEET_NOTES_LOCK:
-                _EXCEL_SHEET_NOTES[digest] = _excel_sheet_note(sheet_names)
+            sheet_note = _excel_sheet_note(sheet_names, resolved_sheet, explicit)
     else:
         raise ValueError("当前数据入口支持 CSV、Excel、JSONL。")
     if not records:
@@ -203,6 +232,8 @@ def read_source(
         format=suffix,
         encoding=actual_encoding,
         delimiter=actual_delimiter,
+        sheet=resolved_sheet,
+        sheet_note=sheet_note,
         columns=columns,
         rows=rows,
     )
@@ -223,8 +254,9 @@ def _value_type(value: Any) -> str:
 def profile_source(source: SampleSource) -> dict[str, Any]:
     """All counts apply exclusively to the provided file, even when called a sample.
 
-    多 Sheet Excel 的读取范围说明(sheet_note)由 read_source 按内容摘要记下:
-    同进程内读取过的文件,profile 如实呈现「含几个 sheet、仅读取第一个」。
+    多 Sheet Excel 的读取范围说明(sheet_note)随来源对象本身携带:read_source
+    读取时按实际 sheet 选择生成并持久化,同进程重启后、同一文件按不同 sheet
+    重复读取都不会串味;历史会话的 profile 快照原样保留既有标注。
     """
     fields: dict[str, Any] = {}
     evidence: list[str] = []
@@ -289,7 +321,7 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
             else "以上描述本次提供的文件；统计通过不代表监督含义正确或已具备独立评测条件。"
         ),
     }
-    sheet_note = _excel_sheet_note_for(source.digest)
+    sheet_note = source.sheet_note
     if sheet_note:
         profile["sheet_note"] = sheet_note
     return profile

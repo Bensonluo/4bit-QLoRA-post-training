@@ -25,6 +25,16 @@ class SampleSource(Contract):
     format: Literal["csv", "jsonl", "xlsx", "xls"]
     encoding: str = ""
     delimiter: str = ""
+    sheet: str = Field(
+        default="",
+        description="Excel 实际读取的 sheet 名称；CSV/JSONL 为空。随来源持久化，"
+        "供全量复用原文件时按同一 sheet 重读，也让 profile 标注可从来源本身还原。",
+    )
+    sheet_note: str = Field(
+        default="",
+        description="多 Sheet 工作簿的读取范围说明（含多个 sheet 时非空）："
+        "如实记录本次读了哪个 sheet、哪些未读取；由读取时按实际选择生成。",
+    )
     columns: list[str]
     rows: list[SourceRow]
 
