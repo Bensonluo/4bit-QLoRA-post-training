@@ -103,6 +103,46 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("high-cardinality", "known-gap"),
         ),
+        ScenarioSpec(
+            scenario_id="dirty-label-variants",
+            goal="根据客户首次描述判断售后类别",
+            sample=("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流。\n").encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                "001,杯子破损,质量\n002,物流未更新,物流。\n003,屏幕碎裂,质量。\n"
+                "004,快递丢失,物流\n005,开不了机,质量\n006,地址填错,物流。\n"
+                "007,异味,质量\n008,延迟送达,物流\n009,无法充电,质量。\n010,包装破损,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note="通过且带「标签多种写法」预警(变体检出已上线);变体在训练中会被当不同答案,预警建议归一",
+            tags=("dirty-data", "label-variants"),
+        ),
+        ScenarioSpec(
+            scenario_id="long-text-inputs",
+            goal="根据客户投诉详情判断严重程度",
+            sample=(
+                "编号,投诉详情,严重程度\n001," + "非常冗长的投诉描述。" * 80 + ",高\n"
+                "002," + "等待多日仍未送达。" * 80 + ",低\n"
+            ).encode(),
+            sample_name="投诉.csv",
+            full=(
+                "编号,投诉详情,严重程度\n"
+                + "".join(
+                    f"{i:03d}," + "投诉内容细节。" * (60 + i % 40) + f",{'高' if i % 2 else '低'}\n"
+                    for i in range(1, 11)
+                )
+            ).encode(),
+            target_column="严重程度",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "数据层通过;长文本的截断风险由训练前检查(真实 tokenizer)负责,不在矩阵覆盖内——边界如实记录"
+            ),
+            tags=("long-text", "boundary-note"),
+        ),
     ]
 
 

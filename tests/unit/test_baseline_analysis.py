@@ -91,3 +91,26 @@ def test_high_cardinality_target_gets_wrong_column_warning(tmp_path):
     session2 = normal.create("判断类别", "t.csv", normal_rows.encode())
     analysis2 = propose_baseline_analysis(session2, target_column="类别")
     assert not any("唯一" in f.message for f in analysis2.findings)
+
+
+def test_label_variants_are_flagged_for_cleanup(tmp_path):
+    """同一业务含义的多种写法被检出并建议归一;干净标签不触发。"""
+    service = IntakeService(tmp_path / "intake")
+    rows = "描述,类别\n" + "".join(
+        f"问题{i},{'质量。' if i % 3 == 0 else '质量' if i % 3 == 1 else '物流'}\n"
+        for i in range(1, 10)
+    )
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    warnings = [f for f in analysis.findings if "多种写法" in f.message]
+    assert warnings and "质量" in warnings[0].message and "map_values" in warnings[0].message
+
+    clean = IntakeService(tmp_path / "intake2")
+    rows2 = "描述,类别\n" + "".join(
+        f"问题{i},{'质量' if i % 2 else '物流'}\n" for i in range(1, 10)
+    )
+    session2 = clean.create("判断类别", "t.csv", rows2.encode())
+    assert not any(
+        "多种写法" in f.message
+        for f in propose_baseline_analysis(session2, target_column="类别").findings
+    )

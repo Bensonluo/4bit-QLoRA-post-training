@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T05:39:50.943636+00:00",
+  "created_at": "2026-09-27T05:44:00.083303+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -105,11 +105,47 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "dirty-label-variants",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "long-text-inputs",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 6,
-    "as_expected": 6,
+    "total": 8,
+    "as_expected": 8,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,

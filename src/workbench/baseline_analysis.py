@@ -145,6 +145,25 @@ def propose_baseline_analysis(
             )
         )
 
+    # 标签变体检出:同一业务的多种写法(strip/末尾标点归一后相同但原文不同)
+    def _normalize_label(value: str) -> str:
+        return value.strip().rstrip("。.!！?？;；,，").strip()
+
+    normalized_groups: dict[str, set[str]] = {}
+    for value in distribution:
+        normalized_groups.setdefault(_normalize_label(value), set()).add(value)
+    variants = {key: values for key, values in normalized_groups.items() if len(values) > 1}
+    if variants:
+        shown = ";".join("/".join(sorted(values)) for values in list(variants.values())[:3])
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    f"答案列存在同一业务含义的多种写法（{shown}）。模型会把它们当不同答案学习，"
+                    "评测也会被判错；建议在原始数据中统一写法，或用转换规则(map_values)归一。"
+                ),
+            )
+        )
     target_distinct = len(distribution)
     if len(target_values) >= 8 and target_distinct / max(len(target_values), 1) >= 0.9:
         findings.append(
