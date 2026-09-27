@@ -113,10 +113,23 @@ python scripts/data_intake.py full-confirm SESSION_ID --revision FULL_REPORT_REV
 北极星的核心痛点是语义错误无声通过。三道通用关卡（与任务类型无关、零或低成本、非专家可独立完成）已接入流程：
 
 - **对比核验（样例确认时）**：系统抽取两条答案不同的输入，把两个答案打乱后由你配对。配对正确才说明真正看清了转换含义；配错会留档并提示重新查看预览。预览或方案变化后核验自动失效。页面在「确认当前转换含义」前提供入口。
-- **盲标核验（训练准备的硬门禁）**：全量确认后、准备训练前，系统随机抽取最多 5 条已标注行并隐藏答案，你仅根据输入作答，与数据标签全部一致才允许准备训练。核验与全量来源和处理方案摘要绑定：数据或方案修订后自动失效，需重新核验。P3.4 自动执行的授权入口同样前置校验。CLI：`label-verify SESSION --revision R [--size 5]` 展示题目，`label-verify-submit SESSION --verification-id V --answer 行ID=答案`（每条一个 `--answer`）提交并得到判定。
+- **盲标核验（训练准备的硬门禁）**：全量确认后、准备训练前，系统按你选择的样本量（1–50 条，默认 5 条）随机抽取已标注行并隐藏答案，你仅根据输入作答，与数据标签全部一致才允许准备训练。核验与全量来源和处理方案摘要绑定：数据或方案修订后自动失效，需重新核验。P3.4 自动执行的授权入口同样前置校验。完整 CLI 用法见下。
 - **可学性探针（可选证据，非门禁）**：用基座模型对开发集抽样做零样本探测，与「瞎猜多数类」基线对比并给出带样本量限制的说明。显著低于基线通常意味着提示格式或任务定义需要先核查；高于基线也不能预测微调效果。CLI：`learnability-probe SESSION --revision R --model-path 目录 [--size 8]`；页面在「训练前检查」区提供入口（会实际加载本地模型）。
 
 这三道关卡都不使用 LLM 判断、不消耗模型服务额度，判定全部确定性可复现。
+
+### 盲标核验的完整 CLI 用法
+
+```sh
+python scripts/data_intake.py label-verify SESSION_ID --revision CURRENT_REVISION --size 5
+# --size 在 1–50 之间自选（默认 5）；加 --export-csv 路径 可把题目清单导出为 CSV 供线下作答。
+python scripts/data_intake.py label-verify-submit SESSION_ID --verification-id VERIFICATION_ID \
+  --answer 行ID=你的答案 --answer 行ID=你的答案
+```
+
+`label-verify` 抽题后依次输出：提示「请仅根据输入作答，不要查看数据中的现有答案。」；`evidence_note` 证据预告——本轮 N 条即使全部一致，95% 置信下真实一致率下界也只约多少（例如 5 条约 57%），小样本下下界才是你能依赖的数；已标注行不足所选条数时再输出 `shortfall_note`，说明按现有全部已标注行抽取、统计按实际条数口径；随后逐题列出「[行ID] 题目输入」。标准输出为 JSON，含 `verification_id`、`sample_size`、`row_ids` 与可照抄的 `submit_hint`。`--export-csv` 导出的清单带 BOM、Excel 直开，只含「行ID、题目输入、留空待填的盲标答案」三列，不含数据答案——导出文件泄露答案，盲标核验就失效；线下作答后逐条照抄回 `label-verify-submit` 提交。
+
+`label-verify-submit` 不收 `--revision`（核验结论由全量来源与处理方案摘要绑定，数据或方案变化后原核验自动失效）；每条抽样行一个 `--answer`，行ID=你的答案，需恰好覆盖全部抽样行。人读判定行形如「判定：verified（5/5 一致，95% 置信下界约 57%）」，通过与未通过两种判定同口径亮出下界数字，观测一致率不冒充真实水平；通过时另附「盲标核验通过：监督信号的业务含义经独立复现。」，未通过时另附「存在不一致，训练不会开始；请核对数据标签或业务定义后重新核验。」JSON 结果同样携带 `agreement_lower_bound` 与 `evidence_note`。
 
 ## 生成独立数据分区与版本
 
@@ -387,5 +400,3 @@ python scripts/data_intake.py --agent-config-path /tmp/tunesmith-agent.json \
 - 提交结论与存档带 `agreement_lower_bound` 和 `evidence_note`，通过与未通过两种判定都展示；CLI `label-verify-submit` 输出的 JSON 同样携带这两个字段。样本 <30 条时文案明说「下界才是你能依赖的数」；≥30 条改说「下界接近观测值」。
 - 已标注行少于所选样本量时，结果带 `shortfall_note` 如实说明按现有全部行抽取；统计说明按实际抽样条数计算，不按请求值夸大证据。
 - 早期版本的存档记录没有这两个统计字段时，页面回读按同一口径现算统计说明，不会静默丢掉局限提示。
-
-「语义安全层」一节中「系统随机抽取最多 5 条已标注行」为早期口径描述；当前实现样本量可自选，统计说明以上述为准。
