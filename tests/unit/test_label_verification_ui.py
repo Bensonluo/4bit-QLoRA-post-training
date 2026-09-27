@@ -83,9 +83,7 @@ def test_contrast_check_via_page(data_page, monkeypatch):
     assert not page.exception
     # 用数据中的真实目标完成配对
     targets = {row.row_id: row.target for row in service.load(session.session_id).preview.rows}
-    boxes = [
-        s for s in page.selectbox if s.key and str(s.key).startswith("cc_")
-    ]
+    boxes = [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]
     assert len(boxes) == 2
     for box in boxes:
         row_id = str(box.key).rsplit("_", 1)[-1]
@@ -103,6 +101,47 @@ def test_contrast_check_via_page(data_page, monkeypatch):
     next(b for b in page.button if b.label == "提交配对").click().run()
     assert not page.exception
     assert any("对比核验二连对" in message.value for message in page.success)
+
+    # 二连对后核验已达标;强制的表单收进可选 expander,第三轮不强制
+    expander = next(e for e in page.expander if "可选" in e.label and "对比核验" in e.label)
+    optional_buttons = [b for b in expander.button if b.label == "开始配对对比"]
+    assert optional_buttons
+    next(b for b in page.button if b.label == "开始配对对比").click().run()
+    assert not page.exception
+    boxes = [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]
+    for box in boxes:
+        row_id = str(box.key).rsplit("_", 1)[-1]
+        box.select(targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("对比核验3轮连胜" in message.value for message in page.success)
+
+
+def test_contrast_check_third_round_is_optional_entry(data_page, monkeypatch):
+    """二连对后不再强制配对:核验入口收进可选 expander,直接确认不受阻。"""
+    import src.agent.intake
+    from tests.unit.test_data_intake import analysis, model_for
+
+    service, session, page = data_page
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "联合分析目标与数据").click().run()
+    targets = {row.row_id: row.target for row in service.load(session.session_id).preview.rows}
+    for _ in range(2):
+        next(b for b in page.button if b.label == "开始配对对比").click().run()
+        for box in [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]:
+            row_id = str(box.key).rsplit("_", 1)[-1]
+            box.select(targets[row_id]).run()
+        next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("对比核验二连对" in message.value for message in page.success)
+    # 可选入口在,但默认不展开、不强制;确认按钮可用
+    assert any("可选" in e.label and "对比核验" in e.label for e in page.expander)
+    next(c for c in page.checkbox if c.label.startswith("已核对预览")).check().run()
+    assert not next(b for b in page.button if b.label == "确认当前转换含义").disabled
 
 
 def test_stale_warning_renders_after_revision(verify_page):

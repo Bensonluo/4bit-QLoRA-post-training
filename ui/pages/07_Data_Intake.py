@@ -1810,17 +1810,8 @@ if session.preview:
     if status == "review_preview":
         st.subheader("对比核验（确认前先配对一次，防止盲点头）")
         contrast = service.contrast_check_status(session.session_id)
-        if (
-            contrast
-            and contrast.get("verdict") == "verified"
-            and not contrast.get("needs_second_round")
-        ):
-            st.success("对比核验二连对：转换的业务含义经两组不同题目配对核对。")
-        else:
-            if contrast and contrast.get("verdict") == "verified":
-                st.info("第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。")
-            if contrast and contrast.get("verdict") == "mismatch":
-                st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
+
+        def render_contrast_round() -> None:
             with st.form("contrast_check_form"):
                 st.write("开始配对对比：抽取两条答案不同的输入，把答案配到正确的输入上。")
                 start_contrast = st.form_submit_button("开始配对对比", type="primary")
@@ -1853,6 +1844,27 @@ if session.preview:
                         st.rerun()
                     except (ValueError, RuntimeError, OSError) as exc:
                         st.error(str(exc))
+
+        verified_streak = (
+            contrast.get("streak", 0) if contrast and contrast.get("verdict") == "verified" else 0
+        )
+        if verified_streak >= 3:
+            st.success(
+                f"对比核验{verified_streak}轮连胜：转换的业务含义经多组不同题目反复配对核对。"
+            )
+        elif verified_streak == 2:
+            st.success("对比核验二连对：转换的业务含义经两组不同题目配对核对。")
+        else:
+            if contrast and contrast.get("verdict") == "verified":
+                st.info("第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。")
+            if contrast and contrast.get("verdict") == "mismatch":
+                st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
+            render_contrast_round()
+        if verified_streak >= 2:
+            # 二连对后核验已达标;第三轮起只是自愿加练,不强制。
+            with st.expander(f"可选：继续第 {verified_streak + 1} 轮对比核验（不强制）"):
+                st.caption("核验已达标。多配一轮只是自愿加练——碰巧连续蒙对的概率会越来越低。")
+                render_contrast_round()
         accepted = st.checkbox(
             "已核对预览：输入是模型实际可获得的信息，答案与我希望模型学会的目标一致。",
             key=f"sample_review_{session.session_id}_{session.revision}_{','.join(row.row_id for row in sample_rows_to_show)}",

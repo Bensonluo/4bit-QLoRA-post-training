@@ -487,7 +487,11 @@ class IntakeService:
         return result
 
     def contrast_check_status(self, session_id: str) -> dict | None:
-        """当前绑定下最近结论与连胜轮数(二连对才算真正看清,防瞎蒙)。"""
+        """当前绑定下最近结论与连胜轮数(二连对才算真正看清,防瞎蒙)。
+
+        连胜是真实的连续 verified 轮数:用户可选继续第三轮及以后,
+        needs_second_round 语义不变(连胜不足两轮即需要再核验)。
+        """
         session = self.load(session_id)
         if session.preview is None:
             return None
@@ -500,7 +504,7 @@ class IntakeService:
             rows = connection.execute(
                 "SELECT verdict, result FROM contrast_checks "
                 "WHERE session_id=? AND binding=? AND status='completed' "
-                "ORDER BY created_at DESC LIMIT 2",
+                "ORDER BY created_at DESC",
                 (session.session_id, binding),
             ).fetchall()
         if not rows:

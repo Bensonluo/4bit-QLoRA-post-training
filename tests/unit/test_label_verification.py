@@ -186,6 +186,32 @@ def test_contrast_check_pairs_answers_and_records_mismatch(tmp_path):
     assert status["needs_second_round"] is True
 
 
+def test_contrast_check_third_round_streak_keeps_counting(tmp_path):
+    """二连对达标后用户可选继续第三轮:连胜如实计数,核验语义不变。"""
+    service, session = _contrast_store(tmp_path)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    for round_number in range(1, 4):
+        pending = service.start_contrast_check(session.session_id, session.revision)
+        mapping = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+        result = service.submit_contrast_check(session.session_id, pending["check_id"], mapping)
+        assert result["verdict"] == "verified"
+        status = service.contrast_check_status(session.session_id)
+        assert status["verdict"] == "verified"
+        assert status["streak"] == round_number
+        assert status["needs_second_round"] is (round_number < 2)
+
+    # 第三轮后配错一次:连胜归零,回到需要重新二连对的状态
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    wrong = {
+        pending["items"][0]["row_id"]: targets[pending["items"][1]["row_id"]],
+        pending["items"][1]["row_id"]: targets[pending["items"][0]["row_id"]],
+    }
+    service.submit_contrast_check(session.session_id, pending["check_id"], wrong)
+    status = service.contrast_check_status(session.session_id)
+    assert status["verdict"] == "mismatch" and status["streak"] == 0
+    assert status["needs_second_round"] is True
+
+
 def test_contrast_check_rejects_bad_submissions_and_stale_binding(tmp_path):
     service, session = _contrast_store(tmp_path)
     pending = service.start_contrast_check(session.session_id, session.revision)
@@ -246,7 +272,6 @@ def test_blind_sampling_covers_rare_classes(tmp_path):
     """抽样数少于类别数时按标签轮转:稀有类必须被抽到。"""
     from tests.unit.test_data_intake import CSV, analysis
     from tests.unit.test_full_data import FULL as TWO_CLASS_FULL
-    from tests.unit.test_data_materialize import _full as _materialize_full
 
     service = IntakeService(tmp_path / "intake")
     session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
