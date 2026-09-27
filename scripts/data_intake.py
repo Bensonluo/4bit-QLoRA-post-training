@@ -262,6 +262,11 @@ def main() -> int:
         help="回读当前数据版本最近一次已保存的探针结果，不重新加载模型",
     )
     probe_show.add_argument("session_id")
+    probe_show.add_argument(
+        "--export-csv",
+        type=Path,
+        help="存盘记录含候选时把人工核对清单导出为 CSV 文件（Excel 直开）；没有候选则不写文件",
+    )
     train_prepare = sub.add_parser(
         "train-prepare", help="用本地基础模型准备真实训练配置并重做匹配 tokenizer 预检"
     )
@@ -1070,7 +1075,11 @@ def main() -> int:
             for line in summarize_preflight(session.training_preflight):
                 print(line, file=sys.stderr)
         elif args.command == "learnability-probe-show":
-            from src.workbench.learnability_probe import describe_candidates, load_latest_probe
+            from src.workbench.learnability_probe import (
+                candidates_to_csv,
+                describe_candidates,
+                load_latest_probe,
+            )
 
             session = service.load(args.session_id)
             if session.dataset is None:
@@ -1094,6 +1103,15 @@ def main() -> int:
             # 回读同样逐行列出候选:重看结论不应重新加载模型,也不该丢掉核对清单。
             for line in describe_candidates(saved.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
+            # 回读的存盘候选同样可导出 CSV,与 learnability-probe 同一份清单逻辑,
+            # 重看证据时不必为了拿核对清单而重新加载模型。
+            if args.export_csv is not None:
+                if saved.get("label_error_candidates"):
+                    args.export_csv.parent.mkdir(parents=True, exist_ok=True)
+                    args.export_csv.write_bytes(candidates_to_csv(saved["label_error_candidates"]))
+                    print(f"候选核对清单已导出：{args.export_csv}", file=sys.stderr)
+                else:
+                    print("没有候选，未生成核对清单 CSV。", file=sys.stderr)
             return 0
         elif args.command == "learnability-probe":
             from src.workbench.learnability_probe import (

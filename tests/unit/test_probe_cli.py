@@ -65,6 +65,26 @@ def _run_probe(monkeypatch, service, evaluation_root, session, *extra):
     return data_intake.main()
 
 
+def _run_show(monkeypatch, service, evaluation_root, session, *extra):
+    from scripts import data_intake
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(service.root),
+            "--evaluation-root",
+            str(evaluation_root),
+            "learnability-probe-show",
+            session.session_id,
+            *map(str, extra),
+        ],
+    )
+    return data_intake.main()
+
+
 def test_cli_probe_prints_candidates_in_plain_language(store, tmp_path, monkeypatch, capsys):
     """有分歧时 stderr 逐行列出候选；基座与盲标双信号矛盾的强证据行带 ⚠。"""
     service, session = store
@@ -178,6 +198,52 @@ def test_cli_probe_export_csv_without_candidates_writes_nothing(
     csv_path = tmp_path / "candidates.csv"
     _mock_runtime(monkeypatch, "yes")  # 全部命中:零候选
     assert _run_probe(monkeypatch, service, evaluation_root, session, "--export-csv", csv_path) == 0
+    _, err = capsys.readouterr()
+    assert not csv_path.exists()
+    assert "没有候选，未生成核对清单 CSV" in err
+
+
+def test_cli_probe_show_export_csv_matches_saved_candidates(store, tmp_path, monkeypatch, capsys):
+    """存盘→show --export-csv:文件内容与探针候选完全一致,与 learnability-probe 同源。"""
+    from src.workbench.learnability_probe import candidates_to_csv
+
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    csv_path = tmp_path / "exports" / "show-candidates.csv"
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    answers = {item["row_id"]: "用户也不认同的答案" for item in pending["items"]}
+    service.submit_label_verification(session.session_id, pending["verification_id"], answers)
+
+    _mock_runtime(monkeypatch, "绝不正确的答案")
+    assert _run_probe(monkeypatch, service, evaluation_root, session) == 0
+    saved_payload = json.loads(capsys.readouterr().out)
+    capsys.readouterr()
+    assert saved_payload["label_error_candidates"]
+
+    # show 不重新加载模型,回读的存盘候选导出为同一份核对清单
+    assert _run_show(monkeypatch, service, evaluation_root, session, "--export-csv", csv_path) == 0
+    _, err = capsys.readouterr()
+    assert csv_path.exists()
+    text = csv_path.read_bytes().decode("utf-8-sig")
+    expected = candidates_to_csv(saved_payload["label_error_candidates"]).decode("utf-8-sig")
+    assert text == expected  # 同一导出逻辑,一字不差
+    for candidate in saved_payload["label_error_candidates"]:
+        assert candidate["row_id"] in text
+    assert "候选核对清单已导出" in err
+
+
+def test_cli_probe_show_export_csv_without_candidates_writes_nothing(
+    store, tmp_path, monkeypatch, capsys
+):
+    """存盘记录没有候选时,show --export-csv 不写文件,如实说明。"""
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    csv_path = tmp_path / "show-candidates.csv"
+    _mock_runtime(monkeypatch, "yes")  # 全部命中:存盘记录零候选
+    assert _run_probe(monkeypatch, service, evaluation_root, session) == 0
+    capsys.readouterr()
+
+    assert _run_show(monkeypatch, service, evaluation_root, session, "--export-csv", csv_path) == 0
     _, err = capsys.readouterr()
     assert not csv_path.exists()
     assert "没有候选，未生成核对清单 CSV" in err
