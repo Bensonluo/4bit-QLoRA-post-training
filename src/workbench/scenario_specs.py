@@ -620,6 +620,24 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("dirty-data", "empty-target"),
         ),
+        ScenarioSpec(
+            scenario_id="utf16-no-bom-rejected",
+            goal="根据客户首次描述判断售后类别",
+            sample=_UTF16_NOBOM_SAMPLE,
+            sample_name="工单.csv",
+            full=_UTF16_NOBOM_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:create",
+            expect_note=(
+                "实测结局:无 BOM 的 UTF-16 字节流(「Unicode 文本」导出经其他工具转存丢 BOM)"
+                "utf-8-sig 解不开,gb18030 兜底也解不开(前导字节后跟交错的 NUL/换行字节),"
+                "create 即明确拒绝:「无法解码文件，请明确指定编码；原始数据未修改。」;"
+                "恢复路径已实测:入口显式指定编码(如 utf-16-le)即可正确解码并继续旅程;"
+                "与带 BOM 的 utf16-excel-export(按 BOM 证据自动识别)构成编码家族的完整边界"
+            ),
+            tags=("encoding", "utf16", "excel"),
+        ),
     ]
 
 

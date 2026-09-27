@@ -123,7 +123,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 16, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 26, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -261,3 +261,30 @@ def test_all_empty_target_column_blocked_at_contrast_check(tmp_path):
     # 基础分析阶段既不静默通过也不拦:如实生成「0 类答案」的观察与逐行 needs_label 预览
     assert result.stages["create"] == "passed"
     assert result.stages["baseline_analysis"] == "passed"
+
+
+def test_utf16_no_bom_rejected_at_create(tmp_path):
+    """场景 26:无 BOM 的 UTF-16 在入口即被明确拒绝、原始数据未修改;显式指定编码可恢复。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "utf16-no-bom-rejected" in specs, "缺少场景 utf16-no-bom-rejected"
+
+    spec = specs["utf16-no-bom-rejected"]
+    # 夹具真实性:确无 BOM,且 utf-8-sig 与 gb18030 两个自动兜底都解不开——
+    # 若夹具漂移成碰巧可解码的形态,场景就不再覆盖「入口明确拒绝」这条路
+    assert spec.sample[:2] not in (b"\xff\xfe", b"\xfe\xff")
+    for fallback in ("utf-8-sig", "gb18030"):
+        try:
+            spec.sample.decode(fallback)
+        except UnicodeDecodeError:
+            continue
+        raise AssertionError(f"夹具意外可被 {fallback} 解码,拒绝路径将不复存在")
+    # 字节本身是合法 UTF-16LE:显式指定编码是真实可用的恢复路径
+    assert spec.sample.decode("utf-16-le").startswith("编号")
+
+    result = run_scenario(spec, tmp_path / "utf16-no-bom-rejected")
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "create", result.to_dict()
+    assert "无法解码文件" in result.blocked_message
+    assert "原始数据未修改" in result.blocked_message
+    # 旅程在第一关即停,没有任何后续阶段被记录
+    assert set(result.stages) == {"create"}
