@@ -68,7 +68,7 @@ tasks:
   - id: "task-001"
     title: "盲标核验训练门禁:prepare 摘要绑定校验 + 全部入口测试(含迭代/P3.4)"
     estimated_hours: 6
-    status: "pending"
+    status: "completed"
     assigned_to: "zcode"
     dependencies: []
     kiro_workflow:
@@ -78,7 +78,7 @@ tasks:
   - id: "task-002"
     title: "盲标核验 CLI(label-verify / label-verify-submit)"
     estimated_hours: 3
-    status: "pending"
+    status: "completed"
     assigned_to: "zcode"
     dependencies: ["task-001"]
     kiro_workflow:
@@ -88,7 +88,7 @@ tasks:
   - id: "task-003"
     title: "盲标核验页面交互区 + 浏览器实测"
     estimated_hours: 5
-    status: "pending"
+    status: "completed"
     assigned_to: "zcode"
     dependencies: ["task-001"]
     kiro_workflow:
@@ -98,7 +98,7 @@ tasks:
   - id: "task-004"
     title: "对比预览最小版:确定性扰动备选解释 + 二选一记录 + 页面与测试"
     estimated_hours: 8
-    status: "pending"
+    status: "completed"
     assigned_to: "zcode"
     dependencies: []
     kiro_workflow:
@@ -108,7 +108,7 @@ tasks:
   - id: "task-005"
     title: "可学性探针最小版:基座零样本小样探测 + 基线对比呈现 + 测试"
     estimated_hours: 8
-    status: "pending"
+    status: "completed"
     assigned_to: "zcode"
     dependencies: []
     kiro_workflow:
@@ -118,7 +118,7 @@ tasks:
   - id: "task-006"
     title: "全量回归 + 文档契约更新(agent-setup/交接) + 走查记录"
     estimated_hours: 6
-    status: "pending"
+    status: "completed"
     assigned_to: "zcode"
     dependencies: ["task-001", "task-002", "task-003", "task-004", "task-005"]
     kiro_workflow:

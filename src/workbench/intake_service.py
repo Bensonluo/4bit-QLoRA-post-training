@@ -98,6 +98,12 @@ class IntakeService:
                 "sample_size INTEGER NOT NULL, seed INTEGER NOT NULL, row_ids TEXT NOT NULL, "
                 "status TEXT NOT NULL, verdict TEXT, result TEXT, created_at TEXT NOT NULL)"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS contrast_checks ("
+                "check_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, "
+                "binding TEXT NOT NULL, row_ids TEXT NOT NULL, options TEXT NOT NULL, "
+                "status TEXT NOT NULL, verdict TEXT, result TEXT, created_at TEXT NOT NULL)"
+            )
 
     def _save(self, session: IntakeSession, expected_revision: int | None) -> IntakeSession:
         updated = session.model_copy(deep=True)
@@ -299,6 +305,145 @@ class IntakeService:
         analysis, trace = analyze_intake(session, client)
         return self.apply_analysis(session, analysis, model=client.model, trace=trace)
 
+    def start_contrast_check(self, session_id: str, expected_revision: int) -> dict:
+        """配对对比:两行输入+打乱的两个答案,用户配对——确认不再是盲点头。"""
+        session = self.load(session_id)
+        if session.revision != expected_revision:
+            raise ValueError("任务已更新，请读取最新预览后再开始对比核验。")
+        preview = session.preview
+        if preview is None:
+            raise ValueError("请先完成分析并生成真实预览，再进行对比核验。")
+        labelled = [row for row in preview.rows if row.target is not None]
+        distinct = {row.target for row in labelled}
+        if len(labelled) < 2 or len(distinct) < 2:
+            raise ValueError("对比核验需要至少两条答案不同的已标注行。")
+        binding = session.source.digest + (
+            session.analysis.recipe.model_dump_json()
+            if session.analysis and session.analysis.recipe
+            else ""
+        )
+        seed = zlib.crc32(binding.encode("utf-8"))
+        first, second = sorted(random.Random(seed).sample(range(len(labelled)), 2))
+        rows = [labelled[first], labelled[second]]
+        if rows[0].target == rows[1].target:  # 确定性兜底:答案必须不同
+            for candidate in labelled:
+                if candidate.target != rows[0].target:
+                    rows[1] = candidate
+                    break
+        options = [rows[0].target, rows[1].target]
+        random.Random(seed + 1).shuffle(options)
+        check_id = uuid4().hex
+        with sqlite3.connect(self.database) as connection:
+            connection.execute(
+                "INSERT INTO contrast_checks VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    check_id,
+                    session.session_id,
+                    binding,
+                    json.dumps([row.row_id for row in rows]),
+                    json.dumps(options),
+                    "pending",
+                    None,
+                    None,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+        return {
+            "check_id": check_id,
+            "items": [{"row_id": row.row_id, "input": row.input} for row in rows],
+            "options": options,
+            "note": "请把每个答案配到正确的输入上；配对正确才说明已看清业务含义。",
+        }
+
+    def submit_contrast_check(
+        self, session_id: str, check_id: str, mapping: dict[str, str]
+    ) -> dict:
+        """判定配对并留档;配错不会静默——确认前必须有人真正读懂了转换。"""
+        session = self.load(session_id)
+        with sqlite3.connect(self.database) as connection:
+            row = connection.execute(
+                "SELECT session_id, binding, row_ids, options, status FROM contrast_checks "
+                "WHERE check_id=?",
+                (check_id,),
+            ).fetchone()
+        if row is None or row[0] != session.session_id:
+            raise ValueError("找不到这个任务的对比核验。")
+        stored_session, binding, row_ids_json, options_json, status = row
+        if status != "pending":
+            raise ValueError("该对比核验已提交过结论，请开始新的核验。")
+        current_binding = session.source.digest + (
+            session.analysis.recipe.model_dump_json()
+            if session.analysis and session.analysis.recipe
+            else ""
+        )
+        if binding != current_binding:
+            with sqlite3.connect(self.database) as connection:
+                connection.execute(
+                    "UPDATE contrast_checks SET status='stale' WHERE check_id=?", (check_id,)
+                )
+            raise ValueError("预览或方案已变化，本次对比核验失效；请重新开始。")
+        row_ids = json.loads(row_ids_json)
+        options = json.loads(options_json)
+        if not isinstance(mapping, dict) or set(mapping) != set(row_ids):
+            raise ValueError(f"请恰好为 {len(row_ids)} 条输入各选一个答案。")
+        if any(value not in options for value in mapping.values()):
+            raise ValueError("答案必须来自给出的选项。")
+        by_id = {preview_row.row_id: preview_row for preview_row in session.preview.rows}
+        items, matched = [], 0
+        for row_id in row_ids:
+            correct = by_id[row_id].target
+            choice = mapping[row_id]
+            ok = choice == correct
+            matched += ok
+            items.append(
+                {
+                    "row_id": row_id,
+                    "chosen": choice,
+                    "correct_answer": correct,
+                    "match": ok,
+                }
+            )
+        verdict = "verified" if matched == len(row_ids) else "mismatch"
+        result = {
+            "verdict": verdict,
+            "matched": matched,
+            "total": len(row_ids),
+            "items": items,
+            "verdict_note": (
+                "配对正确：转换的业务含义已被真正核对。"
+                if verdict == "verified"
+                else "配对错误：此前的确认可能是盲点头；请重新查看预览后再确认。"
+            ),
+        }
+        with sqlite3.connect(self.database) as connection:
+            connection.execute(
+                "UPDATE contrast_checks SET status='completed', verdict=?, result=? "
+                "WHERE check_id=?",
+                (verdict, json.dumps(result, ensure_ascii=False), check_id),
+            )
+        return result
+
+    def contrast_check_status(self, session_id: str) -> dict | None:
+        """当前预览绑定下最近一次对比核验结论(供确认前展示)。"""
+        session = self.load(session_id)
+        if session.preview is None:
+            return None
+        binding = session.source.digest + (
+            session.analysis.recipe.model_dump_json()
+            if session.analysis and session.analysis.recipe
+            else ""
+        )
+        with sqlite3.connect(self.database) as connection:
+            row = connection.execute(
+                "SELECT status, verdict, result FROM contrast_checks "
+                "WHERE session_id=? AND binding=? AND status='completed' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (session.session_id, binding),
+            ).fetchone()
+        if row is None:
+            return None
+        return {"status": row[0], "verdict": row[1], **(json.loads(row[2]) if row[2] else {})}
+
     def confirm(
         self, session_id: str, expected_revision: int, row_ids: list[str] | None = None
     ) -> IntakeSession:
@@ -481,7 +626,7 @@ class IntakeService:
         verification_id = uuid4().hex
         with sqlite3.connect(self.database) as connection:
             connection.execute(
-                "INSERT INTO label_verifications VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO label_verifications VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     verification_id,
                     session.session_id,

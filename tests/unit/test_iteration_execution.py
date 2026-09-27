@@ -21,6 +21,7 @@ def _session(**fields):
         analysis=None,
         full_data=None,
         dataset=None,
+        label_verification={"verdict": "verified"},
     )
     base.update(fields)
     return IntakeSession.model_construct(**base)
@@ -224,3 +225,20 @@ def test_worker_honors_preexisting_stop_request_without_advancing(harness):
     (service._directory(IDENTITY) / "stop.request").touch()
     assert service.run_worker(IDENTITY) is False
     assert service.get(IDENTITY)["status"] == "stopped"
+
+
+def test_authorize_requires_verified_label_verification(harness):
+    """数据修订后盲标核验失效时,自动执行在授权入口即被拒绝,不起后台进程。"""
+    service = harness["service"]
+    live = harness["live"]
+    live.label_verification = None
+    identity = "it-" + "b" * 32
+    harness["iterations"][identity] = {
+        "iteration_id": identity,
+        "session_id": live.session_id,
+        "goal": live.goal,
+        "status": "confirmed",
+    }
+    with pytest.raises(ValueError, match="盲标核验"):
+        service.start(identity, live)
+    assert len(harness["launches"]) == 0

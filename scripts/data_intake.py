@@ -221,12 +221,37 @@ def main() -> int:
         help="仅在未声明分组字段且已确认每行属于独立业务对象时使用",
     )
     preflight = sub.add_parser(
-        "preflight", help="仅用本地 tokenizer 检查实际截断与答案保留，不下载模型或启动训练"
+        "preflight", help="用本地 tokenizer 检查实际 token 与答案保留，不启动训练"
     )
     preflight.add_argument("session_id")
     preflight.add_argument("--revision", type=int, required=True)
     preflight.add_argument("--tokenizer", required=True, help="本地 tokenizer 目录或已缓存标识")
     preflight.add_argument("--max-length", type=int, required=True)
+    label_verify = sub.add_parser(
+        "label-verify",
+        help="盲标核验：抽样已标注行并隐藏答案，由业务用户独立作答（训练准备的前置门禁）",
+    )
+    label_verify.add_argument("session_id")
+    label_verify.add_argument("--revision", type=int, required=True)
+    label_verify.add_argument("--size", type=int, default=5, help="抽样条数（默认 5，上限 50）")
+    verify_submit = sub.add_parser("label-verify-submit", help="提交盲标核验答案并得到一致性判定")
+    verify_submit.add_argument("session_id")
+    verify_submit.add_argument("--verification-id", required=True)
+    verify_submit.add_argument(
+        "--answer",
+        action="append",
+        required=True,
+        help="行ID=你的答案，每条抽样行一个 --answer",
+    )
+    probe = sub.add_parser(
+        "learnability-probe",
+        help="可学性探针：基座模型对开发集抽样零样本探测，与多数类基线如实对比（证据，不是判决）",
+    )
+    probe.add_argument("session_id")
+    probe.add_argument("--revision", type=int, required=True)
+    probe.add_argument("--model-path", required=True, help="已准备好的本地基础模型目录")
+    probe.add_argument("--size", type=int, default=8)
+    probe.add_argument("--max-new-tokens", type=int, default=32)
     train_prepare = sub.add_parser(
         "train-prepare", help="用本地基础模型准备真实训练配置并重做匹配 tokenizer 预检"
     )
@@ -394,7 +419,8 @@ def main() -> int:
     iteration_execute.add_argument("--revision", type=int, required=True)
     iteration_execute.add_argument("--independent-rows-confirmed", action="store_true")
     iteration_execute.add_argument(
-        "--acknowledge-warnings", action="store_true",
+        "--acknowledge-warnings",
+        action="store_true",
         help="仅在已查看本次执行暂停的预检提示后继续",
     )
     for name, help_text in (
@@ -624,13 +650,18 @@ def main() -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command in {
-            "iteration-execute", "iteration-execution-status", "iteration-execution-stop"
+            "iteration-execute",
+            "iteration-execution-status",
+            "iteration-execution-stop",
         }:
             from src.workbench.iteration_execution import IterationExecutionService
 
             execution = IterationExecutionService(
-                Path(args.iteration_root) / "executions", args.store,
-                args.iteration_root, args.training_root, args.evaluation_root,
+                Path(args.iteration_root) / "executions",
+                args.store,
+                args.iteration_root,
+                args.training_root,
+                args.evaluation_root,
             )
             if args.command == "iteration-execution-status":
                 result = execution.get(args.iteration_id)
@@ -643,7 +674,8 @@ def main() -> int:
                 if session.revision != args.revision:
                     raise ValueError("任务已更新，请读取当前版本后再提交自动执行。")
                 result = execution.start(
-                    args.iteration_id, session,
+                    args.iteration_id,
+                    session,
                     acknowledge_warnings=args.acknowledge_warnings,
                     independent_rows_confirmed=args.independent_rows_confirmed,
                 )
@@ -1004,6 +1036,64 @@ def main() -> int:
             print(
                 f"训练前检查：{session.training_preflight['status']}（未启动训练）", file=sys.stderr
             )
+        elif args.command == "learnability-probe":
+            from src.workbench.learnability_probe import probe_learnability, save_probe
+
+            session = service.load(args.session_id)
+            if session.revision != args.revision:
+                raise ValueError("任务已更新，请读取最新 revision 后重试。")
+            result = probe_learnability(
+                session,
+                args.model_path,
+                sample_size=args.size,
+                max_new_tokens=args.max_new_tokens,
+            )
+            path = save_probe(Path(args.evaluation_root).parent / "probes", result)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            print(f"\n探针记录已保存：{path}", file=sys.stderr)
+            return 0
+        elif args.command == "label-verify":
+            pending = service.start_label_verification(
+                args.session_id, args.revision, sample_size=args.size
+            )
+            print("请仅根据输入作答，不要查看数据中的现有答案。", file=sys.stderr)
+            for item in pending["items"]:
+                print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
+            result = {
+                "verification_id": pending["verification_id"],
+                "sample_size": pending["sample_size"],
+                "row_ids": [item["row_id"] for item in pending["items"]],
+                "submit_hint": (
+                    "data_intake.py label-verify-submit SESSION --revision R "
+                    "--verification-id VERIFICATION_ID --answer 行ID=你的答案（每行一个 --answer）"
+                ),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        elif args.command == "label-verify-submit":
+            answers: dict[str, str] = {}
+            for item in args.answer:
+                row_id, separator, value = item.partition("=")
+                if not separator or not row_id.strip() or not value.strip():
+                    raise ValueError("--answer 格式应为 行ID=你的答案，例如 r000001=硬件。")
+                if row_id in answers:
+                    raise ValueError(f"行 {row_id} 重复作答。")
+                answers[row_id] = value
+            result = service.submit_label_verification(
+                args.session_id, args.verification_id, answers
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            verdict_note = (
+                "盲标核验通过：监督信号的业务含义经独立复现。"
+                if result["verdict"] == "verified"
+                else "存在不一致，训练不会开始；请核对数据标签或业务定义后重新核验。"
+            )
+            print(
+                f"\n判定：{result['verdict']}（{result['matched']}/{result['sample_size']} 一致）",
+                file=sys.stderr,
+            )
+            print(verdict_note, file=sys.stderr)
+            return 0
         else:
             session = service.load(args.session_id)
         print(session.model_dump_json(indent=2))

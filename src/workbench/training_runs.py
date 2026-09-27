@@ -178,6 +178,16 @@ class TrainingRunService:
         try:
             if not dataset_is_current(session):
                 raise ValueError("请先确认当前全量数据并生成独立分区。")
+            # 盲标核验门禁：监督信号的业务含义必须经用户独立复现（隐藏答案对抽样行作答
+            # 并与数据标签一致）。核验与全量来源/配方摘要绑定，数据或方案变化后自动失效。
+            verification = getattr(session, "label_verification", None)
+            if not (
+                isinstance(verification, dict) and verification.get("verdict") == "verified"
+            ):
+                raise ValueError(
+                    "请先完成盲标核验：对抽样的已标注行隐藏答案独立作答，并与数据标签一致，"
+                    "再准备训练。这是确认监督信号业务含义的必要步骤，不能跳过。"
+                )
             if type(max_length) is not int or max_length <= 0:
                 raise ValueError("max_length 必须是正整数。")
             train_options, model_overrides = dict(training_options or {}), dict(model_options or {})

@@ -1803,6 +1803,45 @@ if session.preview:
                 st.warning(issue)
     status = next_action(session)
     if status == "review_preview":
+        st.subheader("对比核验（确认前先配对一次，防止盲点头）")
+        contrast = service.contrast_check_status(session.session_id)
+        if contrast and contrast.get("verdict") == "verified":
+            st.success("对比核验已通过：转换的业务含义已被配对核对。")
+        else:
+            if contrast and contrast.get("verdict") == "mismatch":
+                st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
+            with st.form("contrast_check_form"):
+                st.write("开始配对对比：抽取两条答案不同的输入，把答案配到正确的输入上。")
+                start_contrast = st.form_submit_button("开始配对对比", type="primary")
+            if start_contrast:
+                try:
+                    pending = service.start_contrast_check(session.session_id, session.revision)
+                    st.session_state["pending_contrast_check"] = pending
+                    st.rerun()
+                except (ValueError, RuntimeError, OSError) as exc:
+                    st.error(str(exc))
+            pending_contrast = st.session_state.get("pending_contrast_check")
+            if pending_contrast:
+                st.write(f"**配对题（verification {pending_contrast['check_id'][:8]}）**")
+                with st.form(f"contrast_answer_{pending_contrast['check_id']}"):
+                    mapping = {}
+                    for item in pending_contrast["items"]:
+                        st.code(item["input"], language=None)
+                        mapping[item["row_id"]] = st.selectbox(
+                            f"这条输入的正确答案（{item['row_id']}）",
+                            pending_contrast["options"],
+                            key=f"cc_{pending_contrast['check_id']}_{item['row_id']}",
+                        )
+                    submitted_contrast = st.form_submit_button("提交配对", type="primary")
+                if submitted_contrast:
+                    try:
+                        service.submit_contrast_check(
+                            session.session_id, pending_contrast["check_id"], mapping
+                        )
+                        st.session_state["pending_contrast_check"] = None
+                        st.rerun()
+                    except (ValueError, RuntimeError, OSError) as exc:
+                        st.error(str(exc))
         accepted = st.checkbox(
             "已核对预览：输入是模型实际可获得的信息，答案与我希望模型学会的目标一致。",
             key=f"sample_review_{session.session_id}_{session.revision}_{','.join(row.row_id for row in sample_rows_to_show)}",
@@ -2037,6 +2076,74 @@ if session.confirmed_revision is not None or session.full_data is not None:
                         st.rerun()
                     except ValueError as exc:
                         st.error(str(exc))
+        if next_action(session) in {"awaiting_dataset_split", "ready_for_training_preflight"}:
+            st.subheader("盲标核验（训练前的语义安全关卡）")
+            st.caption(
+                "系统随机抽取几条已标注行并隐藏答案，请仅根据输入给出你的答案；"
+                "与数据标签全部一致才允许准备训练。这验证的是监督信号的业务含义，"
+                "数据或方案修订后需重新核验。"
+            )
+            verification = session.label_verification
+            if verification and verification.get("verdict") == "verified":
+                st.success(
+                    f"盲标核验已通过（{verification['matched']}/{verification['sample_size']} 一致）。"
+                )
+            else:
+                if verification and verification.get("verdict") == "insufficient_agreement":
+                    st.error(
+                        f"盲标核验未通过（{verification['matched']}/{verification['sample_size']} 一致）；"
+                        "训练不会开始。请逐条核对不一致原因："
+                    )
+                    for item in verification["items"]:
+                        if not item["match"]:
+                            with st.expander(
+                                f"{item['row_id']}：你的答案「{item['submitted_answer']}」 vs 数据标签「{item['data_label']}」"
+                            ):
+                                st.code(item["input"], language=None)
+                    st.caption("标签错误、业务歧义或任务定义不清都会造成不一致；修正后重新核验。")
+                with st.form("label_verification_form"):
+                    st.write("开始一轮新的盲标核验：题目在提交表单后展示（答案不随题目显示）。")
+                    started = st.form_submit_button("抽取盲标核验题目", type="primary")
+                if started:
+                    try:
+                        pending = service.start_label_verification(
+                            session.session_id, session.revision
+                        )
+                        st.session_state["pending_label_verification"] = pending
+                        st.rerun()
+                    except (ValueError, RuntimeError, OSError) as exc:
+                        st.error(str(exc))
+            pending_items = st.session_state.get("pending_label_verification")
+            concluded = bool(
+                verification
+                and verification.get("verdict") in {"verified", "insufficient_agreement"}
+                and verification.get("verification_id")
+                == (pending_items or {}).get("verification_id")
+            )
+            if pending_items and not concluded:
+                st.write(
+                    f"**本轮核验（{pending_items['sample_size']} 条，verification {pending_items['verification_id'][:8]}）**"
+                )
+                with st.form(f"label_verification_answer_{pending_items['verification_id']}"):
+                    answers = {}
+                    for item in pending_items["items"]:
+                        st.code(item["input"], language=None)
+                        answers[item["row_id"]] = st.text_input(
+                            f"你的答案（{item['row_id']}）",
+                            key=f"lv_{pending_items['verification_id']}_{item['row_id']}",
+                        )
+                    submitted = st.form_submit_button("提交盲标核验答案", type="primary")
+                if submitted:
+                    try:
+                        service.submit_label_verification(
+                            session.session_id,
+                            pending_items["verification_id"],
+                            answers,
+                        )
+                        st.session_state["pending_label_verification"] = None
+                        st.rerun()
+                    except (ValueError, RuntimeError, OSError) as exc:
+                        st.error(str(exc))
         if next_action(session) == "awaiting_dataset_split":
             st.success("全量报告已确认。下一步准备独立训练与评测分区；尚未认定可以正式训练。")
             st.subheader("生成独立训练与评测分区")
@@ -2157,6 +2264,45 @@ if dataset is not None:
         st.caption(
             "只读取本地目录或已有缓存中的 tokenizer，不自动下载、不加载模型权重、不启动训练。"
         )
+        with st.expander("可学性探针（可选）：这份数据学得出这个任务吗？"):
+            st.caption(
+                "用基座模型对开发集抽样做零样本探测，与「瞎猜多数类」基线对比。"
+                "这是最便宜的证据，不是判决：样本量小、零样本差异不能预测微调效果；"
+                "显著低于基线通常意味着提示格式或任务定义需要先核查。会实际加载本地模型。"
+            )
+            probe_model = st.text_input(
+                "本地基础模型目录（已准备好权重）",
+                key=f"probe_model_{session.session_id}",
+            )
+            if st.button(
+                "运行可学性探针",
+                key=f"probe_run_{session.session_id}",
+                disabled=not probe_model.strip(),
+            ):
+                try:
+                    from src.workbench.learnability_probe import probe_learnability, save_probe
+
+                    with st.spinner("基座零样本探测开发集抽样…"):
+                        result = probe_learnability(
+                            service.load(session.session_id), probe_model.strip()
+                        )
+                        save_probe(PROJECT_ROOT / "outputs" / "workbench" / "probes", result)
+                    delta = result["difference"]
+                    verdict = (
+                        "零样本高于瞎猜基线"
+                        if delta > 0
+                        else "零样本不低于瞎猜基线"
+                        if delta == 0
+                        else "零样本低于瞎猜基线——先核查提示格式与任务定义"
+                    )
+                    st.metric(
+                        f"零样本 {result['zero_shot_accuracy']:.0%} vs 基线 {result['majority_baseline']:.0%}",
+                        f"{delta:+.0%}",
+                        delta_color="normal" if delta >= 0 else "inverse",
+                    )
+                    st.info(f"{verdict}。{result['note']}")
+                except (ValueError, RuntimeError, OSError, ImportError) as exc:
+                    st.error(str(exc))
         with st.form(f"training_preflight_{session.session_id}"):
             tokenizer_path = st.text_input("本地 tokenizer 目录或已缓存标识")
             max_length = st.number_input("训练最大 token 长度", min_value=1, value=2048, step=1)

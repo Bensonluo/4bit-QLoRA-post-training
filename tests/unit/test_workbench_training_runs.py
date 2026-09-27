@@ -62,16 +62,26 @@ def environment(tmp_path, monkeypatch):
     intake = IntakeService(tmp_path / "intake")
     session = _full(intake)
     session = intake.materialize_dataset(session.session_id, session.revision)
+    session = _verify_labels(intake, session)
     project = tmp_path / "project"
     (project / "scripts").mkdir(parents=True)
     shutil.copy(
         Path(__file__).resolve().parents[2] / "scripts" / "workbench_train.py",
-        project / "scripts" / "workbench_train.py",
+        project / "scripts/workbench_train.py",
     )
     service = TrainingRunService(
         tmp_path / "runs", project_root=project, python_executable=sys.executable
     )
     return intake, session, service, model
+
+
+def _verify_labels(intake, session):
+    """Simulate the business user reproducing sampled labels (blind check passes)."""
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    pending = intake.start_label_verification(session.session_id, session.revision)
+    answers = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+    intake.submit_label_verification(session.session_id, pending["verification_id"], answers)
+    return intake.load(session.session_id)
 
 
 def _prepare(environment, **options):
