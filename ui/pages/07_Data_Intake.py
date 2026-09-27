@@ -177,11 +177,19 @@ def show_temporal_exclusions(rows: list[dict], *, title: str) -> None:
 
 
 def show_fact_notes(profile, *, alias: str = "") -> None:
-    """渲染来源如实标注(第 18/24/25/26/28 轮):sheet_note 说明读取范围(info 级),
-    merged/formula/hidden/blank 是影响数据事实的告知(warning 级)——blank_note
-    跨格式(CSV/JSONL 空行已跳过、Excel 全空行照常读入),不再只是 Excel 事实。
+    """渲染来源如实标注(第 18/24/25/26/28/29 轮):sheet_note 说明读取范围(info 级),
+    merged/formula/hidden/blank/dup_header 是影响数据事实的告知(warning 级)——
+    blank_note 跨格式(CSV/JSONL 空行已跳过、Excel 全空行照常读入),dup_header_note
+    同样跨格式(与表头完全相同的数据行,样例侧不拦、全量侧硬拦),不再只是 Excel 事实。
     profile(dict)与 SampleSource(属性)同键,统一取用;为空不渲染,顺序固定。"""
-    for key in ("sheet_note", "merged_note", "formula_note", "hidden_note", "blank_note"):
+    for key in (
+        "sheet_note",
+        "merged_note",
+        "formula_note",
+        "hidden_note",
+        "blank_note",
+        "dup_header_note",
+    ):
         note = profile.get(key) if isinstance(profile, dict) else getattr(profile, key, None)
         if not note:
             continue

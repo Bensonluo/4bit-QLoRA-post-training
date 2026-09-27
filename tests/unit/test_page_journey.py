@@ -9,8 +9,7 @@ import pytest
 pytest.importorskip("streamlit")
 
 from tests.unit import test_data_intake_ui as intake_ui
-from tests.unit.test_data_intake import CSV
-from tests.unit.test_full_data import FULL, approved
+from tests.unit.test_full_data import FULL
 
 data_page = intake_ui.data_page
 PAGE = intake_ui.PAGE

@@ -647,8 +647,8 @@ def test_full_upload_form_reads_designated_excel_sheet(data_page, monkeypatch):
 
 
 def _fact_note_workbook_bytes() -> bytes:
-    """双 sheet + 合并区 + 隐藏行 + 全空行:一个工作簿同时触发
-    sheet/merged/hidden/blank 四条如实标注。"""
+    """双 sheet + 合并区 + 隐藏行 + 全空行 + 重复表头行:一个工作簿同时触发
+    sheet/merged/hidden/blank/dup_header 五条如实标注。"""
     from io import BytesIO
 
     from openpyxl import Workbook
@@ -663,6 +663,7 @@ def _fact_note_workbook_bytes() -> bytes:
         ("002", "物流未更新", None),  # C4:C5 合并,非首格读空
         ("003", "屏幕碎裂", None),
         ("004", "快递丢失", "物流"),
+        ("编号", "客户描述", "类别"),  # 第 7 行:导出拼接产生的重复表头,照常读入为数据行
     ):
         sheet.append(row)
     sheet.merge_cells("C4:C5")
@@ -698,7 +699,7 @@ def _full_fact_note_workbook_bytes() -> bytes:
 
 
 def test_excel_fact_notes_render_after_create(data_page):
-    """如实标注在任务页可见:主来源的 sheet(info)/merged/hidden/blank(warning)
+    """如实标注在任务页可见:主来源的 sheet(info)/merged/hidden/blank/dup_header(warning)
     在 scope_note 下按级渲染;CSV 任务没有 Excel 事实,一条都不渲染。"""
     service, existing, page = data_page
     # 两个会话都在首次 run 前建好:AppTest 的 selectbox 选项来自上一次渲染,
@@ -709,11 +710,12 @@ def test_excel_fact_notes_render_after_create(data_page):
     page.run()
     page.selectbox(key="intake_select").select(existing.session_id).run()
     assert not page.exception
-    # CSV 任务没有 Excel 事实:Excel 标注一条都不出现(空行跳过属跨格式事实,由
-    # blank_note 承担,干净 CSV 不携带)
+    # CSV 任务没有 Excel 事实:Excel 标注一条都不出现(空行/重复表头属跨格式事实,
+    # 由 blank_note/dup_header_note 承担,干净 CSV 不携带)
     assert not any("合并单元格" in w.value for w in page.warning)
     assert not any("隐藏行" in w.value for w in page.warning)
     assert not any("全空行" in w.value for w in page.warning)
+    assert not any("与表头完全相同" in w.value for w in page.warning)
     assert not any("sheet" in i.value for i in page.info)
 
     page.selectbox(key="intake_select").select(created.session_id).run()
@@ -721,6 +723,9 @@ def test_excel_fact_notes_render_after_create(data_page):
     assert any("1 处合并单元格" in w.value for w in page.warning), [w.value for w in page.warning]
     assert any("1 个隐藏行" in w.value for w in page.warning), [w.value for w in page.warning]
     assert any("1 个全空行" in w.value for w in page.warning), [w.value for w in page.warning]
+    assert any("1 行与表头完全相同" in w.value for w in page.warning), [
+        w.value for w in page.warning
+    ]
     assert any("仅读取第一个" in i.value for i in page.info), [i.value for i in page.info]
 
 
@@ -760,6 +765,9 @@ def test_added_source_fact_notes_listed_with_alias(data_page):
     assert any(w.value.startswith("labels：") and "1 个全空行" in w.value for w in page.warning), [
         w.value for w in page.warning
     ]
+    assert any(
+        w.value.startswith("labels：") and "1 行与表头完全相同" in w.value for w in page.warning
+    ), [w.value for w in page.warning]
 
 
 def test_composed_full_sources_form_reads_designated_excel_sheets(data_page, monkeypatch):

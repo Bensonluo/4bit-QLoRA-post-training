@@ -982,3 +982,58 @@ blocking 拦下;Excel 尾部空行在解析时自然消失。三种形态都不�
   tests/unit/test_sources.py、tests/unit/test_scenario_matrix.py、
   tests/unit/test_data_intake_ui.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 29 轮 = 样例侧重复表头行如实点名 dup_header_note(恢复循环第 10 轮)
+
+(恢复的北极星打磨循环,第 10 轮。)核心痛点:导出拼接产生的重复表头行是读取层
+最后一个「有据可查的静默事实」——全量侧早已硬拦(`repeated_header_rows`,场景 22
+blocking「与表头完全相同」点名行号),样例侧却完全无声:场景 30 实测该行以
+「就绪」面目进入预览(输入是列名「客户描述」、答案是列名「类别」)、分布 finding
+把列名计为一类、对比核验还可能拿它出题,expect_note 白纸黑字写着「样例侧没有
+对称检查,靠用户在预览逐行核对自行识别」。读取层披露系列(sheet/merged/formula/
+hidden/blank,第 18/24/25/26/28 轮)至此只剩这一处静默。
+
+- **dup_header_note 跨格式如实点名**(`intake_models.py` + `sources.py`):契约
+  字段 + `_dup_header_note` 文案助手 + 检测块(位于 blank_note 组装之后、
+  「文件没有数据行」拦截之前)+ 构造注入 + profile 同步 + `read_source`
+  docstring,六处接线。**判定口径与全量侧完全一致**(列数 ≥ 2 且每格等于
+  列名,基于解析后的 `(行号, 记录)` 元组),披露与拦截永不互相矛盾;单列文件
+  不检测(整列同值是合法业务数据,如类别列全是「质量」);因此 **xlsx 与 xls
+  均检测**、CSV/JSONL 同样检测(JSONL 数值型值不等于字符串列名,不误报;
+  自命名记录 `{"编号": "编号"}` 如实点名)。note 文案分述两侧行为:「该文件有
+  1 行与表头完全相同（第 3 行）照常读入为普通数据行——通常是导出拼接产生的
+  重复表头，输入与答案都会是列名；样例侧不拦（以「就绪」进入预览、可能参与
+  对比核验），全量侧会被全量验证硬拦。请删除重复表头行；没有自动删行。」行号
+  超过 5 个以「等」收尾(与各注同口径)。读取行为不变:该行照常读入为普通数据
+  行(测试钉死 rows[1].values 即列名);不自动删行,删除由用户决定。
+- **UI 第六键**(`ui/pages/07_Data_Intake.py`):`show_fact_notes` 键元组补
+  `dup_header_note`(warning 级,与 blank 同),三处渲染位点(session.profile、
+  原始资料与补充文件区带别名前缀、全量报告来源行)自动覆盖,签名不变。
+- **场景矩阵**(45 不变,无新场景——形态已由 30/40 覆盖,只升 expect_note):
+  场景 30「样例侧没有对称检查,靠用户在预览逐行核对自行识别」改写为「样例侧
+  不拦但已如实点名——dup_header_note(第 29 轮)按与全量侧完全一致的判据指认
+  第 3 行…识别不再只靠用户逐行核对」;场景 40「样例侧至今没有对称检查」改写为
+  「拦截不对称(样例侧披露不拦、全量侧硬拦),两侧判据同源,披露与拦截不互相
+  矛盾」。矩阵测试场景 30 扩展探针:note 含「1 行与表头完全相同」「第 3 行」
+  「样例侧不拦」「全量验证硬拦」「没有自动删行」,profile 与来源一致;场景 40
+  测试注释同步。45/45 as_expected 不变。
+- **文档钉死**(agent-setup.md + test_readme_alignment 21→22):多份资料小节
+  新增重复表头段——dup_header_note 点名行号、输入与答案都会是列名、样例侧
+  不拦/全量验证硬拦两侧行为分述、判据与全量侧完全一致、单列文件不检测、
+  没有自动删行、xlsx 与 xls 均检测;渲染段「五条」改「六条」,跨格式句升为
+  「空行与重复表头事实同样渲染」(钉测试同步改句)。新钉测试
+  `test_dup_header_rows_docs_pinned_and_backed_by_matrix`:关键句 + 场景矩阵
+  背书(duplicate-header-row-in-sample=passes、duplicate-header-rows-in-full=
+  blocked_at:validate_full 双场景钉死)。
+- **回归**:test_sources 31→37(CSV 检测+读取行为不变/JSONL 自命名+数值负例/
+  Excel 物理行号/前五上限「等」/三格式干净负例+单列守卫/服务层持久化)、
+  test_scenario_matrix 33(场景 30 探针扩展)、test_data_intake_ui 25(夹具
+  升级五注一簿+主例/别名/负例断言)、test_readme_alignment 21→22;顺带清偿
+  既有 lint 债(test_page_journey.py 两个 F401,commit 06e252d 引入,ruff
+  --fix,套件 2 passed 不变);ruff check/format clean。全量回归 **tests/unit
+  1739 passed / 0 failed**(--no-cov,无排除,170.99s,算术对账 1732+6+1)。
+  本批只动 src/workbench/intake_models.py、src/workbench/sources.py、
+  src/workbench/scenario_specs.py、ui/pages/07_Data_Intake.py、
+  tests/unit/test_sources.py、tests/unit/test_scenario_matrix.py、
+  tests/unit/test_data_intake_ui.py、tests/unit/test_readme_alignment.py、
+  tests/unit/test_page_journey.py、docs/agent-setup.md 与本记录。

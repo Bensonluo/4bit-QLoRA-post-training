@@ -668,3 +668,94 @@ def test_service_create_persists_blank_note(tmp_path):
     reloaded = service.load(session.session_id)
     assert "第 3 行" in reloaded.source.blank_note
     assert "blank_note" in reloaded.profile
+
+
+def test_csv_dup_header_row_read_as_data_and_annotated():
+    """CSV 重复表头行如实点名:读取行为不变(照常读入为普通数据行),
+    dup_header_note 点名行号并说明输入与答案都会是列名、两侧行为分述。"""
+    source = read_source(
+        "工单.csv",
+        "编号,客户描述,类别\n001,杯子破损,质量\n编号,客户描述,类别\n002,物流未更新,物流\n".encode(),
+    )
+    # 读取行为不变:重复表头行照旧进入数据(第 3 行,值即列名)
+    assert [row.line for row in source.rows] == [2, 3, 4]
+    assert source.rows[1].values == {"编号": "编号", "客户描述": "客户描述", "类别": "类别"}
+    note = source.dup_header_note
+    assert "1 行与表头完全相同" in note, note
+    assert "第 3 行" in note, note  # 逐行点名
+    assert "输入与答案都会是列名" in note, note
+    assert "样例侧不拦" in note and "全量验证硬拦" in note, note  # 两侧行为分述
+    assert "没有自动删行" in note, note
+    assert profile_source(source)["dup_header_note"] == note  # profile 同步如实呈现
+
+
+def test_jsonl_dup_header_self_named_record_annotated():
+    """JSONL 自命名记录(每个键的值都等于键名)同样点名;数值型值不等于字符串列名,不误报。"""
+    source = read_source(
+        "工单.jsonl",
+        '{"编号": "001", "类别": "质量"}\n{"编号": "编号", "类别": "类别"}\n'.encode(),
+    )
+    note = source.dup_header_note
+    assert "1 行与表头完全相同" in note, note
+    assert "第 2 行" in note, note
+    numeric = read_source("数值.jsonl", '{"编号": 1, "类别": 2.5}\n'.encode())
+    assert numeric.dup_header_note == ""
+
+
+def test_excel_dup_header_row_annotated_by_physical_line():
+    """Excel 重复表头行按数据区物理行号点名;与全量侧判据一致,单列文件不检测。"""
+    data = _blank_row_workbook_bytes(
+        ("001", "杯子破损", "质量"),
+        ("编号", "客户描述", "类别"),  # 第 3 物理行:导出拼接产生的重复表头
+        ("002", "物流未更新", "物流"),
+    )
+    source = read_source("工单.xlsx", data)
+    # 读取行为不变:该行照常读入为普通数据行
+    assert [row.line for row in source.rows] == [2, 3, 4]
+    assert source.rows[1].values == {"编号": "编号", "客户描述": "客户描述", "类别": "类别"}
+    note = source.dup_header_note
+    assert "1 行与表头完全相同" in note, note
+    assert "第 3 行" in note, note
+    assert profile_source(source)["dup_header_note"] == note
+
+
+def test_dup_header_note_lists_first_five_and_caps_long_lists():
+    """重复表头超过 5 行时不逐一罗列,以「等」收尾——与各 note 同款口径。"""
+    dirty = "编号,类别\n" + "".join("001,质量\n编号,类别\n" for _ in range(7)) + "002,物流\n"
+    source = read_source("many.csv", dirty.encode())
+    note = source.dup_header_note
+    assert "7 行与表头完全相同" in note, note
+    assert "第 11 行" in note, note  # 只列前 5 个(第 3/5/7/9/11 行)
+    assert "第 13 行" not in note, note  # 第 6 个起以「等」收尾
+    assert "等" in note, note
+
+
+def test_clean_files_have_no_dup_header_note():
+    """干净文件(各格式)不携带 dup_header_note;单列文件与全量侧判据一致,不检测。"""
+    csv_source = read_source("干净.csv", "编号,类别\n001,质量\n002,物流\n".encode())
+    assert csv_source.dup_header_note == ""
+    assert "dup_header_note" not in profile_source(csv_source)
+    jsonl_source = read_source("干净.jsonl", '{"编号": "001", "类别": "质量"}\n'.encode())
+    assert jsonl_source.dup_header_note == ""
+    excel_source = read_source("干净.xlsx", _blank_row_workbook_bytes(("001", "杯子破损", "质量")))
+    assert excel_source.dup_header_note == ""
+    assert "dup_header_note" not in profile_source(excel_source)
+    # 单列文件:整列同值是合法业务数据(如类别列全是「质量」),与全量侧 ≥2 列判据一致,不检测
+    single = read_source("单列.csv", "类别\n质量\n类别\n".encode())
+    assert single.dup_header_note == ""
+
+
+def test_service_create_persists_dup_header_note(tmp_path):
+    """创建入口(服务层)透传:会话建在含重复表头的文件上,存档回读后标注仍在。"""
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(
+        "根据客户首次描述判断售后类别",
+        "工单.csv",
+        "编号,客户描述,类别\n001,杯子破损,质量\n编号,客户描述,类别\n002,物流未更新,物流\n".encode(),
+    )
+    assert "第 3 行" in session.source.dup_header_note
+    assert "dup_header_note" in session.profile
+    reloaded = service.load(session.session_id)
+    assert "第 3 行" in reloaded.source.dup_header_note

@@ -64,6 +64,15 @@ class SampleSource(Contract):
         "自然消失、无从检测，不列入。xlsx 与 xls 均检测（基于解析后的记录，"
         "不依赖引擎特性）。",
     )
+    dup_header_note: str = Field(
+        default="",
+        description="重复表头行的如实说明（跨格式）：数据区存在与表头完全相同的行"
+        "（每个单元格都等于其列名，常见于导出拼接）时点名行号并说明该行按普通"
+        "数据行读入——输入与答案都会是列名；样例侧不拦（以「就绪」进入预览、"
+        "可能参与对比核验），全量侧会被全量验证硬拦。不自动删行，是否删除由"
+        "用户决定。判定口径与全量侧 repeated_header_rows 一致（列数 ≥ 2 且每格"
+        "等于列名）。xlsx 与 xls 均检测（基于解析后的记录）。",
+    )
     columns: list[str]
     rows: list[SourceRow]
 

@@ -446,7 +446,7 @@ def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
     assert result.blocked_at == "validate_full", result.to_dict()
     assert "与表头完全相同" in result.blocked_message, result.to_dict()
     # 样例侧四关照常通过:中部表头行按普通数据行读入并参与对比核验——
-    # 样例侧没有对称检查的不对称边界与场景 30 实测结论一致
+    # 样例侧拦截不对称(不拦,靠 dup_header_note 如实点名)与场景 30 实测结论一致
     assert all(
         result.stages[stage] == "passed"
         for stage in ("create", "baseline_analysis", "contrast_check", "confirm_sample")
@@ -770,7 +770,8 @@ def test_extreme_long_single_cell_passes_full_journey(tmp_path):
 
 def test_duplicate_header_row_in_sample_passes_without_sample_side_check(tmp_path):
     """场景 30:样例(非全量)中部混入重复表头行——样例侧不拦、按普通数据行读入,
-    与全量侧硬拦(duplicate-header-rows-in-full)构成不对称边界,期望以实测为准。"""
+    但 dup_header_note(第 29 轮)如实点名该行;与全量侧硬拦(duplicate-header-rows-in-full)
+    构成拦截不对称、判据同源的边界,期望以实测为准。"""
     specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
     assert "duplicate-header-row-in-sample" in specs, "缺少场景 duplicate-header-row-in-sample"
 
@@ -798,6 +799,13 @@ def test_duplicate_header_row_in_sample_passes_without_sample_side_check(tmp_pat
         "客户描述": "客户描述",
         "类别": "类别",
     }
+    # 第 29 轮起披露在场:读取行为不变,但该行不再无声——dup_header_note 点名行号
+    # 并分述两侧行为,判据与全量侧 repeated_header_rows 完全一致(列数 ≥ 2 且每格等于列名)
+    note = session.source.dup_header_note
+    assert "1 行与表头完全相同" in note and "第 3 行" in note, note
+    assert "样例侧不拦" in note and "全量验证硬拦" in note, note
+    assert "没有自动删行" in note, note
+    assert session.profile["dup_header_note"] == note  # profile 同步,页面如实渲染
     analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
     distribution = next(
         finding.message for finding in analysis.findings if finding.message.startswith("答案列")

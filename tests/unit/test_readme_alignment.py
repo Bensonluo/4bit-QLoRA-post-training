@@ -347,7 +347,7 @@ def test_excel_fact_notes_page_rendering_docs_pinned():
     assert "sheet 级标注用 info" in section
     assert "warning 提示影响数据事实" in section, "severity 分级必须写明"
     assert "一条都不渲染" in section, "CSV/JSONL 负例边界必须写明"
-    assert "空行事实同样渲染" in section, "blank_note 跨格式渲染边界必须写明"
+    assert "空行与重复表头事实同样渲染" in section, "blank/dup_header 跨格式渲染边界必须写明"
 
 
 def test_blank_rows_docs_pinned_and_backed_by_matrix():
@@ -373,3 +373,29 @@ def test_blank_rows_docs_pinned_and_backed_by_matrix():
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "blank-rows-in-sheet" in scenarios, "场景矩阵缺少全空行场景"
     assert scenarios["blank-rows-in-sheet"].expect == "blocked_at:confirm_sample"
+
+
+def test_dup_header_rows_docs_pinned_and_backed_by_matrix():
+    """重复表头行文档:dup_header_note 双侧行为分述/判据与全量侧同源/没有自动删行/
+    单列不检测/跨引擎覆盖关键句钉死,由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 多份资料一起分析",
+        "### 长尾字段解析与受限适配",
+    )
+    assert "dup_header_note" in section
+    assert "输入与答案都会是列名" in section, "该行污染输入与答案的根因必须写明"
+    assert "样例侧不拦" in section and "全量验证硬拦" in section, "两侧行为分述必须写明"
+    assert "没有自动删行" in section, "不自动删行的语义安全边界必须写明"
+    assert "判据完全一致" in section, "与全量侧 repeated_header_rows 同口径必须写明"
+    assert "单列文件不检测" in section, "单列边界必须写明"
+    assert "xls 均检测" in section, "跨引擎覆盖面(与 xlsx-only 检测的差别)必须写明"
+
+    # 场景矩阵背书:样例侧(披露不拦)与全量侧(硬拦)两场景真实存在且结局钉住
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "duplicate-header-row-in-sample" in scenarios, "场景矩阵缺少样例侧重复表头场景"
+    assert scenarios["duplicate-header-row-in-sample"].expect == "passes"
+    assert "duplicate-header-rows-in-full" in scenarios, "场景矩阵缺少全量侧重复表头场景"
+    assert scenarios["duplicate-header-rows-in-full"].expect == "blocked_at:validate_full"

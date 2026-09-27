@@ -268,6 +268,16 @@ def _kept_blank_rows_note(lines: list[int]) -> str:
     )
 
 
+def _dup_header_note(lines: list[int]) -> str:
+    """重复表头行(每个单元格都等于其列名的数据行)的如实说明:点名行号,两侧行为分述。"""
+    return (
+        f"该文件有 {len(lines)} 行与表头完全相同（{_list_line_numbers(lines)}）"
+        "照常读入为普通数据行——通常是导出拼接产生的重复表头，输入与答案都会是"
+        "列名；样例侧不拦（以「就绪」进入预览、可能参与对比核验），全量侧会被"
+        "全量验证硬拦。请删除重复表头行；没有自动删行。"
+    )
+
+
 def read_source(
     name: str,
     data: bytes,
@@ -290,6 +300,12 @@ def read_source(
     （读取行为不变），Excel 的全空行照常读入为全空记录——来源携带
     blank_note 点名行号；不自动补行、不自动排除。Excel 尾部空行在解析时
     自然消失、无从检测，不列入。
+
+    重复表头行跨格式如实点名（dup_header_note）：数据区存在与表头完全相同
+    的行（每个单元格都等于其列名，常见于导出拼接）时，来源携带
+    dup_header_note 点名行号——该行按普通数据行读入，样例侧不拦，全量侧由
+    全量验证硬拦（repeated_header_rows）；没有自动删行。判定口径与全量侧
+    完全一致（列数 ≥ 2 且每格等于列名）。
     """
     suffix = Path(name).suffix.lower().lstrip(".")
     digest = hashlib.sha256(data).hexdigest()
@@ -375,6 +391,19 @@ def read_source(
         ]
         if kept_blank_rows:
             blank_note = _kept_blank_rows_note(kept_blank_rows)
+    # 重复表头行的如实说明(跨格式):每个单元格都等于其列名的行几乎必然是导出
+    # 拼接产生的重复表头。判定口径与全量侧 repeated_header_rows 完全一致
+    # (列数 ≥ 2 且每格等于列名),两侧披露与拦截永不互相矛盾。样例侧此前对该行
+    # 完全无声(场景 30 实测:以「就绪」面目进入预览并可能参与对比核验)。
+    dup_header_note = ""
+    if len(columns) >= 2:
+        dup_header_lines = [
+            line
+            for line, record in records
+            if all(record.get(column) == column for column in columns)
+        ]
+        if dup_header_lines:
+            dup_header_note = _dup_header_note(dup_header_lines)
     if not records:
         raise ValueError("文件没有数据行。")
     rows = [
@@ -394,6 +423,7 @@ def read_source(
         formula_note=formula_note,
         hidden_note=hidden_note,
         blank_note=blank_note,
+        dup_header_note=dup_header_note,
         columns=columns,
         rows=rows,
     )
@@ -492,4 +522,6 @@ def profile_source(source: SampleSource) -> dict[str, Any]:
         profile["hidden_note"] = source.hidden_note
     if source.blank_note:
         profile["blank_note"] = source.blank_note
+    if source.dup_header_note:
+        profile["dup_header_note"] = source.dup_header_note
     return profile
