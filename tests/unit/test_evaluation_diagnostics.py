@@ -53,9 +53,7 @@ def test_complete_counts_and_locatable_cases_never_strip_model_output(task, mode
     assert summary["models"]["tuned"]["counts"]["correct"] == 3
     assert all(fact["kind"] == "observed" for fact in summary["facts"])
     assert all(item["kind"] == "needs_verification" for item in summary["hypotheses"])
-    truncation = next(
-        h for h in summary["hypotheses"] if "不等于只需增加长度" in h["statement"]
-    )
+    truncation = next(h for h in summary["hypotheses"] if "不等于只需增加长度" in h["statement"])
     assert truncation["based_on"] == "truncated"
     # 输出复现了提示的「### Input:」结构标记——也是回声行为，应有专门假设。
     assert summary["models"]["base"]["counts"].get("instruction_echo") == 1
@@ -376,7 +374,9 @@ def test_instruction_echo_detected_as_systematic_pattern(task, model_paths, tmp_
 
     def generate(label, index, expected):
         if label == "base":
-            return Generation(instruction[:16] + "……继续复述的内容", truncated=True, generated_tokens=32)
+            return Generation(
+                instruction[:16] + "……继续复述的内容", truncated=True, generated_tokens=32
+            )
         return Generation(expected)
 
     report = make_report(task, model_paths, tmp_path / "eval", generate=generate)
@@ -406,4 +406,21 @@ def test_paraphrase_echo_from_real_financial_bad_case_is_detected():
     # 短标签与答案+短语说明不误判。
     assert not output_echoes_prompt("上涨", instruction)
     assert not output_echoes_prompt(None, instruction)
-    assert not output_echoes_prompt("硬件\n### Explanation: 客户说的屏幕碎了，属于硬件问题。", "客户描述：屏幕碎了")
+    assert not output_echoes_prompt(
+        "硬件\n### Explanation: 客户说的屏幕碎了，属于硬件问题。", "客户描述：屏幕碎了"
+    )
+
+
+def test_high_truncation_models_uses_shared_ratio_threshold():
+    """截断提示按占比判定：达到 20% 阈值的模型进入提示清单，与对照区口径一致。"""
+    from src.workbench.evaluation_diagnostics import high_truncation_models
+
+    def model(label, total, truncated):
+        rows = [{"status": "truncated" if i < truncated else "scored"} for i in range(total)]
+        return {"label": label, "rows": rows}
+
+    # 1/5 恰好达到阈值 → 提示；1/6 低于阈值 → 不提示。
+    assert high_truncation_models([model("甲", 5, 1), model("乙", 6, 1)]) == [("甲", 1)]
+    # 无截断、空行列表都不产生提示。
+    assert high_truncation_models([model("甲", 4, 0)]) == []
+    assert high_truncation_models([{"label": "空", "rows": []}]) == []

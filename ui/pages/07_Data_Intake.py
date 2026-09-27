@@ -848,7 +848,12 @@ def show_business_comparison(report, *, key: str) -> None:
         st.caption(note)
     summaries = []
     echo_models = []
-    from src.workbench.evaluation_diagnostics import count_instruction_echo
+    from src.workbench.evaluation_diagnostics import (
+        count_instruction_echo,
+        high_truncation_models,
+    )
+
+    truncation_models = high_truncation_models(report.models)
 
     for model_result in report.models:
         metrics = model_result["metrics"]
@@ -888,6 +893,16 @@ def show_business_comparison(report, *, key: str) -> None:
             + "）：输出在复述提示文本而非作答。可核查：指令是否过长淹没答案信号、"
             "补全式提示与对话型基座的模板是否匹配（考虑 messages 格式）、"
             "max_new_tokens 是否小于最短合法答案。这是观察事实，原因仍需核查。"
+        )
+    if truncation_models:
+        limit = report.protocol.get("max_new_tokens")
+        st.warning(
+            "检测到高比例输出截断（"
+            + "、".join(f"{label} {count} 题" for label, count in truncation_models)
+            + "）：大量输出触及生成长度上限。可核查：max_new_tokens"
+            + (f"（当前 {limit}）" if limit is not None else "")
+            + "是否小于最短合法答案；输出是否在重复生成或缺少停止标记。"
+            "触及上限不等于只需增加长度，这是观察事实，原因仍需核查。"
         )
     st.dataframe(summaries, hide_index=True, width="stretch")
     from src.workbench.report_summary import summarize_comparison

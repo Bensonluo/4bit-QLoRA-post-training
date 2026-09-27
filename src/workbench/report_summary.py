@@ -33,7 +33,11 @@ def summarize_comparison(report: Any) -> list[str]:
     total = models[0]["metrics"].get("total") or 0
     lines.append(f"这次对照在固定开发集的 {total} 道题上进行,所有模型用同样的题目和评分规则。")
 
-    from src.workbench.evaluation_diagnostics import count_instruction_echo, output_echoes_prompt
+    from src.workbench.evaluation_diagnostics import (
+        count_instruction_echo,
+        high_truncation_models,
+        output_echoes_prompt,
+    )
 
     best_label, best_correct, best_score = None, -1, -1.0
     stats: dict[str, dict[str, Any]] = {}
@@ -69,6 +73,17 @@ def summarize_comparison(report: Any) -> list[str]:
         score = score_value or 0.0
         if score > best_score:
             best_label, best_correct, best_score = model["label"], correct, score
+
+    truncation_models = high_truncation_models(models)
+    if truncation_models:
+        limit = (getattr(report, "protocol", None) or {}).get("max_new_tokens")
+        lines.append(
+            "多个输出因触及生成长度上限被截断（"
+            + "、".join(f"{label} {count} 题" for label, count in truncation_models)
+            + (f"，当前 max_new_tokens 为 {limit}" if limit is not None else "")
+            + "）；先核查 max_new_tokens 是否小于最短合法答案、输出是否在重复生成，"
+            "再决定是否加长——触及上限不等于只需增加长度。"
+        )
 
     base_stats = _pick_counterpart(stats, "基座")
     tuned_stats = _pick_counterpart(stats, "本轮微调", "微调")

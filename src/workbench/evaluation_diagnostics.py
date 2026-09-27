@@ -69,6 +69,24 @@ def count_instruction_echo(rows: list[dict[str, Any]]) -> int:
     return sum(output_echoes_prompt(row.get("output"), row.get("prompt")) for row in rows)
 
 
+# 截断提示阈值：单个模型的截断行占比达到 20% 即视为高比例，提示核查 max_new_tokens；
+# 与回声提示同构——只陈述观察事实与核查方向，不认定原因（触及上限不等于只需加长）。
+TRUNCATION_HINT_RATIO = 0.2
+
+
+def high_truncation_models(models: list[dict[str, Any]]) -> list[tuple[str, int]]:
+    """截断占比达到提示阈值的（模型标签, 截断题数）列表，供对照区与语言化摘要共用口径。"""
+    hints = []
+    for model in models:
+        rows = model.get("rows") or []
+        if not rows:
+            continue
+        truncated = sum(row.get("status") == "truncated" for row in rows)
+        if truncated / len(rows) >= TRUNCATION_HINT_RATIO:
+            hints.append((model["label"], truncated))
+    return hints
+
+
 class EvaluationDiagnostics:
     def __init__(self, report: EvaluationReport, session: IntakeSession):
         if not dataset_is_current(session):

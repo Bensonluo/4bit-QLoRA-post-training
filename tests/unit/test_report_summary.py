@@ -244,3 +244,43 @@ def test_zero_scores_without_finetuned_model_use_generic_head():
     joined = "\n".join(summarize_comparison(report))
     assert "所有模型都是零分" in joined
     assert "微调后仍是零分" not in joined
+
+
+def test_high_truncation_ratio_hints_max_new_tokens_check():
+    """高比例截断时给出 max_new_tokens 核查方向，与回声提示同构、不认定原因。"""
+    report = _report(
+        [
+            _model("基座", 5, 0.2, statuses=["truncated"] * 2 + ["correct"] * 3),
+            _model(
+                "本轮微调",
+                5,
+                0.4,
+                statuses=["truncated", "truncated", "correct", "correct", "correct"],
+            ),
+        ]
+    )
+    lines = summarize_comparison(report)
+    joined = "\n".join(lines)
+    assert "触及生成长度上限被截断" in joined
+    assert "基座 2 题" in joined and "本轮微调 2 题" in joined
+    assert "max_new_tokens 是否小于最短合法答案" in joined
+    assert "触及上限不等于只需增加长度" in joined
+    # 报告未带协议时不编造当前值。
+    assert "当前 max_new_tokens" not in joined
+
+
+def test_high_truncation_ratio_names_current_limit_when_protocol_present():
+    report = SimpleNamespace(
+        models=[_model("基座", 2, 0.0, statuses=["truncated", "correct"])],
+        protocol={"max_new_tokens": 64},
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "当前 max_new_tokens 为 64" in joined
+
+
+def test_low_truncation_ratio_does_not_hint_max_new_tokens():
+    report = _report([_model("基座", 10, 0.5, statuses=["truncated"] + ["correct"] * 9)])
+    joined = "\n".join(summarize_comparison(report))
+    assert "1 题没写完被截断" in joined
+    assert "触及生成长度上限被截断" not in joined
+    assert "max_new_tokens" not in joined

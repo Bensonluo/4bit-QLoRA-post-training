@@ -336,6 +336,12 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
     assert any(block.value == "期望答案" for block in page.code)
     assert any(block.value == "基座的完整输出" for block in page.code)
     assert any(block.value == "本轮微调的完整输出" for block in page.code)
+    # 一半样本被截断，达到高比例阈值：对照区给出 max_new_tokens 核查提示（观察事实，不认定原因）。
+    assert any(
+        "高比例输出截断" in message.value and "max_new_tokens" in message.value
+        for message in page.warning
+    )
+    assert any("触及上限不等于只需增加长度" in message.value for message in page.warning)
     if task_kind == "iteration":
         assert len(calls[0][0]) == 3
         assert calls[0][0][1].base_model == "/tmp/parent-base"
