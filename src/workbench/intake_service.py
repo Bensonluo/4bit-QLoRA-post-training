@@ -926,13 +926,16 @@ class IntakeService:
         scope: Literal["sample", "full"] = "sample",
         encoding: str | None = None,
         delimiter: str | None = None,
+        sheet: str | int | None = None,
     ) -> IntakeSession:
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("资料已更新，请读取最新任务后再添加。")
         if not re.fullmatch(r"[\w-]+", alias):
             raise ValueError("资料别名请使用文字、数字、下划线或短横线。")
-        source = read_source(name, data, scope=scope, encoding=encoding, delimiter=delimiter)
+        source = read_source(
+            name, data, scope=scope, encoding=encoding, delimiter=delimiter, sheet=sheet
+        )
         sources = session.sources or {"main": session.source}
         sources[alias] = source
         session.sources = sources

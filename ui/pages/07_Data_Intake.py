@@ -1680,6 +1680,9 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
         hide_index=True,
         width="stretch",
     )
+    # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
+    # 按上传的文件类型显示 sheet 选择。
+    source_upload = st.file_uploader("上传补充原始资料", type=["csv", "xlsx", "xls", "jsonl"])
     with st.form(f"source_upload_{session.session_id}"):
         source_alias = st.text_input(
             "补充资料名称", placeholder="例如 labels、orders；main 是首次上传的资料"
@@ -1688,8 +1691,8 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
             "这份资料的用途和关联关系",
             placeholder="例如：质检人员审核的类别，通过工单编号与 main 对应。",
         )
-        source_upload = st.file_uploader("上传补充原始资料", type=["csv", "xlsx", "xls", "jsonl"])
         source_scope = st.radio("补充资料范围", ["样例", "全量"])
+        source_sheet = excel_sheet_input(source_upload, key=f"source_sheet_{session.session_id}")
         replace_source = st.checkbox("若资料名称已存在，替换该份资料并重新分析。")
         add_source = st.form_submit_button("保存补充资料")
     if add_source:
@@ -1706,6 +1709,7 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
                     source_upload.name,
                     source_upload.getvalue(),
                     scope="full" if source_scope == "全量" else "sample",
+                    sheet=(source_sheet or "").strip() or None,
                 )
                 if source_description.strip():
                     service.answer(

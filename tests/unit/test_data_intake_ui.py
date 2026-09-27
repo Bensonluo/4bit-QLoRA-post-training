@@ -578,3 +578,31 @@ def test_new_intake_form_reads_designated_excel_sheet(data_page, monkeypatch):
     assert loaded.source.columns == ["员工号", "部门"]
     assert any(row.values.get("员工号") == "E01" for row in loaded.source.rows)
     assert loaded.source.sheet_note is not None and "工单表" in loaded.source.sheet_note
+
+
+def test_add_source_form_reads_designated_excel_sheet(data_page, monkeypatch):
+    """保存补充资料与新建任务对称：仅 Excel 上传显示 sheet 输入，指定后读到对应工作表。"""
+    service, session, page = data_page
+    holder = {"file": uploaded_bytes(CSV, "labels.csv")}
+    patch_uploader(monkeypatch, "上传补充原始资料", holder)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert not any(t.label == SHEET_INPUT_LABEL for t in page.text_input)
+    holder["file"] = uploaded_bytes(
+        _workbook_bytes(
+            ("工单表", ("编号", "类别"), [("001", "质量")]),
+            ("员工表", ("员工号", "部门"), [("E01", "质检")]),
+        ),
+        "labels.xlsx",
+    )
+    page.run()
+    next(t for t in page.text_input if t.label == "补充资料名称").input("labels")
+    next(t for t in page.text_input if t.label == SHEET_INPUT_LABEL).input("员工表")
+    button(page, "保存补充资料").click().run()
+    assert not page.exception
+    saved = service.load(session.session_id)
+    assert saved.sources["labels"].sheet == "员工表"
+    assert saved.sources["labels"].columns == ["员工号", "部门"]
+    assert any(row.values.get("员工号") == "E01" for row in saved.sources["labels"].rows)
+    assert saved.sources["main"].digest == session.source.digest
