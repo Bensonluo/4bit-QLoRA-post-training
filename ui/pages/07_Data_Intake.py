@@ -2677,6 +2677,28 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                     st.json(run["artifacts"])
                 if run["status"] == "succeeded":
                     st.success("本轮训练已完成。先比较开发集表现，独立测试集留待最终业务验收。")
+                    try:
+                        from src.workbench.registry_link import run_registration_status
+
+                        registration = run_registration_status(
+                            run_id, f"sqlite:///{Path(training_service.root) / 'mlflow.db'}"
+                        )
+                        if registration["status"] == "registered":
+                            shown = "、".join(
+                                f"{v['name']} v{v['version']}"
+                                + (f"（{','.join(v['aliases'])}）" if v["aliases"] else "")
+                                for v in registration["versions"]
+                            )
+                            st.caption(f"模型库：{shown}")
+                        elif registration["status"] == "not_registered":
+                            with st.expander("把这次训练的模型注册进模型库（可选）"):
+                                st.caption(registration["how_to_register"])
+                        else:
+                            st.caption(
+                                f"模型库查询：{registration.get('message', registration['status'])}"
+                            )
+                    except Exception as exc:  # 血缘查询失败不阻塞训练信息展示
+                        st.caption(f"模型库查询失败：{exc}")
                     with st.expander("这次训练花了多少成本（如实估算）"):
                         from src.utils.platform_utils import get_platform
                         from src.workbench.cost_summary import cost_lines, summarize_run_cost
