@@ -221,3 +221,23 @@ def test_jsonl_long_line_duplicate_header_and_full_width_scenarios(tmp_path):
 
     # 全角数字场景的夹具确实含全角数字
     assert "００１".encode() in specs["full-width-digits"].full
+
+
+def test_single_row_sample_blocked_at_contrast_check(tmp_path):
+    """场景 24:样例只有 1 行数据——配对核验需要 2 条不同答案,在哪一关拦以实测为准。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "single-row-sample" in specs, "缺少场景 single-row-sample"
+
+    spec = specs["single-row-sample"]
+    # 夹具真实性:样例确实只有表头+1 行数据,且该行本身有标签(拦截纯因样例数量,不因缺标签)
+    lines = spec.sample.splitlines()
+    assert len(lines) == 2, "样例应为表头 + 1 行数据"
+    assert not lines[1].endswith(b","), "唯一的数据行应有非空答案"
+
+    result = run_scenario(spec, tmp_path / "single-row-sample")
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "contrast_check", result.to_dict()
+    assert "对比核验需要至少两条答案不同的已标注行" in result.blocked_message
+    # create 与基础分析都不拦(一条有标签的行足以生成真实预览),拦截发生在配对核验
+    assert result.stages["create"] == "passed"
+    assert result.stages["baseline_analysis"] == "passed"

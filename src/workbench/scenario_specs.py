@@ -159,6 +159,25 @@ _FW_SAMPLE = (
 )
 
 
+# 只有 1 行数据的样例:用户拿一条记录试用产品;表头+1 行共 2 行,该行本身有标签,
+# 拦截纯粹因为「一条样例不足以完成配对核验」,与缺标签/脏数据无关。
+_ONE_ROW_SAMPLE = "编号,客户描述,类别\n001,杯子破损,质量\n".encode()
+
+# 目标列全空:表头有「类别」但所有值为空(导出漏了标签值列,只保留了列名)。
+_ALL_EMPTY_TARGET_SAMPLE = "编号,客户描述,类别\n001,杯子破损,\n002,物流未更新,\n".encode()
+_ALL_EMPTY_TARGET_FULL = (
+    "编号,客户描述,类别\n" + "".join(f"{i:03d},问题{i},\n" for i in range(1, 11))
+).encode()
+
+# 无 BOM 的 UTF-16:Excel「Unicode 文本」导出通常带 BOM,经其他工具转存/再导出可能丢 BOM;
+# 交错的 NUL/换行字节让 utf-8-sig 与 gb18030 兜底都解不开(测试钉住这一点,防夹具漂移)。
+_UTF16_NOBOM_SAMPLE = _UTF16_ROWS.encode("utf-16-le")
+_UTF16_NOBOM_FULL = (
+    "编号\t客户描述\t类别\n"
+    + "".join(f"{i:03d}\t问题{i}\t{'质量' if i % 2 else '物流'}\n" for i in range(1, 11))
+).encode("utf-16-le")
+
+
 def _long_line_text() -> str:
     import csv as _csv
     import io as _io
@@ -566,6 +585,23 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "需要数字语义时先在数据侧规整——已知边界,非缺陷"
             ),
             tags=("boundary", "full-width"),
+        ),
+        ScenarioSpec(
+            scenario_id="single-row-sample",
+            goal="根据客户首次描述判断售后类别",
+            sample=_ONE_ROW_SAMPLE,
+            sample_name="工单.csv",
+            full=_CLEAN_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:contrast_check",
+            expect_note=(
+                "实测结局:样例只有 1 行数据(2 行含表头)——create 与基础分析都不拦"
+                "(分析如实观察「答案列非空取值 1/1 行,共 1 类」),旅程在对比核验被拦:"
+                "「对比核验需要至少两条答案不同的已标注行。」即使全量数据正常,"
+                "一条样例也不足以让用户完成配对核验;用户须至少提供 2 条答案不同的已标注样例"
+            ),
+            tags=("small-sample", "negative-scenario"),
         ),
     ]
 
