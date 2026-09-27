@@ -172,6 +172,17 @@ stop(iteration_id)
 
 基线:回归 1528 项全绿。M3(三角血缘+成本叙事)为下一里程碑。
 
+### 第 4 轮 = 里程碑 M3 成本叙事 + 三角血缘（2026-09-27 完成）
+
+| 任务 | 交付 | 提交 |
+|---|---|---|
+| t1 成本账 | cost_summary(时长实测/功耗电价明示估计/API 对比口径)+worker finished_at+页面成本区 | dc74056 |
+| t3 血缘正向 | run_registration_status(按 workbench.run_id 标签全局反查注册状态) | 305b9de |
+| t4 血缘反向 | version_lineage + registry_cli lineage(workbench/external/no_source 如实) | 2d9e1f6 |
+| t5 真集成 | 训练→合并→带血缘注册→双向反查闭环;修 transformers flavor 本地模型崩溃与注册血缘丢失 | b58be06 |
+
+北极星三差距(旅程串联/非专家可视化/三角血缘+成本)全部闭合。回归 1536 项全绿。
+
 ### 候选下一轮（按用户试用反馈排序）
 
 - 试用模板（user-trial-log.md）回收后按专家介入点清单迭代
