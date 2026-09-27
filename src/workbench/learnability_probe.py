@@ -238,6 +238,42 @@ def describe_candidates(candidates: list[dict], limit: int | None = 20) -> list[
     return lines
 
 
+def probe_verdict_phrase(result: dict) -> str:
+    """探针判定短语:三态词汇的唯一来源,页面与 CLI 同源同词汇。
+
+    证据不是判决:高于基线不预测微调效果,低于基线只指向「先核查」而非
+    「任务不可学」——扩展解释统一放在 note 里,短语本身只说方向。
+    """
+    delta = result.get("difference")
+    if delta is None:
+        return "没有可比较的探针结果"
+    if delta > 0:
+        return "零样本高于瞎猜基线"
+    if delta == 0:
+        return "零样本不低于瞎猜基线"
+    return "零样本低于瞎猜基线——先核查提示格式与任务定义"
+
+
+def describe_probe_verdict(result: dict) -> list[str]:
+    """探针判定的人话摘要:判定行 + note 原文,供 CLI 直接打印到 stderr。
+
+    判定行如实亮出基座零样本、瞎猜多数类基线与差异三组数字;note 自带
+    抽样计数与样本量/不预测微调效果的边界,原文复述不改编。没有可读
+    字段的裸记录给缺位句,不编造数字。
+    """
+    accuracy = result.get("zero_shot_accuracy")
+    baseline = result.get("majority_baseline")
+    if accuracy is None or baseline is None:
+        return ["这份探针记录没有可读的判定内容。"]
+    lines = [
+        f"可学性探针判定：基座零样本 {accuracy:.0%} vs 瞎猜多数类基线 {baseline:.0%}"
+        f"（差异 {result.get('difference', 0):+.0%}）——{probe_verdict_phrase(result)}。"
+    ]
+    if result.get("note"):
+        lines.append(result["note"])
+    return lines
+
+
 def candidates_to_csv(candidates: list[dict]) -> bytes:
     """候选表导出为 CSV(带 BOM,Excel 直开);供人工核对的离线清单。"""
     import csv

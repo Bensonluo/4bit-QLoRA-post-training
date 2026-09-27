@@ -197,6 +197,39 @@ def test_describe_candidates_limits_listing_like_ui_pagination():
         describe_candidates(candidates, limit=0)
 
 
+def test_probe_verdict_phrase_is_single_source_for_three_states():
+    """三态判定词汇单一来源:页面与 CLI 同源同词汇;差异缺位时不编造方向。"""
+    from src.workbench.learnability_probe import probe_verdict_phrase
+
+    assert probe_verdict_phrase({"difference": 0.25}) == "零样本高于瞎猜基线"
+    assert probe_verdict_phrase({"difference": 0.0}) == "零样本不低于瞎猜基线"
+    assert (
+        probe_verdict_phrase({"difference": -0.1}) == "零样本低于瞎猜基线——先核查提示格式与任务定义"
+    )
+    assert probe_verdict_phrase({"difference": None}) == "没有可比较的探针结果"
+
+
+def test_describe_probe_verdict_lines_for_cli():
+    """CLI 判定行:三组数字 + 三态短语,note 原文复述;裸记录给缺位句不编造。"""
+    from src.workbench.learnability_probe import describe_probe_verdict
+
+    result = {
+        "zero_shot_accuracy": 0.5,
+        "majority_baseline": 0.75,
+        "difference": -0.25,
+        "note": "样本量小,不能预测微调效果。",
+    }
+    lines = describe_probe_verdict(result)
+    assert len(lines) == 2
+    assert lines[0].startswith("可学性探针判定：基座零样本 50% vs 瞎猜多数类基线 75%")
+    assert "差异 -25%" in lines[0]
+    assert "零样本低于瞎猜基线——先核查提示格式与任务定义" in lines[0]
+    assert lines[1] == "样本量小,不能预测微调效果。"
+
+    # 裸记录(无可读字段)给缺位句,不编造数字
+    assert describe_probe_verdict({}) == ["这份探针记录没有可读的判定内容。"]
+
+
 def test_candidates_csv_export_is_excel_friendly():
     from src.workbench.learnability_probe import candidates_to_csv
 
@@ -331,3 +364,8 @@ def test_cli_probe_show_reads_saved_result_without_rerunning(store, tmp_path, mo
     assert "最近一次已保存的探针结果" in err
     # 证据溯源:回读说明指出证据来自哪个记录文件、什么时候生成的
     assert result["saved_at"] in err and "记录文件" in err
+    # 判定行与页面同源:三组数字 + 三态短语;结论先于候选清单或空清单说明
+    assert "可学性探针判定：基座零样本" in err and "瞎猜多数类基线" in err
+    assert "不能预测微调效果" in err, "note 原文复述,不改编"
+    tail = err[err.index("可学性探针判定") :]
+    assert ("标签问题候选" in tail) or ("没有发现值得优先核对的行" in tail), "判定行先于清单"

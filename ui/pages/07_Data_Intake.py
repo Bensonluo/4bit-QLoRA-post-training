@@ -212,13 +212,10 @@ def probe_source_hints(session) -> dict[str, str]:
 def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = None) -> None:
     """渲染一次可学性探针结果:指标、判定与标签问题候选(证据强者在先)。"""
     delta = result["difference"]
-    verdict = (
-        "零样本高于瞎猜基线"
-        if delta > 0
-        else "零样本不低于瞎猜基线"
-        if delta == 0
-        else "零样本低于瞎猜基线——先核查提示格式与任务定义"
-    )
+    # 三态判定词汇与 CLI 同源(probe_verdict_phrase):页面与 stderr 不各说各话。
+    from src.workbench.learnability_probe import probe_verdict_phrase
+
+    verdict = probe_verdict_phrase(result)
     st.metric(
         f"零样本 {result['zero_shot_accuracy']:.0%} vs 基线 {result['majority_baseline']:.0%}",
         f"{delta:+.0%}",

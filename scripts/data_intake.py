@@ -1240,6 +1240,7 @@ def main() -> int:
             from src.workbench.learnability_probe import (
                 candidates_to_csv,
                 describe_candidates,
+                describe_probe_verdict,
                 load_latest_probe_record,
             )
 
@@ -1268,6 +1269,9 @@ def main() -> int:
                 f"{provenance}）；重新探测请运行 learnability-probe。",
                 file=sys.stderr,
             )
+            # 回读同样先给判定行:结论先于清单,词汇与页面 render_probe_result 同源。
+            for line in describe_probe_verdict(saved):
+                print(line, file=sys.stderr)
             # 回读同样逐行列出候选:重看结论不应重新加载模型,也不该丢掉核对清单。
             for line in describe_candidates(saved.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
@@ -1285,6 +1289,7 @@ def main() -> int:
             from src.workbench.learnability_probe import (
                 candidates_to_csv,
                 describe_candidates,
+                describe_probe_verdict,
                 probe_learnability,
                 save_probe,
             )
@@ -1301,6 +1306,9 @@ def main() -> int:
             path = save_probe(Path(args.evaluation_root).parent / "probes", result)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             print(f"\n探针记录已保存：{path}", file=sys.stderr)
+            # 判定行先于候选清单:先说结论(带三组数字与三态词汇),再给核对清单。
+            for line in describe_probe_verdict(result):
+                print(line, file=sys.stderr)
             for line in describe_candidates(result.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
             if args.export_csv is not None:

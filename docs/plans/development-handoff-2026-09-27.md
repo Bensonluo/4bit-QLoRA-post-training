@@ -1678,3 +1678,49 @@ contrast_check_status）、页面入口完整（07_Data_Intake.py「确认当前
   2 个钉测试)。本批只动 scripts/data_intake.py、
   tests/unit/test_contrast_cli.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 44 轮 = 可学性探针判定人话上 CLI（恢复循环第 25 轮）
+
+**痛点**：探针三态判定（零样本高于／不低于／低于瞎猜基线）此前只存在于页面
+`render_probe_result` 的内联条件表达式里；CLI 两条命令（learnability-probe /
+learnability-probe-show）的 stderr 只有「记录已保存／最近一次已保存」+ 候选
+清单，判定本身埋在 stdout JSON 的 difference 字段里——结论先于清单的产品
+口径在 CLI 侧断了，且页面与 CLI 的三态词汇是两份拷贝（漂移风险）。
+
+**实现**：
+- **词汇单一来源**（learnability_probe.py 新增 `probe_verdict_phrase`）：
+  三态短语 + difference 缺位句（「没有可比较的探针结果」）。语义边界保持：
+  低于基线只指向「先核查提示格式与任务定义」，不是「任务不可学」；高于
+  基线不预测微调效果——扩展解释留在 note，短语只说方向。
+- **CLI 判定行人话**（新增 `describe_probe_verdict`）：判定行亮出基座零样本、
+  瞎猜多数类基线、差异三组数字 + 三态短语；note 原文复述不改编；裸记录
+  （无可读字段）给缺位句「这份探针记录没有可读的判定内容。」不编造数字。
+- **双命令接线**（data_intake.py）：learnability-probe 在「探针记录已保存」
+  之后、候选清单之前打印判定行；learnability-probe-show 在溯源说明之后、
+  候选清单之前同样打印——结论先于清单，回看结论不重新加载模型。
+- **页面同源化**（07_Data_Intake.py render_probe_result）：内联三态条件替换
+  为 `probe_verdict_phrase(result)`（lazy import，沿页面既有模式）；渲染输出
+  字节等价，页面探针 UI 测试 6 个全数通过不改一行。
+
+**测试**（+3）：test_probe_verdict_phrase_is_single_source_for_three_states
+（三态 + None 缺位）；test_describe_probe_verdict_lines_for_cli（判定行三组
+数字 + 短语、note 复述、裸记录缺位句）；CLI probe-show 测试扩展 3 断言
+（判定行关键词、「不能预测微调效果」note 复述、判定行先于候选清单/空清单
+说明）。钉测试 +1：test_probe_cli_verdict_docs_pinned（7 断言钉死文档段：
+先给判定行、三组数字、probe_verdict_phrase 单一来源、先核查指向、不预测
+微调效果、probe-show 回读同样先判定、页面与 CLI 不各说各话）。
+
+**文档**（agent-setup.md 语义安全层探针 bullet 扩写）：CLI stderr 判定行
+口径（describe_probe_verdict、三组数字、三态词汇、note 原文、probe-show
+回读、probe_verdict_phrase 单一来源）——落在 _section("## 语义安全层",
+"### 盲标核验的完整 CLI 用法") 窗口内，既有钉测试边界全部保持。
+
+**回归**：ruff check/format clean（1 处格式重排）。定向
+test_learnability_probe + test_readme_alignment 50 passed、
+test_learnability_probe_ui 6 passed。全量回归
+**tests/unit 1783 passed / 0 failed**（--no-cov，基线 1780 + 2 个探针新测试 +
+1 个钉测试；CLI 回读测试扩展是既有测试加断言，不增量）。本批只动
+src/workbench/learnability_probe.py、
+scripts/data_intake.py、ui/pages/07_Data_Intake.py、
+tests/unit/test_learnability_probe.py、tests/unit/test_readme_alignment.py、
+docs/agent-setup.md 与本记录。

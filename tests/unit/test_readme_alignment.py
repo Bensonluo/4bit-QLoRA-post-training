@@ -223,6 +223,22 @@ def test_agent_setup_label_verify_submit_help_matches_documentation(monkeypatch,
     assert "--revision" not in help_text, "文档钉死:label-verify-submit 不收 --revision"
 
 
+def test_probe_cli_verdict_docs_pinned():
+    """可学性探针 CLI 判定行口径钉死:三组数字、三态词汇单一来源、note 原文。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 语义安全层",
+        "### 盲标核验的完整 CLI 用法",
+    )
+    assert "先给判定行" in section, "判定行先于候选清单必须写明"
+    assert "基座零样本、瞎猜多数类基线与差异三组数字" in section
+    assert "`probe_verdict_phrase` 单一来源" in section, "三态词汇单一来源必须写明"
+    assert "先核查提示格式与任务定义" in section
+    assert "不预测微调效果" in section
+    assert "`learnability-probe-show` 回读同样先给判定行" in section
+    assert "页面与 CLI 不各说各话" in section
+
+
 def test_agent_setup_learnability_probe_help_matches_documentation(monkeypatch, capsys, tmp_path):
     """可学性探针用法同步:--revision/--model-path 必填,--size/--export-csv 可选。"""
     help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "learnability-probe")
