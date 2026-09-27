@@ -164,3 +164,24 @@ def test_empty_label_rows_in_full_blocked_at_validation(tmp_path):
         result.stages[stage] == "passed"
         for stage in ("create", "baseline_analysis", "contrast_check", "confirm_sample")
     )
+
+
+def test_spaced_header_names_blocked_at_baseline_analysis(tmp_path):
+    """场景 20:表头带前后空格——精确名匹配在基础分析即失败,报错如实列出带空格列名。"""
+
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "spaced-header-names" in specs, "缺少场景 spaced-header-names"
+
+    spec = specs["spaced-header-names"]
+    # 夹具真实性:表头确实带前后空格,而用户按业务口径选「类别」
+    header = spec.sample.split(b"\n")[0].decode()
+    assert header != header.strip(), "表头应带前后空格"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "baseline_analysis", result.to_dict()
+    assert "答案列" in result.blocked_message and "不在数据字段中" in result.blocked_message
+    # 报错把带空格的真实列名原样列出,用户能看见差异
+    assert " 编号 " in result.blocked_message
+    # 入口读表本身不拦空格表头,失败发生在列选择这一步
+    assert result.stages["create"] == "passed"

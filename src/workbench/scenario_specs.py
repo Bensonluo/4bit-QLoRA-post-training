@@ -82,6 +82,16 @@ _EMPTY_LABEL_FULL = (
     "009,无法充电,质量\n010,包装破损,物流\n"
 ).encode()
 
+# 列名前后空格:外部系统导出的表头带不可见的前后空格,用户按业务口径写「编号/类别」。
+_SPACED_HEADER = " 编号 ,客户描述, 类别"
+_SPACED_SAMPLE = (_SPACED_HEADER + "\n001,杯子破损,质量\n002,物流未更新,物流\n").encode()
+_SPACED_FULL = (
+    _SPACED_HEADER + "\n"
+    "001,杯子破损,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n004,快递丢失,物流\n"
+    "005,开不了机,质量\n006,地址填错,物流\n007,异味,质量\n008,延迟送达,物流\n"
+    "009,无法充电,质量\n010,包装破损,物流\n"
+).encode()
+
 # 超长单行:单个输入单元格里粘贴了数万字符的运行日志(含逗号,按 CSV 规范加引号),
 # 单行数十 KB。日志单元格由 csv 模块按规范写出:带引号单元格里的逗号不是分隔符。
 _LONG_CELL_PREFIX = (
@@ -430,6 +440,24 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "点名行号;用户须补标签或删行后重新验证"
             ),
             tags=("dirty-data", "empty-labels"),
+        ),
+        ScenarioSpec(
+            scenario_id="spaced-header-names",
+            goal="根据客户首次描述判断售后类别",
+            sample=_SPACED_SAMPLE,
+            sample_name="工单.csv",
+            full=_SPACED_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:baseline_analysis",
+            expect_note=(
+                "实测结局:表头「 编号 / 类别」带前后空格,入口读表不剥空格,"
+                "零密钥路径的答案列按精确名匹配——「类别」匹配不上,在基础分析即被拦;"
+                "报错把带空格的真实列名原样列出(可用:[' 编号 ','客户描述',' 类别']),"
+                "用户能看见差异。边界:若改选确切带空格列名可全程通过,空格随之进入"
+                "指令与标签——如实记录,不做自动剥空格"
+            ),
+            tags=("dirty-data", "header-hygiene"),
         ),
     ]
 
