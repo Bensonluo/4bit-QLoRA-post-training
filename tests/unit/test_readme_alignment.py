@@ -399,3 +399,28 @@ def test_dup_header_rows_docs_pinned_and_backed_by_matrix():
     assert scenarios["duplicate-header-row-in-sample"].expect == "passes"
     assert "duplicate-header-rows-in-full" in scenarios, "场景矩阵缺少全量侧重复表头场景"
     assert scenarios["duplicate-header-rows-in-full"].expect == "blocked_at:validate_full"
+
+
+def test_answer_coverage_docs_pinned_and_backed_by_matrix():
+    """物化分区答案覆盖披露文档:三统计键/逐字学习边界/没有自动重切/20 种门限/
+    时间与固定题集同口径关键句钉死,由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 生成独立数据分区与版本",
+        "## 时间预测任务：先核对来源与标签窗口",
+    )
+    for key in ("answer_coverage_note", "answer_counts_by_split", "train_missing_answers"):
+        assert key in section, f"答案覆盖披露缺少统计键说明: {key}"
+    assert "从未出现在训练集" in section, "训练集缺口点名必须写明"
+    assert "逐字学习" in section and "照常打分" in section, "逐字学习与照常打分的反差必须写明"
+    assert "没有自动重新切分" in section, "不自动重切的语义安全边界必须写明"
+    assert "不超过 20 种" in section and "超过 20 种" in section, "20 种门限的双侧口径必须写明"
+    assert "时间分区与固定题集沿用同一披露口径" in section, "三种切分方式同口径必须写明"
+    assert "页面数据集版本区的摘要与 CLI" in section, "页面与 CLI 两个展示位点必须写明"
+
+    # 场景矩阵背书:rare-category-only-in-holdout 场景真实存在且结局钉住(披露不阻断)
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "rare-category-only-in-holdout" in scenarios, "场景矩阵缺少稀有答案落保留分区场景"
+    assert scenarios["rare-category-only-in-holdout"].expect == "passes"

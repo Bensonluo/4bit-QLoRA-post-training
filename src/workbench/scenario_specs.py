@@ -606,6 +606,16 @@ _BLANK_FULL = _hidden_xlsx(
     "blank-full", _CLEAN_TEN_ROWS[:5] + ((None, None, None),) + _CLEAN_TEN_ROWS[5:], ()
 )
 
+# 物化层稀有类别覆盖:全量 17 条「质量」+ 末行唯一一条「屏幕」(18 个单行组)。
+# 默认 seed 42 实测:该组整组落入测试集(14/2/2),训练集从未见过「屏幕」——
+# 训练按逐字学习答案,模型无法输出没学过的值,而验证/测试照常打分。
+# answer_coverage_note(第 30 轮)如实点名,披露不阻断。
+_RARE_CATEGORY_SAMPLE = _rows_as_csv((("001", "杯子破损", "质量"), ("018", "屏幕碎裂", "屏幕")))
+_RARE_CATEGORY_FULL = _rows_as_csv(
+    tuple((f"{index:03d}", f"质量问题{index}", "质量") for index in range(1, 18))
+    + (("018", "屏幕碎裂", "屏幕"),)
+)
+
 
 # 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
 # 全量含样例未覆盖的新测量值。value_kind 判定与旅程行为以实测为准。
@@ -1509,6 +1519,33 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 " 检测不同,全空行基于解析后的记录判定,xls 同样检测"
             ),
             tags=("excel", "blank-rows", "negative-scenario"),
+        ),
+        ScenarioSpec(
+            scenario_id="rare-category-only-in-holdout",
+            goal="根据客户首次描述判断售后类别",
+            sample=_RARE_CATEGORY_SAMPLE,
+            sample_name="工单.csv",
+            full=_RARE_CATEGORY_FULL,
+            full_name="full.csv",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:全量 18 个单行组,17 条「质量」+ 末行唯一一条「屏幕」;"
+                "默认 seed 42 下贪心分配把「屏幕」整组分进测试集(14/2/2)——训练集"
+                "从未见过该答案,训练按逐字学习意味着模型无法输出没学过的值,而验证"
+                "与测试照常打分。此前 statistics 对分区答案构成完全无声(第 30 轮前"
+                "的已知缺口)。answer_coverage_note 已上线:物化统计携带"
+                " answer_counts_by_split/train_missing_answers 并生成人话披露"
+                "「验证/测试集中有 1 类答案（屏幕×1（测试1 条））从未出现在训练集——"
+                "训练按逐字学习答案,模型没有学过这些值,验证与测试仍会照常打分。」"
+                "八关全过(披露不阻断,不自动重切,也不把记录挪回训练集);旅程内"
+                " materialize 关用默认 seed 42,与产品默认路径完全一致,矩阵即真实"
+                "复现该形态。门控:仅当全部答案不同取值 ≤ 20 种时计算——开放文本"
+                "/大量类别逐值点名没有信息量,缺键即如实边界;分组随机/时间/固定题集"
+                "三种切分方式同口径"
+            ),
+            tags=("materialize", "answer-coverage", "rare-category"),
         ),
     ]
 

@@ -243,3 +243,43 @@ def test_unconfirmed_or_stale_report_cannot_be_materialized(service):
     session = service._save(session, session.revision)
     with pytest.raises(ValueError, match="预览与当前来源"):
         service.materialize_dataset(session.session_id, session.revision)
+
+
+def test_rare_answer_landing_only_in_holdout_is_disclosed(service):
+    """稀有答案整组落入保留分区:统计点名分区答案构成与训练集缺口,披露不重切。
+
+    17 条 yes + 末行唯一一条 screen(18 个单行组),默认 seed 42 下 screen 整组
+    落入测试集(14/2/2)——训练集从未见过该答案,逐字学习下模型无法输出没学过的值,
+    而验证/测试照常打分。此前 statistics 对分区答案构成完全无声。
+    """
+    rare = (
+        "customer,order,text,label\n"
+        + "".join(f"c{i:02d},o{i:02d},question {i},yes\n" for i in range(1, 18))
+        + "c18,o18,screen broken,screen\n"
+    ).encode()
+    session = _full(service, data=rare, group_columns=["customer"])
+    session = service.materialize_dataset(session.session_id, session.revision)
+    statistics = session.dataset.statistics
+    assert statistics["row_counts"] == {"train": 14, "validation": 2, "test": 2}
+    assert statistics["answer_counts_by_split"]["train"] == {"yes": 14}
+    assert statistics["answer_counts_by_split"]["test"] == {"yes": 1, "screen": 1}
+    assert statistics["train_missing_answers"] == {"screen": {"test": 1}}
+    note = statistics["answer_coverage_note"]
+    assert "1 类答案" in note and "screen×1（测试1 条）" in note, note
+    assert "从未出现在训练集" in note and "逐字" in note and "照常打分" in note
+    assert "没有自动重新切分" in note, note
+
+
+def test_open_answer_space_skips_coverage_keys(service):
+    """答案不同取值超过 20 种(开放文本形态):不逐值点名,缺键即如实边界。"""
+    wide = (
+        "customer,order,text,label\n"
+        + "".join(f"c{i:02d},o{i:02d},question {i},answer {i}\n" for i in range(1, 23))
+        + "c23,o23,question 23,answer 23\n"
+    ).encode()
+    session = _full(service, data=wide, group_columns=["customer"])
+    session = service.materialize_dataset(session.session_id, session.revision)
+    statistics = session.dataset.statistics
+    assert statistics["row_counts"] == {"train": 19, "validation": 2, "test": 2}
+    for key in ("answer_counts_by_split", "train_missing_answers", "answer_coverage_note"):
+        assert key not in statistics, f"超过 20 种答案不应携带 {key}"

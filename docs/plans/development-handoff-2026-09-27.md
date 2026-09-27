@@ -1037,3 +1037,60 @@ hidden/blank,第 18/24/25/26/28 轮)至此只剩这一处静默。
   tests/unit/test_sources.py、tests/unit/test_scenario_matrix.py、
   tests/unit/test_data_intake_ui.py、tests/unit/test_readme_alignment.py、
   tests/unit/test_page_journey.py、docs/agent-setup.md 与本记录。
+
+### 第 30 轮 = 物化层分区答案覆盖如实点名 answer_coverage_note(恢复循环第 11 轮)
+
+(恢复的北极星打磨循环,第 11 轮。)核心痛点:分组隔离切分可把稀有类别的整组
+记录全部分进验证或测试(分组隔离优先于比例、未做类别分层)——训练按逐字学习
+答案,模型无法输出没学过的值,而验证与测试照常打分。此前 statistics 对分区
+答案构成完全无声:默认 seed 42 下 18 个单行组(17 条「yes」+ 末行唯一一条
+「screen」)切分 14/2/2、稀有行落入测试集,用户在评测看到该类全错之前毫无
+线索;更刺眼的是 **UI 默认夹具(FULL 3 行:100质量/101物流/102质量)本身就
+触发同一形态**——train 只见「物流」、「质量」整组落验证/测试,旅程测试早已
+路过却不曾点名。
+
+- **三统计键**(materialize.py):`answer_counts_by_split`(各分区答案 Counter
+  dict)、`train_missing_answers`(`{值: {"validation"/"test": 条数}}`)、
+  `answer_coverage_note`(人话披露)。**门控:全部答案不同取值 ≤ 20 才计算**
+  (逐字学习下未见值不可学,点名才有信息量);开放文本/大量类别时逐值点名没有
+  信息量,统计缺键即这一如实边界(不看 value_kind,单看取值数——categorical
+  也可能 30 类,numeric_continuous 也可能恰好 8 个离散值)。三种切分方式
+  (分组随机/temporal/fixed_evaluation_suite)同口径,成因句按 split_method
+  分支:temporal「时间边界先于比例,窗口内只出现一次的类别会整体落在单一
+  分区」、固定题集「固定题集把既定评分题保留在原分区,训练段新增类别可能
+  只出现在验证或测试」、分组随机「分组隔离优先于比例且未做类别分层,稀有
+  类别的整组记录可能全部落在验证或测试」。note 文案:「验证/测试集中有 N 类
+  答案（值×条数（测试M 条）…）从未出现在训练集——训练按逐字学习答案,模型
+  没有学过这些值,验证与测试仍会照常打分。{成因}补充该类别的独立业务对象后
+  可重新生成分区版本;没有自动重新切分,也不会把记录挪回训练集。」值超过
+  5 个以「等」收尾(与各注同口径)。**披露不阻断、不自动重切、不挪记录**
+  ——物化照常完成,分区文件与 row_counts 不变。
+- **人话摘要与 CLI**(report_summary.py + data_intake.py):summarize_dataset
+  在边界句「分区就绪只说明…」前渲染 coverage_note(UI 数据集版本区经
+  st.write 自动可见,披露不埋进 JSON);CLI materialize 输出沿用 temporal
+  stderr 打印先例。
+- **场景矩阵 46**(`rare-category-only-in-holdout`):全量 18 行(17 质量 +
+  末行屏幕,`_rows_as_csv` 夹具)、样例含两类答案(对比可配对)、编号单行组;
+  expect=passes(八关全过,披露不阻断)。expect_note 实测口径:14/2/2、屏幕
+  落测试集、note 原文、≤20 门控与三切分同口径。矩阵下限 45→46。
+- **文档钉死**(agent-setup.md + test_readme_alignment 22→23):「生成独立
+  数据分区与版本」段新增答案覆盖披露段——三统计键、note 原文例、逐字学习
+  与照常打分的反差、没有自动重新切分、20 种门限双侧口径(不超过/超过)、
+  时间分区与固定题集同口径、页面与 CLI 两个展示位点。新钉测试
+  `test_answer_coverage_docs_pinned_and_backed_by_matrix`(关键句 + 场景矩阵
+  背书 expect=="passes")。
+- **回归**:test_data_materialize 8→10(稀有答案正例:14/2/2 + 三键 + note
+  短语;开放答案空间负例:23 种取值、19/2/2、三键缺位)、test_report_summary
+  +1(coverage_note 渲染位置在边界句前 + 无键负例)、test_scenario_matrix
+  下限 46 + 场景 46 钉测试(夹具真实性 + run_scenario as_expected 八关全过 +
+  手动探针断言 statistics)、test_data_intake_ui 既有流测试扩展
+  (train_missing_answers=={"质量": {validation:1, test:1}} + page.markdown
+  渲染断言——默认夹具形态被正向点名)。教训重申:row_counts 断言必须探针
+  先行——开放负例初版照抄 n=24 探针值 19/3/2,而夹具实为 23 行(19/2/2),
+  定向套件一次拦下后修正。全量回归 **tests/unit 1744 passed / 0 failed**
+  (--no-cov,无排除;基线 1739 + 新增 5)。本批只动 src/workbench/
+  materialize.py、src/workbench/report_summary.py、src/workbench/
+  scenario_specs.py、scripts/data_intake.py、docs/agent-setup.md、
+  tests/unit/test_data_materialize.py、tests/unit/test_data_intake_ui.py、
+  tests/unit/test_report_summary.py、tests/unit/test_scenario_matrix.py、
+  tests/unit/test_readme_alignment.py 与本记录。

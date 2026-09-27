@@ -59,6 +59,28 @@ def _connected_groups(rows: list[PreviewRow], columns: list[str]) -> list[list[i
     return list(groups.values())
 
 
+_SPLIT_LABELS = {"validation": "验证", "test": "测试"}
+
+
+def _answer_coverage_note(train_missing: dict[str, dict[str, int]], cause: str) -> str:
+    """把「训练集没见过的答案」翻成人话：点名值、条数与落点，分述行为，不自动重切。"""
+    parts = []
+    for value, where in list(train_missing.items())[:5]:
+        locations = "、".join(
+            f"{_SPLIT_LABELS[split]}{where[split]} 条"
+            for split in ("validation", "test")
+            if split in where
+        )
+        parts.append(f"{value}×{sum(where.values())}（{locations}）")
+    listing = "、".join(parts) + ("等" if len(train_missing) > 5 else "")
+    return (
+        f"验证/测试集中有 {len(train_missing)} 类答案（{listing}）从未出现在训练集——"
+        "训练按逐字学习答案，模型没有学过这些值，验证与测试仍会照常打分。"
+        f"{cause}"
+        "补充该类别的独立业务对象后可重新生成分区版本；没有自动重新切分，也不会把记录挪回训练集。"
+    )
+
+
 def materialize_dataset(
     session: IntakeSession,
     *,
@@ -196,6 +218,19 @@ def materialize_dataset(
                 record["metadata"]["temporal"] = temporal["times_by_row"][
                     record["metadata"]["source_row_id"]
                 ]
+    answer_counts = {
+        split: dict(Counter(record["output"] for record in part)) for split, part in records.items()
+    }
+    distinct_answers = set().union(*(set(counts) for counts in answer_counts.values()))
+    train_missing: dict[str, dict[str, int]] = {}
+    if len(distinct_answers) <= 20:
+        train_values = set(answer_counts["train"])
+        for value in sorted(distinct_answers - train_values):
+            train_missing[value] = {
+                split: answer_counts[split][value]
+                for split in ("validation", "test")
+                if value in answer_counts[split]
+            }
     rendered_counts = Counter((row.input, row.target) for row in rows)
     raw_counts = Counter(canonical(row.original) for row in rows)
     statistics = {
@@ -226,6 +261,22 @@ def materialize_dataset(
             exclusion_counts=dict(Counter(row["reason"] for row in temporal["excluded_rows"])),
             note="按已确认时间边界分区；跨窗口、未成熟及关联排除记录完整保留；不随机补数，不把未成熟标签当真值。",
         )
+    # 答案覆盖披露（分组随机/时间/固定题集同口径）：逐字学习下训练集没见过的值不可学。
+    # 仅在全部答案的不同取值 ≤ 20 时计算——开放文本/大量类别时逐值点名没有信息量，缺键即这一如实边界。
+    if len(distinct_answers) <= 20:
+        statistics["answer_counts_by_split"] = answer_counts
+        statistics["train_missing_answers"] = train_missing
+        if train_missing:
+            method = statistics.get("split_method", "")
+            if method.startswith("temporal"):
+                cause = "时间边界先于比例，窗口内只出现一次的类别会整体落在单一分区。"
+            elif method == "fixed_evaluation_suite":
+                cause = "固定题集把既定评分题保留在原分区，训练段新增类别可能只出现在验证或测试。"
+            else:
+                cause = (
+                    "分组隔离优先于比例且未做类别分层，稀有类别的整组记录可能全部落在验证或测试。"
+                )
+            statistics["answer_coverage_note"] = _answer_coverage_note(train_missing, cause)
     metadata = {
         "operation": "confirmed_intake_alpaca_split_v1",
         "source_digest": report.source.digest,

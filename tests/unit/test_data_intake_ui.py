@@ -270,6 +270,14 @@ def test_materialize_actual_partitions_after_full_confirmation(data_page, groups
     assert current.dataset.statistics["row_counts"] == {"train": 1, "validation": 1, "test": 1}
     assert current.dataset.data_config["validation_split"] == 0
     assert any("独立数据分区已生成" in message.value for message in page.success)
+    # 答案覆盖披露(第 30 轮):默认 seed 42 下 质量 整组落在验证/测试、训练只见 物流,
+    # 统计点名缺口且摘要行真的渲染到页面——披露不埋进 JSON
+    assert current.dataset.statistics["train_missing_answers"] == {
+        "质量": {"validation": 1, "test": 1}
+    }
+    assert any("从未出现在训练集" in item.value for item in page.markdown), [
+        item.value for item in page.markdown
+    ]
 
 
 def test_add_original_source_preserves_business_description(data_page, monkeypatch):

@@ -1113,6 +1113,9 @@ def main() -> int:
                     f"时间分区：纳入 {statistics['included_rows']} 条；保留排除 {statistics['excluded_rows']} 条。原因：{json.dumps(statistics.get('exclusion_counts', {}), ensure_ascii=False)}；原行明细见 dataset.paths.manifest 的 metadata.excluded_rows。",
                     file=sys.stderr,
                 )
+            coverage_note = session.dataset.statistics.get("answer_coverage_note")
+            if coverage_note:
+                print(coverage_note, file=sys.stderr)
         elif args.command == "preflight":
             from src.workbench.training_preflight import load_local_tokenizer
 

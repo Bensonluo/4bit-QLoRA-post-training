@@ -343,3 +343,34 @@ def test_summarize_dataset_grouped_and_fixed_suite_split_methods():
     joined = "\n".join(summarize_dataset(fixed))
     assert "沿用固定开发/测试题集" in joined
     assert "按业务对象隔离划分" not in joined
+
+
+def test_summarize_dataset_renders_answer_coverage_note_before_boundary_line():
+    """答案覆盖披露进人话摘要:稀有答案落保留分区时点名训练集缺口,位置在边界句前。"""
+    from src.workbench.report_summary import summarize_dataset
+
+    note = (
+        "验证/测试集中有 1 类答案（screen×1（测试1 条））从未出现在训练集——"
+        "训练按逐字学习答案，模型没有学过这些值，验证与测试仍会照常打分。"
+    )
+    statistics = {
+        "total_rows": 18,
+        "row_counts": {"train": 14, "validation": 2, "test": 2},
+        "independent_groups": 18,
+        "answer_counts_by_split": {
+            "train": {"yes": 14},
+            "validation": {"yes": 2},
+            "test": {"yes": 1, "screen": 1},
+        },
+        "train_missing_answers": {"screen": {"test": 1}},
+        "answer_coverage_note": note,
+    }
+    lines = summarize_dataset(statistics)
+    assert lines[-2] == note
+    assert lines[-1].startswith("分区就绪只说明")
+
+    # 负例:无覆盖问题或答案取值超过 20 种缺键(如实边界)时,摘要不多说一句
+    quiet = summarize_dataset(
+        {"total_rows": 3, "row_counts": {"train": 1, "validation": 1, "test": 1}}
+    )
+    assert not any("从未出现在训练集" in line for line in quiet)

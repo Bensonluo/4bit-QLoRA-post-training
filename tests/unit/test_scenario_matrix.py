@@ -457,7 +457,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 45, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 46, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -1278,3 +1278,54 @@ def test_row_order_reversed_full_passes_and_reupload_stays_content_stable(tmp_pa
     )
     assert session.dataset.version != version_original, "重传后必须物化新版本"
     assert session.dataset.source_digest == digest_reversed, "新版本绑定重传文件摘要"
+
+
+def test_rare_category_only_in_holdout_disclosed_in_materialize_statistics(tmp_path):
+    """场景 46:稀有答案整组落入保留分区——八关全过(披露不阻断),物化统计点名
+    训练集答案缺口;答案取值 ≤ 20 才计算,缺键即开放文本的如实边界。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "rare-category-only-in-holdout" in specs, "缺少场景 rare-category-only-in-holdout"
+
+    spec = specs["rare-category-only-in-holdout"]
+
+    # 夹具真实性:全量 18 行、17 条质量 + 末行唯一一条屏幕;样例两类答案都有(对比可配对)
+    def labels(blob: bytes) -> list[str]:
+        return [line.rsplit(",", 1)[1] for line in blob.decode().splitlines()[1:]]
+
+    assert len(labels(spec.full)) == 18
+    assert labels(spec.full).count("屏幕") == 1 and labels(spec.full)[-1] == "屏幕"
+    assert set(labels(spec.sample)) == {"质量", "屏幕"}
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()  # 披露不阻断:八关全过
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 手动探针:同一夹具走真实旅程,materialize 默认 seed 42 → 屏幕 整组落入测试集
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "rare-category-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    service.submit_contrast_check(
+        session.session_id,
+        pending["check_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full
+    )
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
+    statistics = session.dataset.statistics
+    assert statistics["row_counts"] == {"train": 14, "validation": 2, "test": 2}
+    assert statistics["answer_counts_by_split"]["train"] == {"质量": 14}
+    assert statistics["train_missing_answers"] == {"屏幕": {"test": 1}}
+    note = statistics["answer_coverage_note"]
+    assert "屏幕×1（测试1 条）" in note and "从未出现在训练集" in note, note
+    assert "照常打分" in note and "没有自动重新切分" in note, note
