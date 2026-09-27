@@ -75,6 +75,38 @@ def probe_learnability(
     majority_share = max(label_counts.values()) / len(rows) if label_counts else 0.0
     majority_label = max(label_counts, key=label_counts.get) if label_counts else ""
     accuracy = correct / len(sampled)
+
+    # 标签问题候选:基座零样本与数据标签矛盾的行。基座没见过这些数据,
+    # 它的分歧不带训练利益;若盲标核验中用户也不同意数据标签,则是强证据
+    # (人机双信号交叉)——这正是 cleanlab 式统计检错的任务无关轻量版。
+    blind = getattr(session, "label_verification", None) or {}
+    blind_items = {
+        item.get("row_id"): item
+        for item in (blind.get("items") or [])
+        if isinstance(item, dict) and item.get("match") is False
+    }
+    candidates = []
+    for observation in observations:
+        if observation["match"] or observation["truncated"]:
+            continue  # 截断的生成不算分歧证据
+        row_id = observation["row_id"]
+        user_also_disagrees = row_id in blind_items
+        candidates.append(
+            {
+                "row_id": row_id,
+                "data_label": observation["expected"],
+                "base_zero_shot": observation["generated"],
+                "user_blind_answer": blind_items[row_id].get("submitted_answer")
+                if user_also_disagrees
+                else None,
+                "evidence": (
+                    "基座零样本与用户盲标都不认同数据标签——强证据,优先人工核对"
+                    if user_also_disagrees
+                    else "仅基座零样本不认同——模型可能错,标签也可能错,弱信号供参考"
+                ),
+            }
+        )
+    candidates.sort(key=lambda item: 0 if item["user_blind_answer"] else 1)
     result = {
         "kind": "learnability_probe",
         "dataset_version": session.dataset.version,
@@ -87,6 +119,12 @@ def probe_learnability(
         "majority_label": majority_label,
         "difference": accuracy - majority_share,
         "observations": observations,
+        "label_error_candidates": candidates,
+        "candidates_note": (
+            f"{len(candidates)} 行是标签问题候选(基座零样本与数据标签不一致;"
+            f"其中 {sum(1 for c in candidates if c['user_blind_answer'])} 行与用户盲标也不一致)。"
+            "候选不等于错误——模型可能错;但优先人工核对这些行是性价比最高的数据清理。"
+        ),
         "note": (
             f"基座零样本 {accuracy:.0%} vs 全开发集多数类「{majority_label}」{majority_share:.0%}"
             f"（抽样 {len(sampled)}/{len(rows)} 条）。这只是数据与任务是否存在可学关联的"

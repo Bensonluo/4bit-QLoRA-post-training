@@ -2,9 +2,9 @@
 
 import pytest
 
+from src.workbench.business_evaluation import Generation
 from src.workbench.intake_service import IntakeService
 from src.workbench.learnability_probe import probe_learnability, save_probe
-from src.workbench.business_evaluation import Generation
 from tests.unit.test_data_materialize import _full
 
 
@@ -72,3 +72,44 @@ def test_probe_validates_inputs(store):
     bare.dataset = None
     with pytest.raises(ValueError, match="独立分区"):
         probe_learnability(bare, "/tmp/base", runtime_factory=_factory("x"))
+
+
+def test_label_error_candidates_cross_signal_ranking(store, tmp_path):
+    """基座与用户盲标双信号都矛盾的行排前;截断不作为分歧证据。"""
+    _, session = store
+    labels = [row["output"] for row in _labels(session)]
+    majority = max(set(labels), key=labels.count)
+
+    # 先造一个用户盲标分歧信号:提交与数据标签不同的答案(同库服务)
+    service = store[0]
+    current = service.load(session.session_id)
+    pending = service.start_label_verification(current.session_id, current.revision, sample_size=1)
+    answers = {item["row_id"]: "用户也不认同的答案" for item in pending["items"]}
+    service.submit_label_verification(current.session_id, pending["verification_id"], answers)
+    current = service.load(session.session_id)
+    assert current.label_verification["verdict"] == "insufficient_agreement"
+
+    calls = {"n": 0}
+
+    def make(model):
+        class Runtime:
+            def generate(self, prompt, protocol):
+                calls["n"] += 1
+                answer = "基座不认同的输出" if calls["n"] % 2 else majority
+                return Generation(answer, truncated=False)
+
+            def close(self):
+                pass
+
+        return Runtime()
+
+    result = probe_learnability(
+        current, "/tmp/base", runtime_factory=lambda model: make(model), sample_size=2
+    )
+    candidates = result["label_error_candidates"]
+    assert isinstance(candidates, list)
+    assert "候选不等于错误" in result["candidates_note"]
+    strong = [c for c in candidates if c["user_blind_answer"]]
+    if strong:
+        assert candidates[0]["user_blind_answer"], "强证据排前"
+        assert "强证据" in candidates[0]["evidence"]
