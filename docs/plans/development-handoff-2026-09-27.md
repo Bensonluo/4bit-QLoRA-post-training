@@ -357,3 +357,29 @@ max_new_tokens 值,与回声提示同构、不认定原因(bdbd994)。US-011 基
 
 test_baseline_analysis 15→19 项、test_scenario_matrix 16→17 项全绿;全量回归
 pytest tests/unit 1614 passed / 0 failed;ruff clean。
+
+### 第 14 轮 = 第五批并行(两 agent 分线交付)
+
+**B 线:eval-compare / train-status 语言化摘要的 CLI 分派路径钉死**(3 提交:
+e118c97、9d285a1、本记录)。背景核对:e1291ef 已把 summarize_comparison /
+summarize_training_run 接进两个子命令,且各有一条最小 CLI 断言(eval 侧仅空报告
+占位句「该报告没有模型结果。」,train 侧仅 succeeded 无预检一层)——本线不重做
+接线,补上真实分派路径的行为缺口,新建 tests/unit/test_cli_summaries.py:
+
+- **eval-compare 真实对照报告全句断言**(e118c97):mocked
+  TrainingRunService/BusinessEvaluationService(复用 evaluation_cli 夹具模式),
+  报告携带基座 3/10、本轮微调 8/10 两个模型结果走完整分派;stdout 仍为纯 JSON,
+  stderr 逐句断言:总题数句「这次对照在固定开发集的 10 道题上进行」、逐模型
+  答对句、最优句「答对最多的是本轮微调(8/10)」、增益句「本轮微调比基座答对更多
+  (8/10 vs 3/10)——但要注意样本量」、10 题仍触发的小样本提示「任何百分比都受
+  单题影响很大」、收尾「以上是观察事实,不是业务达标结论」。
+- **train-status 摘要两层各就位**(9d285a1):记录附带 preflight 时,stderr 在
+  训练状态句(模型名 Qwen3-1.7B、轮数、「训练完成，产出了微调适配器。」、
+  loss 0.4200 与「不代表业务效果」、「要用同一套开发题与基座对照」)之外追加
+  预检大白话(「训练前检查通过：6 行数据」「没有内容因长度超限被截断」「不代表
+  训练效果或业务达标」);记录没带预检时只给状态句(running 的「正在训练中」
+  「关闭页面不影响后台训练」),stderr 不出现任何「训练前检查」字样——没有的
+  证据不编造,与摘要层的诚实边界一致。
+
+**A 线(另一并行 agent,页面与探针方向):**(待其交付后由协调员或本人补记——
+预期涉及 ui/pages/07_Data_Intake.py、learnability_probe 及其测试。)
