@@ -143,6 +143,63 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("long-text", "boundary-note"),
         ),
+        ScenarioSpec(
+            scenario_id="duplicate-inputs",
+            goal="根据客户首次描述判断售后类别",
+            sample=(
+                "编号,客户描述,类别\n001,杯子破损,质量\n001,杯子破损,质量\n002,物流未更新,物流\n"
+            ).encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                + "".join(
+                    f"{'001' if i % 2 else f'{i:03d}'},{'杯子破损' if i % 2 else f'问题{i}'},质量\n"
+                    for i in range(1, 13)
+                )
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note="通过且带「输入完全重复」预警(重复检出已上线);重复行答案一致,仅样本量虚高",
+            tags=("dirty-data", "duplicates"),
+        ),
+        ScenarioSpec(
+            scenario_id="same-input-conflicting-labels",
+            goal="根据客户首次描述判断售后类别",
+            sample="编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n".encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                "001,杯子破损,质量\n001,杯子破损,物流\n002,物流未更新,物流\n"
+                "003,屏幕碎裂,质量\n004,快递丢失,物流\n005,开不了机,质量\n"
+                "006,地址填错,物流\n007,异味,质量\n008,延迟送达,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:validate_full",
+            expect_note="同一输入对应不同答案(矛盾标签)必须被拦:模型无法同时满足两个答案",
+            tags=("ambiguous", "conflicting-labels"),
+        ),
+        ScenarioSpec(
+            scenario_id="multi-source-boundary",
+            goal="用工单表和审核表联合判断售后类别",
+            sample="描述,类别\n杯子破损,质量\n物流未更新,物流\n".encode(),
+            sample_name="工单.csv",
+            full=(
+                "描述,类别\n"
+                "杯子破损,质量\n物流未更新,物流\n屏幕碎裂,质量\n快递丢失,物流\n"
+                "开不了机,质量\n地址填错,物流\n异味,质量\n延迟送达,物流\n"
+                "无法充电,质量\n包装破损,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=(),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:零密钥路径仅分析主资料;多源组合需配置 Agent——"
+                "目标提及多表时基础分析不做组合,按已知边界通过"
+            ),
+            tags=("boundary", "multi-source"),
+        ),
     ]
 
 

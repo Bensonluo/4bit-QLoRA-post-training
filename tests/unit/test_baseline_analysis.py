@@ -126,3 +126,25 @@ def test_open_text_target_gets_honest_expectation_statement(tmp_path):
     statements = [f for f in analysis.findings if "没有可执行的自动评分规则" in f.message]
     assert statements and "人工核对" in statements[0].message
     assert "业务评分规则" in statements[0].message
+
+
+def test_duplicate_inputs_are_flagged(tmp_path):
+    """输入完全重复的行被检出(样本量虚高+训练重复);干净数据不触发。"""
+    service = IntakeService(tmp_path / "intake")
+    rows = "描述,类别\n" + "".join(
+        f"{'杯子破损' if i % 2 else '屏幕碎裂'},{'质量' if i % 2 else '物流'}\n" for i in range(10)
+    )
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    warnings = [f for f in analysis.findings if "完全重复" in f.message]
+    assert warnings and "样本量虚高" in warnings[0].message
+
+    clean = IntakeService(tmp_path / "intake2")
+    rows2 = "描述,类别\n" + "".join(
+        f"不同的问题描述第{i}条,{'质量' if i % 2 else '物流'}\n" for i in range(10)
+    )
+    session2 = clean.create("判断类别", "t.csv", rows2.encode())
+    assert not any(
+        "完全重复" in f.message
+        for f in propose_baseline_analysis(session2, target_column="类别").findings
+    )

@@ -168,6 +168,24 @@ def propose_baseline_analysis(
                 ),
             )
         )
+    # 重复输入检出:完全相同的输入会让样本量虚高、训练重复
+    from collections import Counter as _Counter
+
+    input_signatures = [
+        tuple(row.values.get(column, "") for column in input_columns) for row in session.source.rows
+    ]
+    duplicate_total = sum(count - 1 for count in _Counter(input_signatures).values() if count > 1)
+    if input_signatures and duplicate_total / len(input_signatures) >= 0.1:
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    f"有 {duplicate_total}/{len(input_signatures)} 条输入字段完全重复的行。"
+                    "重复会让样本量虚高、训练时同一内容被反复学习;请确认是否为重复录入,"
+                    "必要时在原始数据中去除(答案不同的重复尤其危险——同一输入对应多个标签会让模型无法学习)。"
+                ),
+            )
+        )
     if _value_kind(session, target_column) == "open_text":
         findings.append(
             Finding(

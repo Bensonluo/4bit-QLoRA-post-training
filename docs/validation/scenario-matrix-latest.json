@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T06:03:08.928174+00:00",
+  "created_at": "2026-09-27T06:08:16.989704+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -141,11 +141,62 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "duplicate-inputs",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "same-input-conflicting-labels",
+      "expect": "blocked_at:validate_full",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "blocked"
+      },
+      "blocked_at": "validate_full",
+      "blocked_message": "部分全量记录与已认可业务样例具有相同模型输入，但答案不同。请澄清标签或修改业务规则；按实际输入比对，未混用两份文件的行 ID。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "multi-source-boundary",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 8,
-    "as_expected": 8,
+    "total": 11,
+    "as_expected": 11,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,
