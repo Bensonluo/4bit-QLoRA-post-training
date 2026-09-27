@@ -888,6 +888,11 @@ def main() -> int:
                 report, session, _client(args), output_root=args.evaluation_root
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            # 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加人话。
+            from src.workbench.report_summary import summarize_assessment
+
+            for line in summarize_assessment(result):
+                print(line, file=sys.stderr)
             return 0
         if args.command in {"eval-compare", "eval-show"}:
             from src.workbench.business_evaluation import (

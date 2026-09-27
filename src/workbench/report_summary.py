@@ -690,3 +690,76 @@ def summarize_suite(record: dict) -> list[str]:
     lines.append("materialize 时用 --suite-id 指定即可复用这套题集。")
     lines.append("固定题集只保证各轮比较基线一致，不代表业务效果达标。")
     return lines
+
+
+def summarize_assessment(record: dict) -> list[str]:
+    """把 Agent 评测解读翻译成人话：证据事实、待核查假设、建议与不自动执行的边界。
+
+    只复述记录里的事实：观察与假设分离（假设是待核查原因，不是事实），工具
+    调用轨迹如实计数（含失败）。解读只给建议，不改数据、不启动训练，也不
+    代表业务效果达标。
+    """
+    assessment = record.get("assessment") or {}
+    if not assessment:
+        return [
+            "这份解读没有可读的内容。",
+            "这是开发集诊断建议，不代表业务效果达标。",
+        ]
+    lines = []
+    model = str(record.get("model") or "").strip()
+    head = "这份解读由 Agent 在核查真实工具证据后给出"
+    if model:
+        head += f"（模型 {model}）"
+    lines.append(head + "。")
+    summary = str(assessment.get("summary") or "").strip()
+    if summary:
+        lines.append(f"总述：{summary}")
+    observations = [item for item in (assessment.get("observations") or []) if item]
+    hypotheses = [item for item in (assessment.get("hypotheses") or []) if item]
+    evidence_count = len(
+        {
+            identity
+            for item in [*observations, *hypotheses]
+            for identity in (item.get("evidence_ids") or [])
+        }
+    )
+    parts = [f"有证据的观察 {len(observations)} 条"]
+    if hypotheses:
+        parts.append(f"待核查原因 {len(hypotheses)} 条——这是假设不是事实，每条附验证方式")
+    if evidence_count:
+        parts.append(f"共引用 {evidence_count} 处工具证据")
+    lines.append("、".join(parts) + "。")
+    decision = str(assessment.get("decision") or "").strip()
+    if decision:
+        names = {
+            "inspect_data": "先核查数据",
+            "revise_pipeline": "先修订处理方案",
+            "inspect_training": "先核查训练行为",
+            "collect_evidence": "先补充证据",
+            "business_review": "需要业务核对",
+        }
+        lines.append(f"建议优先处理：{names.get(decision, decision)}。")
+    steps = [str(item) for item in (assessment.get("next_steps") or []) if str(item).strip()]
+    if steps:
+        lines.append("建议下一步：" + "；".join(steps))
+    limitations = [str(item) for item in (assessment.get("limitations") or []) if str(item).strip()]
+    if limitations:
+        lines.append("解读自己声明的局限：" + "；".join(limitations))
+    questions = [
+        str(item) for item in (assessment.get("business_questions") or []) if str(item).strip()
+    ]
+    if questions:
+        lines.append("需要你先回答的业务问题：" + "；".join(questions))
+    trace = [item for item in (record.get("tool_trace") or []) if isinstance(item, dict)]
+    if trace:
+        ok_count = sum(1 for item in trace if item.get("ok"))
+        failed = len(trace) - ok_count
+        trace_text = f"工具核查轨迹：{len(trace)} 次调用，成功 {ok_count} 次"
+        if failed:
+            trace_text += f"、失败 {failed} 次——失败的调用没有取到证据，解读只依赖成功的调用"
+        lines.append(trace_text + "。")
+    lines.append(
+        "以上是开发集诊断建议：软件不会据此自动改标签、删除坏例或采纳方案变更，"
+        "也不会自动启动下一轮训练；是否有效仍需你的业务判断，不代表业务效果达标。"
+    )
+    return lines

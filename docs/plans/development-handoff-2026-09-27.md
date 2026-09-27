@@ -1556,3 +1556,43 @@ iteration-*、execution-* 等 CLI stderr 人话摘要补齐,但同一批记录�
   ui/pages/07_Data_Intake.py、tests/unit/test_report_summary.py、
   tests/unit/test_eval_suite_cli.py、tests/unit/test_forecast_ui.py、
   tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+### 第 41 轮 = Agent 结果解读人话摘要（恢复循环第 22 轮）
+
+痛点：eval-analyze 是 CLI 覆盖图上最后一块零人话的业务决策面。Agent 解读记录
+里最有语义安全价值的三个事实——观察与待核查假设的分离（假设不是事实）、工具
+核查轨迹里的失败调用（失败的调用没有取到证据）、软件不据此自动执行任何变更
+——此前只躺在 JSON 里，CLI 用户与页面用户读不到同一口径。
+
+- **summarize_assessment 函数**(report_summary.py 第 12 个摘要函数):句子结构为
+  「这份解读由 Agent 在核查真实工具证据后给出（模型 X）」→总述原文→计数句
+  （有证据的观察 N 条、待核查原因 M 条——这是假设不是事实，每条附验证方式、
+  共引用 K 处工具证据，evidence_ids 去重）→「建议优先处理：先核查数据」
+  （五态人话名与页面 07 决策词汇一致：先核查数据/先修订处理方案/先核查训练
+  行为/先补充证据/需要业务核对）→建议下一步→解读自己声明的局限→需要你先
+  回答的业务问题→工具核查轨迹计数（N 次调用，成功 X、失败 Y——失败的调用
+  没有取到证据，解读只依赖成功的调用）→双边界收尾「软件不会据此自动改标签、
+  删除坏例或采纳方案变更，也不会自动启动下一轮训练…不代表业务效果达标」。
+  裸记录降级:缺位句+边界句,不编造观察/决策/轨迹。
+- **CLI 接线**(data_intake.py eval-analyze 分支):输出 JSON 后对 record 追加
+  stderr 摘要;eval-analyze 无 list 变体,无需例外。
+- **页面接线**(07_Data_Intake.py 已保存解读 expander):每份解读的核查记录
+  (st.json tool_trace)之下渲染 summarize_assessment(record),页面与 CLI
+  同源同词汇。
+- **测试 +2 个新函数+1 处既有扩展**:test_report_summary 新增
+  test_assessment_summary_evidence_hypotheses_and_boundaries(完整记录:精确
+  首句、观察/假设分离句、去重证据计数、五态决策名、轨迹失败计数、双边界句;
+  裸记录:缺位句+边界句不编造);test_business_evaluation_cli 的
+  test_eval_analyze_uses_byok_and_requires_remote_data_authorization 扩展
+  mock 返回完整 assessment 结构,stderr 断言首句/决策句/边界句/密钥不泄露;
+  test_readme_alignment 新增 test_assessment_summary_docs_pinned(11 断言
+  钉死文档段)。定向 73 passed。
+- **文档**(agent-setup.md「让 Agent 解读结果与下一步」节新增一段):stderr
+  位点+观察/假设分离+五态人话名+轨迹失败计数+不自动执行边界+页面位点
+  (核查记录下方渲染同一份摘要,同源同词汇)。
+- 回归:ruff check/format clean(1 处仅测试文件重排);定向 3 文件 73 passed。
+  全量回归 **tests/unit 1772 passed / 0 failed**(--no-cov,基线 1770 + 2 个
+  新测试函数)。本批只动 src/workbench/report_summary.py、
+  scripts/data_intake.py、ui/pages/07_Data_Intake.py、
+  tests/unit/test_report_summary.py、tests/unit/test_business_evaluation_cli.py、
+  tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

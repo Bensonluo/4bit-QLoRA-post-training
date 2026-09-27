@@ -1142,6 +1142,10 @@ def show_business_comparison(report, *, key: str) -> None:
                     st.warning(question)
                 with st.expander("本次解读核查记录"):
                     st.json(record.get("tool_trace", []))
+                from src.workbench.report_summary import summarize_assessment
+
+                for line in summarize_assessment(record):
+                    st.write(line)
     except (ValueError, OSError) as exc:
         st.error(f"无法读取已保存解读：{exc}")
     if current_report:

@@ -863,3 +863,58 @@ def test_suite_summary_counts_lock_scope_and_boundary():
     assert bare[0] == "这套固定题集没有记录题数。"
     assert bare[-1] == "固定题集只保证各轮比较基线一致，不代表业务效果达标。"
     assert "锁定" not in "\n".join(bare), "裸记录没有摘要值,不得编造锁定句"
+
+
+def test_assessment_summary_evidence_hypotheses_and_boundaries():
+    """Agent 解读摘要:观察/假设分离+决策名+轨迹计数(含失败)+不自动执行边界。"""
+    from src.workbench.report_summary import summarize_assessment
+
+    record = {
+        "model": "tool-fixture",
+        "assessment": {
+            "summary": "基座在日期字段上系统性缺漏。",
+            "observations": [
+                {"statement": "日期字段 10 题错 8 题", "evidence_ids": ["case:1"]},
+                {"statement": "截断占比低", "evidence_ids": ["case:2"]},
+            ],
+            "hypotheses": [
+                {
+                    "statement": "日期格式在训练集中分布不足",
+                    "verification": "统计训练集日期字段的取值分布",
+                    "evidence_ids": ["case:1"],
+                }
+            ],
+            "next_steps": ["核对日期字段的监督覆盖", "补充日期样例后重训对照"],
+            "decision": "inspect_data",
+            "limitations": ["开发集只有 10 题，样本量小"],
+            "business_questions": ["日期字段的真实业务口径是哪个？"],
+        },
+        "tool_trace": [
+            {"tool": "inspect_evaluation_summary", "ok": True},
+            {"tool": "inspect_bad_cases", "ok": True},
+            {"tool": "inspect_case_content", "ok": False, "error": "参数错误"},
+            {"tool": "submit_evaluation_assessment", "ok": True},
+        ],
+    }
+    lines = summarize_assessment(record)
+    joined = "\n".join(lines)
+    assert lines[0] == "这份解读由 Agent 在核查真实工具证据后给出（模型 tool-fixture）。"
+    assert "总述：基座在日期字段上系统性缺漏。" in lines
+    assert "有证据的观察 2 条、待核查原因 1 条——这是假设不是事实，每条附验证方式" in joined
+    assert "共引用 2 处工具证据" in joined, "evidence_ids 去重计数(1 条假设复用 case:1)"
+    assert "建议优先处理：先核查数据。" in lines
+    assert "建议下一步：核对日期字段的监督覆盖；补充日期样例后重训对照" in lines
+    assert "解读自己声明的局限：开发集只有 10 题，样本量小" in lines
+    assert "需要你先回答的业务问题：日期字段的真实业务口径是哪个？" in lines
+    assert "工具核查轨迹：4 次调用，成功 3 次、失败 1 次" in joined
+    assert "失败的调用没有取到证据" in joined
+    assert lines[-1].startswith(
+        "以上是开发集诊断建议：软件不会据此自动改标签、删除坏例或采纳方案变更"
+    )
+    assert "不代表业务效果达标" in lines[-1]
+
+    # 裸记录:不编造观察/决策/轨迹,只留缺位句+边界句
+    bare = summarize_assessment({})
+    assert bare[0] == "这份解读没有可读的内容。"
+    assert len(bare) == 2
+    assert "不代表业务效果达标" in bare[-1]

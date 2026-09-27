@@ -518,6 +518,26 @@ def test_suite_summary_docs_pinned():
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
 
 
+def test_assessment_summary_docs_pinned():
+    """eval-analyze CLI stderr 人话摘要口径钉死:观察/假设分离、轨迹失败计数与不自动执行边界。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 让 Agent 解读结果与下一步",
+        "## 定义并确认自定义业务评分",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "summarize_assessment" in section, "摘要函数必须点名"
+    assert "假设不是事实" in section, "观察/假设分离口径必须写明"
+    assert "先核查数据" in section, "决策五态人话名必须写明"
+    assert "需要业务核对" in section, "决策五态人话名必须写明"
+    assert "解读自己声明的局限" in section, "局限原文复述必须写明"
+    assert "失败的调用没有取到证据" in section, "轨迹失败计数口径必须写明"
+    assert "不会据此自动改标签" in section, "不自动执行边界必须写明"
+    assert "不代表业务效果达标" in section, "不作业务结论边界必须写明"
+    assert "核查记录下方渲染同一份摘要" in section, "页面位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+
+
 def test_acceptance_summary_docs_pinned():
     """最终验收 CLI stderr 人话摘要口径钉死:冻结标准、五态结论、分母口径与不作数边界。"""
     section = _section(

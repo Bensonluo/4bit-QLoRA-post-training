@@ -135,7 +135,17 @@ def test_eval_analyze_uses_byok_and_requires_remote_data_authorization(
         )
         return {
             "evaluation_id": current_report.evaluation_id,
-            "assessment": {"summary": "核查真实坏例后的建议"},
+            "model": client.model,
+            "assessment": {
+                "summary": "核查真实坏例后的建议",
+                "observations": [{"statement": "坏例集中在日期字段", "evidence_ids": ["case:1"]}],
+                "hypotheses": [],
+                "next_steps": ["核对日期字段监督覆盖"],
+                "decision": "inspect_data",
+                "limitations": ["样本量小"],
+                "business_questions": [],
+            },
+            "tool_trace": [{"tool": "inspect_evaluation_summary", "ok": True}],
         }
 
     monkeypatch.setattr(src.agent.evaluation, "assess_evaluation", assess)
@@ -153,6 +163,11 @@ def test_eval_analyze_uses_byok_and_requires_remote_data_authorization(
     output = capsys.readouterr()
     assert json.loads(output.out)["evaluation_id"] == report.evaluation_id
     assert requests[0][:3] == (report.evaluation_id, session.session_id, "tool-fixture")
+    # 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加解读人话摘要。
+    assert "这份解读由 Agent 在核查真实工具证据后给出（模型 tool-fixture）。" in output.err
+    assert "建议优先处理：先核查数据。" in output.err
+    assert "软件不会据此自动改标签" in output.err
+    assert "不代表业务效果达标" in output.err
     assert "fixture-only-secret" not in output.out + output.err
 
 
