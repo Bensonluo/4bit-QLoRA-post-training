@@ -236,10 +236,18 @@ def propose_baseline_analysis(
     if variants:
         first_seen = {value: index for index, value in enumerate(distribution)}
         variant_targets: dict[str, str] = {}
+        tie_notes: list[str] = []
         for group_values in variants.values():
             ordered = sorted(group_values, key=first_seen.__getitem__)
-            canonical = max(ordered, key=lambda value: distribution[value])
+            top = max(distribution[value] for value in ordered)
+            tied = [value for value in ordered if distribution[value] == top]
+            canonical = tied[0]  # 平票时 max 之外也明确取数据中先出现的写法(确定性)。
             variant_targets.update(dict.fromkeys(group_values, canonical))
+            if len(tied) > 1:
+                tie_notes.append(
+                    f"「{'」「'.join(tied)}」出现次数相同（各 {top} 行），"
+                    f"草案暂取数据中先出现的「{canonical}」，请在预览确认时改选你认定的规范写法"
+                )
         # map_values 是严格映射:映射之外的值会在预览报错,草案必须覆盖答案列
         # 全部已见取值(变体映射到规范写法,其余原样保留)。
         draft_mapping = {value: variant_targets.get(value, value) for value in distribution}
@@ -250,17 +258,27 @@ def propose_baseline_analysis(
         ]
         rules_display = "、".join(rules[:6]) + (" 等" if len(rules) > 6 else "")
         shown = ";".join("/".join(sorted(values)) for values in list(variants.values())[:3])
+        # 证据行:变体组内每种写法各引用其首次出现的真实样例行,核对不必自己翻数据。
+        evidence: list[str] = []
+        cited: set[str] = set()
+        for row in session.source.rows:
+            value = row.values.get(target_column, "")
+            if value in variant_targets and value not in cited:
+                cited.add(value)
+                evidence.append(row.row_id)
+        message = (
+            f"答案列存在同一业务含义的多种写法（{shown}）。模型会把它们当不同答案学习，"
+            "评测也会被判错；建议在原始数据中统一写法，或用转换规则(map_values)归一。"
+            f"已生成归一规则草案：{rules_display}"
+        )
+        if tie_notes:
+            message += "；" + "；".join(tie_notes[:2]) + ("等" if len(tie_notes) > 2 else "")
+        message += (
+            "。草案已预置到下方方案的答案列转换里，预览确认前可修改或删除，"
+            "最终采用哪种写法由你裁决。"
+        )
         findings.append(
-            Finding(
-                kind="needs_business_input",
-                message=(
-                    f"答案列存在同一业务含义的多种写法（{shown}）。模型会把它们当不同答案学习，"
-                    "评测也会被判错；建议在原始数据中统一写法，或用转换规则(map_values)归一。"
-                    f"已生成归一规则草案：{rules_display}"
-                    "（每组变体映射到该组出现次数最多的写法；草案已预置到下方方案的答案列转换里，"
-                    "预览确认前可修改或删除，最终采用哪种写法由你裁决）。"
-                ),
-            )
+            Finding(kind="needs_business_input", message=message, evidence_row_ids=evidence[:6])
         )
     # 重复输入检出:完全相同的输入会让样本量虚高、训练重复
     from collections import Counter as _Counter

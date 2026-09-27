@@ -150,6 +150,79 @@ def test_clean_labels_get_no_normalization_draft(tmp_path):
     assert not any("多种写法" in finding.message for finding in analysis.findings)
 
 
+def test_variant_tie_picks_first_seen_and_says_so(tmp_path):
+    """平票时的确定性决策:草案取数据中先出现的写法,finding 明说依据,重复生成结果一致。"""
+    service = IntakeService(tmp_path / "intake")
+    labels = [
+        "质量。",
+        "物流",
+        "质量",
+        "物流。",
+        "质量。",
+        "质量",
+        "物流",
+        "物流。",
+        "质量",
+        "质量。",
+    ]
+    rows = "描述,类别\n" + "".join(f"问题{i},{label}\n" for i, label in enumerate(labels, 1))
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    draft_finding = next(f for f in analysis.findings if "归一规则草案" in f.message)
+    # 两组都平票(质量。/质量 各 3 行;物流/物流。 各 2 行),草案取数据中先出现的写法,
+    # 并在消息里明说依据——用户知道草案不是拍脑袋,也知道去哪里改。
+    assert "出现次数相同" in draft_finding.message
+    assert "暂取数据中先出现的" in draft_finding.message
+    assert "「质量。」" in draft_finding.message
+    draft = analysis.recipe.targets[0].transforms[0]
+    assert draft.mapping == {
+        "质量。": "质量。",
+        "质量": "质量。",
+        "物流": "物流",
+        "物流。": "物流",
+    }
+    # 确定性:同一数据重新生成,草案完全一致(不因集合迭代顺序漂移)。
+    session2 = IntakeService(tmp_path / "intake2").create("判断类别", "t.csv", rows.encode())
+    analysis2 = propose_baseline_analysis(session2, target_column="类别")
+    assert analysis2.recipe.targets[0].transforms[0].mapping == draft.mapping
+    # 平票草案同样可执行:预览全部按先出现写法归一,无问题行。
+    updated = service.apply_analysis(session, analysis, model="baseline-deterministic")
+    assert {row.target for row in updated.preview.rows} == {"质量。", "物流"}
+    assert updated.preview.counts["ready"] == 10
+
+
+def test_variant_draft_cites_evidence_rows(tmp_path):
+    """归一草案的 finding 引用证据行:变体组内每种写法都能跳到首条真实样例核对。"""
+    service = IntakeService(tmp_path / "intake")
+    labels = [
+        "质量",
+        "质量。",
+        "质量",
+        "物流",
+        "质量",
+        "物流",
+        "质量",
+        "质量",
+        "物流。",
+        "质量",
+    ]
+    rows = "描述,类别\n" + "".join(f"问题{i},{label}\n" for i, label in enumerate(labels, 1))
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    draft_finding = next(f for f in analysis.findings if "归一规则草案" in f.message)
+    variant_forms = {"质量", "质量。", "物流", "物流。"}
+    # 每种变体写法各引用一条首次出现的行;引用的都是真实样例行,行上的值就是变体写法。
+    assert len(draft_finding.evidence_row_ids) == len(variant_forms)
+    rows_by_id = {row.row_id: row for row in session.source.rows}
+    cited_values = set()
+    for row_id in draft_finding.evidence_row_ids:
+        assert row_id in rows_by_id
+        cited_values.add(rows_by_id[row_id].values["类别"])
+    assert cited_values == variant_forms
+    # 证据行引用走真实校验:apply_analysis 的证据行核对不报错。
+    service.apply_analysis(session, analysis, model="baseline-deterministic")
+
+
 def test_open_text_target_gets_honest_expectation_statement(tmp_path):
     """开放文本答案在旅程开始就被告知:无自动评分,输出靠人工核对。"""
     service = IntakeService(tmp_path / "intake")
