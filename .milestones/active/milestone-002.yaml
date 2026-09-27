@@ -11,7 +11,7 @@ success_criteria:
 tasks:
   - { id: task-001, title: "零密钥九段旅程集成测试+断点修复", status: completed, hours: 6 }
   - { id: task-002, title: "对照报告语言化摘要(模块+页面+测试)", status: completed, hours: 4 }
-  - { id: task-003, title: "训练状态与预检结果的语言化解读", status: pending, hours: 5 }
-  - { id: task-004, title: "页面九段旅程走查与断头路清理", status: pending, hours: 8 }
-  - { id: task-005, title: "盲标/对比核验的引导文案打磨(非专家视角)", status: pending, hours: 4 }
-  - { id: task-006, title: "全量回归+浏览器走查记录+提交", status: pending, hours: 5 }
+  - { id: task-003, title: "训练状态与预检结果的语言化解读", status: completed, hours: 5 }
+  - { id: task-004, title: "页面九段旅程走查与断头路清理", status: completed, hours: 8 }
+  - { id: task-005, title: "盲标/对比核验的引导文案打磨(非专家视角)", status: completed, hours: 4 }
+  - { id: task-006, title: "全量回归+浏览器走查记录+提交", status: completed, hours: 5 }

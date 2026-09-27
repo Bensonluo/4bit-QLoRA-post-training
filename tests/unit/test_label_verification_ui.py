@@ -93,3 +93,32 @@ def test_contrast_check_via_page(data_page, monkeypatch):
     next(b for b in page.button if b.label == "提交配对").click().run()
     assert not page.exception
     assert any("对比核验已通过" in message.value for message in page.success)
+
+
+def test_stale_warning_renders_after_revision(verify_page):
+    """数据修订后,页面明确显示「核验已失效请重验」,而不是静默回到初始状态。"""
+    from copy import deepcopy
+
+    from src.workbench.intake_models import Transform
+
+    service, session, page = verify_page
+    # 先完成一轮核验(通过)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    for field in [t for t in page.text_input if t.key and str(t.key).startswith("lv_")]:
+        row_id = str(field.key).rsplit("_", 1)[-1]
+        field.input(targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交盲标核验答案").click().run()
+    assert any("盲标核验已通过" in m.value for m in page.success)
+
+    # 修订配方(新增 replace 转换)后重新确认全量 → 核验失效
+    analysis = deepcopy(session.analysis)
+    analysis.recipe.inputs[0].transforms.append(Transform(operation="replace", old="x", new="y"))
+    service.apply_analysis(session, analysis)
+    assert any("已失效" in w.value for w in page.warning) or True  # 先提交后渲染
+    page.run()
+    assert not page.exception
+    # 失效警告出现在盲标核验区(核验状态需在全量确认后可见)
+    assert any("已失效" in w.value for w in page.warning)
