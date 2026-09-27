@@ -1191,6 +1191,23 @@ def new_task() -> None:
     st.session_state["intake_select"] = ""
 
 
+SHEET_INPUT_LABEL = "Excel 工作表（留空读第一个）"
+
+
+def excel_sheet_input(upload, *, key: str) -> str | None:
+    """Excel 上传时提供可选 sheet 选择；其他情况返回 None，读取行为不变。
+
+    返回值直接透传 read_source 的 sheet 参数：按名称或 1 起始序号指定，留空读
+    第一个 sheet。调用方必须把上传控件放在表单外——表单内部件要到提交才提交
+    值，放里面就无法在提交前按上传的文件类型显示这个选择。
+    """
+    if upload is None or not upload.name.lower().endswith((".xlsx", ".xls")):
+        return None
+    return st.text_input(
+        SHEET_INPUT_LABEL, placeholder="按名称如 员工表，或 1 起始序号如 2", key=key
+    )
+
+
 with st.sidebar:
     st.subheader("已有数据任务")
     sessions = service.list_sessions()
@@ -1209,6 +1226,9 @@ base_url, model, api_key, allow_remote = render_agent_settings(
 )
 
 if "intake_id" not in st.session_state:
+    # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
+    # 按上传的文件类型显示 sheet 选择。
+    upload = st.file_uploader("提供 CSV、Excel 或 JSONL", type=["csv", "xlsx", "xls", "jsonl"])
     with st.form("new_intake"):
         goal = st.text_area(
             "希望模型完成什么业务工作？",
@@ -1218,11 +1238,11 @@ if "intake_id" not in st.session_state:
             "这些数据是什么？有哪些已知情况？",
             placeholder="例如：一行一个工单，描述来自客户，类别由人工审核。有些记录缺类别。",
         )
-        upload = st.file_uploader("提供 CSV、Excel 或 JSONL", type=["csv", "xlsx", "xls", "jsonl"])
         scope_label = st.radio("这份文件的用途", ["用于理解结构的样例", "本次任务的全量数据"])
         with st.expander("文件读取设置（通常自动识别即可）"):
             encoding = st.text_input("编码（留空自动识别）", placeholder="utf-8-sig / gb18030")
             delimiter_label = st.selectbox("CSV 分隔符", ["自动", "逗号", "分号", "Tab", "竖线"])
+            sheet = excel_sheet_input(upload, key="new_intake_sheet")
         create = st.form_submit_button("读取数据并开始", type="primary")
     if create:
         if upload is None:
@@ -1239,6 +1259,7 @@ if "intake_id" not in st.session_state:
                     delimiter={"逗号": ",", "分号": ";", "Tab": "\t", "竖线": "|"}.get(
                         delimiter_label
                     ),
+                    sheet=(sheet or "").strip() or None,
                 )
                 st.session_state["intake_id"] = session.session_id
                 st.rerun()

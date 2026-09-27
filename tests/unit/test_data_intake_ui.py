@@ -509,3 +509,72 @@ def test_full_problem_pagination_reaches_all_issue_rows_and_points_to_full_reupl
     assert any("独立问题45" in item.value for item in page.code)
     assert any("全量数据验证」重新上传" in item.value for item in page.info)
     assert not any(item.label == "确认全量数据含义" for item in page.button)
+
+
+SHEET_INPUT_LABEL = "Excel 工作表（留空读第一个）"
+
+
+def _workbook_bytes(*sheets):
+    """sheets: (名称, 表头行, 数据行) 三元组；openpyxl 现场生成多 Sheet 工作簿。"""
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    for index, (name, header, rows) in enumerate(sheets):
+        sheet = workbook.active if index == 0 else workbook.create_sheet()
+        sheet.title = name
+        sheet.append(header)
+        for row in rows:
+            sheet.append(row)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def uploaded_bytes(contents, name):
+    payload = io.BytesIO(contents)
+    payload.name = name
+    return payload
+
+
+def patch_uploader(monkeypatch, label, holder):
+    """按标签替换 file_uploader 的返回值；holder["file"] 可在测试中途更换。"""
+    import streamlit
+
+    original = streamlit.file_uploader
+
+    def uploader(rendered, *args, **kwargs):
+        return holder["file"] if rendered == label else original(rendered, *args, **kwargs)
+
+    monkeypatch.setattr(streamlit, "file_uploader", uploader)
+
+
+def test_new_intake_form_reads_designated_excel_sheet(data_page, monkeypatch):
+    """新建任务表单：仅 Excel 上传显示 sheet 输入，指定后读到对应工作表的数据。"""
+    service, existing, page = data_page
+    holder = {"file": None}
+    patch_uploader(monkeypatch, "提供 CSV、Excel 或 JSONL", holder)
+    page.run()
+    assert not page.exception
+    assert not any(t.label == SHEET_INPUT_LABEL for t in page.text_input)
+    holder["file"] = uploaded_bytes(CSV, "工单.csv")
+    page.run()
+    assert not any(t.label == SHEET_INPUT_LABEL for t in page.text_input)
+    holder["file"] = uploaded_bytes(
+        _workbook_bytes(
+            ("工单表", ("编号", "类别"), [("001", "质量")]),
+            ("员工表", ("员工号", "部门"), [("E01", "质检")]),
+        ),
+        "花名册.xlsx",
+    )
+    page.run()
+    assert not page.exception
+    next(t for t in page.text_area if t.label == "希望模型完成什么业务工作？").input("统计员工部门")
+    next(t for t in page.text_input if t.label == SHEET_INPUT_LABEL).input("员工表")
+    button(page, "读取数据并开始").click().run()
+    assert not page.exception
+    created = next(s for s in service.list_sessions() if s.session_id != existing.session_id)
+    loaded = service.load(created.session_id)
+    assert loaded.source.sheet == "员工表"
+    assert loaded.source.columns == ["员工号", "部门"]
+    assert any(row.values.get("员工号") == "E01" for row in loaded.source.rows)
+    assert loaded.source.sheet_note is not None and "工单表" in loaded.source.sheet_note
