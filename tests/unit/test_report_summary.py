@@ -406,3 +406,26 @@ def test_summarize_dataset_renders_duplicate_note_after_coverage_note():
         {"total_rows": 3, "row_counts": {"train": 1, "validation": 1, "test": 1}}
     )
     assert not any("渲染后完全相同" in line for line in quiet)
+
+
+def test_comparison_names_weakest_field_for_json_tasks():
+    """JSON 任务逐字段准确率进人话摘要:点名最弱字段与诚实口径;非 JSON 任务沉默。"""
+    base = _model("基座", 10, 0.3)
+    base["metrics"]["field_accuracy"] = {"日期": 0.2, "类别": 0.9}
+    tuned = _model("本轮微调", 10, 0.8)
+    tuned["metrics"]["field_accuracy"] = {"日期": 0.5, "类别": 1.0}
+    joined = "\n".join(summarize_comparison(_report([base, tuned])))
+    assert "基座最弱的是「日期」(2/10 题答对)" in joined
+    assert "本轮微调最弱的是「日期」(5/10 题答对)" in joined
+    assert "全部字段都对" in joined
+    assert "无法按 JSON 解析" in joined
+
+    # 负例:分类/开放任务的 field_accuracy 为空 dict,摘要不多说
+    plain = "\n".join(summarize_comparison(_report([_model("基座", 10, 0.3)])))
+    assert "最弱的是" not in plain
+
+    # 全部字段全对 → 不点名最弱(交给「全部答对」句)
+    perfect = _model("本轮微调", 3, 1.0)
+    perfect["metrics"]["field_accuracy"] = {"类别": 1.0}
+    joined = "\n".join(summarize_comparison(_report([perfect])))
+    assert "最弱的是" not in joined

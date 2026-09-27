@@ -449,3 +449,18 @@ def test_duplicate_rows_docs_pinned_and_backed_by_matrix():
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "exact-duplicate-rows-in-full" in scenarios, "场景矩阵缺少完全相同例题场景"
     assert scenarios["exact-duplicate-rows-in-full"].expect == "passes"
+
+
+def test_field_accuracy_disclosure_docs_pinned():
+    """评测对照逐字段准确率披露文档:逐字段口径/失败截断计错/整题答对口径关键句钉死。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 比较基座与本轮微调效果",
+        "## 让 Agent 解读结果与下一步",
+    )
+    assert "field_accuracy" in section
+    assert "最弱" in section
+    assert "无法按 JSON 解析" in section
+    assert "全部字段都对" in section
+    assert "保持沉默" in section  # 非 JSON 任务沉默边界
+    assert "大白话解读" in section  # 页面位点

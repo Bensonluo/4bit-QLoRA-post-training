@@ -74,6 +74,26 @@ def summarize_comparison(report: Any) -> list[str]:
         if score > best_score:
             best_label, best_correct, best_score = model["label"], correct, score
 
+    field_parts: list[str] = []
+    for model in models:
+        field_accuracy = model["metrics"].get("field_accuracy") or {}
+        if not field_accuracy:
+            continue
+        lowest = min(value if value is not None else 0.0 for value in field_accuracy.values())
+        if lowest >= 1.0:
+            continue  # 每个字段都全对,披露没有信息量,交给「全部答对」句
+        weakest = [name for name, value in field_accuracy.items() if (value or 0.0) == lowest]
+        weakest_correct = round(lowest * total)
+        names = "、".join(f"「{name}」" for name in weakest)
+        field_parts.append(f"{model['label']}最弱的是{names}({weakest_correct}/{total} 题答对)")
+    if field_parts:
+        lines.append(
+            "JSON 答案按声明的字段逐项核对,上面的「答对」指全部字段都对:"
+            + "、".join(field_parts)
+            + "。生成失败、截断或无法按 JSON 解析的题按该字段错误计入;"
+            "要知道该字段具体错在哪里,请逐题查看完整输出。"
+        )
+
     truncation_models = high_truncation_models(models)
     if truncation_models:
         limit = (getattr(report, "protocol", None) or {}).get("max_new_tokens")

@@ -1147,3 +1147,47 @@ conflict status blocking + materialize 非 ready 行 raise 早已硬拦,非静�
   docs/agent-setup.md、tests/unit/test_data_materialize.py、
   tests/unit/test_report_summary.py、tests/unit/test_scenario_matrix.py、
   tests/unit/test_readme_alignment.py 与本记录。
+
+### 第 32 轮 = 评测对照逐字段准确率如实点名 field_accuracy(恢复循环第 13 轮)
+
+(恢复的北极星打磨循环,第 13 轮。)核心痛点:business_evaluation 的
+json_fields_exact 评分规则早已计算逐字段准确率(`field_accuracy`,每个已声明
+字段单独一档),诊断层与 UI 也把它展示为裸数字——但 `summarize_comparison`
+(页面「大白话解读」+ CLI eval-compare stderr)从不翻译它。非专家读者既无从
+知道哪个字段最弱,也不知道逐模型行的「答对 X/Y」指全部字段都对(模型可能
+每个字段都答对 9/10 却一道整题也不算答对)。与第 27 轮同型:披露链路断了
+最后一公里,数字已算出,人话从不出现。
+
+- **summarize_comparison 逐字段核对分支**(report_summary.py,逐模型行之后、
+  截断警告块之前):门控 `field_accuracy` 非空 dict(分类/开放任务缺键即沉默,
+  不多说一句);每模型取 `min` 为最弱档(None 值按 0.0 计),并列最弱全部点名
+  (插入序确定性);`lowest >= 1.0` 时抑制——数学不变量 exact_match ≤ 每个字段
+  准确率,全部字段全对 ⟺ 整题全对,该情形交给逐模型行已有的「全部答对」句,
+  披露没有信息量。渲染为一句:「JSON 答案按声明的字段逐项核对,上面的
+  「答对」指全部字段都对:基座最弱的是「日期」(2/10 题答对)、…。生成失败、
+  截断或无法按 JSON 解析的题按该字段错误计入;要知道该字段具体错在哪里,
+  请逐题查看完整输出。」——失败/截断保留分母的口径对逐字段统计同样成立,
+  并写明「上面的答对指全部字段都对」消除 X/Y 的语义歧义。标点沿用本函数
+  半角风格。消费方零改动:仅有的两个生产消费方(07 页面 990/993 行、CLI
+  data_intake.py 942/944 行)都逐行 verbatim 渲染,新句自动上页面与 CLI。
+- **测试**(test_report_summary.py +1):`test_comparison_names_weakest_field_
+  for_json_tasks` 三态钉死——正例(基座 日期 0.2/类别 0.9、本轮微调 日期 0.5/
+  类别 1.0)断言两句最弱点名 + 「全部字段都对」+ 「无法按 JSON 解析」;
+  负例一(无 field_accuracy 的分类任务)断言「最弱的是」不出现;负例二
+  (全部字段 1.0)断言抑制。数值断言探针先行:0.2×10=2、0.5×10=5 均为精确
+  二进制表示,round 结果确定(第 30 轮教训)。
+- **文档钉死**(agent-setup.md + test_readme_alignment.py 24→25):「比较基座
+  与本轮微调效果」段在页面指标说明之后新增逐字段准确率段——field_accuracy
+  按每个已声明字段单独计算、整题只统计全部字段都对的题(每字段 9/10 却零
+  整题的极端形态写明)、页面「大白话解读」与 CLI 位点、note 原文例(与代码
+  输出逐字一致)、失败/截断/无法按 JSON 解析按该字段错误计入、非 JSON 任务
+  保持沉默、全部字段全对不多说一句。新钉测试
+  `test_field_accuracy_disclosure_docs_pinned`(六断言:field_accuracy/最弱/
+  无法按 JSON 解析/全部字段都对/保持沉默/大白话解读)。无新矩阵场景——
+  eval 域在八关旅程之外,沿第 27 轮「无矩阵背书的钉测试」先例;场景数
+  保持 47。
+- 回归:ruff check/format clean;定向套件(test_report_summary+test_readme_
+  alignment+test_business_evaluation+test_cli_summaries)63 passed。全量回归
+  **tests/unit 1749 passed / 0 failed**(--no-cov,无排除;基线 1747 + 新增 2)。
+  本批只动 src/workbench/report_summary.py、tests/unit/test_report_summary.py、
+  tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
