@@ -1,16 +1,29 @@
-"""README 与北极星对齐:本地链接可解析,语义安全层与场景矩阵如实在场。"""
+"""README 与北极星对齐:本地链接可解析,语义安全层与场景矩阵如实在场。
+
+文档健康度巡检:README 主路径、agent-setup 语义安全层(含盲标 CLI 完整用法)、
+north-star 权威版的关键句全部钉死——文档漂移即测试红,改文档必须改测试。
+"""
 
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 README = ROOT / "README.md"
+AGENT_SETUP = ROOT / "docs" / "agent-setup.md"
 
 # 北极星权威版;README 只能指向它,不能另立版本。
 NORTH_STAR = "docs/plans/north-star.md"
+NORTH_STAR_FILE = ROOT / NORTH_STAR
 
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 IMG_PATTERN = re.compile(r'<img\s+src="([^"]+)"')
+
+
+def _section(text, start, end=None):
+    """截取 start 标题到 end 标题(缺省到文末)之间的段落,用于局部钉死。"""
+    begin = text.index(start)
+    finish = text.index(end, begin) if end else len(text)
+    return text[begin:finish]
 
 
 def _local_targets(text):
@@ -31,8 +44,7 @@ def test_all_local_links_resolve_to_existing_files():
     broken = [
         target
         for target in _local_targets(README.read_text(encoding="utf-8"))
-        if target not in DOCUMENTED_PENDING_ASSETS
-        and not (ROOT / target.split("#")[0]).exists()
+        if target not in DOCUMENTED_PENDING_ASSETS and not (ROOT / target.split("#")[0]).exists()
     ]
     assert broken == [], f"README 引用了不存在的文件: {broken}"
 
@@ -56,3 +68,93 @@ def test_license_file_exists_and_declares_mit():
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     assert "MIT License" in license_text
     assert "Permission is hereby granted" in license_text
+
+
+def test_readme_links_agent_setup_and_both_files_exist():
+    """README 主工作流必须链接 agent-setup 配置指南,文档本体真实存在。"""
+    text = README.read_text(encoding="utf-8")
+    assert "](docs/agent-setup.md)" in text, "README 缺少 agent-setup 链接"
+    assert AGENT_SETUP.exists()
+
+
+def test_agent_setup_semantic_safety_layer_pins_three_gates():
+    """语义安全层段:三道关卡条目、口径与确定性边界的关键句钉死。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 语义安全层",
+        "### 盲标核验的完整 CLI 用法",
+    )
+    for gate in (
+        "**对比核验（样例确认时）**",
+        "**盲标核验（训练准备的硬门禁）**",
+        "**可学性探针（可选证据，非门禁）**",
+    ):
+        assert gate in section, f"语义安全层缺少关卡条目: {gate}"
+    assert "（1–50 条，默认 5 条）" in section, "盲标样本量口径漂移"
+    assert "预览或方案变化后核验自动失效" in section, "对比核验失效规则漂移"
+    assert "与「瞎猜多数类」基线对比" in section, "可学性探针基线口径漂移"
+    assert "这三道关卡都不使用 LLM 判断、不消耗模型服务额度，判定全部确定性可复现。" in section
+
+
+def test_agent_setup_blind_label_cli_section_pins_full_usage():
+    """「盲标核验的完整 CLI 用法」小节:命令、参数与统计键说明钉死。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 盲标核验的完整 CLI 用法",
+        "## 生成独立数据分区与版本",
+    )
+    assert "label-verify SESSION_ID --revision CURRENT_REVISION --size 5" in section
+    assert "label-verify-submit SESSION_ID --verification-id VERIFICATION_ID" in section
+    assert "--export-csv" in section
+    for key in ("evidence_note", "shortfall_note", "submit_hint", "agreement_lower_bound"):
+        assert key in section, f"盲标 CLI 用法缺少统计键说明: {key}"
+    assert "不收 `--revision`" in section
+    assert "只含「行ID、题目输入、留空待填的盲标答案」三列，不含数据答案" in section
+    assert "判定：verified（5/5 一致，95% 置信下界约 57%）" in section
+
+
+def test_agent_setup_blind_label_sample_size_stats_pinned():
+    """「盲标核验的样本量与统计口径」段:自选范围与 Wilson 下界数字钉死。"""
+    section = _section(AGENT_SETUP.read_text(encoding="utf-8"), "## 盲标核验的样本量与统计口径")
+    assert "页面抽取表单可在 1–50 条之间自选（默认 5 条）" in section
+    assert "超出范围的请求在抽题前就被拒绝" in section
+    assert "5 条的 95% Wilson 置信下界约 57%，20 条约 84%，30 条约 89%" in section
+
+
+def test_readme_quick_start_pins_dashboard_main_path():
+    """Quick Start 主路径:安装、启动命令、入口页名与 agent-setup 链接钉死。"""
+    quickstart = _section(README.read_text(encoding="utf-8"), "## 🚀 Quick Start", "## 🧙")
+    assert "### Option 1: Dashboard (recommended)" in quickstart
+    assert "python -m venv venv && source venv/bin/activate" in quickstart
+    assert 'pip install -e ".[ui]"' in quickstart
+    assert "python scripts/launch_dashboard.py" in quickstart
+    assert "http://localhost:8501 and choose **目标与数据**" in quickstart
+    assert "[Agent setup and workflow](docs/agent-setup.md)" in quickstart
+
+
+def test_north_star_pins_authority_and_key_sentences():
+    """北极星权威版:章节结构、安全层五机制、硬边界与指标口径钉死。"""
+    text = NORTH_STAR_FILE.read_text(encoding="utf-8")
+    assert "# TuneSmith 北极星目标(权威版本)" in text
+    for heading in (
+        "## 一句话定义",
+        "## 服务对象",
+        "## 硬边界",
+        "## 核心难点与安全层",
+        "## 度量体系",
+    ):
+        assert heading in text, f"北极星缺少关键章节: {heading}"
+    assert "压缩成一个非专家能安全操作、看得懂、可追溯的工位" in text
+    for mechanism in (
+        "**盲标核验**",
+        "**对比预览**",
+        "**可学性探针**",
+        "**同题对照**",
+        "**确定性门禁**",
+    ):
+        assert mechanism in text, f"北极星安全层缺少机制条目: {mechanism}"
+    for boundary in ("**不做推理/serving 层**", "**不替用户宣判业务成败**", "**密钥纪律**"):
+        assert boundary in text, f"北极星缺少硬边界条目: {boundary}"
+    assert "覆盖率 × 独立通过率" in text
+    assert "**诚实红线**" in text
+    assert "场景多样性用场景矩阵系统性覆盖" in text
