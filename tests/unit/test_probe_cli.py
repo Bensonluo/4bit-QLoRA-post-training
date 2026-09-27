@@ -100,3 +100,50 @@ def test_cli_probe_without_candidates_says_so(store, tmp_path, monkeypatch, caps
     assert json.loads(out)["label_error_candidates"] == []
     assert "没有发现值得优先核对的行" in err
     assert "⚠" not in err
+
+
+def test_cli_probe_show_roundtrips_candidates_and_note(store, tmp_path, monkeypatch, capsys):
+    """存盘→回读:候选字段与 note 原样可得,stderr 同样逐行列出候选。"""
+    from scripts import data_intake
+
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    answers = {item["row_id"]: "用户也不认同的答案" for item in pending["items"]}
+    service.submit_label_verification(session.session_id, pending["verification_id"], answers)
+
+    _mock_runtime(monkeypatch, "绝不正确的答案")
+    assert _run_probe(monkeypatch, service, evaluation_root, session) == 0
+    saved_payload = json.loads(capsys.readouterr().out)
+    capsys.readouterr()
+
+    # show 不重新加载模型:此刻把默认运行时换成会炸的工厂,回读仍须成功
+    def _boom(model):
+        raise AssertionError("learnability-probe-show 不得重新加载模型")
+
+    monkeypatch.setattr("src.workbench.learnability_probe._default_runtime", _boom)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(service.root),
+            "--evaluation-root",
+            str(evaluation_root),
+            "learnability-probe-show",
+            session.session_id,
+        ],
+    )
+    assert data_intake.main() == 0
+    out, err = capsys.readouterr()
+    payload = json.loads(out)
+    assert payload["kind"] == "learnability_probe"
+    # 候选字段与人话说明存盘后原样回读,一字不差
+    assert payload["label_error_candidates"] == saved_payload["label_error_candidates"]
+    assert payload["candidates_note"] == saved_payload["candidates_note"]
+    assert payload["note"] == saved_payload["note"]
+    assert payload["label_error_candidates"]
+    for candidate in payload["label_error_candidates"]:
+        assert f"行 {candidate['row_id']}" in err
+    assert err.count("⚠") == len(payload["label_error_candidates"])

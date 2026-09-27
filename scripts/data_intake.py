@@ -1065,7 +1065,7 @@ def main() -> int:
             for line in summarize_preflight(session.training_preflight):
                 print(line, file=sys.stderr)
         elif args.command == "learnability-probe-show":
-            from src.workbench.learnability_probe import load_latest_probe
+            from src.workbench.learnability_probe import describe_candidates, load_latest_probe
 
             session = service.load(args.session_id)
             if session.dataset is None:
@@ -1086,6 +1086,9 @@ def main() -> int:
                 "重新探测请运行 learnability-probe。",
                 file=sys.stderr,
             )
+            # 回读同样逐行列出候选:重看结论不应重新加载模型,也不该丢掉核对清单。
+            for line in describe_candidates(saved.get("label_error_candidates") or []):
+                print(line, file=sys.stderr)
             return 0
         elif args.command == "learnability-probe":
             from src.workbench.learnability_probe import (
