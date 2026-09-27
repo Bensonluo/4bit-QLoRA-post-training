@@ -638,3 +638,28 @@ ruff check/format clean;并入后全量回归 tests/unit 1680 passed(--no-cov,
 导出测试);ruff check/format clean。本批只动 scripts/data_intake.py(仅 label-verify
 的参数、导出 helper 与分支接线)、tests/unit/test_label_verify_cli.py、
 docs/agent-setup.md 与本记录;未触碰 A 线并行文件(页面与 UI 测试域只读)。
+
+### 第 21 轮 = full-sources CLI 补齐 --sheet 对称参数(第十二批后、恢复循环第 1 轮)
+
+(恢复的北极星打磨循环,第 1 轮。)第 20 轮 A 线遗留候选「full-sources 的 sheet
+参数仍留作后续候选」就此清偿。sheet 选择至此四个入口全对称:create / add-source /
+full-validate / full-sources(CLI+页面)。缺口收窄过程有证据:服务层
+`validate_full_sources(sheets=...)` 与页面表单早已就绪(test_composed_intake 的
+服务级 sheet 测试、07 页面表单透传),唯独 CLI 子命令没有 `--sheet` 参数——多
+Sheet Excel 的全量资料在 CLI 路径上无解。
+
+- **full-sources 加 `--sheet ALIAS=名称或序号`(可重复)**:与同命令 `--source
+  ALIAS=PATH` 同款解析风格——`partition("=")` 拆别名与值,格式错误、别名重复
+  逐一给出中文提示(分派级 `raise ValueError` → 上游捕获 → exit 2 无 Traceback,
+  会话 revision 不变)。help 文案与 full-validate 的 `--sheet` 同口径。序号走
+  read_source 的 1 起始序号解析,无需 CLI 侧特判。
+- **测试 test_multisource_cli 11→15 项**:新增本地 `_workbook_bytes`(与
+  test_composed_intake 同款 openpyxl 内存工作簿)——正路径用 main 数据在第二个
+  sheet(不指定就读到说明表)、labels 用序号 `labels=1` 指定,断言 ready==3、
+  `full_data.sources` 各自记录实际读到的 sheet 名、目标类别集合正确;参数化
+  4 种非法 `--sheet`(缺 `=`、别名重复、指向未提供的资料、不带 `--source`
+  单用 sheet)全部 exit 2、revision 不变、无 Traceback。
+- 回归:test_multisource_cli + test_composed_intake 17 passed、test_full_data_cli +
+  test_sources 16 passed(--no-cov);ruff check/format clean。本批只动
+  scripts/data_intake.py(full-sources 的参数与分派)、tests/unit/test_multisource_cli.py
+  与本记录。

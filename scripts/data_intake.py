@@ -215,6 +215,13 @@ def main() -> int:
         metavar="ALIAS=PATH",
         help="每份资料使用一个参数；不提供时复用已存全量来源，不会升级样例",
     )
+    full_sources.add_argument(
+        "--sheet",
+        action="append",
+        default=[],
+        metavar="ALIAS=名称或序号",
+        help="每份 Excel 资料一个参数，指定读取的 sheet（名称或 1 起始序号，1 表示第一个）；默认第一个",
+    )
     full_confirm = sub.add_parser("full-confirm", help="确认已核对全量报告，继续独立分区准备")
     full_confirm.add_argument("session_id")
     full_confirm.add_argument("--revision", type=int, required=True)
@@ -1043,7 +1050,19 @@ def main() -> int:
                     raise ValueError(f"资料别名重复：{alias}。每份来源只提供一次。")
                 path = Path(filename)
                 files[alias] = (path.name, path.read_bytes())
-            session = service.validate_full_sources(args.session_id, args.revision, files or None)
+            sheets: dict[str, str] = {}
+            for item in args.sheet:
+                alias, separator, value = item.partition("=")
+                if not separator or not alias.strip() or not value.strip():
+                    raise ValueError(
+                        "--sheet 格式应为资料别名=sheet名称或序号，例如 main=工单表、labels=2。"
+                    )
+                if alias in sheets:
+                    raise ValueError(f"资料别名重复：{alias}。每份来源的 sheet 只指定一次。")
+                sheets[alias] = value.strip()
+            session = service.validate_full_sources(
+                args.session_id, args.revision, files or None, sheets=sheets or None
+            )
         elif args.command == "full-confirm":
             session = service.confirm_full_data(args.session_id, args.revision)
         elif args.command == "materialize":

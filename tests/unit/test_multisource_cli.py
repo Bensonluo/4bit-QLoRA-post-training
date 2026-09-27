@@ -186,3 +186,103 @@ def test_replacing_named_source_stops_old_full_source_from_reuse(tmp_path):
     assert session.full_data.sources["labels"].digest == hashlib.sha256(labels_v2_full).hexdigest()
     assert session.full_data.sources["labels"].digest != old_labels_digest
     assert {row.target for row in session.full_data.preview.rows} == {"售后", "安装"}
+
+
+def _workbook_bytes(*sheets):
+    """sheets: (名称, 表头行, 数据行) 三元组；openpyxl 现场生成多 Sheet 工作簿。"""
+    import io
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    for index, (name, header, rows) in enumerate(sheets):
+        sheet = workbook.active if index == 0 else workbook.create_sheet()
+        sheet.title = name
+        sheet.append(header)
+        for row in rows:
+            sheet.append(row)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def test_cli_full_sources_sheet_selects_each_excels_worksheet(tmp_path):
+    """full-sources 的 --sheet 与 create/full-validate 对称：每份 Excel 各自指定 sheet。
+
+    main 的真实数据在第二个 sheet（首 sheet 是说明），不指定 --sheet 会读错表；
+    labels 用 1 起始序号指定，覆盖名称与序号两种写法。
+    """
+    service = IntakeService(tmp_path / "intake")
+    session = composition_session(service)
+    main_path, labels_path = tmp_path / "full-main.xlsx", tmp_path / "full-labels.xlsx"
+    main_path.write_bytes(
+        _workbook_bytes(
+            ("说明", ("备注",), [("全量数据在下一个 sheet",)]),
+            (
+                "工单表",
+                ("ticket", "text"),
+                [("10", "新杯子损坏"), ("11", "新物流延迟"), ("12", "新配件缺陷")],
+            ),
+        )
+    )
+    labels_path.write_bytes(
+        _workbook_bytes(
+            ("类别表", ("id", "category"), [("10", "质量"), ("11", "物流"), ("12", "质量")]),
+            ("说明", ("备注",), [("这份资料数据在第一个 sheet",)]),
+        )
+    )
+    result = invoke(
+        service,
+        "full-sources",
+        session.session_id,
+        "--revision",
+        session.revision,
+        "--source",
+        f"main={main_path}",
+        "--source",
+        f"labels={labels_path}",
+        "--sheet",
+        "main=工单表",
+        "--sheet",
+        "labels=1",
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["full_data"]["preview"]["counts"]["ready"] == 3
+    assert payload["full_data"]["sources"]["main"]["sheet"] == "工单表"
+    assert payload["full_data"]["sources"]["labels"]["sheet"] == "类别表"
+    assert {row["target"] for row in payload["full_data"]["preview"]["rows"]} == {"质量", "物流"}
+    assert "review_full_data" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "sheet_args,with_files",
+    [
+        (["broken"], True),
+        (["main=工单表", "main=类别表"], True),
+        (["ghost=工单表"], True),
+        (["main=工单表"], False),
+    ],
+)
+def test_cli_invalid_full_sources_sheet_arguments_leave_session_unchanged(
+    tmp_path, sheet_args, with_files
+):
+    service = IntakeService(tmp_path / "intake")
+    session = composition_session(service)
+    args = [value for item in sheet_args for value in ("--sheet", item)]
+    if with_files:
+        main_path, labels_path = tmp_path / "full-main.csv", tmp_path / "full-labels.csv"
+        main_path.write_bytes(FULL_MAIN)
+        labels_path.write_bytes(FULL_LABELS)
+        args += [
+            "--source",
+            f"main={main_path}",
+            "--source",
+            f"labels={labels_path}",
+        ]
+    result = invoke(
+        service, "full-sources", session.session_id, "--revision", session.revision, *args
+    )
+    assert result.returncode == 2
+    assert service.load(session.session_id).revision == session.revision
+    assert "Traceback" not in result.stderr
