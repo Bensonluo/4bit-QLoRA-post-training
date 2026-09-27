@@ -536,3 +536,49 @@ scenario_specs.py 与 test_scenario_matrix.py(scenario_matrix.py 无需改动),
 26→28 项、test_sources 0→3 项全绿,全集下限断言随之 38→40;ruff check/format
 clean。本批只动 sources.py、scenario_specs.py、test_scenario_matrix.py、新增
 test_sources.py,未触碰 A 线并行文件(intake_service/页面/基线分析域均只读)。
+
+### 第 19 轮 = 多 Sheet 可选读取 + 创建入口接 sheet 选择 + 并行矩阵扩展(场景 41)
+
+(B 线第十批。)上批场景 39 的定局是「入口只读第一个 sheet、不做 sheet 选择」是已知
+边界;本批清偿:sheet 选择上线,数据放在非第一个 sheet 的工作簿不再要求用户改文件。
+全部结论先以临时探针实测、再定期望(探针测完即删,禁止猜)。
+
+- **多 Sheet 可选读取**(`sources.py`):`read_source` 新增 `sheet` 参数——仅对
+  Excel 有效,按名称或 1 起始序号指定工作表(CLI 传参皆为字符串,纯数字串同义序号;
+  名称精确匹配优先),`None` 默认读第一个 sheet,读取行为不变。解析不到即报错并如实
+  列出全部 sheet 名与序号口径,不静默回退;CSV/JSONL 传 sheet 明确拒绝。
+- **标注正道修复**(撤上批的摘要键控进程内记忆):SampleSource 契约新增可选字段
+  `sheet`(实际读取的工作表名)与 `sheet_note`(读取范围说明),标注随来源对象在
+  读取时生成并持久化。上批按摘要键控的记忆有两个如实记录过的局限——重启后重算依赖
+  进程内记录、且同一文件按不同 sheet 重复读取会串味(本批引入选择后成为真 bug):
+  字段方案下标注随会话序列化,重启、apply_analysis 重算 profile、同摘要不同选择
+  全部各自如实;旧存档缺字段按默认空值回读,既有 profile 快照原样保留。
+  `profile_source` 直接取用来源携带的 `sheet_note`,默认路径措辞不变。
+- **创建入口接 sheet 选择**(服务层+CLI,页面入口不动,页面改动属其他 agent 域):
+  `IntakeService.create` 透传 sheet;`validate_full_data` 同样接收,且复用已声明
+  全量的原文件时沿用来源持久化的 sheet(用户显式传入优先)——按第二个 sheet 建的
+  任务做全量复验不会静默退回第一个 sheet。CLI create 与 full-validate 新增
+  `--sheet`(名称或序号,1 表示第一个;默认第一个)。
+- **场景 41「数据在第二个 sheet + --sheet 指定后旅程走通」**
+  (`excel-second-sheet-selected`):与场景 39 同源字节(员工表在前、工单数据在第二个
+  sheet),sample_sheet/full_sheet 指定序号 2。实测结局:入口按序号读取第二个 sheet
+  「工单表」,八关全过——create 不拦,基础分析/对比核验/样例确认照常,全量验证 10 行
+  工单记录无 blocking/review,盲标 5/5 一致,物化 train 8/validation 1/test 1。读取
+  范围如实标注:样例与全量 profile sheet_note 均为「该文件含 2 个 sheet,按指定读取
+  『工单表』;其余 1 个(员工表)未读取」;同一份字节不带 --sheet 时标注仍是「仅读取
+  第一个『员工表』」——同摘要不同选择不串味(标注随来源对象走的直接证据)。边界如实
+  记录:sheet 选择当前在服务层与 CLI,页面入口待接入。
+- **场景 36/39 expect_note 真相更新**:「入口只读第一个 sheet、不做 sheet 选择」的
+  已知边界改写为当前真相——默认仍读第一个,sheet 选择已上线(服务层/CLI --sheet),
+  指向场景 41;矩阵记录的是现在,不是历史。
+
+矩阵 40→41,41/41 as_expected(意外通过/意外拦截/错误均为 0);test_scenario_matrix
+28→29 项、test_sources 3→11 项,全集下限断言随之 40→41;ruff check/format clean。
+本批按任务要求动了 sources.py、intake_models.py、intake_service.py(仅 create/
+validate_full_data 接线)、scripts/data_intake.py(仅 create/full-validate 的
+--sheet 参数与透传)、scenario_matrix.py(仅 ScenarioSpec 字段与透传)、scenario_specs
+.py、test_sources.py、test_scenario_matrix.py;与 A 线同在 data_intake.py 的
+label-verify 提交(c257ce6/337328c/1f06ea2)先后落库无冲突。全量回归 tests/unit
+1672 passed(--no-cov)。遗留下一轮候选:页面入口接 sheet 选择(A/页面域)、
+add-source/full-sources 的 sheet 参数对称补齐、服务层 sheet 选择的契约字段
+`sheet` 若日后需序号回显可另议。
