@@ -14,6 +14,58 @@ _CLEAN_FULL = (
     "009,无法充电,质量\n010,包装破损,物流\n"
 ).encode()
 
+# GBK 编码样例:utf-8-sig 解码失败,入口自动回退 gb18030(GBK 超集)可正确解码。
+_GBK_SAMPLE = "编号,描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n".encode("gbk")
+_GBK_FULL = (
+    "编号,描述,类别\n"
+    "001,杯子破损,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n004,快递丢失,物流\n"
+    "005,开不了机,质量\n006,地址填错,物流\n007,异味,质量\n008,延迟送达,物流\n"
+    "009,无法充电,质量\n010,包装破损,物流\n"
+).encode("gbk")
+
+# 宽表:28 列业务噪声全被用户排除,只留编号(分组)+客户描述(输入)+类别(答案)。
+_WIDE_JUNK_COLUMNS = tuple(f"附加信息{i:02d}" for i in range(1, 29))
+_WIDE_HEADER = ",".join(("编号", "客户描述", "类别", *_WIDE_JUNK_COLUMNS))
+_WIDE_SAMPLE = (
+    _WIDE_HEADER + "\n"
+    "001,杯子破损,质量," + ",".join(["噪声01"] * 28) + "\n"
+    "002,物流未更新,物流," + ",".join(["噪声02"] * 28) + "\n"
+).encode()
+_WIDE_FULL = (
+    _WIDE_HEADER + "\n"
+    "001,杯子破损,质量," + ",".join(["备注甲"] * 28) + "\n"
+    "002,物流未更新,物流,"
+    + ",".join(["备注乙"] * 28)
+    + "\n"
+    + "".join(
+        f"{i:03d},问题{i},{'质量' if i % 2 else '物流'}," + ",".join([f"字段值{i % 7}"] * 28) + "\n"
+        for i in range(3, 11)
+    )
+).encode()
+
+# 混合类型列:工单号同时出现纯数字样与文本样编号,当前路径不做类型区分。
+_MIXED_IDS = (
+    "10023",
+    "AB-1002",
+    "10024",
+    "AB-1003",
+    "10025",
+    "10026",
+    "AB-1004",
+    "10027",
+    "10028",
+    "AB-1005",
+)
+_MIXED_SAMPLE = (
+    "编号,工单号,客户描述,类别\n001,10023,杯子破损,质量\n002,AB-1002,物流未更新,物流\n".encode()
+)
+_MIXED_FULL = (
+    "编号,工单号,客户描述,类别\n"
+    + "".join(
+        f"{i:03d},{_MIXED_IDS[i - 1]},问题{i},{'质量' if i % 2 else '物流'}\n" for i in range(1, 11)
+    )
+).encode()
+
 
 def builtin_scenarios() -> list[ScenarioSpec]:
     return [
@@ -216,6 +268,54 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             expect="passes",
             expect_note="通过且带「分布严重不均衡」预警(多数类 90%:全猜多数类即 90% 准确率,准确率会骗人)",
             tags=("imbalance",),
+        ),
+        ScenarioSpec(
+            scenario_id="gbk-encoded-upload",
+            goal="根据客户首次描述判断售后类别",
+            sample=_GBK_SAMPLE,
+            sample_name="工单.csv",
+            full=_GBK_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:create 不被拦——utf-8-sig 解码失败后入口自动回退 gb18030"
+                "(GBK 的超集)正确解码,全旅程无乱码;入口暂无需手动选择编码,"
+                "需在入口选择编码的是 gb18030 也解不开的冷门编码——边界如实记录"
+            ),
+            tags=("encoding", "gbk", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="wide-table",
+            goal="根据客户首次描述判断售后类别",
+            sample=_WIDE_SAMPLE,
+            sample_name="宽表.csv",
+            full=_WIDE_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            excluded_columns=_WIDE_JUNK_COLUMNS,
+            expect="passes",
+            expect_note=(
+                "31 列宽表:用户在入口排除 28 个无关列,只留编号(分组)+客户描述(输入)+类别(答案);"
+                "宽表不淹死基础分析——列角色由用户选择决定,被排除列仅作记录"
+            ),
+            tags=("wide-table", "column-selection"),
+        ),
+        ScenarioSpec(
+            scenario_id="mixed-type-column",
+            goal="根据客户首次描述判断售后类别",
+            sample=_MIXED_SAMPLE,
+            sample_name="工单.csv",
+            full=_MIXED_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "边界如实记录:工单号列混杂数字样(10023)与文本样(AB-1002)编号,"
+                "当前零密钥路径不做类型区分,一律按文本(strip 后原样)进入输入;"
+                "如需数字语义须先在数据侧规整——已知边界,非缺陷"
+            ),
+            tags=("mixed-type", "boundary-note"),
         ),
     ]
 

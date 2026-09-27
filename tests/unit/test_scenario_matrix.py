@@ -1,6 +1,7 @@
 """场景矩阵:干净分类场景应一路通过;脏数据与歧义标签应被对应关卡诚实拦下。"""
 
 from src.workbench.scenario_matrix import ScenarioSpec, run_matrix, run_scenario
+from src.workbench.scenario_specs import builtin_scenarios
 
 CLEAN_SAMPLE = ("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n").encode()
 CLEAN_FULL = (
@@ -99,3 +100,29 @@ def test_matrix_summary_counts_truthfully(tmp_path):
     assert report["summary"]["total"] == 2
     assert report["summary"]["as_expected"] == 2
     assert "不测模型效果" in report["summary"]["note"]
+
+
+def test_builtin_new_scenarios_match_expected_verdicts(tmp_path):
+    """GBK 编码/宽表/混合类型三个新场景:期望结局以实测为准(全旅程通过)。"""
+
+    wanted = {"gbk-encoded-upload", "wide-table", "mixed-type-column"}
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    missing = wanted - set(specs)
+    assert not missing, f"缺少场景:{sorted(missing)}"
+
+    wide = specs["wide-table"]
+    assert len(wide.excluded_columns) >= 28, "宽表场景应把大部分列交给用户排除"
+
+    for scenario_id in sorted(wanted):
+        result = run_scenario(specs[scenario_id], tmp_path / scenario_id)
+        assert result.verdict == "as_expected", result.to_dict()
+        assert result.blocked_at is None, result.to_dict()
+
+
+def test_builtin_matrix_counts_fifteen_as_expected(tmp_path):
+    report = run_matrix(builtin_scenarios(), tmp_path)
+    assert report["summary"]["total"] == 15
+    assert report["summary"]["as_expected"] == 15
+    assert report["summary"]["unexpected_pass"] == 0
+    assert report["summary"]["unexpected_block"] == 0
+    assert report["summary"]["error"] == 0
