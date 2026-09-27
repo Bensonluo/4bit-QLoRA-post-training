@@ -142,3 +142,25 @@ def test_utf16_excel_export_and_ultra_long_single_line_scenarios(tmp_path):
     # 超长单行场景确实覆盖「单行数十 KB」的量级,而不是普通长文本
     long_full = specs["ultra-long-single-line"].full
     assert max(len(line) for line in long_full.split(b"\n")) >= 40_000
+
+
+def test_empty_label_rows_in_full_blocked_at_validation(tmp_path):
+    """场景 19:样例有标签、全量混入空答案行——必须被全量验证硬拦,不能跳过或带病通过。"""
+
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "empty-label-rows-in-full" in specs, "缺少场景 empty-label-rows-in-full"
+
+    spec = specs["empty-label-rows-in-full"]
+    # 夹具真实性:全量确实混有空标签行,且不止一条
+    empty_label_rows = [line for line in spec.full.split(b"\n") if line.endswith(b",")]
+    assert len(empty_label_rows) >= 2, "全量应混入若干空标签行"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "validate_full", result.to_dict()
+    assert "缺少监督答案" in result.blocked_message
+    # 样例阶段(分析/对比/确认)全部先通过,拦截发生在全量验证这一关
+    assert all(
+        result.stages[stage] == "passed"
+        for stage in ("create", "baseline_analysis", "contrast_check", "confirm_sample")
+    )

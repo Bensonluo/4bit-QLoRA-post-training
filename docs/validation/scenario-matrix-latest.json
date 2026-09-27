@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T10:18:55.507352+00:00",
+  "created_at": "2026-09-27T10:49:42.393647+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -318,11 +318,26 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "empty-label-rows-in-full",
+      "expect": "blocked_at:validate_full",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "blocked"
+      },
+      "blocked_at": "validate_full",
+      "blocked_message": "全量存在缺少监督答案的记录，需要补充标签；没有自动生成真值。（2 条）",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 18,
-    "as_expected": 18,
+    "total": 19,
+    "as_expected": 19,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,

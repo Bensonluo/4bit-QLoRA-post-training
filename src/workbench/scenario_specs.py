@@ -74,6 +74,14 @@ _UTF16_FULL = (
     + "".join(f"{i:03d}\t问题{i}\t{'质量' if i % 2 else '物流'}\n" for i in range(1, 11))
 ).encode("utf-16")
 
+# 空答案行混入:样例两条都有标签,全量第 005/008 行答案为空(导出缺字段/漏标注)。
+_EMPTY_LABEL_FULL = (
+    "编号,客户描述,类别\n"
+    "001,杯子破损,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n004,快递丢失,物流\n"
+    "005,开不了机,\n006,地址填错,物流\n007,异味,质量\n008,延迟送达,\n"
+    "009,无法充电,质量\n010,包装破损,物流\n"
+).encode()
+
 # 超长单行:单个输入单元格里粘贴了数万字符的运行日志(含逗号,按 CSV 规范加引号),
 # 单行数十 KB。日志单元格由 csv 模块按规范写出:带引号单元格里的逗号不是分隔符。
 _LONG_CELL_PREFIX = (
@@ -406,6 +414,22 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "语义是否受影响由用户在真实预览核对"
             ),
             tags=("long-text", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="empty-label-rows-in-full",
+            goal="根据客户首次描述判断售后类别",
+            sample=_CLEAN_SAMPLE,
+            sample_name="工单.csv",
+            full=_EMPTY_LABEL_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:validate_full",
+            expect_note=(
+                "实测结局:样例有标签、全量混入 2 条空答案行(005/008)——既不被静默跳过,"
+                "也不带病通过,而是被全量验证硬拦:blocking 问题「全量存在缺少监督答案的记录…」"
+                "点名行号;用户须补标签或删行后重新验证"
+            ),
+            tags=("dirty-data", "empty-labels"),
         ),
     ]
 
