@@ -492,3 +492,34 @@ def test_start_reports_shortfall_when_requested_exceeds_labelled_rows(store):
     normal = service.start_label_verification(session.session_id, session.revision)
     assert normal["requested_sample_size"] == normal["sample_size"]
     assert "shortfall_note" not in normal
+
+
+def test_shortfall_evidence_note_uses_actual_sample_size(store):
+    """请求量被 min 截断时,统计说明按实际抽样条数现算:不按请求值夸大证据强度。"""
+    from src.workbench.intake_service import sample_evidence_note
+
+    service, session = store
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=20)
+    size = pending["sample_size"]
+    assert size < 20
+    # evidence_note 与截断后的实际抽样数联动:题目数、说明、下界用同一个 size
+    assert len(pending["items"]) == size
+    assert pending["evidence_note"] == sample_evidence_note(size)
+    assert f"本轮 {size} 条" in pending["evidence_note"]
+    assert "本轮 20 条" not in pending["evidence_note"]
+    assert "即使全部一致" in pending["evidence_note"]
+
+    # 上限 50 与下限 1 同口径:说明始终跟着实际抽样数走
+    ceiling = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    assert ceiling["requested_sample_size"] == 50
+    assert ceiling["sample_size"] == size
+    assert f"本轮 {size} 条" in ceiling["evidence_note"]
+    single = service.start_label_verification(session.session_id, session.revision, sample_size=1)
+    assert single["sample_size"] == 1
+    assert "本轮 1 条" in single["evidence_note"]
+
+    # 页面 number_input(1-50)与服务层校验一致:越界在抽题前就被拒绝
+    with pytest.raises(ValueError, match="1 到 50"):
+        service.start_label_verification(session.session_id, session.revision, sample_size=0)
+    with pytest.raises(ValueError, match="1 到 50"):
+        service.start_label_verification(session.session_id, session.revision, sample_size=51)

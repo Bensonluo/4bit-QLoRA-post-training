@@ -111,6 +111,17 @@ def test_sample_size_selection_guidance_and_honest_shortfall(verify_page):
     assert any("不足你选择的 20 条" in c.value for c in page.caption)
     assert any("即使全部一致" in c.value for c in page.caption)
 
+    # 统计说明按实际抽样条数计算:下界来自截断后的条数,不按请求的 20 条夸大证据
+    from src.workbench.intake_service import wilson_lower_bound
+
+    actual = pending["sample_size"]
+    note = next(c.value for c in page.caption if "即使全部一致" in c.value)
+    assert f"本轮 {actual} 条" in note
+    assert "本轮 20 条" not in note
+    assert f"{wilson_lower_bound(actual, actual):.0%}" in note
+    # 本轮核验标题同样用实际条数,与统计说明一致
+    assert any(f"本轮核验（{actual} 条" in m.value for m in page.markdown)
+
 
 def test_old_archive_without_statistical_fields_recomputes_note(verify_page):
     """旧存档记录没有 evidence_note/agreement_lower_bound 时,回读页面按同口径现算统计说明。
