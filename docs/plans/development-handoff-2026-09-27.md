@@ -663,3 +663,42 @@ Sheet Excel 的全量资料在 CLI 路径上无解。
   test_sources 16 passed(--no-cov);ruff check/format clean。本批只动
   scripts/data_intake.py(full-sources 的参数与分派)、tests/unit/test_multisource_cli.py
   与本记录。
+
+### 第 22 轮 = 连续数值目标如实标注 numeric_continuous(恢复循环第 2 轮)
+
+(恢复的北极星打磨循环,第 2 轮。)场景 37(numeric-continuous-target)此前钉住的
+是**不诚实现状**:回归式答案列(1.0/2.5/3.7 这类测量值)被静默判成 categorical
+按逐字分类学习,全量新测量值被报成「新类别」——spec 里「日后若引入数值型
+value_kind 需随之改期望」的欠条本轮兑现。核心原则与盲标/对比核验同源:业务语义
+判断不静默通过。
+
+- **value_kind 增加 `numeric_continuous`**(intake_models.py):FieldBinding 描述同步
+  ——「带小数的连续数值」「只如实标注答案形态,当前训练仍按逐字字符串学习,不是
+  数值回归」。四个消费方(business_evaluation/acceptance/data_intake/07 页面)都按
+  `== "categorical"` 精确匹配走分类严格评分,numeric 自然落入开放任务人工核对口径
+  ——不伪造回归准确率,与既有 open_text 行为一致。
+- **保守判定**(baseline_analysis.py):`_is_continuous_number` 要求带小数点且可
+  float——整数编码(0/1/2)不算;`_value_kind` 顺序 open_text(平均长度)→
+  numeric_continuous(**全部**非空取值均为此形态)→ categorical(去重 ≤20)→
+  unspecified。判定即给诚实 finding:逐字字符串学习(「1.0」≠「1.00」)、不是数值
+  回归、评测只能逐字比对、需数值误差容差请先在数据侧离散化;小数若是离散编码
+  (如版本号)照常逐字核对即可。
+- **全量验证新问题码 `numeric_new_values`**(full_data.py,review 级不阻断):
+  连续目标全量出现新测量值是常态,不再按「新类别」表述,但如实列出并重申逐字学习
+  边界;new_target_values 照常记录,不静默跳过。
+- **Agent 提示词同步**(agent/intake.py):value_kind 三分类规则 + 「Agent 不得把
+  数值回归承诺成可按误差评分的任务」。
+- **场景 37 重写为诚实版**(scenario_specs.py + test_scenario_matrix.py):value_kind
+  断言 numeric_continuous、诚实 finding 含「不是数值回归/逐字」、numeric_new_values
+  含「8 个样例未覆盖的新测量值/逐字」、new_target_values 八个值原样、分布 finding
+  「共 2 类」保留、八关全过 verdict as_expected。剩余边界如实入 spec:整数测量值/
+  编码仍走类别路径。
+- 回归:目标套件(scenario_matrix+baseline_analysis+full_data+forecast+temporal)
+  68 passed;全量 tests/unit 在本机环境排除 46 个缺可选依赖(datasets/peft/plotly)
+  的模块后 621 passed 37 skipped 0 failed。环境注记:本机 venv 未装 datasets 等可选
+  依赖,46 个模块收集期/运行期 ModuleNotFoundError(全部先于本批存在,与本批无关;
+  其中 test_tracking/test_models_base 依赖其他模块导入暖场,排除暖场模块后连带
+  失败,已一并列入环境排除清单)。ruff check/format clean。本批只动
+  src/workbench/intake_models.py、src/workbench/baseline_analysis.py、
+  src/workbench/full_data.py、src/agent/intake.py、src/workbench/scenario_specs.py、
+  tests/unit/test_scenario_matrix.py 与本记录。

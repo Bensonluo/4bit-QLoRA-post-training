@@ -69,6 +69,17 @@ def _column_values(session: IntakeSession, column: str) -> list[str]:
     return [row.values.get(column, "") for row in session.source.rows]
 
 
+def _is_continuous_number(value: str) -> bool:
+    """带小数点的可解析数值视为连续测量值;整数编码(0/1/2)不算。"""
+    if "." not in value:
+        return False
+    try:
+        float(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _value_kind(session: IntakeSession, column: str) -> str:
     values = _column_values(session, column)
     if not values:
@@ -78,6 +89,12 @@ def _value_kind(session: IntakeSession, column: str) -> str:
     avg = sum(len(value) for value in values) / len(values)
     if avg >= _OPEN_TEXT_MIN_AVG_LENGTH:
         return "open_text"
+    non_empty = [value for value in values if value != ""]
+    # 连续数值先于类别判定:回归式答案列不应被静默当成分类学习。
+    # 保守规则——全部非空取值都是带小数的可解析数值才判 numeric_continuous;
+    # 整数测量值/编码仍走类别路径,边界在场景矩阵 scenario 37 如实记录。
+    if non_empty and all(_is_continuous_number(value) for value in non_empty):
+        return "numeric_continuous"
     distinct = {value for value in values if value != ""}
     if len(distinct) <= _CATEGORICAL_MAX_DISTINCT:
         return "categorical"
@@ -306,6 +323,20 @@ def propose_baseline_analysis(
                     f"答案列「{target_column}」是开放文本。开放任务没有可执行的自动评分规则："
                     "训练和对照可以正常进行,但对照只保留各模型的完整输出供你逐条人工核对,"
                     "不会自动给出好坏分数。需要自动评分时,须先定义并确认业务评分规则。"
+                ),
+            )
+        )
+    if _value_kind(session, target_column) == "numeric_continuous":
+        findings.append(
+            Finding(
+                kind="needs_business_input",
+                message=(
+                    f"答案列「{target_column}」的取值全部是带小数的连续数值,已按连续数值目标"
+                    "（numeric_continuous）标注。如实说明当前边界:训练仍按逐字字符串学习答案"
+                    "（「1.0」和「1.00」会被当成不同答案）,不是数值回归——评测只能逐字比对,"
+                    "无法按数值误差衡量,对照报告将按开放任务口径保留输出待你核对。业务需要数值"
+                    "误差容差时,请先在数据侧把答案离散成分区或等级;若这些小数其实是离散编码"
+                    "（如版本号）,在预览确认时照常逐字核对即可。"
                 ),
             )
         )

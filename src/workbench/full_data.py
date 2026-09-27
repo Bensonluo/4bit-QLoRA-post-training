@@ -214,6 +214,28 @@ def validate_full_source(session: IntakeSession, source: SampleSource) -> FullDa
                     )
                 )
         for field in recipe.targets:
+            if field.value_kind == "numeric_continuous":
+                # 连续数值目标:全量出现新测量值是常态,不再按「新类别」表述,
+                # 但仍如实列出并提醒当前逐字学习的边界,不静默跳过。
+                sample_values = _target_values(session.preview, recipe.output_format, field.label)
+                full_values = _target_values(preview, recipe.output_format, field.label)
+                added = [
+                    value
+                    for identity, value in full_values.items()
+                    if identity not in sample_values
+                ]
+                if added:
+                    new_targets[field.column] = [value for value, _ in added]
+                    issues.append(
+                        FullDataIssue(
+                            code="numeric_new_values",
+                            severity="review",
+                            columns=[field.column],
+                            row_ids=[row_id for _, rows in added for row_id in rows],
+                            message=f"答案列 {field.column} 是连续数值，全量出现 {len(added)} 个样例未覆盖的新测量值——连续目标的新值是常态，不阻断；当前训练按逐字字符串学习答案、无法按数值误差评分，请确认逐字数值输出符合业务用途。",
+                        )
+                    )
+                continue
             if field.value_kind != "categorical":
                 continue
             sample_values = _target_values(session.preview, recipe.output_format, field.label)

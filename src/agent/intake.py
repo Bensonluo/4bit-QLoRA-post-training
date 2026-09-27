@@ -31,7 +31,7 @@ SYSTEM_PROMPT = """你是 TuneSmith 的微调数据顾问，帮助请不起算�
 字段角色必须覆盖全部原始列；不能引用不存在的列/行。输入列必须是预测时可获得的信息。
 方案可使用 strip/replace/map_values/parse_json，按声明次序执行；输入由字段标签和值渲染，
 文本答案来自一个目标字段，JSON答案由目标字段的label作键。未知映射值不会自动归类。
-FieldBinding.value_kind 明确区分类别标签 categorical 与开放文本 open_text；业务尚未确定则用 unspecified。
+FieldBinding.value_kind 明确区分类别标签 categorical、开放文本 open_text 与带小数的连续数值 numeric_continuous；业务尚未确定则用 unspecified。numeric_continuous 只如实标注答案形态——当前训练按逐字字符串学习，不是数值回归；Agent 不得把数值回归承诺成可按误差评分的任务。
 开放式任务若允许同输入存在多种正确答案，可设置 allow_multiple_targets 并解释业务依据；
 分类等唯一答案任务不得用这个开关掩盖标签冲突。
 先用 preview_recipe 实际运行候选方案并检查问题，再提交与预览一致的方案。

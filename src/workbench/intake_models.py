@@ -57,9 +57,9 @@ class Transform(Contract):
 class FieldBinding(Contract):
     column: str = Field(min_length=1)
     label: str = Field(min_length=1)
-    value_kind: Literal["unspecified", "categorical", "open_text"] = Field(
+    value_kind: Literal["unspecified", "categorical", "open_text", "numeric_continuous"] = Field(
         default="unspecified",
-        description="根据业务目标明确答案是类别 categorical、开放文本 open_text，尚未确定用 unspecified；不能仅根据列名或样例不同值数量猜测。",
+        description="根据业务目标明确答案是类别 categorical、开放文本 open_text，带小数的连续数值 numeric_continuous，尚未确定用 unspecified；不能仅根据列名或样例不同值数量猜测。numeric_continuous 只如实标注答案形态——当前训练仍按逐字字符串学习，不是数值回归。",
     )
     transforms: list[Transform] = Field(default_factory=list)
 

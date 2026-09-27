@@ -888,7 +888,7 @@ def test_excel_multi_sheet_reads_first_sheet_only(tmp_path):
 
 
 def test_numeric_continuous_target_treated_as_categorical(tmp_path):
-    """场景 37:答案列连续数值——value_kind 判成 categorical,回归被当分类对待(已知边界)。"""
+    """场景 37:答案列连续数值——numeric_continuous 如实标注,逐字学习边界诚实告知。"""
     specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
     assert "numeric-continuous-target" in specs, "缺少场景 numeric-continuous-target"
 
@@ -906,17 +906,19 @@ def test_numeric_continuous_target_treated_as_categorical(tmp_path):
     assert result.blocked_at is None, result.to_dict()
     assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
 
-    # 判定事实:数值语义不被识别——value_kind=categorical,分布 finding 按每值一类计数
+    # 判定事实:value_kind=numeric_continuous(不再静默当分类),并给出逐字学习边界的诚实 finding
     from src.workbench.baseline_analysis import propose_baseline_analysis
     from src.workbench.intake_service import IntakeService
 
     service = IntakeService(tmp_path / "numeric-probe")
     session = service.create(spec.goal, spec.sample_name, spec.sample)
     analysis = propose_baseline_analysis(session, target_column="处理时长", group_columns=("编号",))
-    assert analysis.recipe.targets[0].value_kind == "categorical", analysis.recipe.targets[0]
+    assert analysis.recipe.targets[0].value_kind == "numeric_continuous", analysis.recipe.targets[0]
     assert analysis.recipe.targets[0].transforms == []
     distribution = next(f.message for f in analysis.findings if f.message.startswith("答案列"))
     assert "共 2 类" in distribution and "1.0×1" in distribution and "2.5×1" in distribution
+    honest = next(f for f in analysis.findings if "numeric_continuous" in f.message)
+    assert "不是数值回归" in honest.message and "逐字" in honest.message
     session = service.apply_analysis(session, analysis, model="scenario-matrix")
     assert {row.target for row in session.preview.rows} == {"1.0", "2.5"}
 
@@ -934,8 +936,11 @@ def test_numeric_continuous_target_treated_as_categorical(tmp_path):
     )
     blocking = [issue for issue in session.full_data.issues if issue.severity == "blocking"]
     assert not blocking, [issue.to_dict() for issue in blocking]
-    warning = next(issue for issue in session.full_data.issues if issue.code == "new_categories")
-    assert "样例未覆盖的 8 种答案" in warning.message
+    warning = next(
+        issue for issue in session.full_data.issues if issue.code == "numeric_new_values"
+    )
+    assert "8 个样例未覆盖的新测量值" in warning.message
+    assert "逐字" in warning.message
     assert session.full_data.new_target_values == {
         "处理时长": ["3.7", "4.2", "0.8", "5.1", "2.9", "3.3", "1.6", "4.8"]
     }
