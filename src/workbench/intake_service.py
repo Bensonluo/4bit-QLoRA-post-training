@@ -724,7 +724,25 @@ class IntakeService:
             raise ValueError("当前全量预览没有已标注的行，无法核验。")
         size = min(sample_size, len(labelled))
         binding = report.source.digest + report.approved_recipe_digest
-        seed = zlib.crc32(binding.encode("utf-8"))
+        # 轮次感知抽样:已完成轮数计入种子,每轮换一组题(与对比核验同法)。
+        # 核验未通过时页面必须展示正确标签;若每轮题目相同,照抄公布答案即可
+        # 通过下一轮——核验就退化成背题,起不到复现业务含义的作用。
+        with sqlite3.connect(self.database) as connection:
+            completed = connection.execute(
+                "SELECT COUNT(*) FROM label_verifications "
+                "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
+                "AND status='completed'",
+                (session.session_id, report.source.digest, report.approved_recipe_digest),
+            ).fetchone()
+        round_number = (completed[0] if completed else 0) + 1
+        # 第 1 轮沿用固定绑定种子(保持既有首轮抽题与外部契约不变);
+        # 从第 2 轮起轮数计入种子换题——核验未通过时页面必须公布正确标签,
+        # 若每轮题目相同,照抄公布答案即可通过下一轮,核验退化成背题。
+        seed = (
+            zlib.crc32(binding.encode("utf-8"))
+            if round_number == 1
+            else zlib.crc32(f"{binding}:{round_number}".encode())
+        )
         picked = _stratified_sample(labelled, size, seed)
         rows = [labelled[index] for index in picked]
         verification_id = uuid4().hex
@@ -750,7 +768,10 @@ class IntakeService:
             "sample_size": size,
             "seed": seed,
             "items": [{"row_id": row.row_id, "input": row.input} for row in rows],
-            "note": "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。",
+            "note": (
+                "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。"
+                "重新核验会换一组题：上一轮公布过的正确答案照抄无效。"
+            ),
         }
 
     def submit_label_verification(

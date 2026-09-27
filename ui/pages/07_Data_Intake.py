@@ -2348,7 +2348,8 @@ if session.confirmed_revision is not None or session.full_data is not None:
             st.caption(
                 "系统随机抽取几条已标注行并隐藏答案，请仅根据输入给出你的答案；"
                 "与数据标签全部一致才允许准备训练。这验证的是监督信号的业务含义，"
-                "数据或方案修订后需重新核验。"
+                "数据或方案修订后需重新核验。重新核验会换一组题——"
+                "未通过时公布的正确答案照抄进下一轮是无效的，防止背题。"
             )
             verification = session.label_verification
             if verification and verification.get("stale"):

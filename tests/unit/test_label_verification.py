@@ -337,3 +337,57 @@ def test_blind_sampling_covers_rare_classes(tmp_path):
     targets = {r.row_id: r.target for r in session.full_data.preview.rows}
     sampled = {targets[item["row_id"]] for item in pending["items"]}
     assert len(sampled) == 2, f"两个名额应覆盖两个不同类别,实得 {sampled}"
+
+
+_BIG_FULL = (
+    "编号,客户描述,类别,处理结果\n"
+    + "".join(
+        f"{index:03d},客户描述{index},{'质量' if index % 2 else '物流'},补发\n"
+        for index in range(1, 11)
+    )
+).encode()
+
+
+def _big_full_store(tmp_path):
+    """10 条已标注全量数据:两轮抽样(各 5 条)可以换题。"""
+    from tests.unit.test_full_data import approved
+
+    service = IntakeService(tmp_path / "intake")
+    session = approved(service)
+    session = service.validate_full_data(
+        session.session_id, session.revision, "full.csv", _BIG_FULL
+    )
+    session = service.confirm_full_data(session.session_id, session.revision)
+    return service, session
+
+
+def test_blind_verification_rolls_questions_between_rounds(tmp_path):
+    """核验未通过会公布正确标签;下一轮必须换题,照抄公布答案不能通过核验。
+
+    同一轮状态内重复抽题仍保持确定性(刷新页面不换题、无法反复抽到简单题)。
+    """
+    service, session = _big_full_store(tmp_path)
+
+    # 第 1 轮:5 条题,故意全答错(模拟"看了公布答案再背题"的用户)
+    first = service.start_label_verification(session.session_id, session.revision)
+    wrong = {item["row_id"]: "背出来的答案" for item in first["items"]}
+    service.submit_label_verification(session.session_id, first["verification_id"], wrong)
+
+    # 第 2 轮:题目必须换一组;且本轮状态内重复抽题保持一致(确定性,防反复抽题)
+    second = service.start_label_verification(session.session_id, session.revision)
+    assert {i["row_id"] for i in second["items"]} != {i["row_id"] for i in first["items"]}
+    twin = service.start_label_verification(session.session_id, session.revision)
+    assert [i["row_id"] for i in twin["items"]] == [i["row_id"] for i in second["items"]]
+
+    # 照抄第 1 轮公布的正确标签作答第 2 轮:第 2 轮题目已变,背题不再等于通过
+    targets = {r.row_id: r.target for r in service.load(session.session_id).full_data.preview.rows}
+    stale_parrot = {row_id: targets[row_id] for row_id in (i["row_id"] for i in first["items"])}
+    assert set(stale_parrot) != {i["row_id"] for i in second["items"]}
+    # 第 2 轮用本轮自己的题真实作答:提交 twin(后创建的那份)后状态直接落到它上
+    mapping = {item["row_id"]: targets[item["row_id"]] for item in twin["items"]}
+    verdict = service.submit_label_verification(
+        session.session_id, twin["verification_id"], mapping
+    )
+    assert verdict["verdict"] == "verified"
+    # 换题后新轮次的 note 说明换题事实
+    assert "换一组题" in second["note"]
