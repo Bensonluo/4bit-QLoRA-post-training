@@ -229,7 +229,26 @@ def propose_baseline_analysis(
     for value in distribution:
         normalized_groups.setdefault(_normalize_label(value), set()).add(value)
     variants = {key: values for key, values in normalized_groups.items() if len(values) > 1}
+    # 归一草案:每组变体映射到该组出现次数最多的写法(平票取数据中先出现的写法,
+    # 重复运行结果一致)。草案预置进方案的答案列转换,用户在预览确认时裁决或否决
+    # ——归一写法的选择始终由用户决定,但草案已就位,不用手写。
+    draft_mapping: dict[str, str] = {}
     if variants:
+        first_seen = {value: index for index, value in enumerate(distribution)}
+        variant_targets: dict[str, str] = {}
+        for group_values in variants.values():
+            ordered = sorted(group_values, key=first_seen.__getitem__)
+            canonical = max(ordered, key=lambda value: distribution[value])
+            variant_targets.update(dict.fromkeys(group_values, canonical))
+        # map_values 是严格映射:映射之外的值会在预览报错,草案必须覆盖答案列
+        # 全部已见取值(变体映射到规范写法,其余原样保留)。
+        draft_mapping = {value: variant_targets.get(value, value) for value in distribution}
+        rules = [
+            f"{value}→{normalized}"
+            for value, normalized in draft_mapping.items()
+            if value != normalized
+        ]
+        rules_display = "、".join(rules[:6]) + (" 等" if len(rules) > 6 else "")
         shown = ";".join("/".join(sorted(values)) for values in list(variants.values())[:3])
         findings.append(
             Finding(
@@ -237,6 +256,9 @@ def propose_baseline_analysis(
                 message=(
                     f"答案列存在同一业务含义的多种写法（{shown}）。模型会把它们当不同答案学习，"
                     "评测也会被判错；建议在原始数据中统一写法，或用转换规则(map_values)归一。"
+                    f"已生成归一规则草案：{rules_display}"
+                    "（每组变体映射到该组出现次数最多的写法；草案已预置到下方方案的答案列转换里，"
+                    "预览确认前可修改或删除，最终采用哪种写法由你裁决）。"
                 ),
             )
         )
@@ -348,7 +370,10 @@ def propose_baseline_analysis(
                 "column": target_column,
                 "label": target_label,
                 "value_kind": _value_kind(session, target_column),
-                "transforms": [],
+                # 变体检出时预置归一草案;干净标签不添加任何转换,用户可否决。
+                "transforms": (
+                    [{"operation": "map_values", "mapping": draft_mapping}] if draft_mapping else []
+                ),
             }
         ],
         "group_columns": groups,

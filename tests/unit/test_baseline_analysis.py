@@ -116,6 +116,40 @@ def test_label_variants_are_flagged_for_cleanup(tmp_path):
     )
 
 
+def test_label_variants_get_map_values_draft_in_recipe(tmp_path):
+    """变体检出后自动生成归一草案:map_values 预置进答案列转换,finding 附可直接采用的规则。"""
+    service = IntakeService(tmp_path / "intake")
+    labels = ["质量", "质量。", "质量", "物流", "质量", "物流", "质量", "质量", "物流", "质量"]
+    rows = "描述,类别\n" + "".join(f"问题{i},{label}\n" for i, label in enumerate(labels, 1))
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    messages = [finding.message for finding in analysis.findings]
+    assert any("已生成归一规则草案" in message and "质量。→质量" in message for message in messages)
+    target = analysis.recipe.targets[0]
+    assert len(target.transforms) == 1
+    draft = target.transforms[0]
+    assert draft.operation == "map_values"
+    # 草案覆盖答案列全部已见取值:变体映射到多数写法,非变体原样保留(严格映射不报错)。
+    assert draft.mapping == {"质量": "质量", "质量。": "质量", "物流": "物流"}
+    # 草案走真实链路:预览里变体已归一,答案只剩规范写法。
+    updated = service.apply_analysis(session, analysis, model="baseline-deterministic")
+    targets = {row.target for row in updated.preview.rows}
+    assert targets == {"质量", "物流"}
+    assert updated.preview.counts["ready"] == 10
+    assert not any(row.issues for row in updated.preview.rows)
+
+
+def test_clean_labels_get_no_normalization_draft(tmp_path):
+    """干净标签不生成归一草案:答案列转换保持为空,finding 不提草案。"""
+    service = IntakeService(tmp_path / "intake")
+    rows = "描述,类别\n" + "".join(f"问题{i},{'质量' if i % 2 else '物流'}\n" for i in range(1, 11))
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    assert analysis.recipe.targets[0].transforms == []
+    assert not any("归一规则草案" in finding.message for finding in analysis.findings)
+    assert not any("多种写法" in finding.message for finding in analysis.findings)
+
+
 def test_open_text_target_gets_honest_expectation_statement(tmp_path):
     """开放文本答案在旅程开始就被告知:无自动评分,输出靠人工核对。"""
     service = IntakeService(tmp_path / "intake")
