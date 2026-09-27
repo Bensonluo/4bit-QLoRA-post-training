@@ -1,0 +1,1992 @@
+{
+  "scope": "fictional software integration fixture; actual isolated data transformation, Qwen3-1.7B MPS SFT and three-model generation; no customer acceptance",
+  "iteration": {
+    "actual_dataset": {
+      "data_config": {
+        "dataset_loader": "alpaca",
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "format": "alpaca",
+        "max_samples": null,
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl",
+        "validation_split": 0
+      },
+      "evaluation_suite": {
+        "case_counts": {
+          "test": 1,
+          "validation": 1
+        },
+        "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+        "manifest_path": "/private/tmp/tunesmith-live-iterations-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+        "root": "/private/tmp/tunesmith-live-iterations-20260926/suites",
+        "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+      },
+      "full_confirmed_revision": 7,
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "paths": {
+        "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/manifest.json",
+        "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/test.jsonl",
+        "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl"
+      },
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+      "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+      "statistics": {
+        "actual_ratios": {
+          "test": 0.03125,
+          "train": 0.9375,
+          "validation": 0.03125
+        },
+        "evaluation_suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3",
+        "fixed_case_counts": {
+          "test": 1,
+          "validation": 1
+        },
+        "group_counts": {
+          "test": 1,
+          "train": 30,
+          "validation": 1
+        },
+        "independent_groups": 32,
+        "note": "固定开发与最终测试评分题；新增独立资料进入训练，同评测对象新增行仍保留在对应分区但不扩充评分题。比例及随机种子不重新切分固定题。",
+        "rendered_exact_duplicate_rows": 0,
+        "requested_ratios": null,
+        "reserved_rows": {
+          "test": [],
+          "validation": []
+        },
+        "row_counts": {
+          "test": 1,
+          "train": 30,
+          "validation": 1
+        },
+        "source_exact_duplicate_rows": 0,
+        "split_method": "fixed_evaluation_suite",
+        "stratified": false,
+        "total_rows": 32
+      },
+      "version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271"
+    },
+    "changes": "新增20条虚构独立工单，复用已验证日志提取代码和标签规则，保留全部原开发/最终测试题；其余训练配置不变，样本增加会同时增加更新步数。",
+    "comparison_key": "8ffd358bd32b9f5a9e6cc952e4d0e945b33002bb2f752d36418516bffe753c9b",
+    "created_at": "2026-09-26T14:59:03.178909+00:00",
+    "data_change": true,
+    "decision": "insufficient_evidence",
+    "decision_reason": "仅一条固定开发题与虚构业务数据；本次用于验证增加数据后的第二轮闭环，不能据此作客户业务采用决定。",
+    "evaluation_id": "b4b4c67ca44b45f2b1a60e14492daa87",
+    "evaluation_suite": {
+      "case_counts": {
+        "test": 1,
+        "validation": 1
+      },
+      "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+      "manifest_path": "/private/tmp/tunesmith-live-iterations-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+      "root": "/private/tmp/tunesmith-live-iterations-20260926/suites",
+      "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+    },
+    "expected_outcome": "固定开发题的完整输出严格正确率提高，额外解释和截断减少。",
+    "goal": "根据客户首次原话预测售后类别，类别封闭为硬件或物流。上线只有客户原话；绝不能输入内部处理记录。",
+    "hypothesis": "首轮仅10条训练记录且类别输出错误；增加独立硬件故障和物流描述及严格类别答案，可能改善任务学习。",
+    "iteration_id": "it-bf75b78ba60643a6af3b6a0e60c11caa",
+    "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+    "new_run_id": "wb-6ceaae37d516434bbb05b54959118fa9",
+    "options": {
+      "lora_options": {
+        "alpha_pattern": null,
+        "bias": "none",
+        "exclude_modules": null,
+        "init_lora_weights": true,
+        "loftq_bits": 4,
+        "loftq_iter": 1,
+        "lora_alpha": 8,
+        "lora_dropout": 0.05,
+        "lora_ga_cache_file": null,
+        "lora_ga_calibration_batches": 4,
+        "lora_ga_direction": "ArB2r",
+        "lora_ga_scale": "stable",
+        "lora_ga_stable_gamma": 16,
+        "r": 4,
+        "rank_pattern": null,
+        "target_modules": [
+          "q_proj",
+          "v_proj"
+        ],
+        "task_type": "CAUSAL_LM",
+        "use_dora": false,
+        "use_rslora": false
+      },
+      "max_length": 256,
+      "model_options": {
+        "device_map": null,
+        "load_in_8bit": false,
+        "merge_dtype": "bfloat16",
+        "quantization_bits": null,
+        "torch_dtype": "bfloat16",
+        "use_flash_attention": false
+      },
+      "training_options": {
+        "auto_find_batch_size": false,
+        "auto_scale_batch": false,
+        "batch_size": 1,
+        "bf16": false,
+        "deepspeed_config": null,
+        "eval_steps": 5,
+        "fp16": false,
+        "fsdp": null,
+        "fsdp_config": null,
+        "gradient_accumulation_steps": 2,
+        "gradient_checkpointing": true,
+        "gradient_checkpointing_use_reentrant": false,
+        "learning_rate": 0.0001,
+        "logging_steps": 1,
+        "lr_scheduler_type": "cosine",
+        "max_grad_norm": 1.0,
+        "neftune_noise_alpha": null,
+        "num_epochs": 1,
+        "optim": null,
+        "peak_flops_per_device": null,
+        "save_steps": 5,
+        "save_total_limit": 3,
+        "seed": 42,
+        "torch_compile": false,
+        "torch_empty_cache_steps": null,
+        "train_sampling_strategy": "random",
+        "use_liger_kernel": false,
+        "warmup_ratio": 0.03,
+        "weight_decay": 0.01
+      }
+    },
+    "parent_dataset": {
+      "data_config": {
+        "dataset_loader": "alpaca",
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "format": "alpaca",
+        "max_samples": null,
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "validation_split": 0
+      },
+      "evaluation_suite": null,
+      "full_confirmed_revision": 4,
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "paths": {
+        "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json",
+        "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+        "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl"
+      },
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+      "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+      "statistics": {
+        "actual_ratios": {
+          "test": 0.08333333333333333,
+          "train": 0.8333333333333334,
+          "validation": 0.08333333333333333
+        },
+        "group_counts": {
+          "test": 1,
+          "train": 10,
+          "validation": 1
+        },
+        "independent_groups": 12,
+        "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。",
+        "rendered_exact_duplicate_rows": 0,
+        "requested_ratios": {
+          "test": 0.1,
+          "train": 0.8,
+          "validation": 0.1
+        },
+        "row_counts": {
+          "test": 1,
+          "train": 10,
+          "validation": 1
+        },
+        "source_exact_duplicate_rows": 0,
+        "stratified": false,
+        "total_rows": 12
+      },
+      "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13"
+    },
+    "parent_evaluation_id": "a95801a4e3294d00a22d4dbd6cee22e7",
+    "parent_run_id": "wb-9b175cec8b6a4fb3903860b38d81d2f7",
+    "proposal_dataset_digest": "93b319b62ab687da718f76dab2ac4c2a0fbc20141f373b6264ccb6ab965ec4a1",
+    "results": [
+      {
+        "label": "base",
+        "metrics": {
+          "exact_match": 0.0,
+          "field_accuracy": {},
+          "generated": 1,
+          "generation_coverage": 1.0,
+          "scorable_coverage": 0.0,
+          "scored": 0,
+          "total": 1
+        }
+      },
+      {
+        "label": "parent",
+        "metrics": {
+          "exact_match": 0.0,
+          "field_accuracy": {},
+          "generated": 1,
+          "generation_coverage": 1.0,
+          "scorable_coverage": 0.0,
+          "scored": 0,
+          "total": 1
+        }
+      },
+      {
+        "label": "second_sft",
+        "metrics": {
+          "exact_match": 0.0,
+          "field_accuracy": {},
+          "generated": 1,
+          "generation_coverage": 1.0,
+          "scorable_coverage": 0.0,
+          "scored": 0,
+          "total": 1
+        }
+      }
+    ],
+    "revision": 6,
+    "run_id": "wb-6ceaae37d516434bbb05b54959118fa9",
+    "session_id": "70695b9552884220baaef6fd9dae0883",
+    "status": "decided",
+    "training_run": {
+      "artifacts": {},
+      "config": {
+        "data": {
+          "dataset_loader": "alpaca",
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+          "dataset_split": "train",
+          "format": "alpaca",
+          "max_samples": null,
+          "preprocessing_num_workers": 4,
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl",
+          "validation_split": 0
+        },
+        "logging": {
+          "console_level": "INFO",
+          "log_dir": "./outputs/logs",
+          "log_memory": true,
+          "merge_before_register": true,
+          "mlflow_experiment_name": "workbench-sft",
+          "mlflow_run_name": "wb-6ceaae37d516434bbb05b54959118fa9",
+          "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-live-adapter-training-20260926/mlflow.db",
+          "register_model": false,
+          "registry_model_name": null,
+          "registry_stage": "Staging",
+          "use_mlflow": true,
+          "use_tensorboard": false,
+          "use_wandb": false,
+          "wandb_entity": null,
+          "wandb_project": "qlora-post-training",
+          "wandb_run_name": null
+        },
+        "lora": {
+          "alpha_pattern": null,
+          "bias": "none",
+          "exclude_modules": null,
+          "init_lora_weights": true,
+          "loftq_bits": 4,
+          "loftq_iter": 1,
+          "lora_alpha": 8,
+          "lora_dropout": 0.05,
+          "lora_ga_cache_file": null,
+          "lora_ga_calibration_batches": 4,
+          "lora_ga_direction": "ArB2r",
+          "lora_ga_scale": "stable",
+          "lora_ga_stable_gamma": 16,
+          "r": 4,
+          "rank_pattern": null,
+          "target_modules": [
+            "q_proj",
+            "v_proj"
+          ],
+          "task_type": "CAUSAL_LM",
+          "use_dora": false,
+          "use_rslora": false
+        },
+        "model": {
+          "device_map": null,
+          "load_in_8bit": false,
+          "max_length": 256,
+          "merge_dtype": "bfloat16",
+          "name": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "quantization_bits": null,
+          "torch_dtype": "bfloat16",
+          "trust_remote_code": false,
+          "use_flash_attention": false
+        },
+        "training": {
+          "auto_find_batch_size": false,
+          "auto_scale_batch": false,
+          "batch_size": 1,
+          "bf16": false,
+          "deepspeed_config": null,
+          "eval_steps": 5,
+          "fp16": false,
+          "fsdp": null,
+          "fsdp_config": null,
+          "gradient_accumulation_steps": 2,
+          "gradient_checkpointing": true,
+          "gradient_checkpointing_use_reentrant": false,
+          "learning_rate": 0.0001,
+          "logging_steps": 1,
+          "lr_scheduler_type": "cosine",
+          "max_grad_norm": 1.0,
+          "neftune_noise_alpha": null,
+          "num_epochs": 1,
+          "optim": null,
+          "output_dir": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model",
+          "peak_flops_per_device": null,
+          "save_steps": 5,
+          "save_total_limit": 3,
+          "seed": 42,
+          "torch_compile": false,
+          "torch_empty_cache_steps": null,
+          "train_sampling_strategy": "random",
+          "use_liger_kernel": false,
+          "warmup_ratio": 0.03,
+          "weight_decay": 0.01
+        }
+      },
+      "config_digest": "3afa265109f058729fb878fc102cf9d07a945bd8e036f2ed3f9bb44b98191468",
+      "created_at": "2026-09-26T14:59:03.513204+00:00",
+      "dataset": {
+        "data_config": {
+          "dataset_loader": "alpaca",
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+          "format": "alpaca",
+          "max_samples": null,
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl",
+          "validation_split": 0
+        },
+        "evaluation_suite": {
+          "case_counts": {
+            "test": 1,
+            "validation": 1
+          },
+          "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+          "manifest_path": "/private/tmp/tunesmith-live-iterations-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+          "root": "/private/tmp/tunesmith-live-iterations-20260926/suites",
+          "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+        },
+        "full_confirmed_revision": 7,
+        "name": "intake-70695b9552884220baaef6fd9dae0883",
+        "paths": {
+          "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/manifest.json",
+          "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/test.jsonl",
+          "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+          "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl"
+        },
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+        "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+        "statistics": {
+          "actual_ratios": {
+            "test": 0.03125,
+            "train": 0.9375,
+            "validation": 0.03125
+          },
+          "evaluation_suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3",
+          "fixed_case_counts": {
+            "test": 1,
+            "validation": 1
+          },
+          "group_counts": {
+            "test": 1,
+            "train": 30,
+            "validation": 1
+          },
+          "independent_groups": 32,
+          "note": "固定开发与最终测试评分题；新增独立资料进入训练，同评测对象新增行仍保留在对应分区但不扩充评分题。比例及随机种子不重新切分固定题。",
+          "rendered_exact_duplicate_rows": 0,
+          "requested_ratios": null,
+          "reserved_rows": {
+            "test": [],
+            "validation": []
+          },
+          "row_counts": {
+            "test": 1,
+            "train": 30,
+            "validation": 1
+          },
+          "source_exact_duplicate_rows": 0,
+          "split_method": "fixed_evaluation_suite",
+          "stratified": false,
+          "total_rows": 32
+        },
+        "version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271"
+      },
+      "dataset_version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271",
+      "failure": null,
+      "issues": [
+        {
+          "code": "full_prompt_supervision",
+          "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+          "row_ids": [],
+          "severity": "info",
+          "split": null
+        }
+      ],
+      "metrics": {},
+      "model_identity": {
+        "config_and_tokenizer_hashes": {
+          "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+          "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+          "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+          "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+          "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+          "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        },
+        "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。",
+        "weights": [
+          {
+            "name": "model-00001-of-00002.safetensors",
+            "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+            "size": 3441185608
+          },
+          {
+            "name": "model-00002-of-00002.safetensors",
+            "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+            "size": 622329984
+          }
+        ]
+      },
+      "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "output_dir": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model",
+      "preflight": {
+        "dataset_name": "intake-70695b9552884220baaef6fd9dae0883",
+        "full_confirmed_revision": 7,
+        "issues": [
+          {
+            "code": "full_prompt_supervision",
+            "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+            "row_ids": [],
+            "severity": "info",
+            "split": null
+          }
+        ],
+        "max_length": 256,
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "rows": [
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000003",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 71,
+            "input_tokens": 70,
+            "kept_tokens": 71,
+            "row_id": "r000004",
+            "split": "train",
+            "supervised_tokens": 70,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000005",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000006",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000007",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000008",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "kept_tokens": 72,
+            "row_id": "r000009",
+            "split": "train",
+            "supervised_tokens": 71,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 68,
+            "input_tokens": 67,
+            "kept_tokens": 68,
+            "row_id": "r000010",
+            "split": "train",
+            "supervised_tokens": 67,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "kept_tokens": 72,
+            "row_id": "r000011",
+            "split": "train",
+            "supervised_tokens": 71,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000012",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "kept_tokens": 72,
+            "row_id": "r000013",
+            "split": "train",
+            "supervised_tokens": 71,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000014",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000015",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000016",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 71,
+            "input_tokens": 70,
+            "kept_tokens": 71,
+            "row_id": "r000017",
+            "split": "train",
+            "supervised_tokens": 70,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000018",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000019",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 68,
+            "input_tokens": 67,
+            "kept_tokens": 68,
+            "row_id": "r000020",
+            "split": "train",
+            "supervised_tokens": 67,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000021",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 71,
+            "input_tokens": 70,
+            "kept_tokens": 71,
+            "row_id": "r000022",
+            "split": "train",
+            "supervised_tokens": 70,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000023",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000024",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 71,
+            "input_tokens": 70,
+            "kept_tokens": 71,
+            "row_id": "r000025",
+            "split": "train",
+            "supervised_tokens": 70,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000026",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "kept_tokens": 72,
+            "row_id": "r000027",
+            "split": "train",
+            "supervised_tokens": 71,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "kept_tokens": 72,
+            "row_id": "r000028",
+            "split": "train",
+            "supervised_tokens": 71,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 73,
+            "input_tokens": 72,
+            "kept_tokens": 73,
+            "row_id": "r000029",
+            "split": "train",
+            "supervised_tokens": 72,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000030",
+            "split": "train",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "kept_tokens": 70,
+            "row_id": "r000031",
+            "split": "train",
+            "supervised_tokens": 69,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "kept_tokens": 72,
+            "row_id": "r000032",
+            "split": "train",
+            "supervised_tokens": 71,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000001",
+            "split": "validation",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          },
+          {
+            "answer_boundary_verified": true,
+            "answer_kept_tokens": 1,
+            "answer_supervised_tokens": 1,
+            "answer_tokens": 1,
+            "answer_was_truncated": false,
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "kept_tokens": 69,
+            "row_id": "r000002",
+            "split": "test",
+            "supervised_tokens": 68,
+            "was_truncated": false
+          }
+        ],
+        "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。",
+        "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+        "splits": {
+          "test": {
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "rows": 1,
+            "truncated_rows": 0,
+            "truncation_ratio": 0.0,
+            "unverified_answer_rows": 0
+          },
+          "train": {
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "rows": 30,
+            "truncated_rows": 0,
+            "truncation_ratio": 0.0,
+            "unverified_answer_rows": 0
+          },
+          "validation": {
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "rows": 1,
+            "truncated_rows": 0,
+            "truncation_ratio": 0.0,
+            "unverified_answer_rows": 0
+          }
+        },
+        "status": "passed",
+        "supervision_strategy": "full_prompt_padding_masked",
+        "tokenizer": {
+          "class": "Qwen2Tokenizer",
+          "eos_token_id": 151645,
+          "is_fast": true,
+          "model_max_length": 131072,
+          "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "pad_token_id": 151643,
+          "padding_side": "right",
+          "truncation_side": "right"
+        },
+        "version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271"
+      },
+      "run_id": "wb-6ceaae37d516434bbb05b54959118fa9",
+      "session_id": "70695b9552884220baaef6fd9dae0883",
+      "session_revision": 9,
+      "started_at": "2026-09-26T14:59:08.896290+00:00",
+      "status": "running"
+    },
+    "training_start": "base",
+    "updated_at": "2026-09-26T14:59:46.063029+00:00"
+  },
+  "training": {
+    "run_id": "wb-6ceaae37d516434bbb05b54959118fa9",
+    "session_id": "70695b9552884220baaef6fd9dae0883",
+    "session_revision": 9,
+    "dataset_version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271",
+    "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+    "output_dir": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model",
+    "status": "succeeded",
+    "issues": [
+      {
+        "code": "full_prompt_supervision",
+        "severity": "info",
+        "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+        "split": null,
+        "row_ids": []
+      }
+    ],
+    "config": {
+      "model": {
+        "name": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "quantization_bits": null,
+        "load_in_8bit": false,
+        "trust_remote_code": false,
+        "use_flash_attention": false,
+        "max_length": 256,
+        "device_map": null,
+        "torch_dtype": "bfloat16",
+        "merge_dtype": "bfloat16"
+      },
+      "training": {
+        "output_dir": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model",
+        "num_epochs": 1,
+        "batch_size": 1,
+        "gradient_accumulation_steps": 2,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "warmup_ratio": 0.03,
+        "lr_scheduler_type": "cosine",
+        "logging_steps": 1,
+        "save_steps": 5,
+        "eval_steps": 5,
+        "save_total_limit": 3,
+        "gradient_checkpointing": true,
+        "gradient_checkpointing_use_reentrant": false,
+        "torch_empty_cache_steps": null,
+        "auto_find_batch_size": false,
+        "train_sampling_strategy": "random",
+        "fp16": false,
+        "bf16": false,
+        "max_grad_norm": 1.0,
+        "seed": 42,
+        "fsdp": null,
+        "fsdp_config": null,
+        "deepspeed_config": null,
+        "auto_scale_batch": false,
+        "use_liger_kernel": false,
+        "neftune_noise_alpha": null,
+        "torch_compile": false,
+        "optim": null,
+        "peak_flops_per_device": null
+      },
+      "lora": {
+        "r": 4,
+        "lora_alpha": 8,
+        "lora_dropout": 0.05,
+        "target_modules": [
+          "q_proj",
+          "v_proj"
+        ],
+        "bias": "none",
+        "task_type": "CAUSAL_LM",
+        "use_dora": false,
+        "use_rslora": false,
+        "init_lora_weights": true,
+        "loftq_bits": 4,
+        "loftq_iter": 1,
+        "lora_ga_direction": "ArB2r",
+        "lora_ga_scale": "stable",
+        "lora_ga_stable_gamma": 16,
+        "lora_ga_calibration_batches": 4,
+        "lora_ga_cache_file": null,
+        "rank_pattern": null,
+        "alpha_pattern": null,
+        "exclude_modules": null
+      },
+      "data": {
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "dataset_split": "train",
+        "max_samples": null,
+        "validation_split": 0,
+        "preprocessing_num_workers": 4,
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl",
+        "format": "alpaca",
+        "dataset_loader": "alpaca"
+      },
+      "logging": {
+        "use_wandb": false,
+        "wandb_project": "qlora-post-training",
+        "wandb_entity": null,
+        "wandb_run_name": null,
+        "use_tensorboard": false,
+        "log_dir": "./outputs/logs",
+        "log_memory": true,
+        "console_level": "INFO",
+        "use_mlflow": true,
+        "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-live-adapter-training-20260926/mlflow.db",
+        "mlflow_experiment_name": "workbench-sft",
+        "mlflow_run_name": "wb-6ceaae37d516434bbb05b54959118fa9",
+        "register_model": false,
+        "registry_model_name": null,
+        "merge_before_register": true,
+        "registry_stage": "Staging"
+      }
+    },
+    "preflight": {
+      "status": "passed",
+      "dataset_name": "intake-70695b9552884220baaef6fd9dae0883",
+      "version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271",
+      "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "full_confirmed_revision": 7,
+      "max_length": 256,
+      "tokenizer": {
+        "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "is_fast": true,
+        "pad_token_id": 151643,
+        "eos_token_id": 151645,
+        "padding_side": "right",
+        "truncation_side": "right",
+        "model_max_length": 131072,
+        "class": "Qwen2Tokenizer"
+      },
+      "supervision_strategy": "full_prompt_padding_masked",
+      "issues": [
+        {
+          "code": "full_prompt_supervision",
+          "severity": "info",
+          "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+          "split": null,
+          "row_ids": []
+        }
+      ],
+      "splits": {
+        "train": {
+          "rows": 30,
+          "truncated_rows": 0,
+          "answer_lost_rows": 0,
+          "empty_supervision_rows": 0,
+          "unverified_answer_rows": 0,
+          "truncation_ratio": 0.0
+        },
+        "validation": {
+          "rows": 1,
+          "truncated_rows": 0,
+          "answer_lost_rows": 0,
+          "empty_supervision_rows": 0,
+          "unverified_answer_rows": 0,
+          "truncation_ratio": 0.0
+        },
+        "test": {
+          "rows": 1,
+          "truncated_rows": 0,
+          "answer_lost_rows": 0,
+          "empty_supervision_rows": 0,
+          "unverified_answer_rows": 0,
+          "truncation_ratio": 0.0
+        }
+      },
+      "rows": [
+        {
+          "split": "train",
+          "row_id": "r000003",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000004",
+          "full_tokens": 71,
+          "input_tokens": 70,
+          "answer_tokens": 1,
+          "kept_tokens": 71,
+          "supervised_tokens": 70,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000005",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000006",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000007",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000008",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000009",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000010",
+          "full_tokens": 68,
+          "input_tokens": 67,
+          "answer_tokens": 1,
+          "kept_tokens": 68,
+          "supervised_tokens": 67,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000011",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000012",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000013",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000014",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000015",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000016",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000017",
+          "full_tokens": 71,
+          "input_tokens": 70,
+          "answer_tokens": 1,
+          "kept_tokens": 71,
+          "supervised_tokens": 70,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000018",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000019",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000020",
+          "full_tokens": 68,
+          "input_tokens": 67,
+          "answer_tokens": 1,
+          "kept_tokens": 68,
+          "supervised_tokens": 67,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000021",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000022",
+          "full_tokens": 71,
+          "input_tokens": 70,
+          "answer_tokens": 1,
+          "kept_tokens": 71,
+          "supervised_tokens": 70,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000023",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000024",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000025",
+          "full_tokens": 71,
+          "input_tokens": 70,
+          "answer_tokens": 1,
+          "kept_tokens": 71,
+          "supervised_tokens": 70,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000026",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000027",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000028",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000029",
+          "full_tokens": 73,
+          "input_tokens": 72,
+          "answer_tokens": 1,
+          "kept_tokens": 73,
+          "supervised_tokens": 72,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000030",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000031",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000032",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "validation",
+          "row_id": "r000001",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "test",
+          "row_id": "r000002",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        }
+      ],
+      "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。"
+    },
+    "artifacts": {
+      "adapter_config": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model/adapter_config.json",
+      "adapter_weights": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model/adapter_model.safetensors",
+      "tokenizer_config": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model/tokenizer_config.json",
+      "metrics": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model/workbench_metrics.json",
+      "manifest": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model/workbench_manifest.json"
+    },
+    "metrics": {
+      "loss": 4.490771293640137,
+      "grad_norm": 1.7119417190551758,
+      "learning_rate": 1.2536043909088191e-06,
+      "epoch": 1.0,
+      "step": 15,
+      "eval_loss": 4.373661041259766,
+      "eval_runtime": 0.1181,
+      "eval_samples_per_second": 8.465,
+      "eval_steps_per_second": 8.465,
+      "train_runtime": 12.3304,
+      "train_samples_per_second": 2.433,
+      "train_steps_per_second": 1.217,
+      "total_flos": 64982608773120.0,
+      "train_loss": 4.574524052937826
+    },
+    "failure": null,
+    "created_at": "2026-09-26T14:59:03.513204+00:00",
+    "model_identity": {
+      "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "config_and_tokenizer_hashes": {
+        "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+        "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+        "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      "weights": [
+        {
+          "name": "model-00001-of-00002.safetensors",
+          "size": 3441185608,
+          "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+        },
+        {
+          "name": "model-00002-of-00002.safetensors",
+          "size": 622329984,
+          "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+        }
+      ],
+      "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+    },
+    "config_digest": "3afa265109f058729fb878fc102cf9d07a945bd8e036f2ed3f9bb44b98191468",
+    "dataset": {
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271",
+      "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+      "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "full_confirmed_revision": 7,
+      "paths": {
+        "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl",
+        "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/test.jsonl",
+        "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/manifest.json"
+      },
+      "data_config": {
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271/validation.jsonl",
+        "validation_split": 0,
+        "max_samples": null,
+        "format": "alpaca",
+        "dataset_loader": "alpaca"
+      },
+      "statistics": {
+        "total_rows": 32,
+        "independent_groups": 32,
+        "requested_ratios": null,
+        "actual_ratios": {
+          "train": 0.9375,
+          "validation": 0.03125,
+          "test": 0.03125
+        },
+        "row_counts": {
+          "train": 30,
+          "validation": 1,
+          "test": 1
+        },
+        "group_counts": {
+          "train": 30,
+          "validation": 1,
+          "test": 1
+        },
+        "rendered_exact_duplicate_rows": 0,
+        "source_exact_duplicate_rows": 0,
+        "stratified": false,
+        "note": "固定开发与最终测试评分题；新增独立资料进入训练，同评测对象新增行仍保留在对应分区但不扩充评分题。比例及随机种子不重新切分固定题。",
+        "split_method": "fixed_evaluation_suite",
+        "evaluation_suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3",
+        "reserved_rows": {
+          "validation": [],
+          "test": []
+        },
+        "fixed_case_counts": {
+          "test": 1,
+          "validation": 1
+        }
+      },
+      "evaluation_suite": {
+        "case_counts": {
+          "test": 1,
+          "validation": 1
+        },
+        "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+        "manifest_path": "/private/tmp/tunesmith-live-iterations-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+        "root": "/private/tmp/tunesmith-live-iterations-20260926/suites",
+        "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+      }
+    },
+    "started_at": "2026-09-26T14:59:08.896290+00:00",
+    "pid": 41283,
+    "mlflow_run_id": "a459638991734836a555b63473d230dc",
+    "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-live-adapter-training-20260926/mlflow.db",
+    "mlflow_status": "recorded"
+  },
+  "evaluation": {
+    "evaluation_id": "b4b4c67ca44b45f2b1a60e14492daa87",
+    "created_at": "2026-09-26T14:59:30.981699+00:00",
+    "dataset": {
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "version": "2d16773cde6250e1fafce6c4344159157e2c7ccadae95db2bf34da7926ca0271",
+      "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "split": "validation",
+      "purpose": "development_only",
+      "split_sha256": "cd475f3a484e0100e586dd41a68b611971558a0e9a210ace87b854c61806bd0d",
+      "row_count": 1,
+      "evaluation_suite": {
+        "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3",
+        "cases_digest": "e6c5576efcde9fd84268d740cd5f075073d4c64a71c22b76bd59a456e0a6706d",
+        "evaluation_key": "f0c654fdabeb3f14b4707b47d454ede2270bb3a0448b5887882c3c156fdc9cd0"
+      }
+    },
+    "protocol": {
+      "scorer": "classification_exact",
+      "fields": [],
+      "max_new_tokens": 32,
+      "strip_whitespace": true,
+      "generation": "greedy_v1",
+      "prompt_renderer": "render_alpaca_prompt_without_answer",
+      "prompt_digest": "0de20d145e9c10ddb964018d32b023983612234b094164c82f2b513ec8d63ebe",
+      "answers_digest": "d1b8a3f251c906740347b28d9f9b9c39b252f3b0b9ac212b62e632bc72571bb3"
+    },
+    "comparison_key": "8ffd358bd32b9f5a9e6cc952e4d0e945b33002bb2f752d36418516bffe753c9b",
+    "status": "completed_with_failures",
+    "models": [
+      {
+        "label": "base",
+        "requested_model": {
+          "label": "base",
+          "base_model": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "adapter_path": null,
+          "revision": null
+        },
+        "identity": {
+          "base": {
+            "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "files": {
+              "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+              "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+              "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+              "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+              "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+              "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+              "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+              "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+            },
+            "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1"
+          },
+          "adapter": null
+        },
+        "rows": [
+          {
+            "index": 0,
+            "source": {
+              "evaluation_case_id": "0ad201b98807fd2114390574ca8f9121bab90b361b7d672f33f3eb0d07e32c98",
+              "evaluation_scored": true,
+              "group": {
+                "ticket": "001"
+              },
+              "origins": [
+                {
+                  "row_id": "r000001",
+                  "source_digest": "8d77b696b900e493441c8d361109bef92f0c51c0c33eb014885aa864176ef2fa"
+                }
+              ],
+              "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+              "source_row_id": "r000001"
+            },
+            "prompt": "### Instruction:\n根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。\n\n### Input:\n客户首次原话: 屏幕碎了\n\n### Response:\n",
+            "expected": "硬件",
+            "output": "物流\n### Explanation:\n客户说的屏幕碎了，属于硬件问题，属于物流售后类别。\n\n### Input:\n客户首次原话: 电池没",
+            "status": "truncated",
+            "correct": false,
+            "field_scores": {},
+            "truncated": true,
+            "generated_tokens": 32,
+            "error": "达到生成长度限制，输出可能不完整；未作为成功答案。"
+          }
+        ],
+        "errors": [],
+        "metrics": {
+          "total": 1,
+          "scored": 0,
+          "generated": 1,
+          "scorable_coverage": 0.0,
+          "generation_coverage": 1.0,
+          "exact_match": 0.0,
+          "field_accuracy": {}
+        }
+      },
+      {
+        "label": "parent",
+        "requested_model": {
+          "label": "parent",
+          "base_model": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "adapter_path": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-9b175cec8b6a4fb3903860b38d81d2f7/model",
+          "revision": null
+        },
+        "identity": {
+          "base": {
+            "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "files": {
+              "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+              "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+              "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+              "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+              "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+              "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+              "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+              "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+            },
+            "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1"
+          },
+          "adapter": {
+            "directory": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-9b175cec8b6a4fb3903860b38d81d2f7/model",
+            "files": {
+              "adapter_config.json": "fe18c423b1086b46381734f89f760adc482af23d99f792df78603ecbd8d21e8e",
+              "adapter_model.safetensors": "c7021f7016aa05f859a27f6cde1da932191705184024d6a55ea4d404fe286492",
+              "tokenizer.json": "4ebc61ca942af8e084a5c98257c3c21042d76a2e8c8324fc242fd19976cb987a",
+              "tokenizer_config.json": "d9bf1d78a80bad5eb65b83c2608910e3be00a9d3250c8153a5a393ad1257e1d6",
+              "workbench_manifest.json": "83a09a506fb0643dd5e47556473158a51205ad526e6884bf78c724eeaed36d91",
+              "workbench_metrics.json": "f9808ecc4e363b4ae4df69e326ee7b1d21bb696722c3c5c4bc6b132a3c983362"
+            },
+            "content_digest": "d58566ac8f640430939b461b7ef99fd1c1ca5bee0549ec73120ad89d37809051"
+          }
+        },
+        "rows": [
+          {
+            "index": 0,
+            "source": {
+              "evaluation_case_id": "0ad201b98807fd2114390574ca8f9121bab90b361b7d672f33f3eb0d07e32c98",
+              "evaluation_scored": true,
+              "group": {
+                "ticket": "001"
+              },
+              "origins": [
+                {
+                  "row_id": "r000001",
+                  "source_digest": "8d77b696b900e493441c8d361109bef92f0c51c0c33eb014885aa864176ef2fa"
+                }
+              ],
+              "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+              "source_row_id": "r000001"
+            },
+            "prompt": "### Instruction:\n根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。\n\n### Input:\n客户首次原话: 屏幕碎了\n\n### Response:\n",
+            "expected": "硬件",
+            "output": "物流\n### Explanation:\n客户说的屏幕碎了，属于硬件问题，属于物流售后类别。\n\n### Input:\n客户首次原话: 电池没",
+            "status": "truncated",
+            "correct": false,
+            "field_scores": {},
+            "truncated": true,
+            "generated_tokens": 32,
+            "error": "达到生成长度限制，输出可能不完整；未作为成功答案。"
+          }
+        ],
+        "errors": [],
+        "metrics": {
+          "total": 1,
+          "scored": 0,
+          "generated": 1,
+          "scorable_coverage": 0.0,
+          "generation_coverage": 1.0,
+          "exact_match": 0.0,
+          "field_accuracy": {}
+        }
+      },
+      {
+        "label": "second_sft",
+        "requested_model": {
+          "label": "second_sft",
+          "base_model": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "adapter_path": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model",
+          "revision": null
+        },
+        "identity": {
+          "base": {
+            "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "files": {
+              "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+              "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+              "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+              "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+              "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+              "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+              "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+              "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+            },
+            "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1"
+          },
+          "adapter": {
+            "directory": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-6ceaae37d516434bbb05b54959118fa9/model",
+            "files": {
+              "adapter_config.json": "ee5b022ddc28e657458f89fe5324ca83d558ada461aea8d8fc632ca212d1899c",
+              "adapter_model.safetensors": "cd06fb5beb1759ea9998c9c93563c53cd2e08d82976dc28107e2273f20f2068a",
+              "tokenizer.json": "4ebc61ca942af8e084a5c98257c3c21042d76a2e8c8324fc242fd19976cb987a",
+              "tokenizer_config.json": "1cc816812993bff176eb4f7495433b736f06fba9b6e7b05cac7b4a1780650c95",
+              "workbench_manifest.json": "3464041cafd3dcf83d69739c6f5e63533fa7887d79e869a9cf3eba075e02f254",
+              "workbench_metrics.json": "22d7fa533f34dc2d76e215947de84e3ccc58d1e615efa3b549bdc4f65aeb3385"
+            },
+            "content_digest": "9cf97d08fbdaaf7556a6dcb723171f8563cff5e4f1d17102757c151f842a93e9"
+          }
+        },
+        "rows": [
+          {
+            "index": 0,
+            "source": {
+              "evaluation_case_id": "0ad201b98807fd2114390574ca8f9121bab90b361b7d672f33f3eb0d07e32c98",
+              "evaluation_scored": true,
+              "group": {
+                "ticket": "001"
+              },
+              "origins": [
+                {
+                  "row_id": "r000001",
+                  "source_digest": "8d77b696b900e493441c8d361109bef92f0c51c0c33eb014885aa864176ef2fa"
+                }
+              ],
+              "source_digest": "07419bb00b89f218362fcb12a00a4dbbf0f2b0a846cee13a1c8582c27a55bc16",
+              "source_row_id": "r000001"
+            },
+            "prompt": "### Instruction:\n根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。\n\n### Input:\n客户首次原话: 屏幕碎了\n\n### Response:\n",
+            "expected": "硬件",
+            "output": "硬件\n### Explanation:\n客户说的屏幕碎了，属于硬件问题，因为屏幕是硬件组件。物流问题通常涉及包裹损坏、延误等，",
+            "status": "truncated",
+            "correct": false,
+            "field_scores": {},
+            "truncated": true,
+            "generated_tokens": 32,
+            "error": "达到生成长度限制，输出可能不完整；未作为成功答案。"
+          }
+        ],
+        "errors": [],
+        "metrics": {
+          "total": 1,
+          "scored": 0,
+          "generated": 1,
+          "scorable_coverage": 0.0,
+          "generation_coverage": 1.0,
+          "exact_match": 0.0,
+          "field_accuracy": {}
+        }
+      }
+    ],
+    "notes": [
+      "全部固定开发评测题纳入分母，包括生成失败与截断；独立测试集不用于此对照或自动选参。",
+      "仅固定套件的评分题纳入分母；同组新增保留行不悄悄扩充评分题。"
+    ]
+  },
+  "limitations": [
+    "开发集仅一条，无法建立业务收益结论",
+    "增加样本同时增加训练步数，不能孤立归因于覆盖面",
+    "本次确认和决策由集成测试驱动，真实产品流程需要用户确认"
+  ]
+}

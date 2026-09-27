@@ -1,0 +1,511 @@
+"""UI flows run without GPU/MLflow and use the same production intake service."""
+
+import io
+import json
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("streamlit")
+from streamlit.testing.v1 import AppTest
+
+from src.workbench.intake_service import IntakeService, next_action
+from tests.unit.test_data_intake import CSV, analysis, model_for
+
+PAGE = Path(__file__).resolve().parents[2] / "ui/pages/07_Data_Intake.py"
+
+
+@pytest.fixture()
+def data_page(tmp_path, monkeypatch):
+    import ui.config
+
+    for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
+        monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+    service = IntakeService(tmp_path / "outputs/workbench/intake")
+    session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
+    return service, session, AppTest.from_file(str(PAGE), default_timeout=20)
+
+
+def button(page, label):
+    return next(b for b in page.button if b.label == label)
+
+
+def test_open_task_analyze_confirm_and_return_to_new(data_page, monkeypatch):
+    import src.agent.intake
+
+    service, session, page = data_page
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    assert not page.exception
+    assert any(area.label == "希望模型完成什么业务工作？" for area in page.text_area)
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    button(page, "联合分析目标与数据").click().run()
+    assert not page.exception
+    assert any(s.value == "真实转换预览" for s in page.subheader)
+    assert len(page.metric) == 4
+    assert button(page, "确认当前转换含义").disabled
+    next(c for c in page.checkbox if c.label.startswith("已核对预览")).check().run()
+    button(page, "确认当前转换含义").click().run()
+    assert not page.exception
+    assert next_action(service.load(session.session_id)) == "awaiting_full_data"
+    assert any("尚未认定可以正式训练" in message.value for message in page.success)
+    button(page, "新建数据任务").click().run()
+    assert not page.exception
+    assert any(area.label == "希望模型完成什么业务工作？" for area in page.text_area)
+
+
+def test_business_question_answer_survives_analysis_and_clears_widget(data_page, monkeypatch):
+    import src.agent.intake
+
+    service, session, page = data_page
+    pending = analysis(
+        recipe=None,
+        questions=[
+            {"question_id": "q", "question": "类别由谁审核？", "why": "需要可信的监督答案来源。"}
+        ],
+    )
+    service.apply_analysis(session, pending)
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert any("类别由谁审核" in w.value for w in page.warning)
+    next(t for t in page.text_area if t.label == "回答问题或修正理解").input(
+        "类别由专门质检人员审核。"
+    )
+    button(page, "根据补充说明重新分析").click().run()
+    assert not page.exception
+    assert service.load(session.session_id).answers[-1]["answer"] == "类别由专门质检人员审核。"
+    assert next(t for t in page.text_area if t.label == "回答问题或修正理解").value == ""
+
+
+def test_remote_service_requires_data_consent_in_ui(data_page):
+    service, session, page = data_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(t for t in page.text_input if t.label == "模型服务 API 地址").input(
+        "https://example.test/v1"
+    ).run()
+    next(t for t in page.text_input if t.label == "支持工具调用的模型名称").input("model")
+    button(page, "联合分析目标与数据").click().run()
+    assert not page.exception
+    assert any("需先允许" in error.value for error in page.error)
+    assert service.load(session.session_id).analysis is None
+
+
+def probe_client(monkeypatch):
+    import src.agent.intake
+
+    requests = []
+
+    class Probe:
+        def __init__(self, base_url, model, api_key, **kwargs):
+            requests.append({"base_url": base_url, "model": model, "api_key": api_key, **kwargs})
+
+        def complete(self, messages, tools):
+            requests[-1]["messages"] = messages
+            return {
+                "tool_calls": [
+                    {"function": {"name": "connection_check", "arguments": '{"ok": true}'}}
+                ]
+            }
+
+    monkeypatch.setattr(src.agent.intake, "CompatibleChatClient", Probe)
+    return requests
+
+
+def test_configure_before_task_and_save_without_credentials(data_page, monkeypatch, tmp_path):
+    _, _, page = data_page
+    requests = probe_client(monkeypatch)
+    page.run()
+    page.selectbox(key="agent_provider").select("glm-coding").run()
+    assert not page.exception
+    assert "coding" in page.text_input(key="agent_base_url").value
+    page.text_input(key="agent_api_key").input("test-session-secret").run()
+    button(page, "测试模型连接").click().run()
+    assert requests[-1]["api_key"] == "test-session-secret"
+    assert "客户" not in json.dumps(requests[-1]["messages"], ensure_ascii=False)
+    assert not page.checkbox(key="agent_remote_consent").value
+    button(page, "保存模型配置").click().run()
+    path = tmp_path / "outputs/workbench/agent-settings.json"
+    saved = json.loads(path.read_text())
+    assert set(saved) == {"provider", "base_url", "model"}
+    assert "test-session-secret" not in path.read_text()
+    reopened = AppTest.from_file(str(PAGE), default_timeout=20).run()
+    assert not reopened.exception
+    assert reopened.selectbox(key="agent_provider").value == "glm-coding"
+    assert reopened.text_input(key="agent_api_key").value == ""
+    assert not reopened.checkbox(key="agent_remote_consent").value
+
+
+def test_switch_provider_and_endpoint_clear_key_and_consent(data_page, monkeypatch):
+    _, _, page = data_page
+    requests = probe_client(monkeypatch)
+    page.run()
+    page.selectbox(key="agent_provider").select("glm-coding").run()
+    page.text_input(key="agent_api_key").input("first-provider-secret").run()
+    page.checkbox(key="agent_remote_consent").check().run()
+    page.selectbox(key="agent_provider").select("glm").run()
+    assert page.text_input(key="agent_api_key").value == ""
+    assert not page.checkbox(key="agent_remote_consent").value
+    button(page, "测试模型连接").click().run()
+    assert requests[-1]["api_key"] == ""
+    page.text_input(key="agent_api_key").input("second-provider-secret").run()
+    page.checkbox(key="agent_remote_consent").check().run()
+    page.text_input(key="agent_base_url").input("https://different.example/v1").run()
+    assert page.text_input(key="agent_api_key").value == ""
+    assert not page.checkbox(key="agent_remote_consent").value
+    button(page, "测试模型连接").click().run()
+    assert requests[-1]["api_key"] == ""
+    assert not page.exception
+
+
+def test_environment_key_is_bound_to_initial_provider_and_endpoint(data_page, monkeypatch):
+    _, _, page = data_page
+    monkeypatch.setenv("TUNESMITH_AGENT_PROVIDER", "glm-coding")
+    monkeypatch.setenv("TUNESMITH_AGENT_API_KEY", "test-environment-secret")
+    requests = probe_client(monkeypatch)
+    page.run()
+    assert page.text_input(key="agent_api_key").value == ""
+    button(page, "测试模型连接").click().run()
+    assert requests[-1]["api_key"] == "test-environment-secret"
+    page.text_input(key="agent_base_url").input("https://another.example/v1").run()
+    button(page, "测试模型连接").click().run()
+    assert requests[-1]["api_key"] == ""
+    page.selectbox(key="agent_provider").select("glm").run()
+    button(page, "测试模型连接").click().run()
+    assert requests[-1]["api_key"] == ""
+    assert not page.exception
+
+
+def upload_full_file(monkeypatch, contents):
+    import streamlit
+
+    original = streamlit.file_uploader
+    uploaded = io.BytesIO(contents)
+    uploaded.name = "full.csv"
+
+    def uploader(label, *args, **kwargs):
+        return uploaded if label == "提供本次任务的全量文件" else original(label, *args, **kwargs)
+
+    monkeypatch.setattr(streamlit, "file_uploader", uploader)
+
+
+def test_full_upload_review_and_confirm(data_page, monkeypatch):
+    from tests.unit.test_full_data import FULL
+
+    service, session, page = data_page
+    session = service.apply_analysis(session, analysis())
+    session = service.confirm(session.session_id, session.revision)
+    upload_full_file(monkeypatch, FULL)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    button(page, "按已确认方案验证全量数据").click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert next_action(current) == "review_full_data"
+    assert current.source == session.source
+    assert button(page, "确认全量数据含义").disabled
+    next(c for c in page.checkbox if c.label.startswith("已核对全量报告")).check().run()
+    button(page, "确认全量数据含义").click().run()
+    assert next_action(service.load(session.session_id)) == "awaiting_dataset_split"
+    assert any("独立训练与评测分区" in message.value for message in page.success)
+
+
+def test_full_upload_blockers_cannot_be_confirmed(data_page, monkeypatch):
+    service, session, page = data_page
+    session = service.apply_analysis(session, analysis())
+    session = service.confirm(session.session_id, session.revision)
+    upload_full_file(monkeypatch, "编号,客户描述,类别,处理结果\n10,破损,,补发\n".encode())
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    button(page, "按已确认方案验证全量数据").click().run()
+    assert not page.exception
+    assert next_action(service.load(session.session_id)) == "needs_full_data_revision"
+    assert any("缺少监督答案" in message.value for message in page.error)
+    assert not any(b.label == "确认全量数据含义" for b in page.button)
+
+
+def test_full_initial_source_reuse_and_business_feedback_invalidation(data_page):
+    service, _, page = data_page
+    session = service.create("分类", "full.csv", CSV, scope="full")
+    session = service.apply_analysis(session, analysis())
+    session = service.confirm(session.session_id, session.revision)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    button(page, "验证首次上传的全量文件").click().run()
+    assert next_action(service.load(session.session_id)) == "review_full_data"
+    next(t for t in page.text_area if t.label == "回答问题或修正理解").input(
+        "类别含义需要修正"
+    ).run()
+    button(page, "保存业务补充，稍后分析").click().run()
+    assert not page.exception
+    assert service.load(session.session_id).full_data.status == "stale"
+    assert any("全量报告已失效" in message.value for message in page.warning)
+    assert not any(b.label == "确认全量数据含义" for b in page.button)
+
+
+@pytest.mark.parametrize("groups", [["编号"], []])
+def test_materialize_actual_partitions_after_full_confirmation(data_page, groups):
+    from tests.unit.test_full_data import FULL, approved
+
+    service, _, page = data_page
+    session = approved(service, group_columns=groups)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    if not groups:
+        assert button(page, "生成数据集版本").disabled
+        next(c for c in page.checkbox if c.label.startswith("已确认每行是独立")).check().run()
+    button(page, "生成数据集版本").click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert next_action(current) == "ready_for_training_preflight"
+    assert current.dataset.statistics["row_counts"] == {"train": 1, "validation": 1, "test": 1}
+    assert current.dataset.data_config["validation_split"] == 0
+    assert any("独立数据分区已生成" in message.value for message in page.success)
+
+
+def test_add_original_source_preserves_business_description(data_page, monkeypatch):
+    import streamlit
+
+    service, session, page = data_page
+    original = streamlit.file_uploader
+    upload = io.BytesIO("编号,审核类别\n001,质量\n".encode())
+    upload.name = "labels.csv"
+    monkeypatch.setattr(
+        streamlit,
+        "file_uploader",
+        lambda label, *a, **kw: (
+            upload if label == "上传补充原始资料" else original(label, *a, **kw)
+        ),
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(t for t in page.text_input if t.label == "补充资料名称").input("labels")
+    next(t for t in page.text_area if t.label == "这份资料的用途和关联关系").input(
+        "人工审核标签，通过编号关联。"
+    )
+    button(page, "保存补充资料").click().run()
+    assert not page.exception
+    saved = service.load(session.session_id)
+    assert set(saved.sources) == {"main", "labels"}
+    assert saved.sources["main"].digest == session.source.digest
+    assert "人工审核标签" in saved.answers[-1]["answer"]
+
+
+def test_combined_sources_show_lineage_and_accept_separate_full_uploads(data_page, monkeypatch):
+    import streamlit
+
+    from tests.unit.test_multisource_cli import FULL_LABELS, FULL_MAIN, composition_session
+
+    service, _, page = data_page
+    session = composition_session(service)
+    original = streamlit.file_uploader
+    uploads = {}
+    for alias, contents in (("main", FULL_MAIN), ("labels", FULL_LABELS)):
+        value = io.BytesIO(contents)
+        value.name = f"{alias}.csv"
+        uploads[f"全量原始资料：{alias}"] = value
+    monkeypatch.setattr(
+        streamlit,
+        "file_uploader",
+        lambda label, *a, **kw: uploads[label] if label in uploads else original(label, *a, **kw),
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any(item.value == "资料组合与处理结果" for item in page.subheader)
+    assert not any(b.label == "验证首次上传的全量文件" for b in page.button)
+    button(page, "按组合方案验证全部全量资料").click().run()
+    assert not page.exception
+    saved = service.load(session.session_id)
+    assert set(saved.full_data.sources) == {"main", "labels"}
+    assert saved.full_data.preview.counts["ready"] == 3
+    assert any(item.label == "全量资料组合过程与原始来源" for item in page.expander)
+
+
+def test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failures(
+    data_page, monkeypatch
+):
+    import src.workbench.training_preflight as preflight
+    from tests.unit.test_full_data import FULL, approved
+
+    service, _, page = data_page
+    session = approved(service)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
+    calls = []
+    token = object()
+
+    def load(path, *, local_files_only):
+        calls.append((path, local_files_only))
+        return token
+
+    def report(current, tokenizer, max_length):
+        assert tokenizer is token
+        assert max_length == 6
+        return {
+            "status": "blocked",
+            "scope_note": "UI protocol fixture",
+            "issues": [
+                {
+                    "code": "answer_lost",
+                    "severity": "blocking",
+                    "message": "答案被截断",
+                    "split": "train",
+                    "row_ids": ["r000001"],
+                }
+            ],
+            "splits": {"train": {"answer_lost_rows": 1}},
+            "rows": [{"row_id": "r000001", "answer_supervised_tokens": 0}],
+            "tokenizer": {"name_or_path": "local-fixture"},
+        }
+
+    monkeypatch.setattr(preflight, "load_local_tokenizer", load)
+    monkeypatch.setattr(preflight, "preflight_dataset", report)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert calls == []
+    next(t for t in page.text_input if t.label == "本地 tokenizer 目录或已缓存标识").input(
+        "/tmp/local-fixture"
+    )
+    next(n for n in page.number_input if n.label == "训练最大 token 长度").set_value(6)
+    button(page, "检查实际截断与答案保留").click().run()
+    assert not page.exception
+    assert calls == [("/tmp/local-fixture", True)]
+    assert any("答案被截断" in entry.value for entry in page.error)
+    assert any("r000001" in entry.value for entry in page.caption)
+    page.run()
+    assert len(calls) == 1
+
+
+def test_adapter_evidence_shows_failed_full_validation_without_executing_source(data_page):
+    from tests.unit.test_full_data import FULL, approved
+
+    service, _, page = data_page
+    session = approved(service)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session.analysis.adapter = {
+        "source_code": 'raise AssertionError("UI must never execute adapter source")',
+        "new_columns": ["parsed_category"],
+        "config": {},
+        "examples": [],
+    }
+    session.adapter_report = {
+        "validation": {
+            "status": "passed",
+            "backend": "macos",
+            "source_digest": "code-digest",
+            "cases_digest": "cases-digest",
+            "limits": {"memory_enforcement": "sampled_rss"},
+            "cases": [
+                {"name": "真实样例", "kind": "business", "passed": True},
+                {"name": "缺失字段反例", "kind": "counterexample", "passed": True},
+            ],
+        },
+        "spec_digest": "spec-digest",
+        "origins": {"r000001": [{"source_digest": session.source.digest, "row_id": "r000001"}]},
+    }
+    session.full_data.adapter_report = {
+        "validation": {
+            "status": "failed",
+            "backend": "macos",
+            "cases": [
+                {
+                    "name": "全量新增格式",
+                    "kind": "business",
+                    "passed": False,
+                    "error": "无法解析新格式",
+                }
+            ],
+        }
+    }
+    service._save(session, session.revision)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any(entry.value == "受限适配验证结果" for entry in page.subheader)
+    assert any(entry.value == "全量受限适配验证结果" for entry in page.subheader)
+    assert any("隔离测试未通过" in entry.value for entry in page.error)
+    assert any("实际隔离后端：macos" in entry.value for entry in page.caption)
+    assert any("UI must never execute" in entry.value for entry in page.code)
+    rows = [frame.value for frame in page.dataframe]
+    assert any("结果" in frame and "未通过" in frame["结果"].values for frame in rows)
+
+
+def _preview_csv(count, *, missing_from=None):
+    return (
+        "编号,客户描述,类别,处理结果\n"
+        + "".join(
+            f"{index:03d},独立问题{index},{'' if missing_from is not None and index >= missing_from else '质量'},补发\n"
+            for index in range(1, count + 1)
+        )
+    ).encode()
+
+
+def test_sample_problem_after_twenty_rows_is_visible_and_has_concrete_label_next_step(data_page):
+    service, _, page = data_page
+    session = service.create("判断类别", "sample.csv", _preview_csv(25, missing_from=25))
+    session = service.apply_analysis(session, analysis())
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert next_action(service.load(session.session_id)) == "needs_labels"
+    assert any(item.label == "r000025 · 缺少答案" for item in page.expander)
+    assert any("独立问题25" in item.value for item in page.code)
+    assert any(
+        "答案（字段：类别）" in item.value and "原始资料与补充文件" in item.value
+        for item in page.info
+    )
+    selector = next(item for item in page.selectbox if item.label == "样例记录筛选")
+    selector.select("缺少答案").run()
+    row_labels = [item.label for item in page.expander if item.label.startswith("r000")]
+    assert row_labels == ["r000025 · 缺少答案"]
+    assert not any(item.label == "确认当前转换含义" for item in page.button)
+
+
+def test_sample_pagination_confirms_only_visible_rows_and_resets_acknowledgment(data_page):
+    service, _, page = data_page
+    session = service.create("判断类别", "sample.csv", _preview_csv(25))
+    session = service.apply_analysis(session, analysis())
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(item for item in page.checkbox if item.label.startswith("已核对预览")).check().run()
+    next(item for item in page.number_input if item.label == "样例预览页码").set_value(2).run()
+    assert not page.exception
+    assert button(page, "确认当前转换含义").disabled
+    assert any(item.label.startswith("r000025") for item in page.expander)
+    assert not any(item.label.startswith("r000001") for item in page.expander)
+    next(item for item in page.checkbox if item.label.startswith("已核对预览")).check().run()
+    button(page, "确认当前转换含义").click().run()
+    assert not page.exception
+    assert {row.row_id for row in service.load(session.session_id).confirmed_examples} == {
+        f"r{index:06d}" for index in range(21, 26)
+    }
+
+
+def test_full_problem_pagination_reaches_all_issue_rows_and_points_to_full_reupload(data_page):
+    from tests.unit.test_full_data import approved
+
+    service, _, page = data_page
+    session = approved(service)
+    session = service.validate_full_data(
+        session.session_id, session.revision, "full.csv", _preview_csv(45, missing_from=21)
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(item for item in page.selectbox if item.label == "全量记录筛选").select("缺少答案").run()
+    next(item for item in page.number_input if item.label == "全量预览页码").set_value(2).run()
+    assert not page.exception
+    assert any(item.label == "全量 r000045 · 缺少答案" for item in page.expander)
+    assert any("独立问题45" in item.value for item in page.code)
+    assert any("全量数据验证」重新上传" in item.value for item in page.info)
+    assert not any(item.label == "确认全量数据含义" for item in page.button)

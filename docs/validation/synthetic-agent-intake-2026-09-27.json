@@ -1,0 +1,517 @@
+{
+  "date": "2026-09-27",
+  "scope": "One actual GLM proposal on synthetic data, executed unchanged through real local preparation; no model-quality claim.",
+  "session_id": "cd0ffd458e024e3da2436e8cf7267c35",
+  "agent_model": "glm-5.3",
+  "analysis": {
+    "task": {
+      "goal": "虚构试点：以披露文本（发布时公开可得）预测该披露后未来20个模拟交易日价格是否上涨（split_adjusted_close口径，价格大于基准为上涨），验证软件流程，不代表真实行情",
+      "usage_input": "公司代码、披露公开时间（UTC）、披露正文（三者均为披露发布时可得）",
+      "desired_output": "单一类别答案forecast_direction：上涨/未上涨（价格大于基准为上涨，否则未上涨）",
+      "row_meaning": "一行=一次虚构公司披露事件（event_id唯一），携带派生的未来标签字段；按event_id分组",
+      "supervision_source": "forecast_labels算子从prices（symbol/close_at/adjusted，split_adjusted_close口径）与calendar（close_at收盘日历）对每个事件在公开时间后的首个收盘至第20个会话收盘派生的方向标签",
+      "success_criteria": [
+        "标签全部由prices.split_adjusted_close与显式模拟收盘日历按20会话窗口真实派生，无人工补造",
+        "未成熟标签（label_not_observed）保留原行并在时间分区明确排除",
+        "输入仅含预测时点（published_at次一收盘21:00Z）可获得的ticker/公开时间/正文，未来价格、收益、方向、状态与label_end_at不进入输入",
+        "时间分区边界满足available_at<=prediction_at<label_end_at且验证/测试起点递增",
+        "全量数据上传重跑后各时间分区类别样本充足（阈值待业务确认），评测按时间分区独立进行"
+      ],
+      "field_roles": [
+        {
+          "column": "event_id",
+          "role": "group",
+          "reason": "业务事件分组键，样例中每事件一行；按用户要求设为group并写入recipe.group_columns",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "ticker",
+          "role": "input",
+          "reason": "披露发布时已知的公司代码，作为输入上下文",
+          "available_at_prediction": true,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "published_at",
+          "role": "input",
+          "reason": "虚构披露的明确公开时间（UTC），发布时点可获得，同时作为temporal_split的available_at依据",
+          "available_at_prediction": true,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "text",
+          "role": "input",
+          "reason": "披露正文，发布时可得，是预测的核心输入",
+          "available_at_prediction": true,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_prediction_at",
+          "role": "metadata",
+          "reason": "由公开时间推导的预测时点（次一模拟收盘21:00Z），仅用于时间切分与回测，不得进入模型输入",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_label_end_at",
+          "role": "metadata",
+          "reason": "20个模拟交易会话后的标签窗口结束时间，事后信息，仅用于切分与标签成熟检查",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_reference_price",
+          "role": "unused",
+          "reason": "基准价格（split_adjusted_close），事后价格信息，禁止进入输入",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_target_price",
+          "role": "unused",
+          "reason": "第20会话目标价格，事后信息，禁止进入输入",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_realized_return",
+          "role": "unused",
+          "reason": "事后实现收益，禁止进入输入",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_direction",
+          "role": "target",
+          "reason": "监督目标：上涨/未上涨，由forecast_labels按行情口径派生；未成熟事件为空并排除",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001"
+          ]
+        },
+        {
+          "column": "forecast_status",
+          "role": "metadata",
+          "reason": "标签成熟状态（ready/label_not_observed），用于排除未成熟行，不进入模型输入",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000009"
+          ]
+        }
+      ]
+    },
+    "findings": [
+      {
+        "kind": "observed",
+        "message": "9条虚构事件全部通过 ticker↔symbol 关联到prices（180行拆股调整收盘价）与calendar（180行每两天一条的模拟收盘日历，close_at与prices一致）；forecast_labels按20个日历会话派生标签，8条status=ready（上涨3、未上涨5），1条（event-135）status=label_not_observed，方向为空并保留排除，未补造。",
+        "evidence_row_ids": [
+          "r000001",
+          "r000004",
+          "r000009"
+        ]
+      },
+      {
+        "kind": "observed",
+        "message": "按给定时间边界切分：训练区（prediction_at<2023-04-11T21:00Z）为event-1/5/35共3条且全部为上涨；验证区（2023-04-11至2023-07-20）为event-51/55/85共3条且全部为未上涨；测试区为event-101/105（ready，均未上涨）和event-135（未成熟排除）。样例内训练/验证/测试的类别分布完全单边，无法据此训练或评测，仅验证流程。",
+        "evidence_row_ids": [
+          "r000001",
+          "r000003",
+          "r000004",
+          "r000006",
+          "r000007",
+          "r000008",
+          "r000009"
+        ]
+      },
+      {
+        "kind": "observed",
+        "message": "样例中价格adjusted呈周期循环（100~129、每值6次），标签由事件时点落在价格周期中的位置决定；披露文本中收入单调递增（1001→1135，单位美元，未做换算）。文本数值与方向标签的关系未经因果验证。",
+        "evidence_row_ids": [
+          "r000001",
+          "r000009"
+        ]
+      },
+      {
+        "kind": "hypothesis",
+        "message": "价格周期性可能导致模型学到时间/日历规律而非披露内容；且文本收入数字单调增长而标签取决于价格周期相位，披露文本与标签间的可学关联可能很弱。需全量数据验证，样例不足以下结论。",
+        "evidence_row_ids": []
+      },
+      {
+        "kind": "observed",
+        "message": "训练区event-35的标签窗口（label_end_at=2023-04-21T21:00Z）晚于验证起点2023-04-11T21:00Z，即训练行标签观察期与验证区输入期存在时间重叠；预览工具按prediction_at分区未将其标为问题，是否额外要求训练集标签窗口不跨验证起点需业务确认（见问题Q1）。",
+        "evidence_row_ids": [
+          "r000003"
+        ]
+      },
+      {
+        "kind": "needs_full_data",
+        "message": "当前仅9条事件样例（full_data_available=false）；需上传覆盖整个观察期（至2023-10-08T21:00Z）的全量filings/prices/calendar后重跑同一组合与配方，才能形成可训练数据集；观察期之后（如event-135，label_end=2023-11-07）标签自然成熟后随新观察截止时间补齐，不得提前伪造。",
+        "evidence_row_ids": [
+          "r000009"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "question_id": "Q1",
+        "question": "训练/验证切分是否要求训练集的标签观察窗口（label_end_at）完全早于验证起点？",
+        "why": "样例中event-35的prediction_at在训练区但label_end_at（2023-04-21T21:00Z）晚于验证起点（2023-04-11T21:00Z）。选择后者会减少可训练行数，影响全量方案与分区统计。",
+        "options": [
+          "仅按prediction_at（forecast_prediction_at）分区，允许训练行标签窗口延入验证期（当前预览口径）",
+          "额外要求训练集行label_end_at早于验证起点，跨边界训练行（如样例event-35）排除"
+        ],
+        "blocks_confirmation": false
+      }
+    ],
+    "recipe": {
+      "instruction": "虚构试点：根据公司披露文本（发布时公开可得），预测该披露后未来20个模拟交易日（按显式模拟收盘日历）价格相对基准是否上涨；目标为二分类forecast_direction（上涨/未上涨），价格口径为prices.split_adjusted_close，按event_id分组，按时间切分。",
+      "inputs": [
+        {
+          "column": "ticker",
+          "label": "公司代码",
+          "value_kind": "categorical",
+          "transforms": [
+            {
+              "operation": "strip",
+              "old": "",
+              "new": "",
+              "mapping": {}
+            }
+          ]
+        },
+        {
+          "column": "published_at",
+          "label": "披露公开时间（UTC，ISO-8601）",
+          "value_kind": "unspecified",
+          "transforms": [
+            {
+              "operation": "strip",
+              "old": "",
+              "new": "",
+              "mapping": {}
+            }
+          ]
+        },
+        {
+          "column": "text",
+          "label": "披露正文",
+          "value_kind": "open_text",
+          "transforms": [
+            {
+              "operation": "strip",
+              "old": "",
+              "new": "",
+              "mapping": {}
+            }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "column": "forecast_direction",
+          "label": "未来20个模拟交易日方向",
+          "value_kind": "categorical",
+          "transforms": []
+        }
+      ],
+      "output_format": "text",
+      "allow_multiple_targets": false,
+      "multiple_targets_reason": "",
+      "group_columns": [
+        "event_id"
+      ],
+      "split_rationale": "预测任务须按时间切分防泄漏：训练用验证起点前的事件，验证/测试用其后窗口；窗口未成熟标签（label_not_observed）保留排除，不补造。",
+      "temporal_split": {
+        "available_at_column": "published_at",
+        "prediction_at_column": "forecast_prediction_at",
+        "label_end_at_column": "forecast_label_end_at",
+        "validation_start": "2023-04-11T21:00:00+00:00",
+        "test_start": "2023-07-20T21:00:00+00:00",
+        "observation_end": "2023-10-08T21:00:00+00:00"
+      }
+    },
+    "composition": {
+      "base_source": "main",
+      "steps": [
+        {
+          "available_at_column": "published_at",
+          "calendar_close_at_column": "close_at",
+          "calendar_source": "calendar",
+          "event_id_column": "event_id",
+          "horizon_sessions": 20,
+          "observation_end": "2023-10-08T21:00:00+00:00",
+          "operation": "forecast_labels",
+          "prefix": "forecast_",
+          "price_basis": "split_adjusted_close",
+          "price_close_at_column": "close_at",
+          "price_source": "prices",
+          "price_symbol_column": "symbol",
+          "price_value_column": "adjusted",
+          "symbol_column": "ticker"
+        }
+      ]
+    },
+    "adapter": null,
+    "capability_gaps": [],
+    "training_approach": "暂定指令微调二分类：输入由ticker/公开时间/披露正文渲染，输出单一类别答案\"上涨/未上涨\"；数据经forecast_labels组合派生监督信号，按temporal_split（训练<2023-04-11T21:00Z、验证2023-04-11~2023-07-20、测试≥2023-07-20T21:00Z）划分，未成熟标签排除。理由：目标为离散方向分类，文本输入适合指令微调；样例仅8条可用标签且类别在时间上单边分布，不足以训练或评测，此配置需在全量数据重跑核验后执行，评测指标与类平衡策略待全量确认。",
+    "next_steps": [
+      "确认Q1的跨边界标签窗口口径（仅按prediction_at切分，还是训练集要求label_end_at早于验证起点）；本试点样例按前一口径预览通过",
+      "上传全量main/prices/calendar（覆盖完整观察期至2023-10-08T21:00:00+00:00），重跑与提交完全一致的forecast_labels组合，核对全量的漏匹配、缺失价格与未成熟标签数量",
+      "对全量重跑preview_recipe：核对各时间分区（训练<2023-04-11T21:00Z、验证2023-04-11~2023-07-20、测试≥2023-07-20）样本量与上涨/未上涨类别均衡性，若单边则与业务讨论类平衡或阈值，不靠加训练轮数解决",
+      "观察截止时间推进后（事件窗口全部成熟）重新生成标签补齐label_not_observed行，不人工补造",
+      "确认全量配方通过后，用同一时间分区做指令微调与回测（类别指标+固定阈值），固定随机种子并保留forecast_*字段仅用于标签与回测，绝不进入训练输入"
+    ]
+  },
+  "tool_trace": [
+    {
+      "tool": "inspect_source",
+      "ok": true
+    },
+    {
+      "tool": "inspect_source",
+      "ok": true
+    },
+    {
+      "tool": "inspect_source",
+      "ok": true
+    },
+    {
+      "tool": "list_sources",
+      "ok": true
+    },
+    {
+      "tool": "preview_composition",
+      "ok": true
+    },
+    {
+      "tool": "inspect_rows",
+      "ok": true
+    },
+    {
+      "tool": "profile_data",
+      "ok": true
+    },
+    {
+      "tool": "preview_recipe",
+      "ok": true
+    },
+    {
+      "tool": "submit_analysis",
+      "ok": true
+    }
+  ],
+  "test_driver_confirmation": true,
+  "not_customer_acceptance": true,
+  "derived_labels": [
+    "上涨",
+    "上涨",
+    "上涨",
+    "未上涨",
+    "未上涨",
+    "未上涨",
+    "未上涨",
+    "未上涨",
+    null
+  ],
+  "abnormal_inputs": {
+    "missing_timestamp": {
+      "blocked": true,
+      "issues": [
+        "时间不是有效 ISO 时间戳；不能用报告期或日期替代公开时间。"
+      ]
+    },
+    "missing_price": {
+      "blocked": true,
+      "issues": [
+        "预测窗口缺少1条行情（首个2023-01-21T21:00:00+00:00）；不跨过缺失交易日计算。",
+        "预测窗口缺少1条行情（首个2023-01-21T21:00:00+00:00）；不跨过缺失交易日计算。"
+      ]
+    }
+  },
+  "dataset_version": "d5478a066eba164ca11dc59aeb31b39640e426671f76f7ee9502a9bafa4cc0c7",
+  "counts": {
+    "train": 2,
+    "validation": 2,
+    "test": 2
+  },
+  "exclusions": [
+    {
+      "row_id": "r000003",
+      "reason": "label_window_crosses_validation_start"
+    },
+    {
+      "row_id": "r000006",
+      "reason": "label_window_crosses_test_start"
+    },
+    {
+      "row_id": "r000009",
+      "reason": "label_not_mature"
+    }
+  ],
+  "preflight": {
+    "status": "passed",
+    "dataset_name": "intake-cd0ffd458e024e3da2436e8cf7267c35",
+    "version": "d5478a066eba164ca11dc59aeb31b39640e426671f76f7ee9502a9bafa4cc0c7",
+    "source_digest": "bfc0e9786c660e69e849a42ba42a6ee0b25e9dba9e15cb3315215f8c8fcee8e2",
+    "recipe_digest": "09b416d9df784ff9e8843ca35f4c340d54bcd1fe27bbfa22bd6eb405e7f3c9c0",
+    "full_confirmed_revision": 5,
+    "max_length": 512,
+    "tokenizer": {
+      "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "is_fast": true,
+      "pad_token_id": 151643,
+      "eos_token_id": 151645,
+      "padding_side": "right",
+      "truncation_side": "right",
+      "model_max_length": 131072,
+      "class": "Qwen2Tokenizer"
+    },
+    "supervision_strategy": "full_prompt_padding_masked",
+    "issues": [
+      {
+        "code": "full_prompt_supervision",
+        "severity": "info",
+        "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+        "split": null,
+        "row_ids": []
+      }
+    ],
+    "splits": {
+      "train": {
+        "rows": 2,
+        "truncated_rows": 0,
+        "answer_lost_rows": 0,
+        "empty_supervision_rows": 0,
+        "unverified_answer_rows": 0,
+        "truncation_ratio": 0.0
+      },
+      "validation": {
+        "rows": 2,
+        "truncated_rows": 0,
+        "answer_lost_rows": 0,
+        "empty_supervision_rows": 0,
+        "unverified_answer_rows": 0,
+        "truncation_ratio": 0.0
+      },
+      "test": {
+        "rows": 2,
+        "truncated_rows": 0,
+        "answer_lost_rows": 0,
+        "empty_supervision_rows": 0,
+        "unverified_answer_rows": 0,
+        "truncation_ratio": 0.0
+      }
+    },
+    "rows": [
+      {
+        "split": "train",
+        "row_id": "r000001",
+        "full_tokens": 152,
+        "input_tokens": 151,
+        "answer_tokens": 1,
+        "kept_tokens": 152,
+        "supervised_tokens": 151,
+        "answer_supervised_tokens": 1,
+        "answer_kept_tokens": 1,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true
+      },
+      {
+        "split": "train",
+        "row_id": "r000002",
+        "full_tokens": 152,
+        "input_tokens": 151,
+        "answer_tokens": 1,
+        "kept_tokens": 152,
+        "supervised_tokens": 151,
+        "answer_supervised_tokens": 1,
+        "answer_kept_tokens": 1,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true
+      },
+      {
+        "split": "validation",
+        "row_id": "r000004",
+        "full_tokens": 154,
+        "input_tokens": 152,
+        "answer_tokens": 2,
+        "kept_tokens": 154,
+        "supervised_tokens": 153,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true
+      },
+      {
+        "split": "validation",
+        "row_id": "r000005",
+        "full_tokens": 154,
+        "input_tokens": 152,
+        "answer_tokens": 2,
+        "kept_tokens": 154,
+        "supervised_tokens": 153,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true
+      },
+      {
+        "split": "test",
+        "row_id": "r000007",
+        "full_tokens": 155,
+        "input_tokens": 153,
+        "answer_tokens": 2,
+        "kept_tokens": 155,
+        "supervised_tokens": 154,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true
+      },
+      {
+        "split": "test",
+        "row_id": "r000008",
+        "full_tokens": 155,
+        "input_tokens": 153,
+        "answer_tokens": 2,
+        "kept_tokens": 155,
+        "supervised_tokens": 154,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true
+      }
+    ],
+    "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。"
+  },
+  "model_trained": false,
+  "real_finance_data_used": false,
+  "training_effect_verified": false,
+  "remaining_agent_issue": "The saved Agent asked a non-blocking optional question about permitting training label windows across validation start. This contradicts the implemented fixed exclusion rule. The unchanged recipe still produced correct 2/2/2 partitions. Subsequent code now provides actual temporal counts and exclusion reasons to the Agent; verified with protocol tests, not another online call.",
+  "context_optimization_note": "Origin-preview compression was implemented after this live process had imported its code; this successful run does not demonstrate that compression fixed network timeouts."
+}

@@ -1,0 +1,257 @@
+{
+  "evidence_type": "local verified training evidence for Agent tools; actual Qwen model and confirmed fictional data",
+  "evidence": {
+    "evaluation_id": "a95801a4e3294d00a22d4dbd6cee22e7",
+    "report_digest": "139822f9c8663924f31d4840835d03966812a254a358b3975e54e1807716a787",
+    "models": [
+      {
+        "model": "base",
+        "status": "not_applicable",
+        "reason": "该评测对象没有微调适配器。"
+      },
+      {
+        "model": "first_sft",
+        "status": "available",
+        "training_run_id": "wb-9b175cec8b6a4fb3903860b38d81d2f7",
+        "config": {
+          "model": {
+            "name": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "quantization_bits": null,
+            "load_in_8bit": false,
+            "trust_remote_code": false,
+            "use_flash_attention": false,
+            "max_length": 256,
+            "device_map": null,
+            "torch_dtype": "bfloat16",
+            "merge_dtype": "bfloat16"
+          },
+          "training": {
+            "output_dir": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-9b175cec8b6a4fb3903860b38d81d2f7/model",
+            "num_epochs": 1,
+            "batch_size": 1,
+            "gradient_accumulation_steps": 2,
+            "learning_rate": 0.0001,
+            "weight_decay": 0.01,
+            "warmup_ratio": 0.03,
+            "lr_scheduler_type": "cosine",
+            "logging_steps": 1,
+            "save_steps": 5,
+            "eval_steps": 5,
+            "save_total_limit": 3,
+            "gradient_checkpointing": true,
+            "gradient_checkpointing_use_reentrant": false,
+            "torch_empty_cache_steps": null,
+            "auto_find_batch_size": false,
+            "train_sampling_strategy": "random",
+            "fp16": false,
+            "bf16": false,
+            "max_grad_norm": 1.0,
+            "seed": 42,
+            "fsdp": null,
+            "fsdp_config": null,
+            "deepspeed_config": null,
+            "auto_scale_batch": false,
+            "use_liger_kernel": false,
+            "neftune_noise_alpha": null,
+            "torch_compile": false,
+            "optim": null,
+            "peak_flops_per_device": null
+          },
+          "lora": {
+            "r": 4,
+            "lora_alpha": 8,
+            "lora_dropout": 0.05,
+            "target_modules": [
+              "q_proj",
+              "v_proj"
+            ],
+            "bias": "none",
+            "task_type": "CAUSAL_LM",
+            "use_dora": false,
+            "use_rslora": false,
+            "init_lora_weights": true,
+            "loftq_bits": 4,
+            "loftq_iter": 1,
+            "lora_ga_direction": "ArB2r",
+            "lora_ga_scale": "stable",
+            "lora_ga_stable_gamma": 16,
+            "lora_ga_calibration_batches": 4,
+            "lora_ga_cache_file": null,
+            "rank_pattern": null,
+            "alpha_pattern": null,
+            "exclude_modules": null
+          },
+          "data": {
+            "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+            "dataset_split": "train",
+            "max_samples": null,
+            "validation_split": 0,
+            "preprocessing_num_workers": 4,
+            "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+            "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+            "format": "alpaca",
+            "dataset_loader": "alpaca"
+          },
+          "logging": {
+            "use_wandb": false,
+            "wandb_project": "qlora-post-training",
+            "wandb_entity": null,
+            "wandb_run_name": null,
+            "use_tensorboard": false,
+            "log_dir": "./outputs/logs",
+            "log_memory": true,
+            "console_level": "INFO",
+            "use_mlflow": true,
+            "mlflow_tracking_uri": "/private/tmp/tunesmith-live-adapter-training-20260926/mlruns",
+            "mlflow_experiment_name": "workbench-sft",
+            "mlflow_run_name": "wb-9b175cec8b6a4fb3903860b38d81d2f7",
+            "register_model": false,
+            "registry_model_name": null,
+            "merge_before_register": true,
+            "registry_stage": "Staging"
+          }
+        },
+        "metrics": {
+          "loss": 4.7051801681518555,
+          "grad_norm": 0.8280063271522522,
+          "learning_rate": 1.4644660940672627e-05,
+          "epoch": 1.0,
+          "step": 5,
+          "eval_loss": 4.608567237854004,
+          "eval_runtime": 0.1275,
+          "eval_samples_per_second": 7.841,
+          "eval_steps_per_second": 7.841,
+          "train_runtime": 4.1585,
+          "train_samples_per_second": 2.405,
+          "train_steps_per_second": 1.202,
+          "total_flos": 21660869591040.0,
+          "train_loss": 4.693957424163818
+        },
+        "preflight": {
+          "status": "passed",
+          "max_length": 256,
+          "supervision_strategy": "full_prompt_padding_masked",
+          "tokenizer": {
+            "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "is_fast": true,
+            "pad_token_id": 151643,
+            "eos_token_id": 151645,
+            "padding_side": "right",
+            "truncation_side": "right",
+            "model_max_length": 131072,
+            "class": "Qwen2Tokenizer"
+          },
+          "splits": {
+            "train": {
+              "rows": 10,
+              "truncated_rows": 0,
+              "answer_lost_rows": 0,
+              "empty_supervision_rows": 0,
+              "unverified_answer_rows": 0,
+              "truncation_ratio": 0.0
+            },
+            "validation": {
+              "rows": 1,
+              "truncated_rows": 0,
+              "answer_lost_rows": 0,
+              "empty_supervision_rows": 0,
+              "unverified_answer_rows": 0,
+              "truncation_ratio": 0.0
+            },
+            "test": {
+              "rows": 1,
+              "truncated_rows": 0,
+              "answer_lost_rows": 0,
+              "empty_supervision_rows": 0,
+              "unverified_answer_rows": 0,
+              "truncation_ratio": 0.0
+            }
+          },
+          "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。",
+          "issues": [
+            {
+              "code": "full_prompt_supervision",
+              "severity": "info",
+              "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+              "split": null,
+              "row_ids": []
+            }
+          ]
+        },
+        "mlflow": {
+          "run_id": null,
+          "status": "unavailable",
+          "tracking_uri": "/private/tmp/tunesmith-live-adapter-training-20260926/mlruns",
+          "experiment_name": "workbench-sft",
+          "run_name": "wb-9b175cec8b6a4fb3903860b38d81d2f7"
+        },
+        "identity": {
+          "evaluation": {
+            "base": {
+              "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+              "files": {
+                "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+                "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+                "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+                "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+                "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+                "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+                "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+                "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+                "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+                "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+              },
+              "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1"
+            },
+            "adapter": {
+              "directory": "/private/tmp/tunesmith-live-adapter-training-20260926/wb-9b175cec8b6a4fb3903860b38d81d2f7/model",
+              "files": {
+                "adapter_config.json": "fe18c423b1086b46381734f89f760adc482af23d99f792df78603ecbd8d21e8e",
+                "adapter_model.safetensors": "c7021f7016aa05f859a27f6cde1da932191705184024d6a55ea4d404fe286492",
+                "tokenizer.json": "4ebc61ca942af8e084a5c98257c3c21042d76a2e8c8324fc242fd19976cb987a",
+                "tokenizer_config.json": "d9bf1d78a80bad5eb65b83c2608910e3be00a9d3250c8153a5a393ad1257e1d6",
+                "workbench_manifest.json": "83a09a506fb0643dd5e47556473158a51205ad526e6884bf78c724eeaed36d91",
+                "workbench_metrics.json": "f9808ecc4e363b4ae4df69e326ee7b1d21bb696722c3c5c4bc6b132a3c983362"
+              },
+              "content_digest": "d58566ac8f640430939b461b7ef99fd1c1ca5bee0549ec73120ad89d37809051"
+            }
+          },
+          "training_base": {
+            "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "config_and_tokenizer_hashes": {
+              "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+              "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+              "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+              "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+              "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+              "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+            },
+            "weights": [
+              {
+                "name": "model-00001-of-00002.safetensors",
+                "size": 3441185608,
+                "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+              },
+              {
+                "name": "model-00002-of-00002.safetensors",
+                "size": 622329984,
+                "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+              }
+            ],
+            "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+          },
+          "base_weight_verification": "content_verified"
+        },
+        "facts": [
+          "适配器与清单内容匹配评测时身份；训练配置、数据版本及成功回执关联已核验。"
+        ]
+      }
+    ],
+    "boundaries": [
+      "仅返回配置、训练指标和预检汇总，不发送训练集或独立测试集原文。",
+      "训练损失与预检事实不能替代开发集业务评分，也不能证明业务目标达标。"
+    ]
+  }
+}

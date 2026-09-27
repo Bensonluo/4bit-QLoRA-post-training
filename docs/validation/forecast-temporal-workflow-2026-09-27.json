@@ -1,0 +1,49 @@
+{
+  "data_kind": "synthetic_events_prices_calendar",
+  "session_id": "6f098334f456430e9b7855fa26d3ef6c",
+  "dataset_version": "a6d89b0961ec21567bdb9caaf929070b4a43987418a60078b6aae52049ff969f",
+  "suite_id": "2931772499053da33b723c9daa7311fcd9153497df7c4cec8d1e0e417af3bb3f",
+  "input_events": 9,
+  "horizon_sessions": 20,
+  "included": {
+    "train": 2,
+    "validation": 2,
+    "test": 2
+  },
+  "excluded": [
+    {
+      "event": "event-35",
+      "reason": "label_window_crosses_validation_start"
+    },
+    {
+      "event": "event-85",
+      "reason": "label_window_crosses_test_start"
+    },
+    {
+      "event": "event-135",
+      "reason": "label_not_mature"
+    }
+  ],
+  "sample_pending_target": null,
+  "all_included_rows_have_three_source_lineage": true,
+  "fixed_suite_survives_source_reorder": true,
+  "real_market_data": false,
+  "live_agent_called": false,
+  "model_trained": false,
+  "predictive_performance_verified": false,
+  "date": "2026-09-27",
+  "legacy_snapshot_reverified": {
+    "partitions": {
+      "train": 10,
+      "validation": 1,
+      "test": 1
+    },
+    "issues": []
+  },
+  "checks": {
+    "data_pipeline_regressions_passed": 160,
+    "temporal_ui_workflow_passed": 1,
+    "ruff": "passed",
+    "git_diff_check": "passed"
+  }
+}

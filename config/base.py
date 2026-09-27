@@ -450,6 +450,7 @@ class DataConfig:
         train_file: Path to custom training data
         validation_file: Path to custom validation data
         format: Data format ("alpaca", "chat", "sharegpt", etc.)
+        dataset_loader: Explicit loader; None preserves legacy name/domain selection
     """
 
     dataset_name: str = "yahma/alpaca-cleaned"
@@ -460,6 +461,7 @@ class DataConfig:
     train_file: str | None = None
     validation_file: str | None = None
     format: str = "alpaca"
+    dataset_loader: str | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration."""
@@ -468,6 +470,8 @@ class DataConfig:
 
         if self.format not in ["alpaca", "chat", "sharegpt", "dpo", "grpo"]:
             raise ValueError('format must be one of: "alpaca", "chat", "sharegpt", "dpo", "grpo"')
+        if self.dataset_loader not in (None, "alpaca", "finance", "medical_entity"):
+            raise ValueError("dataset_loader must be alpaca, finance, medical_entity, or None")
 
 
 @dataclass

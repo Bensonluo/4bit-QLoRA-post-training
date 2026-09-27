@@ -1,4 +1,30 @@
-# Quick Start Guide - Windows Training Setup
+# Quick Start Guide
+
+## 🧩 产品主路径：从业务目标到可用模型（Data Intake 工作台）
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -e ".[ui]"
+python scripts/launch_dashboard.py        # 端口被占时加 --mlflow-port 5001
+```
+
+打开 http://localhost:8501 → 「🧩 分析我的目标与数据」：
+
+1. **描述业务目标 + 上传一份 CSV 样例**（不用先整理成训练格式）。
+2. **分析**：配置了 Agent 服务（BYOK，如 GLM Coding Plan）就点「联合分析目标与数据」；
+   **没有任何密钥也能开始**——展开「没有 Agent 服务？用基础分析开始」，选择答案列与业务分组字段即可（产品内置的确定性判断，如实声明不判断业务含义）。
+3. **核对真实转换预览**并确认业务含义 → 提供全量数据 → 验证并确认 → 生成分区。
+4. **准备并启动训练**（预检有提示会先暂停等你核对）。
+5. **同题对照**：基座 vs 微调在同一固定开发集比较；输出截断/复述指令等问题会在结果表中标出并给出核查方向。
+6. **改进迭代**：从坏例出发提出改进轮次，一次授权自动执行到三模型对照（后台独立推进，关闭页面不影响），完成后由你决定采用/继续/停止/证据不足。
+
+> 诚实边界：训练完成与对照完成不等于业务达标；最终验收用独立保留的测试集，通过标准由你在运行前确认。
+
+CLI 等价命令见 `python scripts/data_intake.py --help`（intake/train/eval/iteration 全套）。
+
+---
+
+## 🖥️ Windows Training Setup（远程 GPU 场景）
 
 ## 🚀 One-Command Setup (From Mac)
 

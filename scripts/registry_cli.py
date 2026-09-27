@@ -237,28 +237,19 @@ def register(
     it creates a fresh run, logs the model, and registers it. Useful for registering
     a model you merged with scripts/merge_adapter.py earlier.
     """
-    tracker = _get_tracker(tracking_uri)
-    if not tracker.active:
-        console.print("[red]✗ MLflow not active.[/red]")
-        raise typer.Exit(1)
+    from src.tracking.registry import register_merged_model
 
-    if not Path(model_dir).exists():
-        console.print(f"[red]✗ model-dir not found: {model_dir}[/red]")
-        raise typer.Exit(1)
-
-    console.print(f"[cyan]Logging {model_dir} to a new MLflow run...[/cyan]")
-    with tracker._mlflow.start_run(run_name=f"register-{name}") as _run:
-        tracker.log_params({"registered_via": "registry_cli", "source_dir": model_dir})
-        model_uri = tracker.log_model(model_dir=model_dir, artifact_path="model")
-        if not model_uri:
-            console.print("[red]✗ log_model failed[/red]")
-            raise typer.Exit(1)
-        info = tracker.register_model(model_uri=model_uri, name=name)
-        if stage != "None" and info:
-            tracker.transition_model_stage(
-                name=info["name"], version=str(info["version"]), stage=stage
-            )
-            info["current_stage"] = stage
+    try:
+        info = register_merged_model(
+            model_dir=model_dir,
+            name=name,
+            stage=stage,
+            tracking_uri=tracking_uri,
+            registered_via="registry_cli",
+        )
+    except (FileNotFoundError, RuntimeError) as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
 
     console.print(
         f"[green]✓ Registered {info['name']} v{info['version']} ({info['current_stage']})[/green]"

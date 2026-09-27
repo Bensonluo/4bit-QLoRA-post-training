@@ -22,6 +22,7 @@ from src.training.sft_trainer import MemoryCallback, SFTTrainer, run_sft_trainin
 
 
 def _make_trainer(tmp_path: Path, **training_overrides: Any) -> SFTTrainer:
+    training_overrides.setdefault("bf16", False)
     return SFTTrainer(
         model_config=ModelConfig(name="Qwen/Qwen2.5-0.5B-Instruct"),
         training_config=TrainingConfig(output_dir=str(tmp_path / "sft"), **training_overrides),
@@ -44,7 +45,7 @@ def _as_str(value: Any) -> str:
 
 
 class TestSetupTrainer:
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_builds_valid_training_arguments(
         self, mock_trainer_cls: MagicMock, mock_collator_cls: MagicMock, tmp_path: Path
@@ -64,7 +65,7 @@ class TestSetupTrainer:
         assert args.warmup_steps == pytest.approx(0.03)
         assert kwargs["train_dataset"] == trainer.train_dataset
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_accelerator_flags_default_off(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -78,7 +79,7 @@ class TestSetupTrainer:
         assert args.neftune_noise_alpha is None
         assert args.torch_compile is False
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_forwards_liger_neftune_torch_compile(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -97,7 +98,7 @@ class TestSetupTrainer:
         assert args.neftune_noise_alpha == pytest.approx(5.0)
         assert args.torch_compile is True
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_torch_compile_with_quantization_warns(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -111,7 +112,7 @@ class TestSetupTrainer:
         with pytest.warns(UserWarning, match="torch_compile"):
             trainer.setup_trainer()
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_no_compile_warning_on_full_precision(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -331,7 +332,7 @@ class TestPrepareData:
 
 
 class TestOptimizerOverride:
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_optim_injected_when_set(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -343,7 +344,7 @@ class TestOptimizerOverride:
         args = mock_trainer_cls.call_args.kwargs["args"]
         assert args.optim == "paged_adamw_8bit"
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_optim_defaults_to_library_choice(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -463,7 +464,7 @@ class TestRunSFTTraining:
 
 
 class TestGradientCheckpointingKwargs:
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_non_reentrant_forwarded_when_checkpointing_on(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -475,7 +476,7 @@ class TestGradientCheckpointingKwargs:
         args = mock_trainer_cls.call_args.kwargs["args"]
         assert args.gradient_checkpointing_kwargs == {"use_reentrant": False}
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_kwargs_none_when_checkpointing_off(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -489,7 +490,7 @@ class TestGradientCheckpointingKwargs:
 
 
 class TestTorchEmptyCacheSteps:
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_value_forwarded(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -501,7 +502,7 @@ class TestTorchEmptyCacheSteps:
         args = mock_trainer_cls.call_args.kwargs["args"]
         assert args.torch_empty_cache_steps == 100
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_auto_find_batch_size_forwarded(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -513,7 +514,7 @@ class TestTorchEmptyCacheSteps:
         args = mock_trainer_cls.call_args.kwargs["args"]
         assert args.auto_find_batch_size is True
 
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_train_sampling_strategy_forwarded(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path
@@ -655,7 +656,7 @@ class TestPrepareDataBranches:
 
 class TestDistributedInjection:
     @patch("src.training.sft_trainer.get_distributed_info")
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_fsdp_injected(
         self,
@@ -677,7 +678,7 @@ class TestDistributedInjection:
 
     @patch("src.training.sft_trainer.get_distributed_info")
     @patch("src.training.sft_trainer.TrainingArguments")
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_deepspeed_injected(
         self,
@@ -699,7 +700,7 @@ class TestDistributedInjection:
         assert kwargs["deepspeed"] == ds_config
 
     @patch("src.training.sft_trainer.get_distributed_info")
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_distributed_banner_printed(
         self,
@@ -904,7 +905,7 @@ class TestPrepareModelLoRAGA:
 
 
 class TestMFUCallbackAttachment:
-    @patch("src.training.sft_trainer.DataCollatorForLanguageModeling")
+    @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_setup_trainer_attaches_mfu_callback(
         self, mock_trainer_cls: MagicMock, _mock_collator: MagicMock, tmp_path: Path

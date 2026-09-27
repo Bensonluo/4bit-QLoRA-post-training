@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-27",
+  "scope": "Actual GLM integration attempt with the previously authorized fictional development data; not a successful live Agent validation.",
+  "status": "not_verified",
+  "attempts": 2,
+  "error": "CompatibleChatClient reported connection failure or request timeout; no scoring draft returned.",
+  "draft_count": 0,
+  "public_endpoint_diagnostic": {
+    "dns_resolved": true,
+    "https_home_status": 200,
+    "credentials_or_task_data_sent": false
+  },
+  "final_test_sent_to_agent": false,
+  "local_validation": {
+    "core_and_agent_protocol_tests": 12,
+    "evaluation_diagnostics_acceptance_iteration_tests": 79,
+    "numeric_data_to_scoring_workflow_tests": 1,
+    "note": "Tests used real macOS isolation, controlled model/Agent fixtures; these do not prove the live GLM path."
+  }
+}

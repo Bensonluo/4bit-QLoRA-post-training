@@ -1,0 +1,42 @@
+# 里程碑依赖图与路线草图
+# M1 详案见 milestone-001.yaml;M2/M3 为按北极星差距排定的后续占位,启动时再详规。
+
+milestones:
+  - id: "milestone-001"
+    title: "语义安全层上线"
+    status: "active"
+    depends_on: []
+    enables: ["milestone-002", "milestone-003"]
+    shared_resources: ["src/workbench/intake_service.py", "ui/pages/07_Data_Intake.py"]
+
+  - id: "milestone-002"
+    title: "旅程串联与非专家可视化(九段闭环按旅程打磨,可视化面向非专家重做)"
+    status: "planned"
+    depends_on: ["milestone-001"]
+    enables: ["milestone-003"]
+    shared_resources: ["ui/", "scripts/data_intake.py"]
+
+  - id: "milestone-003"
+    title: "模型-实验-数据三角血缘打通 + 成本叙事(Registry↔workbench 互查;每次运行的时间/硬件/电费/API 对比账)"
+    status: "planned"
+    depends_on: ["milestone-002"]
+    enables: []
+    shared_resources: ["src/tracking/", "src/workbench/training_runs.py"]
+
+critical_path:
+  - "milestone-001 → milestone-002 → milestone-003"
+  rationale: "安全层先于呈现(没有安全语义的可视化是给错误发奖状);呈现先于血缘(旅程断点比互查更早卡住用户)。"
+
+risk_matrix:
+  - milestone: "milestone-001"
+    level: "medium"
+    summary: "门禁收紧波及现有链路(迭代/P3.4 需前置核验)"
+    mitigation: "授权入口前置校验 + 集成测试补步骤 + 文档声明为北极星有意约束"
+  - milestone: "milestone-002"
+    level: "medium"
+    summary: "可视化重塑范围蔓延"
+    mitigation: "以'非专家能否复述发生了什么'为唯一验收,按旅程段落逐段交付"
+  - milestone: "milestone-003"
+    level: "low"
+    summary: "血缘打通涉及新旧两套记录体系"
+    mitigation: "只读互查先行,不迁移旧数据"

@@ -1,0 +1,366 @@
+# 配置数据分析 Agent（BYOK）
+
+Agent 使用你选择的模型服务，联合分析业务目标和上传的数据样例。这里配置的是分析助手使用的模型，不是之后要微调的基础模型。服务需要支持 OpenAI Chat Completions 的工具调用协议。
+
+## 在页面中配置
+
+打开「目标与数据」入口，在「分析模型设置」选择供应商，核对 API 地址和模型名称，输入 API Key，点击「测试模型连接」。探针只发送固定测试内容并检查工具调用，不会读取或发送数据任务；通过连接测试也不代表业务分析质量已验收。
+
+「保存模型配置」只保存供应商、地址和模型名。页面输入的密钥只保留在当前 Streamlit 会话中；重新建立会话后需再次输入，或由运行进程的环境变量提供。切换供应商或修改地址会清除输入密钥及业务数据发送授权，环境密钥也不会跟随到另一个供应商或地址。
+
+正式分析远程服务时，需勾选页面的数据发送授权。发送内容包括业务说明、回答、数据画像和选取的证据行；连接探针不会代替这项授权。
+
+## 供应商预设
+
+| 选择 | OpenAI Base URL | 说明 |
+| --- | --- | --- |
+| `local` | `http://localhost:11434/v1` | 本地兼容服务，填写已部署且支持工具调用的模型名 |
+| `glm-coding` | `https://open.bigmodel.cn/api/coding/paas/v4` | 智谱中国 GLM Coding Plan |
+| `glm` | `https://open.bigmodel.cn/api/paas/v4` | 智谱中国普通 API |
+| `compatible` | 自行填写 | 其他 OpenAI 兼容服务，包括 Z.ai 国际端点 |
+
+模型名可以修改，以账户实际可用模型为准。Base URL 不包含末尾 `/chat/completions`，程序会补上该路径。远程服务必须使用 HTTPS。
+
+Coding Plan 与普通 API 的端点不互换，失败时程序不会自动改用普通 API。官方注明 Coding Plan 端点用于编码场景；选用前需确认当前用途符合服务范围。Z.ai 国际 Coding Plan 地址为 `https://api.z.ai/api/coding/paas/v4`，普通 API 地址为 `https://api.z.ai/api/paas/v4`，可通过自定义服务填写。端点依据：[官方模型配置说明](https://zcode.z.ai/en/docs/configuration)（核对于 2026-09-26）。
+
+## CLI 配置与检查
+
+以下命令在项目根目录执行。密钥只从 `TUNESMITH_AGENT_API_KEY` 读取，不提供命令行密钥参数，也不保存到配置文件、任务快照或导出结果。
+
+```sh
+python scripts/data_intake.py agent-config --provider glm-coding --model glm-5.3
+```
+
+通过当前 shell 的隐藏输入设置密钥，避免把密钥直接写进命令历史。例如 zsh：
+
+```zsh
+read -rs 'TUNESMITH_AGENT_API_KEY?输入 API Key: '
+export TUNESMITH_AGENT_API_KEY
+python scripts/data_intake.py agent-check
+```
+
+`agent-check` 只发固定工具探针，不建立数据任务。完成使用后可运行 `unset TUNESMITH_AGENT_API_KEY`；已启动的页面进程仍持有启动时继承的环境，需要重新启动才能更新。
+
+创建数据任务不会调用模型：
+
+```sh
+python scripts/data_intake.py create --input ./sample.csv \
+  --goal '根据用户首次描述判断工单类别' \
+  --description '一行一个工单，类别由质检人员审核，关闭原因是事后信息' \
+  --scope sample
+```
+
+命令会返回 `session_id`。分析远程服务时显式允许业务数据发送：
+
+```sh
+python scripts/data_intake.py analyze SESSION_ID --allow-remote-data
+python scripts/data_intake.py analyze SESSION_ID --answer '质检类别才是需要学习的答案' --allow-remote-data
+python scripts/data_intake.py show SESSION_ID
+```
+
+`--base-url` 和 `--model` 可临时覆盖分析或连接检查的配置。若已有环境密钥，临时地址与解析后的地址不同，CLI 会拒绝请求。要改用另一个服务，应同时配置该服务的 `TUNESMITH_AGENT_BASE_URL`、`TUNESMITH_AGENT_MODEL` 和配套密钥，再重试，避免旧密钥被带到新服务。
+
+## 从样例继续到全量数据
+
+### 多份资料一起分析
+
+首次上传的资料命名为 `main`。在页面「原始资料与补充文件」上传其他资料，给它一个便于识别的名称，并说明用途和关系，例如「labels 是质检审核的类别，通过工单编号对应 main」。同名上传会替换该份资料，页面要求明确勾选替换；补充或替换后，旧方案需重新分析确认。
+
+Agent 可以检查多个来源，试运行关联、列表展开、嵌套字段提取，以及按会话和顺序生成「历史输入 → 当前答案」。页面展示实际处理步骤、问题和每个组合行的原始来源。用户无需先拼表，也无需填写 JSON 配方。会话历史只包含该回答之前的信息；生成的数据仍走当前 Alpaca 训练入口。
+
+```sh
+python scripts/data_intake.py add-source SESSION_ID --revision CURRENT_REVISION \
+  --alias labels --input ./labels-sample.csv --scope sample \
+  --description '人工审核类别，通过工单编号与 main 对应'
+python scripts/data_intake.py analyze SESSION_ID --allow-remote-data
+```
+
+确认组合后的真实样例预览后，提供方案所需的每份全量原始文件。页面分别显示所需资料的上传框，不要求先手工关联。CLI 用重复的 `--source` 指定资料名称与路径：
+
+```sh
+python scripts/data_intake.py full-sources SESSION_ID --revision CURRENT_REVISION \
+  --source main=./tickets-full.csv --source labels=./labels-full.csv
+```
+
+`full-sources` 不提供 `--source` 时，只能复用已保存且明确标为全量的所需来源；样例不会自动升级为全量。全量继续执行已经确认的组合与转换规则，缺失关联、字段冲突或会话顺序异常会进入报告。
+
+### 长尾字段解析与受限适配
+
+当已有转换组件无法表达某个解析规则时，Agent 可以起草受限适配代码，先用真实业务期望样例和独立反例在操作系统隔离环境中验证，再用于真实资料。当前适配只支持保留原字段和原行、一对一新增声明字段；不能静默删除记录或覆盖原值。
+
+页面展示实际隔离后端、业务样例与反例的测试结果、新增字段以及源行引用。源码、配置和验收样例可折叠查看，不要求业务用户先人工审代码。用户仍通过真实转换预览确认模型输入和答案是否符合目标。全量验证单独显示其适配报告，样例测试通过不等于全量已经通过。
+
+执行依赖可用的真实操作系统隔离后端，例如 Docker 或受支持的 macOS 沙盒；不可用时返回失败，不回退到宿主直接执行。Docker 的内存限制依赖容器控制机制；macOS 模式采用进程 RSS 抽样检查，不能视为同等的容器硬内存上限。页面仅展示执行报告，不直接运行源码。
+
+### 单份资料
+
+核对样例转换后，页面提供「全量数据验证」入口：上传全量 CSV、Excel 或 JSONL，沿已确认方案进行本地转换与诊断；首次就声明为全量的文件可直接复用。报告独立保存全量来源和问题行，样例证据与确认记录不会被替换。
+
+缺少必需字段、监督答案、转换失败或答案冲突时，先根据报告修正资料或业务规则。新增类别和字段需要核对；开放文本不会仅因出现新答案而被判错。「保存业务补充，稍后分析」可先保存修正，旧全量报告随即失效，重新确认方案后须重验全量。
+
+CLI 使用每次输出中的最新 `revision`，确认操作表示已经查看相应报告：
+
+```sh
+python scripts/data_intake.py confirm SESSION_ID --revision SAMPLE_REVISION
+python scripts/data_intake.py full-validate SESSION_ID --revision CURRENT_REVISION --input ./full.csv
+python scripts/data_intake.py full-confirm SESSION_ID --revision FULL_REPORT_REVISION
+```
+
+`full-validate` 支持 `--encoding`、`--delimiter`。首次上传已声明 `--scope full` 时可省略 `--input`，样例任务必须显式提供全量文件。这两个命令只处理本地文件，不调用模型或消耗模型服务额度。验证发现问题仍会保存报告，下一步状态为 `needs_full_data_revision`；问题解决后核对并确认，进入 `awaiting_dataset_split`。这表示可以继续准备独立训练与评测分区，尚未认定可以正式训练。
+
+## 生成独立数据分区与版本
+
+全量确认后，页面可按已确认分组字段生成训练、验证和独立测试集。没有分组字段时，需要先明确确认每行属于独立业务对象；相关客户、会话或文档不能为了凑比例而拆开。页面展示实际数量、数据集版本及本地文件，并提供三个分区和训练数据配置的下载。
+
+```sh
+python scripts/data_intake.py materialize SESSION_ID --revision CURRENT_REVISION \
+  --name my-domain --validation-fraction 0.1 --test-fraction 0.1 --seed 42
+```
+
+可用 `--registry-root` 指定数据注册目录；无分组字段且已完成业务核对时加 `--independent-rows-confirmed`。不足三个独立组会要求补充资料，不能据几条相关样例宣称完成独立评测。分组隔离优先于比例，报告显示实际比例；目前不做类别分层。
+
+物化后状态为 `ready_for_training_preflight`，表示继续训练前检查，模型还未训练。输出的 `dataset.data_config` 是完整训练配置中 `data` 部分：使用固定的 `train_file` 和 `validation_file`，`validation_split: 0` 防止再次随机切分，`dataset_loader: alpaca` 明确采用已生成的数据格式，避免由文件路径猜测领域并再次过滤记录。独立测试文件单独用于最终评测。单独把训练路径交给会重新切分的旧入口不能替代这套配置。
+
+## 时间预测任务：先核对来源与标签窗口
+
+只有目标涉及未来结果时，Agent 才会提出时间方案；普通分类、抽取或文本任务继续原流程。先说明模型在什么时点作预测、当时实际可得什么资料、未来答案如何观察。报告期或文件日期不能替代公开可得时间，系统不猜时区、不补伪真值。
+
+如果目标是根据公开事件预测之后若干交易日的市场方向，可分别上传三份本地资料：事件表、明确价格口径的行情表、独立的交易所收盘日历。日历 CSV 每行是明确带时区的实际收盘时点，需要覆盖事件之前至预测窗口结束；不能把行情行数当作交易日数，也不能用自然日推算缺少的交易日。事件表需有单一事件标识、标的和实际公开可得时间；行情需有标的、带时区的收盘时点、明确的正价格。
+
+Agent 通过 `forecast_labels` 调用现有真实组合预览，按用户确认的预测交易日数、观察截止及价格口径生成标签。价格口径明确选择拆股调整收盘价（`split_adjusted_close`）或含分红总回报调整价（`total_return_adjusted_close`），并与提供的行情来源一致。日历和价格完整性需要业务核对；缺行情、缺时间或日历覆盖不足会报告具体问题，不跳过缺失交易日计算方向。目前直接读取本地上传文件，不连接或下载行情平台。
+
+组合预览保留每个事件及其来源，派生 `prediction_at`、`label_end_at`、参考/目标价格、实际收益、方向和状态等字段（默认加 `forecast_` 前缀）。未来价格、收益、方向、标签窗口结束时间和标签成熟状态不能进入模型输入。窗口尚未结束的方向保留为空，状态为 `label_not_observed`，不会填成“未上涨”。若缺任何必需来源，页面会分别要求事件、行情、日历的全量文件，不要求用户自行拼表。
+
+```sh
+python scripts/data_intake.py create --goal '描述实际预测目标、时点和可得资料' --input events.csv
+python scripts/data_intake.py add-source SESSION_ID --revision CURRENT_REVISION \
+  --alias prices --input prices.csv --description '说明标的、收盘时间和真实价格调整口径'
+python scripts/data_intake.py add-source SESSION_ID --revision CURRENT_REVISION \
+  --alias calendar --input exchange-closes.csv --description '交易所实际收盘时点，含时区及完整覆盖范围'
+python scripts/data_intake.py analyze SESSION_ID --allow-remote-data
+# 核对 Agent 方案与实际预览后确认；每次修改后用最新 revision。
+python scripts/data_intake.py full-sources SESSION_ID --revision CURRENT_REVISION \
+  --source main=full-events.csv --source prices=full-prices.csv --source calendar=full-exchange-closes.csv
+```
+
+`group_columns` 中多个字段表示“任一共同字段把记录关联为同组”，不是复合主键。因此不能把 `[ticker, period]` 当作一个独立事件标识；需要先根据真实业务定义生成并核对单一 `event_id`，再按它分组，防止无意将所有同标的或同报告期连成大组。
+
+## 按已确认时间边界生成分区
+
+时间预测配方的 `temporal_split` 指定三个不同字段：信息实际可得时间、预测时间、标签窗口结束时间，以及验证起点、测试起点、观察截止三个递增边界。字段值和边界均须包含明确时区，且每行满足“可得时间 ≤ 预测时间 < 标签窗口结束时间”。界面展示这些字段、日期和业务含义，随真实预览由用户确认；缺字段或含义不清时，Agent 应先提问。
+
+时间方案按已确认窗口分配：训练标签须在验证起点前成熟，验证标签须在测试起点前成熟，测试标签须在观察截止前可见。跨窗口、截至观察期仍未成熟及与这些记录相连的行明确排除并保留原行、输入、标签和原因。同事件或相同模型输入跨时间分区会阻断，不能靠随机换组绕过。已成熟却缺标签、时间非法或预测时尚不可得的信息仍是问题，不能借“尚未成熟”排除掩盖。
+
+含合法未成熟行的样例可以继续核对，但样例确认和全量确认至少需要一条真实有标签且已成熟的记录；仅有未来待观察数据不能宣称具备训练监督。未成熟行不保存为已认可的答案样例。正式物化还要求训练、验证、测试三个分区都非空。
+
+```sh
+python scripts/data_intake.py materialize SESSION_ID --revision CURRENT_REVISION
+```
+
+无需额外填写时间参数，物化使用已确认的 Agent 配方。时间方案不展示随机比例/种子设置，也不会随机回退；CLI 的 `--validation-fraction`、`--test-fraction` 和 `--seed` 对时间方案不生效，并给出明确提示。页面和 CLI 展示纳入与排除数量及原因；完整排除记录保存在 `dataset.paths.manifest` 指向文件的 `metadata.excluded_rows`，页面可查看与下载。已冻结题集仍须与时间方案兼容，不会通过随机重分配原测试题。
+
+## 检查实际 token 与答案保留
+
+生成数据分区后，在页面「训练前检查」填写本地 tokenizer 目录或已缓存标识以及计划采用的最大 token 长度，点击「检查实际截断与答案保留」。只有点击按钮才会加载 tokenizer；不会自动下载文件、加载模型权重或启动训练。
+
+```sh
+python scripts/data_intake.py preflight SESSION_ID --revision CURRENT_REVISION \
+  --tokenizer ./models/my-base-tokenizer --max-length 2048
+```
+
+本地目录缺少文件或缓存不存在时，先准备对应基础模型的 tokenizer，再执行检查。`2048` 仅为命令示例，应根据实际模型和业务上下文选取。
+
+报告保存为 `training_preflight`，状态包括 `blocked`（存在阻断问题）、`warnings`（需核对风险）、`passed`（当前数据与 token 消费检查通过）。报告列出各分区的截断和答案丢失统计、问题行以及实际 token 消费；答案完全丢失会阻断。tokenizer 无法提供答案边界时明确标记未验证。检查依据当前训练模板、因果位移和 padding 屏蔽方式，不据此声称业务效果已验收或硬件足以训练。
+
+## 让 Agent 推荐训练方案
+
+确认数据并生成分区后，「用当前数据微调模型」会发现本机已准备的模型，列出文件完整的候选供点选。只选择本轮需要比较的模型，避免核查不相关的大型权重；其他位置的已有模型可在「高级：补充本地模型路径与发现详情」中填写，每行一个。发现只检查已知缓存和模型目录的本地文件，不下载、加载或计算权重哈希；文件完整也不等于训练兼容，Agent 后续还会检查候选事实和真实 tokenizer。点击「让 Agent 推荐训练方案」后，Agent 读取业务目标、处理方案、实际数据统计、本机条件及候选模型事实，并对选择的模型执行真实 tokenizer 预检。它不会自动下载模型、加载训练权重或启动训练。
+
+方案显示推荐理由、训练长度、轮数、batch size、学习率等关键参数，以及实际检查记录。`ready` 表示可供确认；`needs_data` 提示先完善数据；`unsupported` 表示当前模型或机器条件不支持。预检通过不保证内存一定足够，也不代表业务效果达标。核对方案后点击「确认推荐方案并准备训练」，随后使用已有训练记录的「启动这轮训练」。已保存方案绑定任务版本、实际数据及模型内容，发生变化需重新推荐。熟悉训练参数的用户仍可展开「高级：手工配置训练参数」。
+
+远程 Agent 需要独立确认发送任务与处理方案、数据统计、模型配置及本机硬件摘要；不会发送 API 密钥或训练、开发、测试原文。BYOK 继续使用公共配置和环境密钥，无额度或计费设置。
+
+```sh
+python scripts/data_intake.py model-list
+python scripts/data_intake.py plan-recommend SESSION_ID --revision CURRENT_REVISION --allow-remote-data
+# 需要指定其他已有模型时，可追加 --model-path ./models/local-base-a（可重复）。
+python scripts/data_intake.py plan-list SESSION_ID
+python scripts/data_intake.py plan-show PLAN_ID
+python scripts/data_intake.py plan-prepare SESSION_ID PLAN_ID --revision CURRENT_REVISION
+python scripts/data_intake.py train-start SESSION_ID RUN_ID --revision CURRENT_REVISION
+```
+
+省略 `--model-path` 时自动采用发现的完整本地候选；没有完整模型时会提示缺少文件，不会自动下载。`model-list --root LOCAL_DIRECTORY` 可只查看指定目录，`--root` 可重复。`--model-path` 可以重复；本地 Agent 服务不需要 `--allow-remote-data`。方案默认保存在 `outputs/workbench/training-plans`，全局 `--plan-root` 可覆盖目录。`plan-prepare` 表示已经审阅并确认保存的推荐方案，只准备训练，不自动启动。
+
+## 在同一任务中启动真实训练
+
+数据版本生成后，页面「用当前数据微调模型」可填写本地基础模型目录，选择最大 token 长度、训练轮数和 batch size。基础参数还包括学习率、梯度累积、LoRA rank，以及兼容 NVIDIA CUDA 环境下可选的 4-bit 量化。
+
+点击「准备本轮训练方案」后，系统使用所选模型自己的 tokenizer 重新预检，并保存与当前数据版本绑定的训练配置。展开本轮配置与预检记录即可核对；有阻断问题时不能启动，有风险提示时先确认已经核对。点击「启动这轮训练」才会运行已有 SFT 训练链路，无需手工编写 YAML 或复制命令。
+
+同一页面保存每轮记录，可刷新状态和最近日志、停止运行中的训练，以及查看输出目录和已经存在的产物。训练失败显示阶段及错误信息；训练成功仍需使用独立测试集检验业务效果。准备方案后如果数据或业务方案已变化，需重新准备，不能把旧训练方案直接应用到新数据。
+
+CLI 也使用同一套训练记录，默认目录为项目下的 `outputs/workbench/training`，可用子命令前的全局 `--training-root` 改变目录：
+
+```sh
+python scripts/data_intake.py train-prepare SESSION_ID --revision CURRENT_REVISION \
+  --model-path ./models/my-local-base --max-length 1024 --epochs 1 --batch-size 1
+python scripts/data_intake.py train-start SESSION_ID RUN_ID --revision CURRENT_REVISION
+python scripts/data_intake.py train-status RUN_ID
+python scripts/data_intake.py train-logs RUN_ID --tail 100
+python scripts/data_intake.py train-stop RUN_ID
+python scripts/data_intake.py train-list SESSION_ID
+```
+
+`RUN_ID` 来自准备结果；有预检风险且已完成核对时，启动命令增加 `--acknowledge-warnings`。`train-prepare` 另支持 `--learning-rate`、`--gradient-accumulation`、`--lora-rank` 和 `--load-in-4bit`。这里需要已准备好的本地基础模型目录，工作台不会悄悄更换底座或下载另一个模型。
+
+## 允许一次显存不足技术恢复
+
+启动前可选「允许显存不足后自动技术重试一次」，默认关闭。开启后，只有真实训练步骤提供内存不足证据时，后台才会尝试缩小微批次并增加梯度累积以保持有效 batch，或在微批次已为 1 时启用梯度检查点。业务目标、数据分区、模型、LoRA、学习率和训练轮数继续沿已确认方案；没有可用调整、非内存不足、准备阻断或重试仍失败时，都保留失败信息。
+
+原训练保留 `failed` 和实际错误，恢复训练另建关联记录，页面显示恢复依据、参数变化、子训练状态和产物。一次技术恢复不算新的业务假设，成功后仍需用相同固定题集检验效果。查询和刷新只读状态，不会触发恢复。点击「停止此训练及其自动恢复」，或对原训练运行 `train-stop`，会取消后续恢复并停止已关联的子训练。
+
+```sh
+python scripts/data_intake.py train-start SESSION_ID RUN_ID --revision CURRENT_REVISION --recover-technical-failures
+# 已确认改进轮次也可采用相同授权：
+python scripts/data_intake.py iteration-start SESSION_ID ITERATION_ID --revision CURRENT_REVISION --recover-technical-failures
+python scripts/data_intake.py train-status RUN_ID
+python scripts/data_intake.py train-stop RUN_ID
+```
+
+父记录的 `recovery.child_run_id` 与子记录的 `recovery_parent_run_id` 相互关联；子训练不再自动重试。改进轮次的子训练成功后，可用该子训练 ID 运行 `eval-compare ... --iteration-id ITERATION_ID`，系统核验双向关联后比较基座、父轮业务模型和恢复产物。这里没有额度或预算管理。
+
+## 比较基座与本轮微调效果
+
+成功训练的记录下提供「基座与本轮微调：同开发集对照」。系统按训练记录选择基础模型和本轮 adapter，在同一个固定开发集上顺序加载、生成和比较；独立测试集留待最终业务验收。当前任务的数据版本需对应本轮训练；固定题集模式允许父轮使用自己的历史训练数据快照与模型证据，在同一套开发题上与新模型对照。
+
+评分沿已确认的数据目标选择：单字段类别使用严格匹配，JSON 答案使用全部已声明字段逐项匹配；开放任务只生成并保留输出，明确标记待业务评分，不自动宣布效果通过。可以设置统一生成长度，以及严格评分是否忽略首尾空白。
+
+页面显示总样本数、已评分数、生成失败与截断数量、严格准确率或字段准确率。失败与截断保留在分母中。逐样本选择器可查看每一条的完整输入、期望答案和各个模型的完整输出；完整报告也可以下载。模型释放失败或评测未完成时，不将部分结果当作完整对照。
+
+```sh
+python scripts/data_intake.py eval-compare SESSION_ID RUN_ID --revision CURRENT_REVISION \
+  --max-new-tokens 256
+python scripts/data_intake.py eval-show EVALUATION_ID
+```
+
+`EVALUATION_ID` 来自比较结果；加 `--keep-whitespace` 可保留首尾空白差异。报告默认保存在 `outputs/workbench/evaluations`，全局参数 `--evaluation-root` 可指定其他目录。这一步比较开发集表现，不代表已完成最终独立测试或业务上线验收。
+
+## 让 Agent 解读结果与下一步
+
+每份评测报告下可以点击「让 Agent 分析结果与下一步」。Agent 使用已配置的 BYOK 模型，结合目标、当前处理方案、实际模型输出和坏例核查证据；有微调 adapter 时还必须读取对应训练配置、指标及监督检查，不能把软件已有的排查信息交给用户查询。远程服务需要原有资料发送授权，并额外确认发送本次评测细节。这里发送的内容包括业务文本、真实输出及训练配置和检查摘要，不只是汇总指标；不会发送 API 密钥或完整训练/最终测试原文。
+
+解读分别展示有证据的观察、仍需验证的原因及验证方式、建议先处理的事项、局限和必要业务问题。它不会自动改标签、删除坏例、采纳方案变更或启动下一轮训练。页面保留解读及证据引用，重新打开仍可查看；当前业务方案已变化时会标明旧解读的上下文。
+
+```sh
+python scripts/data_intake.py eval-analyze SESSION_ID EVALUATION_ID \
+  --revision CURRENT_REVISION --allow-remote-data
+```
+
+CLI 同样读取现有供应商、模型和环境密钥配置。使用本地模型服务时不需 `--allow-remote-data`；远程服务必须明确允许。解读保存在评测根目录的 `assessments` 子目录，与对应评测标识及任务版本关联。
+
+## 定义并确认自定义业务评分
+
+默认类别严格匹配、JSON 字段匹配和开放任务人工判断继续可用。需要自己的业务规则时，在「自定义业务评分」描述可判定的要求与不能接受的错误。Agent 仅读取所需开发样例及当前目标/处理方案，拟定评分代码、参数、单题通过分数及正反例，并在真实操作系统隔离环境中执行验证；隔离不可用或例子验证失败时不能确认，不会直接在宿主环境运行评分代码。
+
+例如，业务要求可以明确规定结构中哪些信息必须存在、允许怎样的数值误差、什么违规内容必须扣分。只有“更专业”“质量好”等主观要求时，Agent 会提出必要问题，用户补充可判断的业务边界后再拟定规则；不会用几个关键词伪造专业质量评估，也没有自动引入另一个模型作为裁判。
+
+页面展示真实正反例得分与理由、隔离验证结果和单题通过分数，源码和预期样例可折叠查看。用户先核对这些实际结果，再勾选确认并点击「确认这套业务评分规则」。Agent 不会自动确认。已确认规则绑定业务任务及语义；数据修订后可继续使用兼容规则，业务目标或输入/答案含义变更时需重新确认。
+
+开发对照和最终验收都可从「本次使用的评分规则」选择已确认规则。自定义对照显示**业务分均值**和**业务通过率**：前者是规则得分的平均数，后者是达到已确认单题通过分数的比例；两者不称为严格准确率。失败与截断仍计入总题数，不能当作通过。逐条输出同时显示实际分数与评分理由。
+
+最终验收采用这套规则时，用户另外填写的「最低通过率」是整套测试的业务门槛，区别于规则中每一题的通过分数。规则引用与评分协议一起冻结，最终题和坏例仍不发送给 Agent 优化。
+
+```sh
+python scripts/data_intake.py scoring-propose SESSION_ID --revision CURRENT_REVISION \
+  --business-standard '说明可以实际判定的业务标准与扣分情况' --allow-remote-data
+python scripts/data_intake.py scoring-show SCORING_ID
+python scripts/data_intake.py scoring-confirm SESSION_ID SCORING_ID --revision CURRENT_REVISION
+python scripts/data_intake.py scoring-list SESSION_ID
+python scripts/data_intake.py eval-compare SESSION_ID RUN_ID --revision CURRENT_REVISION --scoring-id SCORING_ID
+python scripts/data_intake.py acceptance-prepare SESSION_ID RUN_ID --revision CURRENT_REVISION \
+  --scoring-id SCORING_ID --business-standard '业务方确认的最终验收标准' \
+  --minimum-score 0.9 --minimum-cases 100
+```
+
+最后一条中的通过率和题数仅为参数格式示例，必须替换成真实业务要求。CLI 的自定义验收指标为 `pass_rate`，单题分数门槛来自已确认规则；未确认规则或其他任务的规则会被拒绝。规则默认位于 `outputs/workbench/business-scoring`，可用全局 `--scoring-root` 覆盖。远程 Agent 需要明确允许发送所需开发样例；本地服务不需要远程授权。需要澄清时 `scoring-propose` 返回 `needs_business_input` 和问题，不返回可确认的规则 ID。
+
+## 用独立测试题做单模型业务验收
+
+开发集用于比较和改进，最终独立测试用于判断一个已选定的模型是否达到业务标准。成功模型下展开「按业务标准做最终验收」，填写标准说明、最低通过率和最低测试题数。题数按测试记录计，不代表独立业务组数或统计置信度。评分规则沿已确认任务：类别严格匹配、JSON 全部声明字段匹配，或开放任务人工逐题判断。界面不预设业务分数或题数门槛；这些应由实际交付要求决定。
+
+点击「冻结此模型与业务验收标准」保存模型、固定测试题、评分与生成协议及业务门槛。核对冻结条款后，再点击「按冻结标准执行最终验收」进行单模型生成。结果区分达到标准、未达到标准、证据不足和待人工判断；即使少数题全部答对，未满足最低测试题数也不能认定可交付。生成失败和截断保留在分母中。
+
+开放任务会逐题显示输入、参考答案与实际回答，用户选择通过或不通过并填写业务理由。生成失败、缺失或截断的回答不能人工标为通过。判断会保存到该次验收，累积完成后再按冻结标准形成结论。最终记录可从页面下载，也可用 CLI 查看。
+
+执行验收会留下题目暴露记录。同套件不能通过更改阈值、评分或生成协议变成新的验收标准；已经揭示的测试题或同业务组也不能通过更换套件标识伪装成新盲测。服务会明确标记或阻断重复暴露，并要求真正独立的新资料。最终题及坏例只向用户展示，不提供 Agent 分析或优化入口，也不会混入默认开发集报告列表。`eval-analyze` 拒绝最终测试报告。
+
+```sh
+# 以下分数和题数仅演示参数格式，必须替换为自己的业务要求。
+python scripts/data_intake.py acceptance-prepare SESSION_ID RUN_ID --revision CURRENT_REVISION \
+  --business-standard '业务方确认的交付要求' --minimum-score 0.9 --minimum-cases 100
+python scripts/data_intake.py acceptance-show ACCEPTANCE_ID
+python scripts/data_intake.py acceptance-run SESSION_ID ACCEPTANCE_ID --revision CURRENT_REVISION
+python scripts/data_intake.py acceptance-list SESSION_ID
+# 开放任务：row-index 使用报告中零起始的 index，每次提交一题判断。
+python scripts/data_intake.py acceptance-review SESSION_ID ACCEPTANCE_ID --revision CURRENT_REVISION \
+  --row-index 0 --decision accepted --reason '说明为何符合已冻结业务标准'
+```
+
+`--minimum-score` 取 0 到 1，`--minimum-cases` 为正整数，两者都必须显式提供。`acceptance-prepare` 可用 `--max-new-tokens` 设置统一生成长度、`--keep-whitespace` 保留严格匹配中的首尾空白差异；这些会随条款冻结。全局 `--acceptance-root` 指定验收记录目录，默认为 `outputs/workbench/acceptance`。最终验收通过表示达到该次冻结标准，不会自动部署模型。
+
+## 从评测结果进入下一轮改进
+
+评测报告下展开「将结果转成下一轮改进假设」，可从 Agent 解读带入待核查原因与建议，再填写希望看到的业务变化、具体变更范围，以及是否会修改数据。训练配置默认继承父轮，按需只调整轮数、学习率或长度。保存提案后，在同页的改进记录中点击「确认本轮假设与变更范围」；保存提案本身不会启动训练。
+
+提案会冻结父轮开发题和独立测试题，并保留父轮模型及证据。后续都在同一个数据任务中修订：需要改数据时，通过原资料入口补充或修订文件，由 Agent 重新分析，重新确认转换及全量结果；不需要手工编写 JSON 或另建任务。确认的数据改进轮次提供「让 Agent 按确认方向修改数据方案」：它读取父轮坏例与确认范围，调用已有数据工具执行组合、受限适配或转换预览，保存前后方案及改动摘要。生成的新预览仍需业务确认，不自动编造监督标签。远程服务需同时确认发送当前业务资料及父轮实际评测输出与坏例。原开发和测试题的输入、答案不能改写、缺失或进入训练集；新增独立业务对象进入训练，同组资料仍留在原保留分区。
+
+已有数据版本也可直接点击「用本轮固定题集准备数据版本」，为本轮绑定题集。没有分组字段时，仍需确认每行属于独立业务对象。数据绑定完成后点击「按已确认范围准备下一轮训练」，通过预检后在下方对应记录启动。每轮从同一基础模型重新微调，父轮 adapter 保留作对照，不作为续训起点。
+
+本轮训练成功后的比较会自动选择基座、已确认父轮、本轮三个模型，使用固定开发题、相同实际输入与评分/生成协议。每个历史 adapter 使用它自己的基础模型路径与训练证据。页面逐条展示完整输出、期望、失败与截断，并把对照关联到当前改进假设。然后填写业务理由，记录「采用本轮结果」「继续改进」「停止本轮路线」或「证据不足」。采用记录不会自动部署模型；固定题数太少、输出截断或开放任务尚无评分时，应明确保留证据局限。
+
+CLI 提供相同的确认流程；每次改变资料或物化后使用返回的最新 `revision`：
+
+```sh
+python scripts/data_intake.py iteration-propose SESSION_ID --revision CURRENT_REVISION \
+  --parent-run-id PARENT_RUN_ID --evaluation-id PARENT_EVALUATION_ID \
+  --hypothesis '已有监督覆盖不足可能影响类别判断' \
+  --expected-outcome '固定开发题上的严格错误减少' \
+  --change '补充经过审核的独立训练样例，保持原开发和测试题不变' --data-change
+python scripts/data_intake.py iteration-confirm SESSION_ID ITERATION_ID --revision CURRENT_REVISION
+# 按需先经 add-source 补充资料，再让 Agent 按确认方向修订处理方案。
+python scripts/data_intake.py iteration-revise SESSION_ID ITERATION_ID --revision CURRENT_REVISION --allow-remote-data
+# 核对新预览并沿 confirm / full-sources / full-confirm 确认实际数据。
+python scripts/data_intake.py materialize SESSION_ID --revision CURRENT_REVISION --iteration-id ITERATION_ID
+python scripts/data_intake.py iteration-prepare SESSION_ID ITERATION_ID --revision CURRENT_REVISION
+python scripts/data_intake.py iteration-start SESSION_ID ITERATION_ID --revision CURRENT_REVISION
+python scripts/data_intake.py train-status NEW_RUN_ID
+python scripts/data_intake.py eval-compare SESSION_ID NEW_RUN_ID --revision CURRENT_REVISION --iteration-id ITERATION_ID
+python scripts/data_intake.py iteration-decide ITERATION_ID --decision insufficient_evidence --reason '题数仍少，暂不据此采用'
+python scripts/data_intake.py iteration-list SESSION_ID
+```
+
+`iteration-propose` 可重复 `--change`，可选 `--epochs`、`--learning-rate`、`--max-length`；不改数据则省略 `--data-change`。`iteration-start` 有预检风险且已核对时加 `--acknowledge-warnings`。`eval-compare --iteration-id` 会自动选择父轮，并绑定三模型结果；已有合格报告也可用 `iteration-bind SESSION_ID ITERATION_ID --revision CURRENT_REVISION --evaluation-id EVALUATION_ID` 关联。全局 `--iteration-root` 可覆盖改进记录目录。
+
+若只需先固定题集，可点击「固定当前开发与测试题集」，或运行 `suite-freeze SESSION_ID --revision CURRENT_REVISION`；这一步不修改父轮数据版本。`suite-show SUITE_ID` 查看来源与题数，后续 `materialize ... --suite-id SUITE_ID` 显式复用。全局 `--suite-root` 控制独立题集目录；改进提案自带题集引用，使用 `--iteration-id` 时无需手工查找目录。固定题集时，新独立行进入训练，原题保持不变，分区比例及随机种子不再重新分配原题。
+
+## 配置文件与优先级
+
+页面与 CLI 默认共享项目目录下的 `outputs/workbench/agent-settings.json`，文件仅包含 `provider`、`base_url`、`model`。CLI 可用全局参数覆盖文件路径，须放在子命令前：
+
+```sh
+python scripts/data_intake.py --agent-config-path /tmp/tunesmith-agent.json \
+  agent-config --provider local --model my-tool-model
+```
+
+读取顺序为：CLI 临时参数（如果提供）→ `TUNESMITH_AGENT_PROVIDER` / `TUNESMITH_AGENT_BASE_URL` / `TUNESMITH_AGENT_MODEL` 环境变量 → 保存的公共配置 → 本地默认配置。环境选择新供应商时，未明确设置的地址和模型取该供应商预设，不沿用旧供应商的地址。页面初次加载同样采用环境优先，随后可以在当前会话修改。
+
+`agent-config` 保存时只依据已有文件和显式参数，不会把环境覆盖值意外写入文件。切换供应商取新预设；自定义服务需明确填写地址。环境覆盖不会因保存文件自动消失，需要清除对应环境变量才能使用文件值。
+
+环境密钥由启动者配给当前有效供应商和地址；保存或切换公共配置后也应核对配套密钥。当前实现没有密钥库、额度管理或计费系统。
+
+## 长单元格的证据读取
+
+普通画像、行检查和预览会将单个长文本展示为前 2000 个字符，原资料保持完整。Agent 可用 `read_cell_content` 核实财报尾注、合同末段等后续内容：`source_kind="current"` 读取当前组合或适配结果，`source_kind="source"` 加 `alias` 读取已上传的具名原始文件，`source_kind="full"` 读取已有全量报告的来源。三种选择均使用各自来源的短 `row_id` 与实际 `column`，不会将别名解释为磁盘路径或网址。
+
+`offset` 默认 0，`limit` 默认 4096、最多 16384 个字符。返回内容包括来源指纹、完整行证据引用、字段类型、总字符数、当前片段及 `next_offset` / `has_more`；结构化值以确定性 JSON 编码分页。该工具的片段不会再次被截成 2000 字符。Agent 可按需跳到指定位置，但只能把实际读过的部分称为观察证据；全量报告若已过期，返回结果也会标明 `stale`。工具读取遵循本次数据分析已有的供应商和资料发送授权，不改变源文件，不要求为提出缺资料问题读完所有长字段。

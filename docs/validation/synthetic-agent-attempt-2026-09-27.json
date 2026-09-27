@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-27",
+  "purpose": "Validate the actual Agent on the existing small synthetic three-source case; no external financial research.",
+  "session_id": "cd0ffd458e024e3da2436e8cf7267c35",
+  "provider": "glm-coding",
+  "model": "glm-5.3",
+  "status": "not_verified",
+  "attempts": [
+    {
+      "request_timeout_seconds": 90,
+      "completed_tools": [
+        "list_sources",
+        "inspect_source",
+        "read_cell_content",
+        "preview_composition",
+        "inspect_rows",
+        "profile_data"
+      ],
+      "outcome": "connection failure or request timeout before submitting analysis"
+    },
+    {
+      "request_timeout_seconds": 180,
+      "completed_tools": [
+        "list_sources"
+      ],
+      "outcome": "connection failure or request timeout on next request"
+    }
+  ],
+  "saved_analysis": false,
+  "next_action": "awaiting_analysis",
+  "default_timeout_restored_seconds": 90,
+  "new_training_runs": 0,
+  "note": "Do not substitute offline fixture success for actual Agent understanding. No more identical online retries without a concrete change in service conditions; focus on remaining core product gaps."
+}

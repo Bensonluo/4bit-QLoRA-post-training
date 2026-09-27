@@ -1,0 +1,1669 @@
+{
+  "scope": "Actual GLM planning for fictional software regression data previously approved for this test; local hardware/model facts and real tokenizer checks; no actual customer acceptance; test-driven confirmation and real recommended-config training do not establish business benefit",
+  "plan": {
+    "plan_id": "tp-5f251c8ad2984558a150ccf9160b23c9",
+    "session_id": "70695b9552884220baaef6fd9dae0883",
+    "session_revision": 6,
+    "dataset": {
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+      "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+      "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "full_confirmed_revision": 4,
+      "paths": {
+        "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+        "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json"
+      },
+      "data_config": {
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "validation_split": 0,
+        "max_samples": null,
+        "format": "alpaca",
+        "dataset_loader": "alpaca"
+      },
+      "statistics": {
+        "total_rows": 12,
+        "independent_groups": 12,
+        "requested_ratios": {
+          "train": 0.8,
+          "validation": 0.1,
+          "test": 0.1
+        },
+        "actual_ratios": {
+          "train": 0.8333333333333334,
+          "validation": 0.08333333333333333,
+          "test": 0.08333333333333333
+        },
+        "row_counts": {
+          "train": 10,
+          "validation": 1,
+          "test": 1
+        },
+        "group_counts": {
+          "train": 10,
+          "validation": 1,
+          "test": 1
+        },
+        "rendered_exact_duplicate_rows": 0,
+        "source_exact_duplicate_rows": 0,
+        "stratified": false,
+        "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。"
+      },
+      "evaluation_suite": null
+    },
+    "model_identity": {
+      "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "config_and_tokenizer_hashes": {
+        "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+        "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+        "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      "weights": [
+        {
+          "name": "model-00001-of-00002.safetensors",
+          "size": 3441185608,
+          "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+        },
+        {
+          "name": "model-00002-of-00002.safetensors",
+          "size": 622329984,
+          "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+        }
+      ],
+      "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+    },
+    "proposal": {
+      "business_questions": [],
+      "limitations": [
+        "训练数据仅10行、验证/测试各1行，验证与测试指标不具统计意义，本方案不承诺业务效果达标；验收阈值需业务另行确定",
+        "预检只验证tokenizer、分区与长度，不加载训练权重，不能保证模型装入64GB统一内存、MPS算子全部兼容或训练成功，首个真实运行可能暴露问题",
+        "监督为现有全prompt监督（padding按pad_token屏蔽、因果损失跳过首token），非仅答案监督；小数据下存在过拟合或复读prompt的风险，多训几轮不保证更好",
+        "分类以文本生成实现，SFT只教模型输出标签字符串；上线解码侧需业务自行约束输出为『硬件/物流』封闭二值",
+        "切分未做类别分层（工具事实：stratified=false），单行验证/测试的类别代表性未知，效果指标波动风险高"
+      ],
+      "lora_options": {
+        "bias": "none",
+        "lora_alpha": 16,
+        "lora_dropout": 0.05,
+        "r": 8,
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj"
+        ],
+        "use_dora": false,
+        "use_rslora": false
+      },
+      "max_length": 1024,
+      "model_options": {
+        "load_in_8bit": false,
+        "quantization_bits": null,
+        "torch_dtype": "bfloat16",
+        "use_flash_attention": false
+      },
+      "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "rationale": [
+        "业务已确认：仅用客户首次原话预测封闭二分类（硬件/物流），内部log记录字段角色为unused、不进入输入，recipe输入列为customer_first_words、监督列为质检确认的category，业务无未解决歧义",
+        "唯一通过工具观察的本地候选为Qwen3-1.7B（qwen3架构、上下文40960、tokenizer/权重哈希齐全、无已知问题），本方案选用该路径，不引入任何未观察模型",
+        "真实预检在max_length=1024下通过：训练10/验证1/测试1行，0截断、0答案丢失、0空监督，输入为中文短句，1024远超需要且远低于模型40960上限",
+        "硬件为Apple Silicon MPS、64GB统一内存、支持bf16、不支持量化：因此加载用bfloat16、不开量化、不开8bit、不开flash attention、不开gradient_checkpointing（1.7B规模无需）",
+        "训练仅10行且监督为现有全prompt策略（padding按pad_token屏蔽）：为限制过拟合，LoRA取低秩r=8/alpha=16/dropout 0.05，仅作用于已观察qwen3架构的注意力投影q/k/v/o_proj；轮数取3而非更多，多训不保证更有效",
+        "batch_size=2、梯度累积=1使每轮产生5个优化步（3轮约15步），比平台默认有效批8（每轮仅1-2步）在极小数据上有更多更新；学习率1e-4、warmup 0.1、max_grad_norm 1.0为LoRA小数据常规稳健设置；logging_steps=1便于逐步观察，save/eval_steps=5约每轮各存/评一次",
+        "切分已按ticket分组（10/1/1，无重复、无跨组泄漏），本方案不改动输出目录、采样规则或监督策略"
+      ],
+      "status": "ready",
+      "training_options": {
+        "batch_size": 2,
+        "bf16": true,
+        "eval_steps": 5,
+        "fp16": false,
+        "gradient_accumulation_steps": 1,
+        "gradient_checkpointing": false,
+        "learning_rate": 0.0001,
+        "logging_steps": 1,
+        "max_grad_norm": 1.0,
+        "num_epochs": 3,
+        "save_steps": 5,
+        "warmup_ratio": 0.1,
+        "weight_decay": 0.01
+      }
+    },
+    "status": "ready",
+    "context": {
+      "session_id": "70695b9552884220baaef6fd9dae0883",
+      "session_revision": 6,
+      "dataset": {
+        "name": "intake-70695b9552884220baaef6fd9dae0883",
+        "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+        "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+        "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "full_confirmed_revision": 4,
+        "paths": {
+          "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+          "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json"
+        },
+        "data_config": {
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "validation_split": 0,
+          "max_samples": null,
+          "format": "alpaca",
+          "dataset_loader": "alpaca"
+        },
+        "statistics": {
+          "total_rows": 12,
+          "independent_groups": 12,
+          "requested_ratios": {
+            "train": 0.8,
+            "validation": 0.1,
+            "test": 0.1
+          },
+          "actual_ratios": {
+            "train": 0.8333333333333334,
+            "validation": 0.08333333333333333,
+            "test": 0.08333333333333333
+          },
+          "row_counts": {
+            "train": 10,
+            "validation": 1,
+            "test": 1
+          },
+          "group_counts": {
+            "train": 10,
+            "validation": 1,
+            "test": 1
+          },
+          "rendered_exact_duplicate_rows": 0,
+          "source_exact_duplicate_rows": 0,
+          "stratified": false,
+          "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。"
+        },
+        "evaluation_suite": null
+      },
+      "statistics": {
+        "total_rows": 12,
+        "independent_groups": 12,
+        "requested_ratios": {
+          "train": 0.8,
+          "validation": 0.1,
+          "test": 0.1
+        },
+        "actual_ratios": {
+          "train": 0.8333333333333334,
+          "validation": 0.08333333333333333,
+          "test": 0.08333333333333333
+        },
+        "row_counts": {
+          "train": 10,
+          "validation": 1,
+          "test": 1
+        },
+        "group_counts": {
+          "train": 10,
+          "validation": 1,
+          "test": 1
+        },
+        "rendered_exact_duplicate_rows": 0,
+        "source_exact_duplicate_rows": 0,
+        "stratified": false,
+        "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。"
+      },
+      "business": {
+        "goal": "根据客户首次原话预测售后类别，类别封闭为硬件或物流。上线只有客户原话；绝不能输入内部处理记录。",
+        "task": {
+          "goal": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」；上线时仅输入客户原话，绝不输入内部处理记录",
+          "usage_input": "客户首次原话（开放中文短文本，如「屏幕碎了」「快递还没到」）；工单号与内部处理记录上线时不可用",
+          "desired_output": "单一类别标签：硬件或物流（封闭二分类，不允许其他值）",
+          "row_meaning": "一行代表一个独立售后工单（当前样例3行，每行ticket唯一）",
+          "supervision_source": "人工category字段，由质检确认，可信",
+          "success_criteria": [
+            "上线输入仅含客户首次原话，任何内部记录字段（log的【内部记录】段）不出现在训练与评测输入中",
+            "每行有唯一且经质检确认的封闭类别标签（硬件/物流），无冲突、无缺标签",
+            "log缺失任一标记的行在适配阶段报错并单独处理，绝不猜测或静默填值",
+            "训练/验证切分按ticket分组，同一工单不跨集",
+            "全量数据预览通过后再训练，最终以留出组上的类别准确率等指标验收（阈值由业务确定）"
+          ],
+          "field_roles": [
+            {
+              "column": "customer_first_words",
+              "role": "input",
+              "reason": "由log提取的客户首次原话，是上线时唯一可获得的输入，已通过隔离验证的适配生成",
+              "available_at_prediction": true,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            },
+            {
+              "column": "category",
+              "role": "target",
+              "reason": "质检确认的人工类别，是监督标签与答案字段；预测时不可得，不得进入输入",
+              "available_at_prediction": false,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            },
+            {
+              "column": "ticket",
+              "role": "group",
+              "reason": "工单编号，业务指定用于分组切分，防止同工单信息跨集泄漏；不进入模型输入",
+              "available_at_prediction": true,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            },
+            {
+              "column": "log",
+              "role": "unused",
+              "reason": "含【内部记录】，属事后信息，业务明确禁止作为输入；仅作为customer_first_words的提取来源与追溯凭证",
+              "available_at_prediction": false,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            }
+          ]
+        },
+        "recipe": {
+          "instruction": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。",
+          "inputs": [
+            {
+              "column": "customer_first_words",
+              "label": "客户首次原话",
+              "value_kind": "open_text",
+              "transforms": [
+                {
+                  "operation": "strip",
+                  "old": "",
+                  "new": "",
+                  "mapping": {}
+                }
+              ]
+            }
+          ],
+          "targets": [
+            {
+              "column": "category",
+              "label": "售后类别",
+              "value_kind": "categorical",
+              "transforms": [
+                {
+                  "operation": "strip",
+                  "old": "",
+                  "new": "",
+                  "mapping": {}
+                }
+              ]
+            }
+          ],
+          "output_format": "text",
+          "allow_multiple_targets": false,
+          "multiple_targets_reason": "",
+          "group_columns": [
+            "ticket"
+          ],
+          "split_rationale": "按 ticket 分组切分，确保同一工单的所有行不跨训练/验证集，避免同工单信息泄漏。"
+        }
+      },
+      "platform": {
+        "device": "mps",
+        "is_cuda": false,
+        "is_mps": true,
+        "is_apple_silicon": true,
+        "supports_quantization": false,
+        "supports_bf16": true,
+        "total_memory_gb": 64.0,
+        "description": "Apple Silicon (64.0GB unified memory)",
+        "gpu_count": 1
+      },
+      "recommended_settings": {
+        "quantization_bits": null,
+        "batch_size": 4,
+        "gradient_accumulation_steps": 2,
+        "gradient_checkpointing": false,
+        "max_length": 1024,
+        "torch_dtype": "bfloat16",
+        "reason": "Apple Silicon with 64GB unified memory. No quantization needed — load model in bf16 directly."
+      },
+      "models": [
+        {
+          "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "status": "available",
+          "model_identity": {
+            "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "config_and_tokenizer_hashes": {
+              "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+              "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+              "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+              "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+              "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+              "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+            },
+            "weights": [
+              {
+                "name": "model-00001-of-00002.safetensors",
+                "size": 3441185608,
+                "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+              },
+              {
+                "name": "model-00002-of-00002.safetensors",
+                "size": 622329984,
+                "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+              }
+            ],
+            "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+          },
+          "config": {
+            "model_type": "qwen3",
+            "architectures": [
+              "Qwen3ForCausalLM"
+            ],
+            "hidden_size": 2048,
+            "num_hidden_layers": 28,
+            "vocab_size": 151936,
+            "max_position_embeddings": 40960,
+            "dtype": "bfloat16"
+          },
+          "context_capacity": 40960,
+          "tokenizer": {
+            "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "is_fast": true,
+            "pad_token_id": 151643,
+            "eos_token_id": 151645,
+            "padding_side": "right",
+            "truncation_side": "right",
+            "model_max_length": 131072
+          },
+          "issues": []
+        }
+      ],
+      "scope_note": "当前只交接现有 SFT/LoRA。tokenizer 与分区预检不加载训练权重，不能保证模型能装入内存、所有训练算子兼容或业务效果达标；硬件建议只是起点，最终以真实运行和固定业务评测为准。",
+      "probes": [
+        {
+          "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "max_length": 1024,
+          "evidence_id": "probe:c6f07187f1e5ba4b74d358da6878d001844ef35c40d5bb6c91919106bc2ddc03",
+          "result": {
+            "status": "passed",
+            "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "model_identity": {
+              "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+              "config_and_tokenizer_hashes": {
+                "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+                "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+                "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+                "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+                "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+                "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+                "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+                "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+              },
+              "weights": [
+                {
+                  "name": "model-00001-of-00002.safetensors",
+                  "size": 3441185608,
+                  "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+                },
+                {
+                  "name": "model-00002-of-00002.safetensors",
+                  "size": 622329984,
+                  "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+                }
+              ],
+              "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+            },
+            "max_length": 1024,
+            "preflight": {
+              "status": "passed",
+              "dataset_name": "intake-70695b9552884220baaef6fd9dae0883",
+              "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+              "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+              "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+              "full_confirmed_revision": 4,
+              "max_length": 1024,
+              "tokenizer": {
+                "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+                "is_fast": true,
+                "pad_token_id": 151643,
+                "eos_token_id": 151645,
+                "padding_side": "right",
+                "truncation_side": "right",
+                "model_max_length": 131072,
+                "class": "Qwen2Tokenizer"
+              },
+              "supervision_strategy": "full_prompt_padding_masked",
+              "issues": [
+                {
+                  "code": "full_prompt_supervision",
+                  "severity": "info",
+                  "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+                  "split": null,
+                  "row_ids": [],
+                  "occurrences": 1
+                }
+              ],
+              "splits": {
+                "train": {
+                  "rows": 10,
+                  "truncated_rows": 0,
+                  "answer_lost_rows": 0,
+                  "empty_supervision_rows": 0,
+                  "unverified_answer_rows": 0,
+                  "truncation_ratio": 0.0
+                },
+                "validation": {
+                  "rows": 1,
+                  "truncated_rows": 0,
+                  "answer_lost_rows": 0,
+                  "empty_supervision_rows": 0,
+                  "unverified_answer_rows": 0,
+                  "truncation_ratio": 0.0
+                },
+                "test": {
+                  "rows": 1,
+                  "truncated_rows": 0,
+                  "answer_lost_rows": 0,
+                  "empty_supervision_rows": 0,
+                  "unverified_answer_rows": 0,
+                  "truncation_ratio": 0.0
+                }
+              },
+              "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。",
+              "inspected_rows": 12,
+              "risk_examples": []
+            },
+            "issues": [
+              {
+                "code": "full_prompt_supervision",
+                "severity": "info",
+                "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+                "split": null,
+                "row_ids": [],
+                "occurrences": 1
+              }
+            ],
+            "scope_note": "当前只交接现有 SFT/LoRA。tokenizer 与分区预检不加载训练权重，不能保证模型能装入内存、所有训练算子兼容或业务效果达标；硬件建议只是起点，最终以真实运行和固定业务评测为准。"
+          }
+        }
+      ]
+    },
+    "trace": [
+      {
+        "tool": "inspect_training_context",
+        "ok": true,
+        "arguments": {},
+        "evidence_id": "context:d2dcc1abdda3249afbb7b4660d9671659887ead5e47f57839e336b93dac66024"
+      },
+      {
+        "tool": "probe_training",
+        "ok": true,
+        "arguments": {
+          "max_length": 1024,
+          "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B"
+        },
+        "evidence_id": "probe:c6f07187f1e5ba4b74d358da6878d001844ef35c40d5bb6c91919106bc2ddc03"
+      },
+      {
+        "tool": "submit_training_plan",
+        "ok": false,
+        "arguments": {
+          "evidence_ids": [
+            "context:d2dcc1abdda3249afbb7b4660d9671659887ead5e47f57839e336b93dac66024",
+            "probe:c6f07187f1e5ba4b74d358da6878d001844ef35c40d5bb6c91919106bc2ddc03"
+          ],
+          "proposal": {
+            "business_questions": [],
+            "limitations": [
+              "训练数据仅10行、验证/测试各1行，验证与测试指标不具统计意义，本方案不承诺业务效果达标；验收阈值需业务另行确定",
+              "预检只验证tokenizer、分区与长度，不加载训练权重，不能保证模型装入64GB统一内存、MPS算子全部兼容或训练成功，首个真实运行可能暴露问题",
+              "监督为现有全prompt监督（padding按pad_token屏蔽、因果损失跳过首token），非仅答案监督；小数据下存在过拟合或复读prompt的风险，多训几轮不保证更好",
+              "分类以文本生成实现，SFT只教模型输出标签字符串；上线解码侧需业务自行约束输出为『硬件/物流』封闭二值",
+              "切分未做类别分层（工具事实：stratified=false），单行验证/测试的类别代表性未知，效果指标波动风险高"
+            ],
+            "lora_options": {
+              "bias": "none",
+              "lora_alpha": 16,
+              "lora_dropout": 0.05,
+              "r": 8,
+              "target_modules": [
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj"
+              ],
+              "use_dora": false,
+              "use_rslora": false
+            },
+            "max_length": 1024,
+            "model_options": {
+              "bf16": true,
+              "device_map": "mps",
+              "fp16": false,
+              "load_in_8bit": false,
+              "quantization_bits": null,
+              "torch_dtype": "bfloat16",
+              "use_flash_attention": false
+            },
+            "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "rationale": [
+              "业务已确认：仅用客户首次原话预测封闭二分类（硬件/物流），内部log记录字段角色为unused、不进入输入，recipe输入列为customer_first_words、监督列为质检确认的category，业务无未解决歧义",
+              "唯一通过工具观察的本地候选为Qwen3-1.7B（qwen3架构、上下文40960、tokenizer/权重哈希齐全、无已知问题），本方案选用该路径，不引入任何未观察模型",
+              "真实预检在max_length=1024下通过：训练10/验证1/测试1行，0截断、0答案丢失、0空监督，输入为中文短句，1024远超需要且远低于模型40960上限",
+              "硬件为Apple Silicon MPS、64GB统一内存、支持bf16、不支持量化：因此加载用bf16、不开量化、不开8bit、不开flash attention、不开gradient_checkpointing（1.7B规模无需）",
+              "训练仅10行且监督为现有全prompt策略（padding按pad_token屏蔽）：为限制过拟合，LoRA取低秩r=8/alpha=16/dropout 0.05，仅作用于已观察qwen3架构的注意力投影q/k/v/o_proj；轮数取3而非更多，多训不保证更有效",
+              "batch_size=2、梯度累积=1使每轮产生5个优化步（3轮约15步），比平台默认有效批8（每轮仅1-2步）在极小数据上有更多更新；学习率1e-4、warmup 0.1、max_grad_norm 1.0为LoRA小数据常规稳健设置；logging_steps=1便于逐步观察，save/eval_steps=5约每轮各存/评一次",
+              "切分已按ticket分组（10/1/1，无重复、无跨组泄漏），本方案不改动输出目录、采样规则或监督策略"
+            ],
+            "status": "ready",
+            "training_options": {
+              "batch_size": 2,
+              "bf16": true,
+              "eval_steps": 5,
+              "fp16": false,
+              "gradient_accumulation_steps": 1,
+              "gradient_checkpointing": false,
+              "learning_rate": 0.0001,
+              "logging_steps": 1,
+              "max_grad_norm": 1.0,
+              "num_epochs": 3,
+              "save_steps": 5,
+              "warmup_ratio": 0.1,
+              "weight_decay": 0.01
+            }
+          }
+        },
+        "evidence_ids": [
+          "context:d2dcc1abdda3249afbb7b4660d9671659887ead5e47f57839e336b93dac66024",
+          "probe:c6f07187f1e5ba4b74d358da6878d001844ef35c40d5bb6c91919106bc2ddc03"
+        ],
+        "agent_model": "glm-5.3",
+        "error": "model_options 含当前训练方案不支持的字段。"
+      },
+      {
+        "tool": "submit_training_plan",
+        "ok": true,
+        "arguments": {
+          "evidence_ids": [
+            "context:d2dcc1abdda3249afbb7b4660d9671659887ead5e47f57839e336b93dac66024",
+            "probe:c6f07187f1e5ba4b74d358da6878d001844ef35c40d5bb6c91919106bc2ddc03"
+          ],
+          "proposal": {
+            "business_questions": [],
+            "lora_options": {
+              "bias": "none",
+              "lora_alpha": 16,
+              "lora_dropout": 0.05,
+              "r": 8,
+              "target_modules": [
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj"
+              ],
+              "use_dora": false,
+              "use_rslora": false
+            },
+            "limitations": [
+              "训练数据仅10行、验证/测试各1行，验证与测试指标不具统计意义，本方案不承诺业务效果达标；验收阈值需业务另行确定",
+              "预检只验证tokenizer、分区与长度，不加载训练权重，不能保证模型装入64GB统一内存、MPS算子全部兼容或训练成功，首个真实运行可能暴露问题",
+              "监督为现有全prompt监督（padding按pad_token屏蔽、因果损失跳过首token），非仅答案监督；小数据下存在过拟合或复读prompt的风险，多训几轮不保证更好",
+              "分类以文本生成实现，SFT只教模型输出标签字符串；上线解码侧需业务自行约束输出为『硬件/物流』封闭二值",
+              "切分未做类别分层（工具事实：stratified=false），单行验证/测试的类别代表性未知，效果指标波动风险高"
+            ],
+            "max_length": 1024,
+            "model_options": {
+              "load_in_8bit": false,
+              "quantization_bits": null,
+              "torch_dtype": "bfloat16",
+              "use_flash_attention": false
+            },
+            "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "rationale": [
+              "业务已确认：仅用客户首次原话预测封闭二分类（硬件/物流），内部log记录字段角色为unused、不进入输入，recipe输入列为customer_first_words、监督列为质检确认的category，业务无未解决歧义",
+              "唯一通过工具观察的本地候选为Qwen3-1.7B（qwen3架构、上下文40960、tokenizer/权重哈希齐全、无已知问题），本方案选用该路径，不引入任何未观察模型",
+              "真实预检在max_length=1024下通过：训练10/验证1/测试1行，0截断、0答案丢失、0空监督，输入为中文短句，1024远超需要且远低于模型40960上限",
+              "硬件为Apple Silicon MPS、64GB统一内存、支持bf16、不支持量化：因此加载用bfloat16、不开量化、不开8bit、不开flash attention、不开gradient_checkpointing（1.7B规模无需）",
+              "训练仅10行且监督为现有全prompt策略（padding按pad_token屏蔽）：为限制过拟合，LoRA取低秩r=8/alpha=16/dropout 0.05，仅作用于已观察qwen3架构的注意力投影q/k/v/o_proj；轮数取3而非更多，多训不保证更有效",
+              "batch_size=2、梯度累积=1使每轮产生5个优化步（3轮约15步），比平台默认有效批8（每轮仅1-2步）在极小数据上有更多更新；学习率1e-4、warmup 0.1、max_grad_norm 1.0为LoRA小数据常规稳健设置；logging_steps=1便于逐步观察，save/eval_steps=5约每轮各存/评一次",
+              "切分已按ticket分组（10/1/1，无重复、无跨组泄漏），本方案不改动输出目录、采样规则或监督策略"
+            ],
+            "status": "ready",
+            "training_options": {
+              "batch_size": 2,
+              "bf16": true,
+              "eval_steps": 5,
+              "fp16": false,
+              "gradient_accumulation_steps": 1,
+              "gradient_checkpointing": false,
+              "learning_rate": 0.0001,
+              "logging_steps": 1,
+              "max_grad_norm": 1.0,
+              "num_epochs": 3,
+              "save_steps": 5,
+              "warmup_ratio": 0.1,
+              "weight_decay": 0.01
+            }
+          }
+        },
+        "evidence_ids": [
+          "context:d2dcc1abdda3249afbb7b4660d9671659887ead5e47f57839e336b93dac66024",
+          "probe:c6f07187f1e5ba4b74d358da6878d001844ef35c40d5bb6c91919106bc2ddc03"
+        ],
+        "agent_model": "glm-5.3"
+      }
+    ],
+    "probe": {
+      "status": "passed",
+      "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "model_identity": {
+        "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "config_and_tokenizer_hashes": {
+          "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+          "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+          "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+          "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+          "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+          "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        },
+        "weights": [
+          {
+            "name": "model-00001-of-00002.safetensors",
+            "size": 3441185608,
+            "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+          },
+          {
+            "name": "model-00002-of-00002.safetensors",
+            "size": 622329984,
+            "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+          }
+        ],
+        "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+      },
+      "max_length": 1024,
+      "preflight": {
+        "status": "passed",
+        "dataset_name": "intake-70695b9552884220baaef6fd9dae0883",
+        "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+        "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "full_confirmed_revision": 4,
+        "max_length": 1024,
+        "tokenizer": {
+          "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "is_fast": true,
+          "pad_token_id": 151643,
+          "eos_token_id": 151645,
+          "padding_side": "right",
+          "truncation_side": "right",
+          "model_max_length": 131072,
+          "class": "Qwen2Tokenizer"
+        },
+        "supervision_strategy": "full_prompt_padding_masked",
+        "issues": [
+          {
+            "code": "full_prompt_supervision",
+            "severity": "info",
+            "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+            "split": null,
+            "row_ids": [],
+            "occurrences": 1
+          }
+        ],
+        "splits": {
+          "train": {
+            "rows": 10,
+            "truncated_rows": 0,
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "unverified_answer_rows": 0,
+            "truncation_ratio": 0.0
+          },
+          "validation": {
+            "rows": 1,
+            "truncated_rows": 0,
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "unverified_answer_rows": 0,
+            "truncation_ratio": 0.0
+          },
+          "test": {
+            "rows": 1,
+            "truncated_rows": 0,
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "unverified_answer_rows": 0,
+            "truncation_ratio": 0.0
+          }
+        },
+        "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。",
+        "inspected_rows": 12,
+        "risk_examples": []
+      },
+      "issues": [
+        {
+          "code": "full_prompt_supervision",
+          "severity": "info",
+          "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+          "split": null,
+          "row_ids": [],
+          "occurrences": 1
+        }
+      ],
+      "scope_note": "当前只交接现有 SFT/LoRA。tokenizer 与分区预检不加载训练权重，不能保证模型能装入内存、所有训练算子兼容或业务效果达标；硬件建议只是起点，最终以真实运行和固定业务评测为准。"
+    },
+    "run_id": null,
+    "created_at": "2026-09-26T15:14:19.693085+00:00",
+    "scope_note": "当前只交接现有 SFT/LoRA。tokenizer 与分区预检不加载训练权重，不能保证模型能装入内存、所有训练算子兼容或业务效果达标；硬件建议只是起点，最终以真实运行和固定业务评测为准。",
+    "proposal_digest": "47833ad73f7bbd7a86354cb179aeb17d472dadaf1c7dedb3c0f227063a21bb4c"
+  },
+  "training_started": true,
+  "test_driven_confirmation": {
+    "plan_id": "tp-5f251c8ad2984558a150ccf9160b23c9",
+    "run_id": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+    "training_run": {
+      "run_id": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+      "session_id": "70695b9552884220baaef6fd9dae0883",
+      "session_revision": 6,
+      "dataset_version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+      "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "output_dir": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+      "status": "prepared",
+      "issues": [
+        {
+          "code": "full_prompt_supervision",
+          "severity": "info",
+          "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+          "split": null,
+          "row_ids": []
+        }
+      ],
+      "config": {
+        "model": {
+          "name": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "quantization_bits": null,
+          "load_in_8bit": false,
+          "trust_remote_code": false,
+          "use_flash_attention": false,
+          "max_length": 1024,
+          "device_map": null,
+          "torch_dtype": "bfloat16",
+          "merge_dtype": "bfloat16"
+        },
+        "training": {
+          "output_dir": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+          "num_epochs": 3,
+          "batch_size": 2,
+          "gradient_accumulation_steps": 1,
+          "learning_rate": 0.0001,
+          "weight_decay": 0.01,
+          "warmup_ratio": 0.1,
+          "lr_scheduler_type": "cosine",
+          "logging_steps": 1,
+          "save_steps": 5,
+          "eval_steps": 5,
+          "save_total_limit": 3,
+          "gradient_checkpointing": false,
+          "gradient_checkpointing_use_reentrant": false,
+          "torch_empty_cache_steps": null,
+          "auto_find_batch_size": false,
+          "train_sampling_strategy": "random",
+          "fp16": false,
+          "bf16": true,
+          "max_grad_norm": 1.0,
+          "seed": 42,
+          "fsdp": null,
+          "fsdp_config": null,
+          "deepspeed_config": null,
+          "auto_scale_batch": false,
+          "use_liger_kernel": false,
+          "neftune_noise_alpha": null,
+          "torch_compile": false,
+          "optim": null,
+          "peak_flops_per_device": null
+        },
+        "lora": {
+          "r": 8,
+          "lora_alpha": 16,
+          "lora_dropout": 0.05,
+          "target_modules": [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj"
+          ],
+          "bias": "none",
+          "task_type": "CAUSAL_LM",
+          "use_dora": false,
+          "use_rslora": false,
+          "init_lora_weights": true,
+          "loftq_bits": 4,
+          "loftq_iter": 1,
+          "lora_ga_direction": "ArB2r",
+          "lora_ga_scale": "stable",
+          "lora_ga_stable_gamma": 16,
+          "lora_ga_calibration_batches": 4,
+          "lora_ga_cache_file": null,
+          "rank_pattern": null,
+          "alpha_pattern": null,
+          "exclude_modules": null
+        },
+        "data": {
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "dataset_split": "train",
+          "max_samples": null,
+          "validation_split": 0,
+          "preprocessing_num_workers": 4,
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "format": "alpaca",
+          "dataset_loader": "alpaca"
+        },
+        "logging": {
+          "use_wandb": false,
+          "wandb_project": "qlora-post-training",
+          "wandb_entity": null,
+          "wandb_run_name": null,
+          "use_tensorboard": false,
+          "log_dir": "./outputs/logs",
+          "log_memory": true,
+          "console_level": "INFO",
+          "use_mlflow": true,
+          "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-training-plan-runs-20260926/mlflow.db",
+          "mlflow_experiment_name": "workbench-sft",
+          "mlflow_run_name": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+          "register_model": false,
+          "registry_model_name": null,
+          "merge_before_register": true,
+          "registry_stage": "Staging"
+        }
+      },
+      "preflight": {
+        "status": "passed",
+        "dataset_name": "intake-70695b9552884220baaef6fd9dae0883",
+        "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+        "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "full_confirmed_revision": 4,
+        "max_length": 1024,
+        "tokenizer": {
+          "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "is_fast": true,
+          "pad_token_id": 151643,
+          "eos_token_id": 151645,
+          "padding_side": "right",
+          "truncation_side": "right",
+          "model_max_length": 131072,
+          "class": "Qwen2Tokenizer"
+        },
+        "supervision_strategy": "full_prompt_padding_masked",
+        "issues": [
+          {
+            "code": "full_prompt_supervision",
+            "severity": "info",
+            "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+            "split": null,
+            "row_ids": []
+          }
+        ],
+        "splits": {
+          "train": {
+            "rows": 10,
+            "truncated_rows": 0,
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "unverified_answer_rows": 0,
+            "truncation_ratio": 0.0
+          },
+          "validation": {
+            "rows": 1,
+            "truncated_rows": 0,
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "unverified_answer_rows": 0,
+            "truncation_ratio": 0.0
+          },
+          "test": {
+            "rows": 1,
+            "truncated_rows": 0,
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "unverified_answer_rows": 0,
+            "truncation_ratio": 0.0
+          }
+        },
+        "rows": [
+          {
+            "split": "train",
+            "row_id": "r000003",
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "answer_tokens": 1,
+            "kept_tokens": 69,
+            "supervised_tokens": 68,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000004",
+            "full_tokens": 71,
+            "input_tokens": 70,
+            "answer_tokens": 1,
+            "kept_tokens": 71,
+            "supervised_tokens": 70,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000005",
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "answer_tokens": 1,
+            "kept_tokens": 70,
+            "supervised_tokens": 69,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000006",
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "answer_tokens": 1,
+            "kept_tokens": 70,
+            "supervised_tokens": 69,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000007",
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "answer_tokens": 1,
+            "kept_tokens": 70,
+            "supervised_tokens": 69,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000008",
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "answer_tokens": 1,
+            "kept_tokens": 70,
+            "supervised_tokens": 69,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000009",
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "answer_tokens": 1,
+            "kept_tokens": 72,
+            "supervised_tokens": 71,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000010",
+            "full_tokens": 68,
+            "input_tokens": 67,
+            "answer_tokens": 1,
+            "kept_tokens": 68,
+            "supervised_tokens": 67,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000011",
+            "full_tokens": 72,
+            "input_tokens": 71,
+            "answer_tokens": 1,
+            "kept_tokens": 72,
+            "supervised_tokens": 71,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "train",
+            "row_id": "r000012",
+            "full_tokens": 70,
+            "input_tokens": 69,
+            "answer_tokens": 1,
+            "kept_tokens": 70,
+            "supervised_tokens": 69,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "validation",
+            "row_id": "r000001",
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "answer_tokens": 1,
+            "kept_tokens": 69,
+            "supervised_tokens": 68,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          },
+          {
+            "split": "test",
+            "row_id": "r000002",
+            "full_tokens": 69,
+            "input_tokens": 68,
+            "answer_tokens": 1,
+            "kept_tokens": 69,
+            "supervised_tokens": 68,
+            "answer_supervised_tokens": 1,
+            "answer_kept_tokens": 1,
+            "was_truncated": false,
+            "answer_was_truncated": false,
+            "answer_boundary_verified": true
+          }
+        ],
+        "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。"
+      },
+      "artifacts": {},
+      "metrics": {},
+      "failure": null,
+      "created_at": "2026-09-26T15:14:21.343341+00:00",
+      "model_identity": {
+        "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "config_and_tokenizer_hashes": {
+          "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+          "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+          "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+          "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+          "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+          "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        },
+        "weights": [
+          {
+            "name": "model-00001-of-00002.safetensors",
+            "size": 3441185608,
+            "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+          },
+          {
+            "name": "model-00002-of-00002.safetensors",
+            "size": 622329984,
+            "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+          }
+        ],
+        "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+      },
+      "config_digest": "0a1f923a468c9fe101220ddd4f1f335f4a35362a033de66a38db108e77293c73",
+      "dataset": {
+        "name": "intake-70695b9552884220baaef6fd9dae0883",
+        "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+        "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+        "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "full_confirmed_revision": 4,
+        "paths": {
+          "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+          "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json"
+        },
+        "data_config": {
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "validation_split": 0,
+          "max_samples": null,
+          "format": "alpaca",
+          "dataset_loader": "alpaca"
+        },
+        "statistics": {
+          "total_rows": 12,
+          "independent_groups": 12,
+          "requested_ratios": {
+            "train": 0.8,
+            "validation": 0.1,
+            "test": 0.1
+          },
+          "actual_ratios": {
+            "train": 0.8333333333333334,
+            "validation": 0.08333333333333333,
+            "test": 0.08333333333333333
+          },
+          "row_counts": {
+            "train": 10,
+            "validation": 1,
+            "test": 1
+          },
+          "group_counts": {
+            "train": 10,
+            "validation": 1,
+            "test": 1
+          },
+          "rendered_exact_duplicate_rows": 0,
+          "source_exact_duplicate_rows": 0,
+          "stratified": false,
+          "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。"
+        },
+        "evaluation_suite": null
+      }
+    }
+  },
+  "actual_training": {
+    "run_id": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+    "session_id": "70695b9552884220baaef6fd9dae0883",
+    "session_revision": 6,
+    "dataset_version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+    "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+    "output_dir": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+    "status": "succeeded",
+    "issues": [
+      {
+        "code": "full_prompt_supervision",
+        "severity": "info",
+        "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+        "split": null,
+        "row_ids": []
+      }
+    ],
+    "config": {
+      "model": {
+        "name": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "quantization_bits": null,
+        "load_in_8bit": false,
+        "trust_remote_code": false,
+        "use_flash_attention": false,
+        "max_length": 1024,
+        "device_map": null,
+        "torch_dtype": "bfloat16",
+        "merge_dtype": "bfloat16"
+      },
+      "training": {
+        "output_dir": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+        "num_epochs": 3,
+        "batch_size": 2,
+        "gradient_accumulation_steps": 1,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "warmup_ratio": 0.1,
+        "lr_scheduler_type": "cosine",
+        "logging_steps": 1,
+        "save_steps": 5,
+        "eval_steps": 5,
+        "save_total_limit": 3,
+        "gradient_checkpointing": false,
+        "gradient_checkpointing_use_reentrant": false,
+        "torch_empty_cache_steps": null,
+        "auto_find_batch_size": false,
+        "train_sampling_strategy": "random",
+        "fp16": false,
+        "bf16": true,
+        "max_grad_norm": 1.0,
+        "seed": 42,
+        "fsdp": null,
+        "fsdp_config": null,
+        "deepspeed_config": null,
+        "auto_scale_batch": false,
+        "use_liger_kernel": false,
+        "neftune_noise_alpha": null,
+        "torch_compile": false,
+        "optim": null,
+        "peak_flops_per_device": null
+      },
+      "lora": {
+        "r": 8,
+        "lora_alpha": 16,
+        "lora_dropout": 0.05,
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj"
+        ],
+        "bias": "none",
+        "task_type": "CAUSAL_LM",
+        "use_dora": false,
+        "use_rslora": false,
+        "init_lora_weights": true,
+        "loftq_bits": 4,
+        "loftq_iter": 1,
+        "lora_ga_direction": "ArB2r",
+        "lora_ga_scale": "stable",
+        "lora_ga_stable_gamma": 16,
+        "lora_ga_calibration_batches": 4,
+        "lora_ga_cache_file": null,
+        "rank_pattern": null,
+        "alpha_pattern": null,
+        "exclude_modules": null
+      },
+      "data": {
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "dataset_split": "train",
+        "max_samples": null,
+        "validation_split": 0,
+        "preprocessing_num_workers": 4,
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "format": "alpaca",
+        "dataset_loader": "alpaca"
+      },
+      "logging": {
+        "use_wandb": false,
+        "wandb_project": "qlora-post-training",
+        "wandb_entity": null,
+        "wandb_run_name": null,
+        "use_tensorboard": false,
+        "log_dir": "./outputs/logs",
+        "log_memory": true,
+        "console_level": "INFO",
+        "use_mlflow": true,
+        "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-training-plan-runs-20260926/mlflow.db",
+        "mlflow_experiment_name": "workbench-sft",
+        "mlflow_run_name": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+        "register_model": false,
+        "registry_model_name": null,
+        "merge_before_register": true,
+        "registry_stage": "Staging"
+      }
+    },
+    "preflight": {
+      "status": "passed",
+      "dataset_name": "intake-70695b9552884220baaef6fd9dae0883",
+      "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+      "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "full_confirmed_revision": 4,
+      "max_length": 1024,
+      "tokenizer": {
+        "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "is_fast": true,
+        "pad_token_id": 151643,
+        "eos_token_id": 151645,
+        "padding_side": "right",
+        "truncation_side": "right",
+        "model_max_length": 131072,
+        "class": "Qwen2Tokenizer"
+      },
+      "supervision_strategy": "full_prompt_padding_masked",
+      "issues": [
+        {
+          "code": "full_prompt_supervision",
+          "severity": "info",
+          "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+          "split": null,
+          "row_ids": []
+        }
+      ],
+      "splits": {
+        "train": {
+          "rows": 10,
+          "truncated_rows": 0,
+          "answer_lost_rows": 0,
+          "empty_supervision_rows": 0,
+          "unverified_answer_rows": 0,
+          "truncation_ratio": 0.0
+        },
+        "validation": {
+          "rows": 1,
+          "truncated_rows": 0,
+          "answer_lost_rows": 0,
+          "empty_supervision_rows": 0,
+          "unverified_answer_rows": 0,
+          "truncation_ratio": 0.0
+        },
+        "test": {
+          "rows": 1,
+          "truncated_rows": 0,
+          "answer_lost_rows": 0,
+          "empty_supervision_rows": 0,
+          "unverified_answer_rows": 0,
+          "truncation_ratio": 0.0
+        }
+      },
+      "rows": [
+        {
+          "split": "train",
+          "row_id": "r000003",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000004",
+          "full_tokens": 71,
+          "input_tokens": 70,
+          "answer_tokens": 1,
+          "kept_tokens": 71,
+          "supervised_tokens": 70,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000005",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000006",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000007",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000008",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000009",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000010",
+          "full_tokens": 68,
+          "input_tokens": 67,
+          "answer_tokens": 1,
+          "kept_tokens": 68,
+          "supervised_tokens": 67,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000011",
+          "full_tokens": 72,
+          "input_tokens": 71,
+          "answer_tokens": 1,
+          "kept_tokens": 72,
+          "supervised_tokens": 71,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "train",
+          "row_id": "r000012",
+          "full_tokens": 70,
+          "input_tokens": 69,
+          "answer_tokens": 1,
+          "kept_tokens": 70,
+          "supervised_tokens": 69,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "validation",
+          "row_id": "r000001",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        },
+        {
+          "split": "test",
+          "row_id": "r000002",
+          "full_tokens": 69,
+          "input_tokens": 68,
+          "answer_tokens": 1,
+          "kept_tokens": 69,
+          "supervised_tokens": 68,
+          "answer_supervised_tokens": 1,
+          "answer_kept_tokens": 1,
+          "was_truncated": false,
+          "answer_was_truncated": false,
+          "answer_boundary_verified": true
+        }
+      ],
+      "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。"
+    },
+    "artifacts": {
+      "adapter_config": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model/adapter_config.json",
+      "adapter_weights": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model/adapter_model.safetensors",
+      "tokenizer_config": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model/tokenizer_config.json",
+      "metrics": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model/workbench_metrics.json",
+      "manifest": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model/workbench_manifest.json"
+    },
+    "metrics": {
+      "loss": 3.775954484939575,
+      "grad_norm": 1.854540467262268,
+      "learning_rate": 1.4529091286973995e-06,
+      "epoch": 3.0,
+      "step": 15,
+      "eval_loss": 3.777538299560547,
+      "eval_runtime": 0.4815,
+      "eval_samples_per_second": 2.077,
+      "eval_steps_per_second": 2.077,
+      "train_runtime": 39.2131,
+      "train_samples_per_second": 0.765,
+      "train_steps_per_second": 0.383,
+      "total_flos": 260374360227840.0,
+      "train_loss": 4.251304038365682
+    },
+    "failure": null,
+    "created_at": "2026-09-26T15:14:21.343341+00:00",
+    "model_identity": {
+      "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "config_and_tokenizer_hashes": {
+        "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+        "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+        "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      "weights": [
+        {
+          "name": "model-00001-of-00002.safetensors",
+          "size": 3441185608,
+          "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+        },
+        {
+          "name": "model-00002-of-00002.safetensors",
+          "size": 622329984,
+          "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+        }
+      ],
+      "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。"
+    },
+    "config_digest": "0a1f923a468c9fe101220ddd4f1f335f4a35362a033de66a38db108e77293c73",
+    "dataset": {
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13",
+      "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+      "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "full_confirmed_revision": 4,
+      "paths": {
+        "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+        "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json"
+      },
+      "data_config": {
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "validation_split": 0,
+        "max_samples": null,
+        "format": "alpaca",
+        "dataset_loader": "alpaca"
+      },
+      "statistics": {
+        "total_rows": 12,
+        "independent_groups": 12,
+        "requested_ratios": {
+          "train": 0.8,
+          "validation": 0.1,
+          "test": 0.1
+        },
+        "actual_ratios": {
+          "train": 0.8333333333333334,
+          "validation": 0.08333333333333333,
+          "test": 0.08333333333333333
+        },
+        "row_counts": {
+          "train": 10,
+          "validation": 1,
+          "test": 1
+        },
+        "group_counts": {
+          "train": 10,
+          "validation": 1,
+          "test": 1
+        },
+        "rendered_exact_duplicate_rows": 0,
+        "source_exact_duplicate_rows": 0,
+        "stratified": false,
+        "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。"
+      },
+      "evaluation_suite": null
+    },
+    "started_at": "2026-09-26T15:15:21.845591+00:00",
+    "pid": 50740,
+    "mlflow_run_id": "69b6ae95a88d4c32b97d8837a985b9ef",
+    "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-training-plan-runs-20260926/mlflow.db",
+    "mlflow_status": "recorded"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "evidence_type": "synthetic integration after actual GLM analysis; no model training",
+  "next_action": "ready_for_training_preflight",
+  "row_counts": {
+    "train": 10,
+    "validation": 1,
+    "test": 1
+  },
+  "source_digest": "da2fa89e07103ce6d04a5529f1756fe48e0886af3ee19bd3e0f9963ccaabfcb3",
+  "recipe_digest": "6607347362b192bc3cff79bc5dc81cc97c5c4f071c4451ed7c787ab518eb6fe2",
+  "dataset_version": "51fc37894ca7e7c4c2729d36fcede2573986aed8011eb15d8eaa889c34546e5f",
+  "retained_records": 12,
+  "partitions_disjoint": true,
+  "validation_split": 0,
+  "dataset_loader": "alpaca"
+}

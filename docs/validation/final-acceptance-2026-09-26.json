@@ -1,0 +1,506 @@
+{
+  "scope": "Actual local Qwen inference on the fictional fixed test split; software acceptance-flow validation, not customer acceptance or proof of model benefit. No final test evidence sent to Agent.",
+  "standard_source": "Declared by integration test before generation, not supplied by a customer.",
+  "acceptance": {
+    "acceptance_id": "ac-81912c0aff5146d09e65ffbc05f57ba4",
+    "blind_test": true,
+    "case_count": 1,
+    "created_at": "2026-09-26T15:44:53.941749+00:00",
+    "criteria": {
+      "business_standard": "虚构软件回归用标准：只输出完整正确的问题类别；至少五道独立测试题全部通过。此标准不代表真实客户要求。",
+      "metric": "exact_match",
+      "minimum_cases": 5,
+      "minimum_score": 1.0
+    },
+    "criteria_digest": "4930327addb3aba75e6618103c9d56d4704960ff69582d9c5e3971ed0aa0e6b8",
+    "decisions": [],
+    "evaluation_id": "b4a2b6ba55674a96b7958d038bde13e2",
+    "evaluation_suite": {
+      "case_counts": {
+        "test": 1,
+        "validation": 1
+      },
+      "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+      "manifest_path": "/private/tmp/tunesmith-final-acceptance-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+      "root": "/private/tmp/tunesmith-final-acceptance-20260926/suites",
+      "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+    },
+    "exposure_keys": [
+      "27ac92a05ed341099caacbe35102cb4aca7a091caee395432268dc9af204148d",
+      "d24ff238724c7044204bf2652b316699c58704bfd5d103886a9df6b4e3539e2a"
+    ],
+    "exposure_note": "本次尝试已占用这些留出题；即使加载或生成失败，也不会再次伪装首次盲测。",
+    "frozen_digest": "342e9bc5bf2cce0016bb5c13379fbed46454d48b613f6d9eb4a6d6888ea0ab8a",
+    "model": {
+      "adapter_path": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+      "base_model": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "label": "GLM推荐方案训练模型",
+      "revision": null
+    },
+    "model_identity": {
+      "adapter": {
+        "content_digest": "21d66ac8f801651917e793114342d12cdceda707c9cbc457d1ee4c54404245d5",
+        "directory": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+        "files": {
+          "adapter_config.json": "8c3f38778e3280c58f4001c6d2f652f5229798f3410694cb7e9273fe9da319d2",
+          "adapter_model.safetensors": "375b6bf20b27e658a3db45fa978b57cb9fd372840b5edcc9508c1e527004b0bb",
+          "tokenizer.json": "ecf4d795f7b56986ab02af17847aa62857316dd08b953bf7e1b73802ee98e91e",
+          "tokenizer_config.json": "1cc816812993bff176eb4f7495433b736f06fba9b6e7b05cac7b4a1780650c95",
+          "workbench_manifest.json": "c43f97b48e419ee2c438e9d9365332b70a576bc7b3ff47e9712b1168eac3f9d1",
+          "workbench_metrics.json": "ae3652d09f32b70b0b8f1f270eeff5c4739c0b336d65cea1551f72647bd22615"
+        }
+      },
+      "base": {
+        "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1",
+        "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+        "files": {
+          "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+          "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+          "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+          "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+          "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+          "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+          "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+          "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        }
+      }
+    },
+    "original_session_digest": "3b3ff37972612e59c1f1360e931f4e9d7bc06d15595c5c3c5636a8903f05b144",
+    "protocol": {
+      "fields": [],
+      "max_new_tokens": 32,
+      "scorer": "classification_exact",
+      "strip_whitespace": true
+    },
+    "report": {
+      "comparison_key": "ade40b9a952681314fdd0b1414faf9bbb139e5ee0eb689f75feaf89af3e4d460",
+      "created_at": "2026-09-26T15:44:57.581643+00:00",
+      "dataset": {
+        "evaluation_suite": {
+          "cases_digest": "b152c70f09c6364a0d35f31710a8cd43a3c2f68edc36dde437740e30539e4023",
+          "evaluation_key": "18204121f2914d89c84a9d7365b9d58dfbc7cadba3ab9494b24287b50924e529",
+          "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+        },
+        "name": "intake-70695b9552884220baaef6fd9dae0883",
+        "purpose": "final_acceptance",
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "row_count": 1,
+        "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+        "split": "test",
+        "split_sha256": "693978e2d9f626bba84106732451b896cf0d5d2afdc62e4e0c1e3759d447e1fa",
+        "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13"
+      },
+      "evaluation_id": "b4a2b6ba55674a96b7958d038bde13e2",
+      "models": [
+        {
+          "errors": [],
+          "identity": {
+            "adapter": {
+              "content_digest": "21d66ac8f801651917e793114342d12cdceda707c9cbc457d1ee4c54404245d5",
+              "directory": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+              "files": {
+                "adapter_config.json": "8c3f38778e3280c58f4001c6d2f652f5229798f3410694cb7e9273fe9da319d2",
+                "adapter_model.safetensors": "375b6bf20b27e658a3db45fa978b57cb9fd372840b5edcc9508c1e527004b0bb",
+                "tokenizer.json": "ecf4d795f7b56986ab02af17847aa62857316dd08b953bf7e1b73802ee98e91e",
+                "tokenizer_config.json": "1cc816812993bff176eb4f7495433b736f06fba9b6e7b05cac7b4a1780650c95",
+                "workbench_manifest.json": "c43f97b48e419ee2c438e9d9365332b70a576bc7b3ff47e9712b1168eac3f9d1",
+                "workbench_metrics.json": "ae3652d09f32b70b0b8f1f270eeff5c4739c0b336d65cea1551f72647bd22615"
+              }
+            },
+            "base": {
+              "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1",
+              "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+              "files": {
+                "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+                "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+                "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+                "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+                "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+                "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+                "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+                "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+                "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+                "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+              }
+            }
+          },
+          "label": "GLM推荐方案训练模型",
+          "metrics": {
+            "exact_match": 0.0,
+            "field_accuracy": {},
+            "generated": 1,
+            "generation_coverage": 1.0,
+            "scorable_coverage": 0.0,
+            "scored": 0,
+            "total": 1
+          },
+          "requested_model": {
+            "adapter_path": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+            "base_model": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "label": "GLM推荐方案训练模型",
+            "revision": null
+          },
+          "rows": [
+            {
+              "correct": false,
+              "error": "达到生成长度限制，输出可能不完整；未作为成功答案。",
+              "expected": "物流",
+              "field_scores": {},
+              "generated_tokens": 32,
+              "index": 0,
+              "output": "物流\n### Explanation:\n- 客户原话是「快递还没到」，说明客户对快递的物流状态有疑问，因此属于物流类",
+              "prompt": "### Instruction:\n根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。\n\n### Input:\n客户首次原话: 快递还没到\n\n### Response:\n",
+              "source": {
+                "evaluation_case_id": "8cd4a8bef84f9829edfee5007b32cc4cefbc6ff7d570f0ecca95e2ae316751b1",
+                "group": {
+                  "ticket": "002"
+                },
+                "origins": [
+                  {
+                    "row_id": "r000002",
+                    "source_digest": "a4e084d8f067d8b6149870e233a8dd7d90345aaaf52635d14ddbbd8bd8cd56bc"
+                  }
+                ],
+                "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+                "source_row_id": "r000002"
+              },
+              "status": "truncated",
+              "truncated": true
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "仅验收已选定模型的固定最终测试题；全部题纳入分母，包括生成失败与截断，不用于模型筛选或调参。",
+        "仅固定套件的评分题纳入分母；同组新增保留行不悄悄扩充评分题。"
+      ],
+      "protocol": {
+        "answers_digest": "e232adc24093e1b57129d65dda6d40d1dea283c0a16115af292aa49c044a1f3c",
+        "fields": [],
+        "generation": "greedy_v1",
+        "max_new_tokens": 32,
+        "prompt_digest": "d6d8d3007ede5a04e81a533ec78a2106757056e1ae2a50417009c77f346ab9cb",
+        "prompt_renderer": "render_alpaca_prompt_without_answer",
+        "scorer": "classification_exact",
+        "strip_whitespace": true
+      },
+      "status": "completed_with_failures"
+    },
+    "report_digest": "1fb55e4a9a4488d61430f149ace039f1d2108a284702c4106b5122477566e379",
+    "result": {
+      "accepted_cases": 0,
+      "decision": "insufficient_evidence",
+      "metric": "exact_match",
+      "minimum_cases": 5,
+      "minimum_score": 1.0,
+      "observed_decision": "insufficient_evidence",
+      "reason": "题目数量不足，或没有可完整核查的有效输出。",
+      "score": 0.0,
+      "total_cases": 1,
+      "usable_cases": 0
+    },
+    "revision": 2,
+    "session_id": "70695b9552884220baaef6fd9dae0883",
+    "session_revision": 6,
+    "snapshot_digest": "036d47a64a2585919f0e7e2a3933ac417146b66f8c759e972428a23a188bb262",
+    "status": "completed",
+    "training_provenance": {
+      "config": {
+        "data": {
+          "dataset_loader": "alpaca",
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "dataset_split": "train",
+          "format": "alpaca",
+          "max_samples": null,
+          "preprocessing_num_workers": 4,
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "validation_split": 0
+        },
+        "logging": {
+          "console_level": "INFO",
+          "log_dir": "./outputs/logs",
+          "log_memory": true,
+          "merge_before_register": true,
+          "mlflow_experiment_name": "workbench-sft",
+          "mlflow_run_name": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+          "mlflow_tracking_uri": "sqlite:////private/tmp/tunesmith-training-plan-runs-20260926/mlflow.db",
+          "register_model": false,
+          "registry_model_name": null,
+          "registry_stage": "Staging",
+          "use_mlflow": true,
+          "use_tensorboard": false,
+          "use_wandb": false,
+          "wandb_entity": null,
+          "wandb_project": "qlora-post-training",
+          "wandb_run_name": null
+        },
+        "lora": {
+          "alpha_pattern": null,
+          "bias": "none",
+          "exclude_modules": null,
+          "init_lora_weights": true,
+          "loftq_bits": 4,
+          "loftq_iter": 1,
+          "lora_alpha": 16,
+          "lora_dropout": 0.05,
+          "lora_ga_cache_file": null,
+          "lora_ga_calibration_batches": 4,
+          "lora_ga_direction": "ArB2r",
+          "lora_ga_scale": "stable",
+          "lora_ga_stable_gamma": 16,
+          "r": 8,
+          "rank_pattern": null,
+          "target_modules": [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj"
+          ],
+          "task_type": "CAUSAL_LM",
+          "use_dora": false,
+          "use_rslora": false
+        },
+        "model": {
+          "device_map": null,
+          "load_in_8bit": false,
+          "max_length": 1024,
+          "merge_dtype": "bfloat16",
+          "name": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "quantization_bits": null,
+          "torch_dtype": "bfloat16",
+          "trust_remote_code": false,
+          "use_flash_attention": false
+        },
+        "training": {
+          "auto_find_batch_size": false,
+          "auto_scale_batch": false,
+          "batch_size": 2,
+          "bf16": true,
+          "deepspeed_config": null,
+          "eval_steps": 5,
+          "fp16": false,
+          "fsdp": null,
+          "fsdp_config": null,
+          "gradient_accumulation_steps": 1,
+          "gradient_checkpointing": false,
+          "gradient_checkpointing_use_reentrant": false,
+          "learning_rate": 0.0001,
+          "logging_steps": 1,
+          "lr_scheduler_type": "cosine",
+          "max_grad_norm": 1.0,
+          "neftune_noise_alpha": null,
+          "num_epochs": 3,
+          "optim": null,
+          "output_dir": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+          "peak_flops_per_device": null,
+          "save_steps": 5,
+          "save_total_limit": 3,
+          "seed": 42,
+          "torch_compile": false,
+          "torch_empty_cache_steps": null,
+          "train_sampling_strategy": "random",
+          "use_liger_kernel": false,
+          "warmup_ratio": 0.1,
+          "weight_decay": 0.01
+        }
+      },
+      "facts": [
+        "适配器与清单内容匹配评测时身份；训练配置、数据版本及成功回执关联已核验。"
+      ],
+      "identity": {
+        "base_weight_verification": "content_verified",
+        "evaluation": {
+          "adapter": {
+            "content_digest": "21d66ac8f801651917e793114342d12cdceda707c9cbc457d1ee4c54404245d5",
+            "directory": "/private/tmp/tunesmith-training-plan-runs-20260926/wb-8b8acff806e944759c9c15ceb47a5ee7/model",
+            "files": {
+              "adapter_config.json": "8c3f38778e3280c58f4001c6d2f652f5229798f3410694cb7e9273fe9da319d2",
+              "adapter_model.safetensors": "375b6bf20b27e658a3db45fa978b57cb9fd372840b5edcc9508c1e527004b0bb",
+              "tokenizer.json": "ecf4d795f7b56986ab02af17847aa62857316dd08b953bf7e1b73802ee98e91e",
+              "tokenizer_config.json": "1cc816812993bff176eb4f7495433b736f06fba9b6e7b05cac7b4a1780650c95",
+              "workbench_manifest.json": "c43f97b48e419ee2c438e9d9365332b70a576bc7b3ff47e9712b1168eac3f9d1",
+              "workbench_metrics.json": "ae3652d09f32b70b0b8f1f270eeff5c4739c0b336d65cea1551f72647bd22615"
+            }
+          },
+          "base": {
+            "content_digest": "0e80bf436f210fabecaff5fd897c732afc7dedd0801731a09f5ad5d43871b4c1",
+            "directory": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+            "files": {
+              "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+              "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+              "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+              "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+              "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+              "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+              "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+              "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+            }
+          }
+        },
+        "training_base": {
+          "config_and_tokenizer_hashes": {
+            "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+            "configuration.json": "f888421726665e8a84b738eed42a64875aed79de8be7daade851ac8bf4c0cef9",
+            "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+            "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+            "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+            "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+            "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+            "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+          },
+          "path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "weight_identity_note": "基础模型权重、配置及 tokenizer 文件均记录实际内容 SHA256。",
+          "weights": [
+            {
+              "name": "model-00001-of-00002.safetensors",
+              "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+              "size": 3441185608
+            },
+            {
+              "name": "model-00002-of-00002.safetensors",
+              "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+              "size": 622329984
+            }
+          ]
+        }
+      },
+      "metrics": {
+        "epoch": 3.0,
+        "eval_loss": 3.777538299560547,
+        "eval_runtime": 0.4815,
+        "eval_samples_per_second": 2.077,
+        "eval_steps_per_second": 2.077,
+        "grad_norm": 1.854540467262268,
+        "learning_rate": 1.4529091286973995e-06,
+        "loss": 3.775954484939575,
+        "step": 15,
+        "total_flos": 260374360227840.0,
+        "train_loss": 4.251304038365682,
+        "train_runtime": 39.2131,
+        "train_samples_per_second": 0.765,
+        "train_steps_per_second": 0.383
+      },
+      "mlflow": {
+        "experiment_name": "workbench-sft",
+        "run_id": "69b6ae95a88d4c32b97d8837a985b9ef",
+        "run_name": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+        "status": "recorded",
+        "tracking_uri": "sqlite:////private/tmp/tunesmith-training-plan-runs-20260926/mlflow.db"
+      },
+      "preflight": {
+        "issues": [
+          {
+            "code": "full_prompt_supervision",
+            "message": "现有 Alpaca 训练对整个 prompt 计算标签；collator 按 pad_token_id 屏蔽 padding，因果损失跳过首 token，并非仅监督答案。",
+            "row_ids": [],
+            "severity": "info",
+            "split": null
+          }
+        ],
+        "max_length": 1024,
+        "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。",
+        "splits": {
+          "test": {
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "rows": 1,
+            "truncated_rows": 0,
+            "truncation_ratio": 0.0,
+            "unverified_answer_rows": 0
+          },
+          "train": {
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "rows": 10,
+            "truncated_rows": 0,
+            "truncation_ratio": 0.0,
+            "unverified_answer_rows": 0
+          },
+          "validation": {
+            "answer_lost_rows": 0,
+            "empty_supervision_rows": 0,
+            "rows": 1,
+            "truncated_rows": 0,
+            "truncation_ratio": 0.0,
+            "unverified_answer_rows": 0
+          }
+        },
+        "status": "passed",
+        "supervision_strategy": "full_prompt_padding_masked",
+        "tokenizer": {
+          "class": "Qwen2Tokenizer",
+          "eos_token_id": 151645,
+          "is_fast": true,
+          "model_max_length": 131072,
+          "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+          "pad_token_id": 151643,
+          "padding_side": "right",
+          "truncation_side": "right"
+        }
+      },
+      "status": "available",
+      "training_dataset": {
+        "data_config": {
+          "dataset_loader": "alpaca",
+          "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "format": "alpaca",
+          "max_samples": null,
+          "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+          "validation_split": 0
+        },
+        "evaluation_suite": null,
+        "full_confirmed_revision": 4,
+        "name": "intake-70695b9552884220baaef6fd9dae0883",
+        "paths": {
+          "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json",
+          "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+          "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+          "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl"
+        },
+        "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+        "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+        "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+        "statistics": {
+          "actual_ratios": {
+            "test": 0.08333333333333333,
+            "train": 0.8333333333333334,
+            "validation": 0.08333333333333333
+          },
+          "group_counts": {
+            "test": 1,
+            "train": 10,
+            "validation": 1
+          },
+          "independent_groups": 12,
+          "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。",
+          "rendered_exact_duplicate_rows": 0,
+          "requested_ratios": {
+            "test": 0.1,
+            "train": 0.8,
+            "validation": 0.1
+          },
+          "row_counts": {
+            "test": 1,
+            "train": 10,
+            "validation": 1
+          },
+          "source_exact_duplicate_rows": 0,
+          "stratified": false,
+          "total_rows": 12
+        },
+        "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13"
+      },
+      "training_run_id": "wb-8b8acff806e944759c9c15ceb47a5ee7",
+      "training_session_digest": "3b3ff37972612e59c1f1360e931f4e9d7bc06d15595c5c3c5636a8903f05b144"
+    },
+    "updated_at": "2026-09-26T15:45:06.160744+00:00"
+  },
+  "repeat_run_same_attempt": true,
+  "hidden_from_development_reports": true
+}

@@ -1,0 +1,124 @@
+{
+  "evaluation_id": "a95801a4e3294d00a22d4dbd6cee22e7",
+  "created_at": "2026-09-26T14:45:30.576812+00:00",
+  "comparison_key": "da3676c07e7b07de98972b2fb8f872e13ea35d3fe512a9d226c46410ad165550",
+  "session_id": "70695b9552884220baaef6fd9dae0883",
+  "session_revision": 6,
+  "model": "glm-5.3",
+  "assessment": {
+    "summary": "本次开发集仅1行（r000001「屏幕碎了」，期望「硬件」），base与first_sft输出逐字相同：先给错误标签「物流」，再自写解释并续写新的「### Input」，在32 token上限处截断，正确数为0。输入侧合规：prompt仅含客户首次原话，无【内部记录】或ticket泄漏。训练侧核查显示：train仅10行、1个epoch、LoRA r=4，train_loss 4.69/eval_loss 4.61，且预检明确监督策略为full_prompt_padding_masked（对整个prompt计损失，非仅答案）。当前失败表现为生成格式与停止问题叠加标签判错，数据量过小使本次结果仅能证明链路可运行，不能代表业务效果。建议先修复监督与答案格式/停止条件，再扩充真实标注数据后重新评测。",
+    "observations": [
+      {
+        "statement": "两个坏例的评测prompt仅含指令与「客户首次原话: 屏幕碎了」，未见log的【内部记录】段或ticket进入模型输入，符合「上线仅输入客户原话」的要求。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "base与first_sft在该开发行的输出逐字相同：先给出「物流」，再自写解释并继续编造新的「### Input: 客户首次原话: 电池没…」，在32 token处被截断；未产出封闭单标签，正确数为0。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "该行期望标签为「硬件」，而两个模型输出的首个标签均为「物流」；即使忽略截断只看首行，此样本也不正确。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "本次开发集仅1行（index 0），两个模型均为truncated错误（各1个），mismatch/invalid_output均为0；1行样本无法支撑任何准确率结论。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "训练预检显示监督策略为full_prompt_padding_masked：对整个prompt（指令+输入）计算标签、仅屏蔽padding，并非仅监督答案；这是预检明确记录的信息级问题。",
+        "evidence_ids": [
+          "training:first_sft:wb-9b175cec8b6a4fb3903860b38d81d2f7"
+        ]
+      },
+      {
+        "statement": "训练规模极小：train 10行、validation 1行、test 1行，num_epochs=1，LoRA r=4，train_loss约4.69、eval_loss约4.61；各分区预检无截断、无答案丢失、无空监督行。",
+        "evidence_ids": [
+          "training:first_sft:wb-9b175cec8b6a4fb3903860b38d81d2f7"
+        ]
+      },
+      {
+        "statement": "base模型无微调adapter记录（not_applicable）；first_sft的适配器、训练配置与数据版本身份已核验匹配本次评测。",
+        "evidence_ids": [
+          "training:first_sft:wb-9b175cec8b6a4fb3903860b38d81d2f7"
+        ]
+      }
+    ],
+    "hypotheses": [
+      {
+        "statement": "训练对整个prompt计算损失且答案结束缺乏EOS监督，导致模型把「标签+解释+续写模板」当作输出格式，直到触及生成上限。这是最可能的直接原因，但需验证。",
+        "evidence_ids": [],
+        "verification": "在适配阶段核对单条训练样本的标签掩码：确认仅答案token计入损失、答案「硬件/物流」后紧跟EOS；以answer-only监督+EOS重新训练后，在同一开发行观察是否在标签后停止并只输出单标签。"
+      },
+      {
+        "statement": "评测协议未约束停止条件与输出格式（greedy+max_new_tokens=32，无停止串/受限解码），多段续写输出在封闭二分类精确匹配下必然失败；单纯加大max_new_tokens不能解决。",
+        "evidence_ids": [],
+        "verification": "先验证监督修复；若格式修复后仍出现续写，检查评测协议的停止串/解码约束，而不是先调大长度。"
+      },
+      {
+        "statement": "训练数据仅10行、开发集仅1行且只训1个epoch，adapter行为几乎未变（两模型输出完全相同），本次结果只说明技术链路可运行。",
+        "evidence_ids": [],
+        "verification": "扩充经质检的真实标注工单，保持按ticket分组切分，修复监督后重新训练，在规模合理的开发集上重新评测。"
+      },
+      {
+        "statement": "即使修复格式，该样本首标签「物流」与期望「硬件」仍不一致，可能反映训练量不足或该类样本覆盖不足。",
+        "evidence_ids": [],
+        "verification": "格式修复后在扩充的开发集上评测，按类别统计错误分布；现有1行证据不足以定位是训练不足还是数据问题。"
+      }
+    ],
+    "next_steps": [
+      "修改训练管线：改为仅监督答案token（answer-only损失），并确保答案「硬件/物流」后带EOS；修改后先做全量数据预览，确认样本渲染与标签掩码再训练。",
+      "确认训练样本的答案字段严格为封闭单标签（硬件/物流），评测侧核对分类精确匹配的停止条件与多段输出的处理方式，避免以调大max_new_tokens代替格式修复。",
+      "扩充经质检确认的真实标注工单数据，保持按ticket分组切分（同工单不跨集），重新训练并重跑开发集评测；本次1行开发集不能作为验收依据。",
+      "修复后重新评测时同步报告base与first_sft的完整输出（含截断、invalid等错误计数），不得只截取首行标签宣布成功。"
+    ],
+    "decision": "revise_pipeline",
+    "limitations": [
+      "开发集仅1行、训练集10行，本结果只证明技术链路可运行，不能估计准确率或代表任何业务收益。",
+      "工具不返回训练样本原文与独立测试集；训练答案是否为纯封闭标签、答案后是否带EOS未直接核实，只能列为待验证项。",
+      "训练loss约4.69、预检通过不代表业务达标；base与first_sft输出完全相同的原因（数据量、轮数或监督方式）现有证据无法区分。",
+      "本次仅使用固定开发集做诊断，未使用测试集调参，也未进行跨数据版本的指标对比。"
+    ],
+    "business_questions": [
+      "业务验收的准确率阈值是多少？基于1行开发集无法计算有意义的准确率，业务可接受的最小留出评测规模（按ticket分组）是多少？",
+      "能否提供更多经质检确认的真实工单标注数据（客户首次原话+封闭类别），以支撑训练与验收？",
+      "上线是否严格要求输出恰好为「硬件」或「物流」单标签？若是，修复训练格式与停止监督后，是否接受在推理侧增加受限解码或停止条件作为兜底？"
+    ]
+  },
+  "tool_trace": [
+    {
+      "tool": "inspect_evaluation_summary",
+      "ok": true
+    },
+    {
+      "tool": "inspect_training_evidence",
+      "ok": true
+    },
+    {
+      "tool": "inspect_bad_cases",
+      "ok": true
+    },
+    {
+      "tool": "submit_evaluation_assessment",
+      "ok": true
+    }
+  ],
+  "scope": "development_advice_requires_business_review",
+  "validation_note": "Actual GLM used verified real training receipts and bad cases on fictional data. This proves evidence access and cited advice, not correctness of causal diagnosis or customer acceptance.",
+  "review_findings": [
+    "Agent correctly cited actual training configuration, sample counts, losses, supervision policy and unchanged bad outputs.",
+    "Its suggestion to switch to answer-only supervision or add EOS remains an untested hypothesis: full-prompt supervision alone is not a defect, and the evidence tool did not directly expose end-token supervision. No changes were automatically applied.",
+    "System instructions were subsequently clarified to prevent treating a legal supervision strategy or unverified EOS assumptions as established causes."
+  ]
+}

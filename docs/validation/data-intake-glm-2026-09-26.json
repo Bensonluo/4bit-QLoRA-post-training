@@ -1,0 +1,556 @@
+{
+  "date": "2026-09-26",
+  "data_kind": "fictional regression cases; not customer acceptance",
+  "provider": "glm-coding",
+  "model": "glm-5.3",
+  "endpoint": "https://open.bigmodel.cn/api/coding/paas/v4",
+  "cases": [
+    {
+      "case": "classification",
+      "status": "review_preview",
+      "analysis": {
+        "task": {
+          "goal": "根据客户首次描述预测售后问题类别（人工质检类别）。",
+          "usage_input": "上线时只有客户首次描述文本（客户在提交工单时写的话），没有其他字段。",
+          "desired_output": "一个经质检审核的人工售后问题类别（如硬件损坏、物流咨询、发错商品等，具体全集待全量确认），单选、唯一答案。",
+          "row_meaning": "一行代表一张售后工单，含客户首次描述、人工问题类别与事后处理结果。",
+          "supervision_source": "「人工问题类别」列，由质检人工审核产生，可作为可信标签来源。",
+          "success_criteria": [
+            "输入仅使用客户描述，模型输出单个人工问题类别",
+            "全量数据中不存在未归类或冲突的人工问题类别标签",
+            "独立评测集上类别预测准确率/各类召回达到业务验收标准（阈值待业务确认）",
+            "线上推理时不依赖工单编号、处理结果等预测时不可得信息"
+          ],
+          "field_roles": [
+            {
+              "column": "客户描述",
+              "role": "input",
+              "reason": "上线时唯一可获得的信息，用户已明确线上只会有客户描述；作为唯一输入字段。",
+              "available_at_prediction": true,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003",
+                "r000004"
+              ]
+            },
+            {
+              "column": "人工问题类别",
+              "role": "target",
+              "reason": "由质检审核的答案列，作为监督目标；样例中为离散类别文本，标记为 categorical。",
+              "available_at_prediction": false,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            },
+            {
+              "column": "处理结果",
+              "role": "unused",
+              "reason": "事后信息，用户已说明是处理后的结果；进入输入会造成事后信息泄漏，排除在训练输入外。",
+              "available_at_prediction": false,
+              "evidence_row_ids": [
+                "r000001",
+                "r000003"
+              ]
+            },
+            {
+              "column": "工单编号",
+              "role": "metadata",
+              "reason": "仅用于追踪的编号，用户已说明；不参与输入与答案，保留为元数据便于回查。",
+              "available_at_prediction": true,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            }
+          ]
+        },
+        "findings": [
+          {
+            "kind": "observed",
+            "message": "样例共 4 行，4 列均无缺失值、无重复行；预览配方 4/4 行 ready，无缺答案、无标签冲突。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000002",
+              "r000003",
+              "r000004"
+            ]
+          },
+          {
+            "kind": "observed",
+            "message": "「人工问题类别」为质检审核的人工类别，样例中出现 3 个不同值（硬件损坏×2、物流咨询×1、发错商品×1），适合作为类别型目标答案。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000002",
+              "r000003"
+            ]
+          },
+          {
+            "kind": "observed",
+            "message": "「处理结果」是事后信息（如换屏完成、换货完成），已按用户说明排除在输入之外，避免事后信息泄漏；「工单编号」仅用于追踪，也不进入输入。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000003",
+              "r000004"
+            ]
+          },
+          {
+            "kind": "observed",
+            "message": "样例中客户描述均为短文本（4-7 字）且无前后空白等格式问题，strip 清理后与原值一致。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000002"
+            ]
+          },
+          {
+            "kind": "needs_full_data",
+            "message": "样例仅 4 行，无法确认类别全集、各类别占比、是否存在空描述或同描述不同类别的冲突；需上传全量后核查训练可行性。",
+            "evidence_row_ids": []
+          },
+          {
+            "kind": "hypothesis",
+            "message": "假定全量数据中「人工问题类别」已由质检统一口径标注、可直接作为训练答案；如全量存在口径不一，需先做 map_values 归一化或人工复核。",
+            "evidence_row_ids": []
+          }
+        ],
+        "questions": [
+          {
+            "question_id": "Q1",
+            "question": "人工问题类别是否有一份固定的闭环类别清单（例如固定 N 类）？",
+            "why": "若类别清单固定，可在全量核查与验收时按清单比对；若线上可能出现新类别，需要额外的新增/兜底类别策略。该问题不影响当前预览的正确性。",
+            "options": [
+              "是，固定类别清单，线上只会出现这些类别",
+              "否，类别可能新增，需要保留新类别处理机制",
+              "不确定，需要与质检确认"
+            ],
+            "blocks_confirmation": false
+          }
+        ],
+        "recipe": {
+          "instruction": "根据客户首次描述预测人工售后问题类别。输入为客户描述文本，答案为人工问题类别。",
+          "inputs": [
+            {
+              "column": "客户描述",
+              "label": "客户描述",
+              "value_kind": "open_text",
+              "transforms": [
+                {
+                  "operation": "strip",
+                  "old": "",
+                  "new": "",
+                  "mapping": {}
+                }
+              ]
+            }
+          ],
+          "targets": [
+            {
+              "column": "人工问题类别",
+              "label": "问题类别",
+              "value_kind": "categorical",
+              "transforms": [
+                {
+                  "operation": "strip",
+                  "old": "",
+                  "new": "",
+                  "mapping": {}
+                }
+              ]
+            }
+          ],
+          "output_format": "text",
+          "allow_multiple_targets": false,
+          "multiple_targets_reason": "",
+          "group_columns": [],
+          "split_rationale": ""
+        },
+        "capability_gaps": [],
+        "training_approach": "暂定：单输入单答案的文本分类式指令微调。输入字段为客户描述（strip 清理），答案字段为人工问题类别（strip 清理、类别型）；「处理结果」与「工单编号」不进入训练样本。样例已验证该配方可直接渲染为问答对。当前样例仅 4 行，不足以支撑训练，需全量核查类别分布后再判断样本量是否足够；若不足，按固定类别清单由质检对历史工单首次描述补标注，不从处理结果反推伪标签。",
+        "next_steps": [
+          "上传全量 fictional-tickets.csv，核查类别全集与各类别样本量，标记低样本类别以便补标注。",
+          "核查全量是否存在空/超短客户描述以及同描述不同人工类别的冲突行，冲突需质检仲裁。",
+          "业务确认类别清单是否固定闭环（见问题 Q1）；确认后如有别名再补充 map_values 归一化并重新预览。",
+          "按确认后的配方生成训练集，用留出工单做独立评测（准确率/每类召回），达标后再上线。"
+        ]
+      },
+      "preview": {
+        "source_digest": "4488c84f6a897fae5a670e3605b70716b95de1451255230f70e0c8bae26b28c7",
+        "recipe_digest": "6607347362b192bc3cff79bc5dc81cc97c5c4f071c4451ed7c787ab518eb6fe2",
+        "instruction": "根据客户首次描述预测人工售后问题类别。输入为客户描述文本，答案为人工问题类别。",
+        "rows": [
+          {
+            "row_id": "r000001",
+            "original": {
+              "工单编号": "001",
+              "客户描述": "屏幕碎了",
+              "人工问题类别": "硬件损坏",
+              "处理结果": "换屏完成"
+            },
+            "input": "客户描述: 屏幕碎了",
+            "target": "硬件损坏",
+            "group": {},
+            "status": "ready",
+            "issues": []
+          },
+          {
+            "row_id": "r000002",
+            "original": {
+              "工单编号": "002",
+              "客户描述": "快递还没到",
+              "人工问题类别": "物流咨询",
+              "处理结果": "查询后告知预计送达"
+            },
+            "input": "客户描述: 快递还没到",
+            "target": "物流咨询",
+            "group": {},
+            "status": "ready",
+            "issues": []
+          },
+          {
+            "row_id": "r000003",
+            "original": {
+              "工单编号": "003",
+              "客户描述": "收到的颜色不对",
+              "人工问题类别": "发错商品",
+              "处理结果": "换货完成"
+            },
+            "input": "客户描述: 收到的颜色不对",
+            "target": "发错商品",
+            "group": {},
+            "status": "ready",
+            "issues": []
+          },
+          {
+            "row_id": "r000004",
+            "original": {
+              "工单编号": "004",
+              "客户描述": "机器开不了机",
+              "人工问题类别": "硬件损坏",
+              "处理结果": "换机完成"
+            },
+            "input": "客户描述: 机器开不了机",
+            "target": "硬件损坏",
+            "group": {},
+            "status": "ready",
+            "issues": []
+          }
+        ],
+        "counts": {
+          "ready": 4,
+          "needs_label": 0,
+          "invalid": 0,
+          "conflict": 0
+        },
+        "scope_note": "这是所提供数据的转换预览，不代表已完成全量数据与独立评测验收。"
+      },
+      "trace": [
+        {
+          "tool": "inspect_rows",
+          "ok": true
+        },
+        {
+          "tool": "profile_data",
+          "ok": true
+        },
+        {
+          "tool": "preview_recipe",
+          "ok": true
+        },
+        {
+          "tool": "submit_analysis",
+          "ok": false,
+          "error": "1 validation error for IntakeAnalysis\ntask.desired_output_format\n  Extra inputs are not permitted [type=extra_forbidden, input_value='single categorical label', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden"
+        },
+        {
+          "tool": "submit_analysis",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "case": "missing_target",
+      "status": "needs_business_answers",
+      "analysis": {
+        "task": {
+          "goal": "根据客户首次提交的工单描述，预测客户最终是否满意，输出满意或不满意。",
+          "usage_input": "上线时仅有客户提交的工单描述文本（如「屏幕碎了」「快递还没到」）。",
+          "desired_output": "针对每个工单输出一个类别标签：满意 或 不满意",
+          "row_meaning": "一行代表一张客户工单及其流转信息（客户描述、人工问题类别、处理结果）。",
+          "supervision_source": "当前不存在：表中无满意度字段，处理结果是客服动作而非客户感受。需业务确认通过回访/评价采集真实满意度，或书面确认可接受的代理规则，才能产生可信标签。",
+          "success_criteria": [
+            "每条训练样本的输入只含客户描述，不混入人工问题类别、处理结果等事后信息",
+            "标签为真实采集的客户满意度（或业务明确确认的代理标签规则），满意/不满意两档定义清晰且无同一工单多个矛盾答案",
+            "全量数据上传后预览通过，可训练样本量达到业务认可的最低规模再进入训练"
+          ],
+          "field_roles": [
+            {
+              "column": "客户描述",
+              "role": "input",
+              "reason": "上线时唯一可获得的信息，是模型唯一输入；样例4行均非空，作为开放文本渲染。",
+              "available_at_prediction": true,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003",
+                "r000004"
+              ]
+            },
+            {
+              "column": "工单编号",
+              "role": "metadata",
+              "reason": "记录唯一标识，预测时存在但仅用于关联后续补标注与追踪，不作为模型输入。",
+              "available_at_prediction": true,
+              "evidence_row_ids": [
+                "r000001"
+              ]
+            },
+            {
+              "column": "人工问题类别",
+              "role": "unused",
+              "reason": "由人工在收到描述后判定，上线时不可得；且其含义是问题分类而非满意度，不能当标签。",
+              "available_at_prediction": false,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003"
+              ]
+            },
+            {
+              "column": "处理结果",
+              "role": "unused",
+              "reason": "客服事后完成的动作，属事后信息不能进输入；内容记录客服做了什么而非客户感受，未经业务确认不得映射为满意度标签。",
+              "available_at_prediction": false,
+              "evidence_row_ids": [
+                "r000001",
+                "r000002",
+                "r000003",
+                "r000004"
+              ]
+            }
+          ]
+        },
+        "findings": [
+          {
+            "kind": "observed",
+            "message": "样例共4行、4列，不存在任何满意度字段；转换预览中4行全部状态为needs_label，可训练样本为0。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000002",
+              "r000003",
+              "r000004"
+            ]
+          },
+          {
+            "kind": "observed",
+            "message": "「处理结果」内容为客服完成的动作（如换屏完成、查询后告知预计送达、换货完成、换机完成），语义上记录的是客服做了什么，不是客户是否满意，不能直接当作满意度标签。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000002",
+              "r000004"
+            ]
+          },
+          {
+            "kind": "observed",
+            "message": "「人工问题类别」是人工在收到描述后赋予的分类（屏幕碎了/机器开不了机→硬件损坏），上线时不可得，既不能进输入，也不是满意度。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000004"
+            ]
+          },
+          {
+            "kind": "hypothesis",
+            "message": "样例描述均为4-7字的极短句（屏幕碎了、快递还没到等），假设全量描述同样简短，则满意/不满意判别难度较高，需要更充足的标签量支撑；描述长度分布需全量验证。",
+            "evidence_row_ids": [
+              "r000001",
+              "r000002",
+              "r000003",
+              "r000004"
+            ]
+          },
+          {
+            "kind": "needs_business_input",
+            "message": "满意度标签来源未定：既无已采集字段，也未经业务确认是否接受用「处理结果」做代理标签。这是当前任务能否成立的前提，见问题Q1-Q3。",
+            "evidence_row_ids": []
+          },
+          {
+            "kind": "needs_full_data",
+            "message": "当前仅上传4行样例，全量工单数量、描述长度分布、类别覆盖均未知，无法评估标签量是否足够，也无法确定切分方案。",
+            "evidence_row_ids": []
+          }
+        ],
+        "questions": [
+          {
+            "question_id": "Q1",
+            "question": "满意度标签从哪里获得？",
+            "why": "当前表没有满意度字段，没有可信答案来源就无法定义「满意/不满意」这一目标，整个训练任务无法成立。",
+            "options": [
+              "工单结束后回访/电话或短信打分，按工单编号关联",
+              "客户主动评价或评价体系已有数据可导出",
+              "用复购/二次投诉等行为记录组合推断（需业务给出规则）",
+              "暂无任何渠道，需要先建立采集流程"
+            ],
+            "blocks_confirmation": true
+          },
+          {
+            "question_id": "Q2",
+            "question": "是否接受用「处理结果」作为满意度的代理标签？",
+            "why": "处理结果记录的是客服做了什么而非客户感受；若业务认可某套映射规则可先用，否则严禁用它生成伪真值，直接影响目标字段如何定义。",
+            "options": [
+              "不接受，等真实满意度数据补齐",
+              "接受，但需业务提供明确的处理结果→满意/不满意映射规则并认可偏差",
+              "仅作为训练前的快速可行性验证，正式版仍用真实满意度"
+            ],
+            "blocks_confirmation": true
+          },
+          {
+            "question_id": "Q3",
+            "question": "答案是否只有「满意/不满意」两档？未回访或客户表示一般的工单如何归类？",
+            "why": "答案集合的定义直接决定标签补标规则和模型输出格式，含糊会导致标注阶段各行口径不一致。",
+            "options": [
+              "仅两档，未回访/无法判断的工单剔除出训练",
+              "增加「一般/中间档」，改为三分类",
+              "两档+人工复核边界样本"
+            ],
+            "blocks_confirmation": true
+          }
+        ],
+        "recipe": {
+          "instruction": "根据客户首次提交的工单描述，预测客户最终是否满意（满意/不满意）。当前数据缺少满意度标签，本预览仅验证输入字段的渲染与清洗，不生成任何伪答案。",
+          "inputs": [
+            {
+              "column": "客户描述",
+              "label": "客户描述",
+              "value_kind": "open_text",
+              "transforms": [
+                {
+                  "operation": "strip",
+                  "old": "",
+                  "new": "",
+                  "mapping": {}
+                }
+              ]
+            }
+          ],
+          "targets": [],
+          "output_format": "text",
+          "allow_multiple_targets": false,
+          "multiple_targets_reason": "",
+          "group_columns": [],
+          "split_rationale": "样本仅4行且无标签，划分方案待标签补齐并上传全量后再定。"
+        },
+        "capability_gaps": [],
+        "training_approach": "暂定方法：补齐真实满意度标签后，做「客户描述→满意/不满意」的监督式文本分类（SFT 二分类，输出固定类别标签）。理由：输入是短文本、答案是唯一类别，任务形态适合分类微调；但当前0个可训练样本，必须先完成标签采集，不能用增加训练轮数代替。若业务最终确认接受「处理结果」代理标签，则训练目标实为「预测处理结果类别」的代理任务，须由业务书面认可其与真实满意度的偏差。",
+        "next_steps": [
+          "业务回答Q1-Q3，确定满意度标签来源、是否接受代理规则及答案档位定义。",
+          "若采集真实满意度：按工单编号关联回访/评价结果，回填满意度列后上传全量，重新预览并核对标签冲突。",
+          "若业务书面确认代理规则：提供「处理结果→满意/不满意」完整映射表，我用map_values实现并在预览中检查未覆盖值与冲突。",
+          "标签齐备后上传全量，检查标签分布、未回访比例与描述长度，再确定训练/评测切分与验收标准。"
+        ]
+      },
+      "preview": {
+        "source_digest": "4488c84f6a897fae5a670e3605b70716b95de1451255230f70e0c8bae26b28c7",
+        "recipe_digest": "7134a948d9d8b90b55bbc9cae9c3774db203422284cd7fcbec4a3325be08e05f",
+        "instruction": "根据客户首次提交的工单描述，预测客户最终是否满意（满意/不满意）。当前数据缺少满意度标签，本预览仅验证输入字段的渲染与清洗，不生成任何伪答案。",
+        "rows": [
+          {
+            "row_id": "r000001",
+            "original": {
+              "工单编号": "001",
+              "客户描述": "屏幕碎了",
+              "人工问题类别": "硬件损坏",
+              "处理结果": "换屏完成"
+            },
+            "input": "客户描述: 屏幕碎了",
+            "target": null,
+            "group": {},
+            "status": "needs_label",
+            "issues": [
+              "缺少监督答案，需要补充或确认标签；没有自动生成真值。"
+            ]
+          },
+          {
+            "row_id": "r000002",
+            "original": {
+              "工单编号": "002",
+              "客户描述": "快递还没到",
+              "人工问题类别": "物流咨询",
+              "处理结果": "查询后告知预计送达"
+            },
+            "input": "客户描述: 快递还没到",
+            "target": null,
+            "group": {},
+            "status": "needs_label",
+            "issues": [
+              "缺少监督答案，需要补充或确认标签；没有自动生成真值。"
+            ]
+          },
+          {
+            "row_id": "r000003",
+            "original": {
+              "工单编号": "003",
+              "客户描述": "收到的颜色不对",
+              "人工问题类别": "发错商品",
+              "处理结果": "换货完成"
+            },
+            "input": "客户描述: 收到的颜色不对",
+            "target": null,
+            "group": {},
+            "status": "needs_label",
+            "issues": [
+              "缺少监督答案，需要补充或确认标签；没有自动生成真值。"
+            ]
+          },
+          {
+            "row_id": "r000004",
+            "original": {
+              "工单编号": "004",
+              "客户描述": "机器开不了机",
+              "人工问题类别": "硬件损坏",
+              "处理结果": "换机完成"
+            },
+            "input": "客户描述: 机器开不了机",
+            "target": null,
+            "group": {},
+            "status": "needs_label",
+            "issues": [
+              "缺少监督答案，需要补充或确认标签；没有自动生成真值。"
+            ]
+          }
+        ],
+        "counts": {
+          "ready": 0,
+          "needs_label": 4,
+          "invalid": 0,
+          "conflict": 0
+        },
+        "scope_note": "这是所提供数据的转换预览，不代表已完成全量数据与独立评测验收。"
+      },
+      "trace": [
+        {
+          "tool": "inspect_rows",
+          "ok": true
+        },
+        {
+          "tool": "profile_data",
+          "ok": true
+        },
+        {
+          "tool": "preview_recipe",
+          "ok": true
+        },
+        {
+          "tool": "submit_analysis",
+          "ok": false,
+          "error": "3 validation errors for IntakeAnalysis\nquestions.0.question_id\n  Field required [type=missing, input_value={'blocks_confirmation': T...任务无法成立。'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nquestions.1.question_id\n  Field required [type=missing, input_value={'blocks_confirmation': T...字段如何定义。'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nquestions.2.question_id\n  Field required [type=missing, input_value={'blocks_confirmation': T...行口径不一致。'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing"
+        },
+        {
+          "tool": "submit_analysis",
+          "ok": true
+        }
+      ]
+    }
+  ]
+}

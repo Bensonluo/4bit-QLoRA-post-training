@@ -357,4 +357,3 @@ Training speed for Qwen 1.5B on RTX 4060 (8GB):
 
 - **SFT Guide**: Learn supervised fine-tuning in `sft.md`
 - **DPO Guide**: Learn preference optimization in `dpo.md`
-- **Finance Tutorial**: Domain-specific training in `../tutorials/finance_training.md`

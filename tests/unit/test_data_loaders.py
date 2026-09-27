@@ -22,6 +22,9 @@ from src.data.loaders import (
 class _Tok:
     """Callable tokenizer double that records per-call kwargs."""
 
+    eos_token_id = 4
+    pad_token_id = 0
+
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
@@ -127,9 +130,10 @@ class TestAlpacaFormat:
 
         ds.format_for_training(tok, max_length=128)  # type: ignore[arg-type]
 
-        assert tok.calls[0]["truncation"] is True
-        assert tok.calls[0]["max_length"] == 128
-        assert tok.calls[0]["padding"] == "max_length"
+        assert tok.calls[0]["truncation"] is False
+        assert tok.calls[0]["padding"] is False
+        # EOS is added before explicit length handling so truncation is honest.
+        assert "max_length" not in tok.calls[0]
 
     @patch.object(AlpacaDataset, "load")
     def test_lazy_loads_when_dataset_missing(self, mock_load: MagicMock) -> None:

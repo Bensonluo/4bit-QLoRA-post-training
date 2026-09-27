@@ -1,0 +1,117 @@
+{
+  "evaluation_id": "a95801a4e3294d00a22d4dbd6cee22e7",
+  "created_at": "2026-09-26T14:34:49.003301+00:00",
+  "comparison_key": "da3676c07e7b07de98972b2fb8f872e13ea35d3fe512a9d226c46410ad165550",
+  "session_id": "70695b9552884220baaef6fd9dae0883",
+  "session_revision": 6,
+  "model": "glm-5.3",
+  "assessment": {
+    "summary": "开发验证集仅1行（ticket 001，客户原话「屏幕碎了」，人工标签「硬件」）。base与first_sft两个模型的输出完全相同：先输出「物流」，随后自行生成解释段并编造出下一个输入示例「电池没…」，在32个新token上限处被截断，均计为truncated、0正确。这表明问题不止是长度：模型未学会在给出标签后停止，且本行开头输出的标签「物流」与人工标签「硬件」不一致，即便解决截断，该行也大概率判错。微调前后输出逐字相同，训练是否生效、训练格式与停止监督如何，需进一步核查训练侧证据。开发集仅1行，任何指标都不具统计代表性，不能据此判断业务效果。",
+    "observations": [
+      {
+        "statement": "开发验证集仅1行：r000001（ticket 001），输入为客户首次原话「屏幕碎了」，人工标签为「硬件」。",
+        "evidence_ids": [
+          "base:0"
+        ]
+      },
+      {
+        "statement": "prompt中仅含「客户首次原话: 屏幕碎了」，未出现log的【内部记录】段（原始log含「已跟进内部处理1」），符合上线输入隔离要求。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "base模型输出不是单一标签，而是「物流」后接自写的「### Explanation:」解释段，并继续编造下一条「### Input: 客户首次原话: 电池没」，在第32个新token处达到生成长度上限被截断，未作为成功答案。",
+        "evidence_ids": [
+          "base:0"
+        ]
+      },
+      {
+        "statement": "first_sft（微调后）输出与base逐字完全相同，同样在32 token处截断；两个模型的错误计数均为truncated=1、correct=0。",
+        "evidence_ids": [
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "两个模型输出开头的标签均为「物流」，与人工标签「硬件」不一致；评分器因截断将其计为truncated而非mismatch，本行最终类别正确性尚未被正式判定。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ]
+      },
+      {
+        "statement": "评测协议为classification_exact精确匹配、greedy解码、strip_whitespace，生成上限32个新token，与desired_output要求的单一封闭类别标签不符的输出形态不会通过评分。",
+        "evidence_ids": [
+          "base:0"
+        ]
+      }
+    ],
+    "hypotheses": [
+      {
+        "statement": "模型没有学会在给出标签后停止：可能训练目标的答案结束监督缺失（target未以结束符收尾）或推理端缺少停止条件，导致模型在标签后继续生成解释并续写下一条示例，最终撞上32 token上限。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ],
+        "verification": "检查训练样本的target构造：是否只含类别标签且带答案结束符/结束监督；检查推理配置的停止条件（EOS、stop序列）。修复后在同一开发集重测，观察是否输出单一标签即停止。注意：即使停止问题解决，本行开头标签仍与人工标签不符，还需继续核对类别正确性。"
+      },
+      {
+        "statement": "微调可能未生效或训练样本格式与评测prompt格式不一致：first_sft与base的输出完全逐字相同，提示该检查点在此prompt下的行为未被训练改变。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ],
+        "verification": "核对训练配置与训练样本：训练时使用的prompt渲染是否与评测的render_alpaca_prompt_without_answer一致、target格式是否正确、训练是否实际应用到被评测的检查点；对照训练日志中的样本样例。在确认前不把'训练未生效'当作事实。"
+      },
+      {
+        "statement": "即使解决截断与停止问题，标签预测本身在本行可能仍错误（输出以「物流」开头，人工标签为「硬件」），可能反映训练数据对这类表述的覆盖不足或训练尚未对封闭二分类生效。",
+        "evidence_ids": [
+          "base:0",
+          "first_sft:0"
+        ],
+        "verification": "在修复输出形态与停止条件后重新评分，统计mismatch；并检查训练集中「屏幕碎了」等明显硬件类表述的样本覆盖。注意开发集仅1行，任何单行结论都不能推广。"
+      }
+    ],
+    "next_steps": [
+      "转入训练检查（inspect_training）：核对训练样本的prompt渲染是否与评测的 render_alpaca_prompt_without_answer 一致、target是否只含「硬件/物流」并带答案结束监督、微调是否实际应用到被评测的检查点。",
+      "核查推理停止条件（max_new_tokens=32、EOS/stop序列）：目标输出只是单一标签，若确认只需极短生成，应在确认停止监督后调整，而不是单纯放大长度掩盖问题。",
+      "修复后在同一开发集重测，重点看是否输出单一标签即停止、以及类别是否与人工标签一致；不得把truncated当作接近成功。",
+      "与业务确认类别准确率验收阈值，并评估扩大开发验证集规模（当前仅1行，按ticket分组扩充后才能得到可信指标）。",
+      "本轮只做诊断与建议，不修改目标、标签或处理规则，不宣称用户已验收或可交付。"
+    ],
+    "decision": "inspect_training",
+    "limitations": [
+      "开发验证集仅1行（ticket 001），无论结果如何都无法代表整体类别准确率，也不能据此宣称模型达标或有业务收益。",
+      "两条输出被计为truncated而非mismatch，评分器未对最终类别给出判定；本行模型真实类别正确性尚未由评分确认（尽管输出开头是「物流」）。",
+      "未读取训练配置与训练日志，训练是否生效、target格式与结束监督如何，目前没有证据，只能列为待核查假设。",
+      "本次仅使用开发集做诊断，未使用测试集调参；与其他协议的历史指标不可直接比较宣称提升。",
+      "截断不等于'接近正确'：base:0 与 first_sft:0 的输出开头标签均与人工标签不一致，不能因第一行文本像标签就宣布成功。"
+    ],
+    "business_questions": [
+      "验收的类别准确率阈值是多少？当前开发验证集仅1行，是否可以按ticket分组扩充开发集样本量，否则无法得到可信指标？",
+      "上线输出是否严格要求只含一个标签（不允许附带解释文字）？部署端是否允许配置停止序列或按首行/首个标签解析输出？"
+    ]
+  },
+  "tool_trace": [
+    {
+      "tool": "inspect_evaluation_summary",
+      "ok": true
+    },
+    {
+      "tool": "inspect_bad_cases",
+      "ok": true
+    },
+    {
+      "tool": "submit_evaluation_assessment",
+      "ok": false,
+      "error": "6 validation errors for EvaluationAssessment\nobservations.0.title\n  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nobservations.1.title\n  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nobservations.2.title\n  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nobservations.3.title\n  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nobservations.4.title\n  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nobservations.5.title\n  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden"
+    },
+    {
+      "tool": "submit_evaluation_assessment",
+      "ok": true
+    }
+  ],
+  "scope": "development_advice_requires_business_review",
+  "validation_note": "Actual GLM diagnosis of actual local model outputs on fictional data. Advice only, no business acceptance. This first run preceded the additional training-evidence tool; its stated uncertainty about training records is preserved."
+}

@@ -9,6 +9,77 @@ from src.data.base import BaseDataset
 from src.utils.logging import console
 
 
+def render_alpaca_prompt(example: dict[str, Any]) -> str:
+    """Render the exact SFT prompt used by training and consumption preflight."""
+    instruction = example["instruction"]
+    input_text = example.get("input", "")
+    output = example["output"]
+    if input_text:
+        return f"### Instruction:\n{instruction}\n\n### Input:\n{input_text}\n\n### Response:\n{output}"
+    return f"### Instruction:\n{instruction}\n\n### Response:\n{output}"
+
+
+def tokenize_alpaca_record(
+    example: dict[str, Any],
+    tokenizer: Any,
+    max_length: int | None = None,
+    return_offsets_mapping: bool = False,
+) -> dict[str, Any]:
+    """Tokenize a complete record with EOS, then truncate/pad the actual token sequence.
+
+    EOS is appended before truncation, never substituted for a truncated answer.
+    Offsets for added EOS and padding use the tokenizer special-token convention (0, 0).
+    """
+    if max_length is not None and (type(max_length) is not int or max_length <= 0):
+        raise ValueError("max_length must be a positive integer or None.")
+    eos_id = getattr(tokenizer, "eos_token_id", None)
+    if type(eos_id) is not int or eos_id < 0:
+        raise ValueError("Alpaca SFT requires a valid tokenizer eos_token_id.")
+    kwargs = {"truncation": False, "padding": False, "return_attention_mask": True}
+    if return_offsets_mapping:
+        kwargs["return_offsets_mapping"] = True
+    encoded = tokenizer(render_alpaca_prompt(example), **kwargs)
+    ids = list(encoded["input_ids"])
+    mask = list(encoded.get("attention_mask", [1] * len(ids)))
+    if len(mask) != len(ids):
+        raise ValueError("Tokenizer input_ids and attention_mask lengths differ.")
+    result = {"input_ids": ids, "attention_mask": mask}
+    if return_offsets_mapping:
+        offsets = [tuple(pair) for pair in encoded["offset_mapping"]]
+        if len(offsets) != len(ids):
+            raise ValueError("Tokenizer offsets must align with input_ids.")
+        result["offset_mapping"] = offsets
+    if not ids or ids[-1] != eos_id:
+        ids.append(eos_id)
+        mask.append(1)
+        if return_offsets_mapping:
+            result["offset_mapping"].append((0, 0))
+    if max_length is None:
+        return result
+    truncation_side = getattr(tokenizer, "truncation_side", "right")
+    padding_side = getattr(tokenizer, "padding_side", "right")
+    if truncation_side not in {"left", "right"} or padding_side not in {"left", "right"}:
+        raise ValueError("Tokenizer truncation_side and padding_side must be left or right.")
+    if len(ids) > max_length:
+        span = slice(-max_length, None) if truncation_side == "left" else slice(0, max_length)
+        result = {key: value[span] for key, value in result.items()}
+    missing = max_length - len(result["input_ids"])
+    if missing:
+        pad_id = getattr(tokenizer, "pad_token_id", None)
+        if type(pad_id) is not int or pad_id < 0:
+            raise ValueError("Padded Alpaca SFT requires a valid tokenizer pad_token_id.")
+        fill = {"input_ids": pad_id, "attention_mask": 0, "offset_mapping": (0, 0)}
+        result = {
+            key: (
+                [fill[key]] * missing + value
+                if padding_side == "left"
+                else value + [fill[key]] * missing
+            )
+            for key, value in result.items()
+        }
+    return result
+
+
 class AlpacaDataset(BaseDataset):
     """Dataset in Alpaca format (instruction, input, output).
 
@@ -56,34 +127,7 @@ class AlpacaDataset(BaseDataset):
 
         def format_prompt(example: dict) -> dict:
             """Format a single example."""
-            instruction = example["instruction"]
-            input_text = example.get("input", "")
-            output = example["output"]
-
-            # Build prompt
-            if input_text:
-                prompt = f"""### Instruction:
-{instruction}
-
-### Input:
-{input_text}
-
-### Response:
-{output}"""
-            else:
-                prompt = f"""### Instruction:
-{instruction}
-
-### Response:
-{output}"""
-
-            # Tokenize
-            tokenized: dict[str, Any] = tokenizer(
-                prompt,
-                truncation=True,
-                max_length=max_length,
-                padding="max_length",
-            )
+            tokenized = tokenize_alpaca_record(example, tokenizer, max_length=max_length)
 
             # For causal LM, labels are same as input_ids
             tokenized["labels"] = tokenized["input_ids"].copy()

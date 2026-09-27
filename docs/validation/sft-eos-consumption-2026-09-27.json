@@ -1,0 +1,159 @@
+{
+  "date": "2026-09-27",
+  "scope": "Local tokenizer and actual SFT formatter/collator; synthetic data only. No model weights, training, network call or business performance claim.",
+  "session_id": "cd0ffd458e024e3da2436e8cf7267c35",
+  "original_last_token": 102164,
+  "complete_last_token": 151645,
+  "eos_token_id": 151645,
+  "pad_equals_eos_real_eos_label": 151645,
+  "padding_labels_all_masked": true,
+  "right_truncation_does_not_fabricate_eos": true,
+  "preflight": {
+    "status": "passed",
+    "dataset_name": "intake-cd0ffd458e024e3da2436e8cf7267c35",
+    "version": "d5478a066eba164ca11dc59aeb31b39640e426671f76f7ee9502a9bafa4cc0c7",
+    "source_digest": "bfc0e9786c660e69e849a42ba42a6ee0b25e9dba9e15cb3315215f8c8fcee8e2",
+    "recipe_digest": "09b416d9df784ff9e8843ca35f4c340d54bcd1fe27bbfa22bd6eb405e7f3c9c0",
+    "full_confirmed_revision": 5,
+    "max_length": 512,
+    "tokenizer": {
+      "name_or_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+      "is_fast": true,
+      "pad_token_id": 151643,
+      "eos_token_id": 151645,
+      "padding_side": "right",
+      "truncation_side": "right",
+      "model_max_length": 131072,
+      "class": "Qwen2Tokenizer"
+    },
+    "supervision_strategy": "full_prompt_padding_masked",
+    "issues": [
+      {
+        "code": "full_prompt_supervision",
+        "severity": "info",
+        "message": "Alpaca 训练对整个 prompt 计算标签，完整记录带 EOS；collator 按 attention_mask 屏蔽 padding，因果损失跳过批次首位置，并非仅监督答案。",
+        "split": null,
+        "row_ids": []
+      }
+    ],
+    "splits": {
+      "train": {
+        "rows": 2,
+        "truncated_rows": 0,
+        "answer_lost_rows": 0,
+        "empty_supervision_rows": 0,
+        "unverified_answer_rows": 0,
+        "truncation_ratio": 0.0
+      },
+      "validation": {
+        "rows": 2,
+        "truncated_rows": 0,
+        "answer_lost_rows": 0,
+        "empty_supervision_rows": 0,
+        "unverified_answer_rows": 0,
+        "truncation_ratio": 0.0
+      },
+      "test": {
+        "rows": 2,
+        "truncated_rows": 0,
+        "answer_lost_rows": 0,
+        "empty_supervision_rows": 0,
+        "unverified_answer_rows": 0,
+        "truncation_ratio": 0.0
+      }
+    },
+    "rows": [
+      {
+        "split": "train",
+        "row_id": "r000001",
+        "full_tokens": 153,
+        "input_tokens": 152,
+        "answer_tokens": 1,
+        "kept_tokens": 153,
+        "supervised_tokens": 152,
+        "answer_supervised_tokens": 1,
+        "answer_kept_tokens": 1,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true,
+        "terminal_eos_supervised": true
+      },
+      {
+        "split": "train",
+        "row_id": "r000002",
+        "full_tokens": 153,
+        "input_tokens": 152,
+        "answer_tokens": 1,
+        "kept_tokens": 153,
+        "supervised_tokens": 152,
+        "answer_supervised_tokens": 1,
+        "answer_kept_tokens": 1,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true,
+        "terminal_eos_supervised": true
+      },
+      {
+        "split": "validation",
+        "row_id": "r000004",
+        "full_tokens": 155,
+        "input_tokens": 153,
+        "answer_tokens": 2,
+        "kept_tokens": 155,
+        "supervised_tokens": 154,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true,
+        "terminal_eos_supervised": true
+      },
+      {
+        "split": "validation",
+        "row_id": "r000005",
+        "full_tokens": 155,
+        "input_tokens": 153,
+        "answer_tokens": 2,
+        "kept_tokens": 155,
+        "supervised_tokens": 154,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true,
+        "terminal_eos_supervised": true
+      },
+      {
+        "split": "test",
+        "row_id": "r000007",
+        "full_tokens": 156,
+        "input_tokens": 154,
+        "answer_tokens": 2,
+        "kept_tokens": 156,
+        "supervised_tokens": 155,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true,
+        "terminal_eos_supervised": true
+      },
+      {
+        "split": "test",
+        "row_id": "r000008",
+        "full_tokens": 156,
+        "input_tokens": 154,
+        "answer_tokens": 2,
+        "kept_tokens": 156,
+        "supervised_tokens": 155,
+        "answer_supervised_tokens": 2,
+        "answer_kept_tokens": 2,
+        "was_truncated": false,
+        "answer_was_truncated": false,
+        "answer_boundary_verified": true,
+        "terminal_eos_supervised": true
+      }
+    ],
+    "scope_note": "只验证当前不可变数据的分区与 token 消费；不代表答案正确、模型可装入硬件或业务效果达标。输入 token 数包含指令、模板与特殊 token。"
+  }
+}

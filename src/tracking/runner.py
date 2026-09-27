@@ -7,9 +7,10 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import yaml
 
@@ -19,6 +20,7 @@ SCRIPTS = {
     "dpo": "scripts/train_dpo.py",
     "grpo": "scripts/train_grpo.py",
     "domain": "scripts/train_sft.py",
+    "workbench_sft": "scripts/workbench_train.py",
 }
 
 
@@ -37,6 +39,33 @@ def _pid_alive(pid: int) -> bool:
     except PermissionError:
         return True  # exists but owned by another user
     return True
+
+
+@contextmanager
+def _metadata_lock(path: Path):
+    """Serialize the small metadata update shared by UI and CLI processes."""
+    with path.open("a+b") as handle:
+        if os.name == "posix":
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+        else:
+            import msvcrt
+
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 class TrainingRunner:
@@ -58,14 +87,28 @@ class TrainingRunner:
                 return data
         return {}
 
-    def _save_meta(self) -> None:
-        self._meta_file.write_text(json.dumps(self._run_meta, indent=2))
+    def _save_meta(self, changed: set[str] | None = None, deleted: set[str] | None = None) -> None:
+        updates = (
+            self._run_meta if changed is None else {key: self._run_meta[key] for key in changed}
+        )
+        with _metadata_lock(self._meta_file.with_suffix(".lock")):
+            latest = self._load_meta()
+            latest.update(updates)
+            for key in deleted or set():
+                latest.pop(key, None)
+            temporary = self._meta_file.with_name(f".run_meta.{uuid4().hex}.tmp")
+            temporary.write_text(json.dumps(latest, indent=2))
+            temporary.replace(self._meta_file)
+            self._run_meta = latest
 
     def launch_training(
         self,
         technique: str,
         config_dict: dict,
         run_name: str,
+        *,
+        python_executable: str | None = None,
+        env_remove: list[str] | None = None,
     ) -> str:
         """Start training as a subprocess. Returns run_id."""
         self._cleanup_finished()
@@ -82,11 +125,13 @@ class TrainingRunner:
         script_path = self.project_root / script
 
         env = os.environ.copy()
+        for name in env_remove or []:
+            env.pop(name, None)
         env["PYTHONUNBUFFERED"] = "1"
         if "HF_ENDPOINT" not in env:
             env["HF_ENDPOINT"] = "https://hf-mirror.com"
 
-        cmd = [sys.executable, str(script_path), "--config", str(config_path)]
+        cmd = [python_executable or sys.executable, str(script_path), "--config", str(config_path)]
 
         log_path = self.project_root / "outputs" / "logs" / f"{run_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,7 +155,7 @@ class TrainingRunner:
             "pid": proc.pid,
             "start_time": time.time(),
         }
-        self._save_meta()
+        self._save_meta(changed={run_name})
         return run_name
 
     def get_status(self, run_id: str) -> str:
@@ -178,11 +223,12 @@ class TrainingRunner:
                 proc.kill()
         self._active.pop(run_id, None)
         del self._run_meta[run_id]
-        self._save_meta()
+        self._save_meta(changed=set(), deleted={run_id})
 
     def list_active(self) -> list[str]:
         """Return run_ids of currently running runs."""
-        return [rid for rid in self._run_meta if self.get_status(rid) == "running"]
+        known = dict.fromkeys([*self._run_meta, *self._active])
+        return [rid for rid in known if self.get_status(rid) == "running"]
 
     def _record_exit(self, run_id: str, returncode: int | None) -> None:
         """Persist exit code so status survives UI restarts."""
@@ -190,7 +236,7 @@ class TrainingRunner:
             return
         meta = self._run_meta.setdefault(run_id, {})
         meta["returncode"] = returncode
-        self._save_meta()
+        self._save_meta(changed={run_id})
 
     def list_all_runs(self) -> list[str]:
         """Return all run_ids (active + completed) from persisted meta."""

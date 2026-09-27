@@ -1,0 +1,9 @@
+{
+  "scope": "synthetic data, offline measurement; not proof of network-timeout cause",
+  "original_refs": 375,
+  "shown_refs": 43,
+  "original_origin_characters": 40617,
+  "preview_characters_including_counts_and_note": 5444,
+  "full_lineage_retained_locally": true,
+  "tests_passed": 32
+}

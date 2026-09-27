@@ -1,0 +1,137 @@
+id: "milestone-001"
+title: "语义安全层上线——盲标核验、对比预览、可学性探针"
+description: >-
+  北极星(docs/plans/north-star.md)指认的核心痛点是"语义错误无声通过"。本里程碑把安全层的
+  三件通用机制做完全链路:盲标核验(隐藏答案抽样作答,验证监督信号的业务自洽性,不过不训)、
+  对比预览(两种解释二选一,错误在对比中暴露)、可学性探针(训练前用基座小样探测数据与标签
+  是否存在可学关联,与瞎猜基线如实对比)。全部机制任务无关、零/低成本、非专家可独立完成,
+  并作为训练授权的确定性门禁接入全部入口(UI/CLI/迭代/P3.4 自动执行)。
+priority: "high"
+category: "feature"
+timeline:
+  estimated_start: "2026-09-27"
+  estimated_end: "2026-09-30"
+  estimated_hours: 36
+  buffer_percentage: 20
+
+success_criteria:
+  - "训练准备(TrainingRunService.prepare)的全部入口在缺少与当前全量摘要+配方摘要绑定的 verified 盲标核验时明确拒绝;数据或配方变更后旧核验自动失效——以单元与集成测试证明,含 P3.4 自动执行链路"
+  - "盲标核验经页面与 CLI 均可完整交互:抽样题目隐藏答案呈现、逐条作答、逐条不一致展示(用户答案 vs 数据标签)、判定与理由落盘——页面测试 + CLI 测试 + 运行中面板浏览器实测"
+  - "对比预览最小版上线:确认环节提供由确定性扰动生成的第二种解释供二选一,选择结果记录在确认证据中——测试覆盖生成、呈现与记录"
+  - "可学性探针最小版上线:对固定开发小样用基座模型零样本探测,输出与瞎猜基线的差异及样本量限制的如实说明,不产生达标结论——测试覆盖"
+  - "全量回归 ≥1503+新增全部通过;ruff/mypy 干净;agent-setup.md 行为契约与交接文档同步更新"
+
+deliverables:
+  - name: "盲标核验全链路(服务层已就绪)"
+    type: "code"
+    acceptance_criteria:
+      - "prepare 门禁按 (full_source_digest, approved_recipe_digest) 绑定校验"
+      - "CLI label-verify / label-verify-submit 可用"
+      - "页面:开始核验→逐条作答→判定与不一致展示"
+      - "受影响夹具(environment 等)更新,迭代/自动执行集成测试含核验步骤"
+  - name: "对比预览最小版"
+    type: "code"
+    acceptance_criteria:
+      - "确定性扰动生成备选解释(字段调换/标签重映射),不依赖 LLM"
+      - "页面呈现二选一,选择进入确认证据"
+  - name: "可学性探针最小版"
+    type: "code"
+    acceptance_criteria:
+      - "基座零样本小样探测 + 瞎猜基线对比 + 样本量限制声明"
+      - "呈现于训练前检查区,不阻断(证据性质,非门禁)"
+  - name: "文档与走查"
+    type: "documentation"
+    acceptance_criteria:
+      - "agent-setup.md 新增语义安全层契约段"
+      - "交接文档第 7 节记录本轮;浏览器实测记录"
+
+dependencies:
+  requires: []
+  enables: ["milestone-002", "milestone-003"]
+  external: []
+
+risks:
+  - description: "盲标核验门禁波及现有链路:迭代修订数据后必须重新核验,P3.4 自动执行授权需要前置校验,流程变长"
+    probability: 0.5
+    impact: "medium"
+    mitigation: "在 iteration-execute 授权入口前置校验并给出明确指引;集成测试补核验步骤;在文档中说明这是北极星的有意约束而非回归"
+  - description: "对比预览的备选解释若依赖 LLM 会在无密钥路径断链"
+    probability: 0.4
+    impact: "medium"
+    mitigation: "备选解释由确定性扰动(字段调换、标签映射重排)生成,零 LLM 依赖"
+  - description: "可学性探针在小样本上给出误导性'学不出'结论,打击用户"
+    probability: 0.4
+    impact: "high"
+    mitigation: "输出限定为'与瞎猜基线的差异'并强制展示样本量限制与置信说明;定位为证据呈现而非判决,不阻断流程"
+
+tasks:
+  - id: "task-001"
+    title: "盲标核验训练门禁:prepare 摘要绑定校验 + 全部入口测试(含迭代/P3.4)"
+    estimated_hours: 6
+    status: "pending"
+    assigned_to: "zcode"
+    dependencies: []
+    kiro_workflow:
+      enabled: false
+      current_phase: "execute"
+      phases: {}
+  - id: "task-002"
+    title: "盲标核验 CLI(label-verify / label-verify-submit)"
+    estimated_hours: 3
+    status: "pending"
+    assigned_to: "zcode"
+    dependencies: ["task-001"]
+    kiro_workflow:
+      enabled: false
+      current_phase: "execute"
+      phases: {}
+  - id: "task-003"
+    title: "盲标核验页面交互区 + 浏览器实测"
+    estimated_hours: 5
+    status: "pending"
+    assigned_to: "zcode"
+    dependencies: ["task-001"]
+    kiro_workflow:
+      enabled: false
+      current_phase: "execute"
+      phases: {}
+  - id: "task-004"
+    title: "对比预览最小版:确定性扰动备选解释 + 二选一记录 + 页面与测试"
+    estimated_hours: 8
+    status: "pending"
+    assigned_to: "zcode"
+    dependencies: []
+    kiro_workflow:
+      enabled: false
+      current_phase: "execute"
+      phases: {}
+  - id: "task-005"
+    title: "可学性探针最小版:基座零样本小样探测 + 基线对比呈现 + 测试"
+    estimated_hours: 8
+    status: "pending"
+    assigned_to: "zcode"
+    dependencies: []
+    kiro_workflow:
+      enabled: false
+      current_phase: "execute"
+      phases: {}
+  - id: "task-006"
+    title: "全量回归 + 文档契约更新(agent-setup/交接) + 走查记录"
+    estimated_hours: 6
+    status: "pending"
+    assigned_to: "zcode"
+    dependencies: ["task-001", "task-002", "task-003", "task-004", "task-005"]
+    kiro_workflow:
+      enabled: false
+      current_phase: "execute"
+      phases: {}
+
+kiro_configuration:
+  enabled: false
+  default_phases: ["design", "spec", "task", "execute"]
+  approval_gates: {}
+  phase_weights:
+    design: 15
+    spec: 25
+    task: 20
+    execute: 40

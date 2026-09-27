@@ -1,0 +1,923 @@
+{
+  "scope": "fictional previously tested records with leading/trailing spaces in category; actual GLM tool use, actual sandbox adapter replay and fixed-suite materialization; no claim of model improvement",
+  "iteration": {
+    "changes": "确认只给category监督绑定添加strip规范化。保留instruction、输入显示名、日志提取适配器、ticket分组、业务目标和标签含义。不复制模型错误输出作为标签；不改训练参数。",
+    "confirmed_session_revision": 10,
+    "created_at": "2026-09-26T15:27:59.195863+00:00",
+    "data_change": true,
+    "data_revision": {
+      "after": {
+        "adapter": {
+          "config": {
+            "end_marker": "【内部记录】",
+            "start_marker": "【客户原话】"
+          },
+          "examples": [
+            {
+              "expected_rows": [
+                {
+                  "__row_id": "r000001",
+                  "category": " 硬件 ",
+                  "customer_first_words": "屏幕碎了",
+                  "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+                  "ticket": "001"
+                },
+                {
+                  "__row_id": "r000002",
+                  "category": " 物流 ",
+                  "customer_first_words": "快递还没到",
+                  "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+                  "ticket": "002"
+                }
+              ],
+              "kind": "business",
+              "name": "真实行提取客户首次原话，原字段含空白的category原样保留",
+              "rows": [
+                {
+                  "__row_id": "r000001",
+                  "category": " 硬件 ",
+                  "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+                  "ticket": "001"
+                },
+                {
+                  "__row_id": "r000002",
+                  "category": " 物流 ",
+                  "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+                  "ticket": "002"
+                }
+              ]
+            },
+            {
+              "expected_rows": [
+                {
+                  "__row_id": "r000003",
+                  "category": " 硬件 ",
+                  "customer_first_words": "机器开不了机",
+                  "log": "【客户原话】机器开不了机【内部记录】同意换新",
+                  "ticket": "003"
+                }
+              ],
+              "kind": "business",
+              "name": "无内部空白的原话照常提取",
+              "rows": [
+                {
+                  "__row_id": "r000003",
+                  "category": " 硬件 ",
+                  "log": "【客户原话】机器开不了机【内部记录】同意换新",
+                  "ticket": "003"
+                }
+              ]
+            },
+            {
+              "expect_error": true,
+              "kind": "counterexample",
+              "name": "缺少结束标记必须报错",
+              "rows": [
+                {
+                  "__row_id": "cx001",
+                  "category": " 硬件 ",
+                  "log": "【客户原话】屏幕碎了换屏完成",
+                  "ticket": "101"
+                }
+              ]
+            },
+            {
+              "expect_error": true,
+              "kind": "counterexample",
+              "name": "缺少开始标记必须报错",
+              "rows": [
+                {
+                  "__row_id": "cx002",
+                  "category": " 物流 ",
+                  "log": "快递还没到【内部记录】坐席查物流",
+                  "ticket": "102"
+                }
+              ]
+            }
+          ],
+          "new_columns": [
+            "customer_first_words"
+          ],
+          "source_code": "import re\n\ndef transform(rows, config):\n    START = config.get(\"start_marker\", \"【客户原话】\")\n    END = config.get(\"end_marker\", \"【内部记录】\")\n    out = []\n    for row in rows:\n        new = dict(row)\n        rid = row.get(\"__row_id\", \"?\")\n        log = row.get(\"log\")\n        if not isinstance(log, str):\n            raise ValueError(f\"行{rid}: log 不是文本，无法提取客户原话\")\n        s = log.find(START)\n        if s == -1:\n            raise ValueError(f\"行{rid}: log 缺少开始标记 {START}，拒绝猜测\")\n        content_start = s + len(START)\n        e = log.find(END, content_start)\n        if e == -1:\n            raise ValueError(f\"行{rid}: log 缺少结束标记 {END}，拒绝猜测\")\n        words = log[content_start:e].strip()\n        new[\"customer_first_words\"] = words\n        out.append(new)\n    return out"
+        },
+        "composition": null,
+        "recipe": {
+          "allow_multiple_targets": false,
+          "group_columns": [
+            "ticket"
+          ],
+          "inputs": [
+            {
+              "column": "customer_first_words",
+              "label": "客户首次原话",
+              "transforms": [
+                {
+                  "mapping": {},
+                  "new": "",
+                  "old": "",
+                  "operation": "strip"
+                }
+              ],
+              "value_kind": "open_text"
+            }
+          ],
+          "instruction": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。",
+          "multiple_targets_reason": "",
+          "output_format": "text",
+          "split_rationale": "按 ticket 分组切分，确保同一工单的所有行不跨训练/验证集，避免同工单信息泄漏。",
+          "targets": [
+            {
+              "column": "category",
+              "label": "售后类别",
+              "transforms": [
+                {
+                  "mapping": {},
+                  "new": "",
+                  "old": "",
+                  "operation": "strip"
+                }
+              ],
+              "value_kind": "categorical"
+            }
+          ]
+        }
+      },
+      "analysis_digest": "b78d24ba241325e535a36766ec4b01e4cafff149b1305510b7ab4732879fd461",
+      "before": {
+        "adapter": {
+          "config": {
+            "end_marker": "【内部记录】",
+            "start_marker": "【客户原话】"
+          },
+          "examples": [
+            {
+              "expected_rows": [
+                {
+                  "__row_id": "r000001",
+                  "category": "硬件",
+                  "customer_first_words": "屏幕碎了",
+                  "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+                  "ticket": "001"
+                },
+                {
+                  "__row_id": "r000002",
+                  "category": "物流",
+                  "customer_first_words": "快递还没到",
+                  "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+                  "ticket": "002"
+                }
+              ],
+              "kind": "business",
+              "name": "真实行提取客户首次原话",
+              "rows": [
+                {
+                  "__row_id": "r000001",
+                  "category": "硬件",
+                  "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+                  "ticket": "001"
+                },
+                {
+                  "__row_id": "r000002",
+                  "category": "物流",
+                  "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+                  "ticket": "002"
+                }
+              ]
+            },
+            {
+              "expected_rows": [
+                {
+                  "__row_id": "r000003",
+                  "category": "硬件",
+                  "customer_first_words": "机器开不了机",
+                  "log": "【客户原话】 机器开不了机 【内部记录】同意换新",
+                  "ticket": "003"
+                }
+              ],
+              "kind": "business",
+              "name": "含首尾空白的原话去空白且原字段原样保留",
+              "rows": [
+                {
+                  "__row_id": "r000003",
+                  "category": "硬件",
+                  "log": "【客户原话】 机器开不了机 【内部记录】同意换新",
+                  "ticket": "003"
+                }
+              ]
+            },
+            {
+              "expect_error": true,
+              "kind": "counterexample",
+              "name": "缺少结束标记必须报错",
+              "rows": [
+                {
+                  "__row_id": "cx001",
+                  "category": "硬件",
+                  "log": "【客户原话】屏幕碎了换屏完成",
+                  "ticket": "101"
+                }
+              ]
+            },
+            {
+              "expect_error": true,
+              "kind": "counterexample",
+              "name": "缺少开始标记必须报错",
+              "rows": [
+                {
+                  "__row_id": "cx002",
+                  "category": "物流",
+                  "log": "快递还没到【内部记录】坐席查物流",
+                  "ticket": "102"
+                }
+              ]
+            }
+          ],
+          "new_columns": [
+            "customer_first_words"
+          ],
+          "source_code": "import re\n\ndef transform(rows, config):\n    START = config.get(\"start_marker\", \"【客户原话】\")\n    END = config.get(\"end_marker\", \"【内部记录】\")\n    out = []\n    for row in rows:\n        new = dict(row)\n        rid = row.get(\"__row_id\", \"?\")\n        log = row.get(\"log\")\n        if not isinstance(log, str):\n            raise ValueError(f\"行{rid}: log 不是文本，无法提取客户原话\")\n        s = log.find(START)\n        if s == -1:\n            raise ValueError(f\"行{rid}: log 缺少开始标记 {START}，拒绝猜测\")\n        content_start = s + len(START)\n        e = log.find(END, content_start)\n        if e == -1:\n            raise ValueError(f\"行{rid}: log 缺少结束标记 {END}，拒绝猜测\")\n        words = log[content_start:e].strip()\n        new[\"customer_first_words\"] = words\n        out.append(new)\n    return out"
+        },
+        "composition": null,
+        "recipe": {
+          "allow_multiple_targets": false,
+          "group_columns": [
+            "ticket"
+          ],
+          "inputs": [
+            {
+              "column": "customer_first_words",
+              "label": "客户首次原话",
+              "transforms": [
+                {
+                  "mapping": {},
+                  "new": "",
+                  "old": "",
+                  "operation": "strip"
+                }
+              ],
+              "value_kind": "open_text"
+            }
+          ],
+          "instruction": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。",
+          "multiple_targets_reason": "",
+          "output_format": "text",
+          "split_rationale": "按 ticket 分组切分，确保同一工单的所有行不跨训练/验证集，避免同工单信息泄漏。",
+          "targets": [
+            {
+              "column": "category",
+              "label": "售后类别",
+              "transforms": [
+                {
+                  "mapping": {},
+                  "new": "",
+                  "old": "",
+                  "operation": "strip"
+                }
+              ],
+              "value_kind": "categorical"
+            }
+          ]
+        }
+      },
+      "changed_components": [
+        "adapter"
+      ],
+      "from_revision": 11,
+      "model": "glm-5.3",
+      "next_action": "review_preview",
+      "scope": "executed_preview_requires_business_confirmation",
+      "to_revision": 12,
+      "tool_trace": [
+        {
+          "ok": true,
+          "tool": "inspect_revision_cases"
+        },
+        {
+          "ok": true,
+          "tool": "inspect_revision_summary"
+        },
+        {
+          "ok": true,
+          "tool": "list_sources"
+        },
+        {
+          "ok": true,
+          "tool": "inspect_source"
+        },
+        {
+          "ok": true,
+          "tool": "preview_adapter"
+        },
+        {
+          "ok": true,
+          "tool": "inspect_rows"
+        },
+        {
+          "ok": true,
+          "tool": "profile_data"
+        },
+        {
+          "ok": true,
+          "tool": "preview_recipe"
+        },
+        {
+          "ok": true,
+          "tool": "submit_analysis"
+        }
+      ]
+    },
+    "evaluation_id": null,
+    "evaluation_suite": {
+      "case_counts": {
+        "test": 1,
+        "validation": 1
+      },
+      "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+      "manifest_path": "/private/tmp/tunesmith-revision-live-rounds-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+      "root": "/private/tmp/tunesmith-revision-live-rounds-20260926/suites",
+      "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+    },
+    "expected_outcome": "带空白的新导出仍生成原始硬件/物流类别，原开发与最终测试题保持语义和内容。",
+    "goal": "根据客户首次原话预测售后类别，类别封闭为硬件或物流。上线只有客户原话；绝不能输入内部处理记录。",
+    "hypothesis": "后续导出可能给人工类别附加首尾空白，需在接入时规范化，避免当作新类别；此假设不声称解释首轮模型复读。",
+    "iteration_id": "it-4a963ca790834bf8acaf5654799191cc",
+    "model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+    "new_run_id": null,
+    "options": {
+      "lora_options": {
+        "alpha_pattern": null,
+        "bias": "none",
+        "exclude_modules": null,
+        "init_lora_weights": true,
+        "loftq_bits": 4,
+        "loftq_iter": 1,
+        "lora_alpha": 8,
+        "lora_dropout": 0.05,
+        "lora_ga_cache_file": null,
+        "lora_ga_calibration_batches": 4,
+        "lora_ga_direction": "ArB2r",
+        "lora_ga_scale": "stable",
+        "lora_ga_stable_gamma": 16,
+        "r": 4,
+        "rank_pattern": null,
+        "target_modules": [
+          "q_proj",
+          "v_proj"
+        ],
+        "task_type": "CAUSAL_LM",
+        "use_dora": false,
+        "use_rslora": false
+      },
+      "max_length": 256,
+      "model_options": {
+        "device_map": null,
+        "load_in_8bit": false,
+        "merge_dtype": "bfloat16",
+        "quantization_bits": null,
+        "torch_dtype": "bfloat16",
+        "use_flash_attention": false
+      },
+      "training_options": {
+        "auto_find_batch_size": false,
+        "auto_scale_batch": false,
+        "batch_size": 1,
+        "bf16": false,
+        "deepspeed_config": null,
+        "eval_steps": 5,
+        "fp16": false,
+        "fsdp": null,
+        "fsdp_config": null,
+        "gradient_accumulation_steps": 2,
+        "gradient_checkpointing": true,
+        "gradient_checkpointing_use_reentrant": false,
+        "learning_rate": 0.0001,
+        "logging_steps": 1,
+        "lr_scheduler_type": "cosine",
+        "max_grad_norm": 1.0,
+        "neftune_noise_alpha": null,
+        "num_epochs": 1,
+        "optim": null,
+        "peak_flops_per_device": null,
+        "save_steps": 5,
+        "save_total_limit": 3,
+        "seed": 42,
+        "torch_compile": false,
+        "torch_empty_cache_steps": null,
+        "train_sampling_strategy": "random",
+        "use_liger_kernel": false,
+        "warmup_ratio": 0.03,
+        "weight_decay": 0.01
+      }
+    },
+    "parent_dataset": {
+      "data_config": {
+        "dataset_loader": "alpaca",
+        "dataset_name": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "format": "alpaca",
+        "max_samples": null,
+        "train_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation_file": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl",
+        "validation_split": 0
+      },
+      "evaluation_suite": null,
+      "full_confirmed_revision": 4,
+      "name": "intake-70695b9552884220baaef6fd9dae0883",
+      "paths": {
+        "manifest": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/manifest.json",
+        "test": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/test.jsonl",
+        "train": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/train.jsonl",
+        "validation": "/private/tmp/tunesmith-live-adapter-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13/validation.jsonl"
+      },
+      "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+      "registry_root": "/private/tmp/tunesmith-live-adapter-20260926/datasets",
+      "source_digest": "a090eb6ec77e70a659d512c0f0fc944e45c51616a47c00e34d7983bdb11c9452",
+      "statistics": {
+        "actual_ratios": {
+          "test": 0.08333333333333333,
+          "train": 0.8333333333333334,
+          "validation": 0.08333333333333333
+        },
+        "group_counts": {
+          "test": 1,
+          "train": 10,
+          "validation": 1
+        },
+        "independent_groups": 12,
+        "note": "保留所有记录；按业务对象及相同模型输入隔离，实际比例受分组大小影响；未做类别分层。",
+        "rendered_exact_duplicate_rows": 0,
+        "requested_ratios": {
+          "test": 0.1,
+          "train": 0.8,
+          "validation": 0.1
+        },
+        "row_counts": {
+          "test": 1,
+          "train": 10,
+          "validation": 1
+        },
+        "source_exact_duplicate_rows": 0,
+        "stratified": false,
+        "total_rows": 12
+      },
+      "version": "d2276113253dd15699ffc66ab81b98381e97229aaee2d9e0a165cbfc40421d13"
+    },
+    "parent_evaluation_id": "a95801a4e3294d00a22d4dbd6cee22e7",
+    "parent_evidence_binding": "content_verified",
+    "parent_report_digest": "139822f9c8663924f31d4840835d03966812a254a358b3975e54e1807716a787",
+    "parent_run_id": "wb-9b175cec8b6a4fb3903860b38d81d2f7",
+    "proposal_dataset_digest": "93b319b62ab687da718f76dab2ac4c2a0fbc20141f373b6264ccb6ab965ec4a1",
+    "revision": 2,
+    "session_id": "70695b9552884220baaef6fd9dae0883",
+    "status": "confirmed",
+    "training_start": "base",
+    "updated_at": "2026-09-26T15:29:53.706949+00:00"
+  },
+  "session_revision": 16,
+  "analysis": {
+    "task": {
+      "goal": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」；上线时仅输入客户原话，绝不输入内部处理记录",
+      "usage_input": "客户首次原话（开放中文短文本，如「屏幕碎了」「快递还没到」）；工单号与内部处理记录上线时不可用",
+      "desired_output": "单一类别标签：硬件或物流（封闭二分类，不允许其他值）；带首尾空白的导出值经 strip 规范化后仍映射回原始硬件/物流，不产生新类别",
+      "row_meaning": "一行代表一个独立售后工单（当前样例3行，每行ticket唯一）",
+      "supervision_source": "人工category字段，由质检确认，可信；当前导出带首尾空白，接入时经strip规范化",
+      "success_criteria": [
+        "上线输入仅含客户首次原话，任何内部记录字段（log的【内部记录】段）不出现在训练与评测输入中",
+        "每行有唯一且经质检确认的封闭类别标签；带首尾空白的 category 导出经 strip 规范化后仍为「硬件/物流」，不产生新类别、无冲突、无缺标签",
+        "规范化后渲染的题目与原开发集及最终测试题语义和内容保持一致（本次预览 recipe_digest 与开发评估套件一致）",
+        "log缺失任一标记的行在适配阶段报错并单独处理，绝不猜测或静默填值",
+        "训练/验证切分按ticket分组，同一工单不跨集",
+        "全量数据预览通过后再训练，最终以留出组上的类别准确率等指标验收（阈值由业务确定）"
+      ],
+      "field_roles": [
+        {
+          "column": "customer_first_words",
+          "role": "input",
+          "reason": "由log提取的客户首次原话，是上线时唯一可获得的输入；本轮隔离验证通过的适配仅新增此字段",
+          "available_at_prediction": true,
+          "evidence_row_ids": [
+            "r000001",
+            "r000002",
+            "r000003"
+          ]
+        },
+        {
+          "column": "category",
+          "role": "target",
+          "reason": "质检确认的人工类别，是监督标签与答案字段；当前导出带首尾空白（「 硬件 」「 物流 」），经目标绑定 strip 规范化为原始类别后使用，不当作新类别",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001",
+            "r000002",
+            "r000003"
+          ]
+        },
+        {
+          "column": "ticket",
+          "role": "group",
+          "reason": "工单编号，业务指定用于分组切分，防止同工单信息跨集泄漏；不进入模型输入",
+          "available_at_prediction": true,
+          "evidence_row_ids": [
+            "r000001",
+            "r000002",
+            "r000003"
+          ]
+        },
+        {
+          "column": "log",
+          "role": "unused",
+          "reason": "含【内部记录】，属事后信息，业务明确禁止作为输入；仅作为customer_first_words的提取来源与追溯凭证",
+          "available_at_prediction": false,
+          "evidence_row_ids": [
+            "r000001",
+            "r000002",
+            "r000003"
+          ]
+        }
+      ]
+    },
+    "findings": [
+      {
+        "kind": "observed",
+        "message": "确认计划假设的导出形态已在当前样例中实际出现：3行 category 全部带首尾空白（「 硬件 」×2、「 物流 」×1），log 三行均含成对【客户原话】/【内部记录】标记，ticket 三行唯一（001/002/003）。",
+        "evidence_row_ids": [
+          "source:5b4b31b9279b77948f622223f6e89ae7ba3b76896a3407ef3a794b70e2438acf:r000001",
+          "source:5b4b31b9279b77948f622223f6e89ae7ba3b76896a3407ef3a794b70e2438acf:r000002",
+          "source:5b4b31b9279b77948f622223f6e89ae7ba3b76896a3407ef3a794b70e2438acf:r000003"
+        ]
+      },
+      {
+        "kind": "observed",
+        "message": "日志提取适配器在真实隔离环境（macOS，超时/内存限额内）验证通过：业务例提取出「屏幕碎了/快递还没到/机器开不了机」并原样保留 category 的空白原值，仅新增 customer_first_words；缺开始或结束标记的两个反例如预期抛错拒绝猜测，无静默兜底。适配器职责仅限 log 提取，不触碰 category。",
+        "evidence_row_ids": [
+          "r000001",
+          "r000002",
+          "r000003"
+        ]
+      },
+      {
+        "kind": "observed",
+        "message": "配方预览 3/3 ready、无 needs_label/conflict/invalid：输入仅渲染「客户首次原话」，【内部记录】未进入任何输入；目标绑定 strip 后「 硬件 」→「硬件」、「 物流 」→「物流」，仍为封闭两值，未产生新类别。本次预览 recipe_digest（37296da3…）与开发评估套件所用配方一致，即带空白导出经规范化后渲染的题目与原开发集/测试题语义和内容保持一致，达成确认计划的预期结果。",
+        "evidence_row_ids": [
+          "r000001",
+          "r000002",
+          "r000003"
+        ]
+      },
+      {
+        "kind": "observed",
+        "message": "开发评估报告（139822f9…，development_only，验证集1行）显示 base 与 first_sft 均为 truncated（32 token 达限，输出先答「物流」再进入解释文本），均不正确；此坏例仅作诊断。确认计划明确本轮不声称 strip 解释该问题、不复制模型错误输出作标签、不改训练参数，本轮未做确认范围以外的任何变更。",
+        "evidence_row_ids": []
+      },
+      {
+        "kind": "hypothesis",
+        "message": "若全量导出与样例同样仅带首尾半角空白，strip 后类别应仍只剩「硬件/物流」；若全量出现空白以外的形态（如全角空格、不可见字符、其他类别词），strip 不会自动归类，需业务确认后另行处理。样例3行不能证明全量形态。",
+        "evidence_row_ids": []
+      },
+      {
+        "kind": "needs_full_data",
+        "message": "全量资料到位后需验证：category 经 strip 后仅剩「硬件/物流」两个值、无缺标签或冲突；每行 log 含成对标记（缺标记行报错并交人工修复）；ticket 分组结构（是否一 ticket 多行）；各类别样本量是否支撑训练与评测。",
+        "evidence_row_ids": []
+      }
+    ],
+    "questions": [
+      {
+        "question_id": "q1",
+        "question": "全量数据中，同一工单的log是否可能出现多段【客户原话】？若出现多段，「首次原话」是否就是第一段？",
+        "why": "当前解析取首个【客户原话】到其后首个【内部记录】的文本；若业务对「首次」另有所指，需调整提取规则，否则全量解析时可能提取错段。",
+        "options": [
+          "每行log恰有一段，只取首段即可",
+          "可能有多段，仍只取首段",
+          "可能有多段，取法需另行定义"
+        ],
+        "blocks_confirmation": false
+      },
+      {
+        "question_id": "q2",
+        "question": "全量中同一ticket是否可能对应多行工单记录？",
+        "why": "影响按ticket分组的切分逻辑与「一行=一个独立工单」的定义；样例中ticket唯一（各3字符），无法从样例确认全量结构。",
+        "options": [
+          "是，一工单一行",
+          "否，一工单可能多行（如多次反馈）"
+        ],
+        "blocks_confirmation": false
+      }
+    ],
+    "recipe": {
+      "instruction": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。",
+      "inputs": [
+        {
+          "column": "customer_first_words",
+          "label": "客户首次原话",
+          "value_kind": "open_text",
+          "transforms": [
+            {
+              "operation": "strip",
+              "old": "",
+              "new": "",
+              "mapping": {}
+            }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "column": "category",
+          "label": "售后类别",
+          "value_kind": "categorical",
+          "transforms": [
+            {
+              "operation": "strip",
+              "old": "",
+              "new": "",
+              "mapping": {}
+            }
+          ]
+        }
+      ],
+      "output_format": "text",
+      "allow_multiple_targets": false,
+      "multiple_targets_reason": "",
+      "group_columns": [
+        "ticket"
+      ],
+      "split_rationale": "按 ticket 分组切分，确保同一工单的所有行不跨训练/验证集，避免同工单信息泄漏。"
+    },
+    "composition": null,
+    "adapter": {
+      "config": {
+        "end_marker": "【内部记录】",
+        "start_marker": "【客户原话】"
+      },
+      "examples": [
+        {
+          "expected_rows": [
+            {
+              "__row_id": "r000001",
+              "category": " 硬件 ",
+              "customer_first_words": "屏幕碎了",
+              "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+              "ticket": "001"
+            },
+            {
+              "__row_id": "r000002",
+              "category": " 物流 ",
+              "customer_first_words": "快递还没到",
+              "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+              "ticket": "002"
+            }
+          ],
+          "kind": "business",
+          "name": "真实行提取客户首次原话，原字段含空白的category原样保留",
+          "rows": [
+            {
+              "__row_id": "r000001",
+              "category": " 硬件 ",
+              "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+              "ticket": "001"
+            },
+            {
+              "__row_id": "r000002",
+              "category": " 物流 ",
+              "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+              "ticket": "002"
+            }
+          ]
+        },
+        {
+          "expected_rows": [
+            {
+              "__row_id": "r000003",
+              "category": " 硬件 ",
+              "customer_first_words": "机器开不了机",
+              "log": "【客户原话】机器开不了机【内部记录】同意换新",
+              "ticket": "003"
+            }
+          ],
+          "kind": "business",
+          "name": "无内部空白的原话照常提取",
+          "rows": [
+            {
+              "__row_id": "r000003",
+              "category": " 硬件 ",
+              "log": "【客户原话】机器开不了机【内部记录】同意换新",
+              "ticket": "003"
+            }
+          ]
+        },
+        {
+          "expect_error": true,
+          "kind": "counterexample",
+          "name": "缺少结束标记必须报错",
+          "rows": [
+            {
+              "__row_id": "cx001",
+              "category": " 硬件 ",
+              "log": "【客户原话】屏幕碎了换屏完成",
+              "ticket": "101"
+            }
+          ]
+        },
+        {
+          "expect_error": true,
+          "kind": "counterexample",
+          "name": "缺少开始标记必须报错",
+          "rows": [
+            {
+              "__row_id": "cx002",
+              "category": " 物流 ",
+              "log": "快递还没到【内部记录】坐席查物流",
+              "ticket": "102"
+            }
+          ]
+        }
+      ],
+      "new_columns": [
+        "customer_first_words"
+      ],
+      "source_code": "import re\n\ndef transform(rows, config):\n    START = config.get(\"start_marker\", \"【客户原话】\")\n    END = config.get(\"end_marker\", \"【内部记录】\")\n    out = []\n    for row in rows:\n        new = dict(row)\n        rid = row.get(\"__row_id\", \"?\")\n        log = row.get(\"log\")\n        if not isinstance(log, str):\n            raise ValueError(f\"行{rid}: log 不是文本，无法提取客户原话\")\n        s = log.find(START)\n        if s == -1:\n            raise ValueError(f\"行{rid}: log 缺少开始标记 {START}，拒绝猜测\")\n        content_start = s + len(START)\n        e = log.find(END, content_start)\n        if e == -1:\n            raise ValueError(f\"行{rid}: log 缺少结束标记 {END}，拒绝猜测\")\n        words = log[content_start:e].strip()\n        new[\"customer_first_words\"] = words\n        out.append(new)\n    return out"
+    },
+    "capability_gaps": [],
+    "training_approach": "封闭二分类的文本监督微调（SFT）：以「客户首次原话」为唯一输入、经strip规范化的category（仅「硬件/物流」两个词，无空白、无解释文本）为答案做指令式微调；按ticket分组切分训练/验证。针对开发集截断坏例（输出先答错类别再进入解释文本并触32 token上限），按摘要假设在训练侧核查停止标记、答案长度与训练提示一致性，不以增加生成长度或训练轮数替代核查，也不把模型错误输出复制为标签。样例仅3行无法确定规模与类别比例，全量到位后若某类样本过少，优先补标注真实样本。此为暂定方法，未经全量验证。",
+    "next_steps": [
+      "提供全量资料后，用与本预览完全一致的适配（同样缺标记报错规则）执行：缺标记行报错清单交人工修复，不猜测、不静默跳过。",
+      "适配后重新 profile 全量，重点核对 category strip 后仅剩「硬件/物流」、无缺标签或冲突；出现空白以外的脏值（全角空格、不可见字符、新类别词）时不自动归类，交业务确认。",
+      "用同一配方在全量跑 preview_recipe，确认无 needs_label/conflict 后再切分。",
+      "与业务确认 q1（多段客户原话取首段）、q2（一 ticket 多行）及验收指标阈值。",
+      "按 ticket 分组切分启动微调，训练答案为纯净单标签；在固定开发集重训验证，同时核查首轮截断问题（停止标记、答案长度、训练提示一致性），不以增加轮数代替核查，也不把模型错误输出复制为标签。"
+    ]
+  },
+  "tool_trace": [
+    {
+      "tool": "inspect_revision_cases",
+      "ok": true
+    },
+    {
+      "tool": "inspect_revision_summary",
+      "ok": true
+    },
+    {
+      "tool": "list_sources",
+      "ok": true
+    },
+    {
+      "tool": "inspect_source",
+      "ok": true
+    },
+    {
+      "tool": "preview_adapter",
+      "ok": true
+    },
+    {
+      "tool": "inspect_rows",
+      "ok": true
+    },
+    {
+      "tool": "profile_data",
+      "ok": true
+    },
+    {
+      "tool": "preview_recipe",
+      "ok": true
+    },
+    {
+      "tool": "submit_analysis",
+      "ok": true
+    }
+  ],
+  "preview": {
+    "source_digest": "f6e360c36d802a5aa96cf4c3a6d4c87fc624b332a68d9291ee14b213b16a8d31",
+    "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+    "instruction": "根据客户首次原话预测售后类别，类别封闭为「硬件」或「物流」。上线时模型只能看到客户原话，严禁输入任何内部处理记录（log的【内部记录】部分不得进入输入）。",
+    "rows": [
+      {
+        "row_id": "r000001",
+        "original": {
+          "category": " 硬件 ",
+          "log": "【客户原话】屏幕碎了【内部记录】换屏完成",
+          "ticket": "001",
+          "customer_first_words": "屏幕碎了"
+        },
+        "input": "客户首次原话: 屏幕碎了",
+        "target": "硬件",
+        "group": {
+          "ticket": "001"
+        },
+        "status": "ready",
+        "issues": []
+      },
+      {
+        "row_id": "r000002",
+        "original": {
+          "category": " 物流 ",
+          "log": "【客户原话】快递还没到【内部记录】坐席查物流",
+          "ticket": "002",
+          "customer_first_words": "快递还没到"
+        },
+        "input": "客户首次原话: 快递还没到",
+        "target": "物流",
+        "group": {
+          "ticket": "002"
+        },
+        "status": "ready",
+        "issues": []
+      },
+      {
+        "row_id": "r000003",
+        "original": {
+          "category": " 硬件 ",
+          "log": "【客户原话】机器开不了机【内部记录】同意换新",
+          "ticket": "003",
+          "customer_first_words": "机器开不了机"
+        },
+        "input": "客户首次原话: 机器开不了机",
+        "target": "硬件",
+        "group": {
+          "ticket": "003"
+        },
+        "status": "ready",
+        "issues": []
+      }
+    ],
+    "counts": {
+      "ready": 3,
+      "needs_label": 0,
+      "invalid": 0,
+      "conflict": 0
+    },
+    "scope_note": "这是所提供数据的转换预览，不代表已完成全量数据与独立评测验收。"
+  },
+  "dataset": {
+    "name": "intake-70695b9552884220baaef6fd9dae0883",
+    "version": "2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc",
+    "registry_root": "/private/tmp/tunesmith-revision-live-20260926/datasets",
+    "source_digest": "01ad8b3333d44c7610907b62af932f3ca52e29484736de7b95f6e42c3e6fcd27",
+    "recipe_digest": "37296da31f4a032b387680221687388df2a81ea1584761527fe4abdebb77e89c",
+    "full_confirmed_revision": 14,
+    "paths": {
+      "train": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/train.jsonl",
+      "validation": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/validation.jsonl",
+      "test": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/test.jsonl",
+      "manifest": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/manifest.json"
+    },
+    "data_config": {
+      "dataset_name": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/train.jsonl",
+      "train_file": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/train.jsonl",
+      "validation_file": "/private/tmp/tunesmith-revision-live-20260926/datasets/intake-70695b9552884220baaef6fd9dae0883/splits/2dab969df74b544a52e7ffaafcfb6bc6f97647040c27e0ef33dfc8d0e0404efc/validation.jsonl",
+      "validation_split": 0,
+      "max_samples": null,
+      "format": "alpaca",
+      "dataset_loader": "alpaca"
+    },
+    "statistics": {
+      "total_rows": 12,
+      "independent_groups": 12,
+      "requested_ratios": null,
+      "actual_ratios": {
+        "train": 0.8333333333333334,
+        "validation": 0.08333333333333333,
+        "test": 0.08333333333333333
+      },
+      "row_counts": {
+        "train": 10,
+        "validation": 1,
+        "test": 1
+      },
+      "group_counts": {
+        "train": 10,
+        "validation": 1,
+        "test": 1
+      },
+      "rendered_exact_duplicate_rows": 0,
+      "source_exact_duplicate_rows": 0,
+      "stratified": false,
+      "note": "固定开发与最终测试评分题；新增独立资料进入训练，同评测对象新增行仍保留在对应分区但不扩充评分题。比例及随机种子不重新切分固定题。",
+      "split_method": "fixed_evaluation_suite",
+      "evaluation_suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3",
+      "reserved_rows": {
+        "validation": [],
+        "test": []
+      },
+      "fixed_case_counts": {
+        "test": 1,
+        "validation": 1
+      }
+    },
+    "evaluation_suite": {
+      "case_counts": {
+        "test": 1,
+        "validation": 1
+      },
+      "cases_digest": "474d9fc795cb22912ab6d858cc861d57d7a9a0b356b16cc1dfcaaa18ed92035a",
+      "manifest_path": "/private/tmp/tunesmith-revision-live-rounds-20260926/suites/0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3.json",
+      "root": "/private/tmp/tunesmith-revision-live-rounds-20260926/suites",
+      "suite_id": "0deb218e4516f9eb236863a6cc5ae0b58b66dda3f43aba17ec98fb07880ae5e3"
+    }
+  },
+  "training_started": false,
+  "review_notes": [
+    "原配方已含category strip，本次没有新增清理规则，也没有改解析代码；实际修改仅为适配器验收样例匹配新原始值。",
+    "Agent关于全量/最终测试题保持一致的表述不能单靠样例确认；脚本随后实际全量重放及固定套件物化才提供该证据。",
+    "模型关于全角空格不会被strip处理的推断不准确：Python str.strip能清理多种Unicode空白；原始模型陈述保留，不当作程序语义。",
+    "该验证证明确认方向、坏例读取、工具执行、全量核对的连接，不证明模型业务质量改善。"
+  ]
+}

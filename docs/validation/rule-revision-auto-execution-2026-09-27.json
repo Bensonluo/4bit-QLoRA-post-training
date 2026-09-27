@@ -1,0 +1,63 @@
+{
+  "date": "2026-09-27",
+  "scope": "实际转换规则修改（transform 列表真实变化）→ 真实预览与业务确认 → P3.4 自动执行到三模型开发集对照。全部虚构资料、本地 Qwen3-1.7B、无网络调用、无 GLM 请求。不宣称业务效果改善。",
+  "session_id": "cd0ffd458e024e3da2436e8cf7267c35",
+  "bad_case_origin": {
+    "parent_run_id": "wb-4ae1a6dece3147feb4bfef2fcb36fc0b",
+    "parent_evaluation_id": "1e23c3c862ca4d9db6b6871bff534084",
+    "observation": "基座与父轮在固定开发集 2/2 题均复述任务定义文本（「预测未来20个模拟交易日…forecast_direction(上涨/」）并在 32 token 截断，exact_match=0。诊断：模板化长文案稀释决定性数字信号，两模型行为完全一致。",
+    "honesty_note": "坏例是模型行为事实；数据侧修正不预设会改善该行为。"
+  },
+  "rule_change": {
+    "binding": "recipe.inputs[text]（披露正文）",
+    "before_transforms": [{"operation": "strip"}],
+    "after_transforms": [
+      {"operation": "strip"},
+      {"operation": "replace", "old": "次公开披露：收入为100", "new": "次披露：收入为100"}
+    ],
+    "applied_via": "IntakeService.apply_analysis（与 Agent 修订共用同一条确定性落地路径；本次由操作者按坏例诊断确定规则，未经 GLM——交接允许先用虚构正反例检查含义）",
+    "positive_examples": [
+      "虚构公司第1次公开披露：收入为1001，单位美元。 → 虚构公司第1次披露：收入为1001，单位美元。（变化 ✓）",
+      "虚构公司第5次公开披露：收入为1005，单位美元。 → 虚构公司第5次披露：收入为1005，单位美元。（变化 ✓）"
+    ],
+    "negative_examples": [
+      "收入为1051/1055（固定开发题）字节不变 ✓",
+      "收入为1101/1105（固定测试题）字节不变 ✓",
+      "不含该模式的文本不变 ✓"
+    ],
+    "design_constraint": "固定评测题渲染内容在迭代内不可改写（assert_compatible 按内容摘要强制）；replace 模式「次公开披露：收入为100」经字节核对仅命中训练期两行（1001/1005），开发/测试题（1051/1055/1101/1105）不含该子串。"
+  },
+  "real_preview_evidence": {
+    "sample_preview": "9 行中 2 行输入变化（r000001/r000002：公开披露→披露），其余 7 行不变",
+    "full_preview": "与样例一致：9 行中同样 2 行变化",
+    "business_confirmation": "样例预览确认（rev 10→11）→ 全量重新验证（rev 11→12）→ 全量确认（rev 12→13）",
+    "dataset_v1": "d5478a066eba164ca11dc59aeb31b39640e426671f76f7ee9502a9bafa4cc0c7",
+    "dataset_v2": "c97c7876…（recipe_digest 09b416d9… → 33ed9245…，实际记录于 iteration.actual_data_changes）",
+    "train_file_effect": "train.json 2/2 行含「次披露：收入为」；validation/test 的 instruction/input/output 与父轮逐字节一致（仅新增 evaluation_case_id/evaluation_scored 套件元数据）"
+  },
+  "iteration": {
+    "iteration_id": "it-af3ecde1884c41ba818918c4bcf202c9",
+    "data_change": true,
+    "order_note": "按服务校验要求：propose/confirm 在数据未变时完成（冻结固定题集），规则修改在其后执行（full_confirmed_revision=12 > confirmed_session_revision=9 通过 prepare 检查）",
+    "frozen_suite": "086596e5cbd68692…（validation 2 + test 2 题，冻结自父轮数据）"
+  },
+  "automatic_execution": {
+    "authorized_once": "iteration-execute --revision 13（一次授权，未再点任何训练/评测按钮）",
+    "worker": "后台独立进程（start_new_session），状态依次 queued→materializing（用固定题集物化 v2）→preparing→training→waiting_for_release→evaluating→completed",
+    "new_run_id": "wb-cc351445b14041f58602c99c0c79fba4",
+    "final_iteration_status": "evaluated（无 decision——按设计停在待业务决策）",
+    "report": {
+      "evaluation_id": "fc1802cff3ba4fa0ac1b63c9bf5fd02f",
+      "status": "completed_with_failures",
+      "split": "validation",
+      "purpose": "development_only",
+      "suite_matches_proposal": true,
+      "protocol_matches_parent": "classification_exact / max_new_tokens=32 / strip_whitespace=true / greedy_v1",
+      "models": ["基座", "父轮模型", "本轮微调"]
+    }
+  },
+  "honest_result": {
+    "all_three_models": "exact_match=0.0，输出仍为复述任务定义并在 32 token 截断（与父轮坏例形态一致）",
+    "conclusion": "已核验的是软件流程：坏例→实际转换规则修改→真实预览→业务确认→一次授权自动执行→三模型同题对照→绑定并停在待业务决策。业务效果未达标也未宣称；2 条训练记录不可能证明模型能力，此为流程验证的预期边界。"
+  }
+}

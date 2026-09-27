@@ -1,0 +1,4 @@
+project: TuneSmith
+north_star: docs/plans/north-star.md
+cadence: AI 会话制(以小时预算代替人日)
+tracker: git + .milestones/ 文件与事件日志

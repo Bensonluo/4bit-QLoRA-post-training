@@ -338,9 +338,8 @@ ssh-copy-id windows
 ## Next Steps
 
 1. **Learn Theory**: Read `docs/theory/sft.md`
-2. **Finance Domain**: See `docs/tutorials/finance_training.md`
-3. **Advanced Techniques**: Learn DPO in `docs/theory/dpo.md`
-4. **Experiment**: Try different models and datasets!
+2. **Advanced Techniques**: Learn DPO in `docs/theory/dpo.md`
+3. **Experiment**: Try different models and datasets!
 
 ## Getting Help
 

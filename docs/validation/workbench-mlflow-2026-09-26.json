@@ -1,0 +1,31 @@
+{
+  "evidence_type": "actual tiny local SFT worker and actual MLflow SQLite tracking on two installed versions; not model quality acceptance",
+  "runs": [
+    {
+      "mlflow_version": "3.16.1",
+      "workbench_run_id": "wb-f44e187b4efd4c0380ad58116120903e",
+      "mlflow_run_id": "d502d5be196a48da8f57b75eb28a2eb7",
+      "tracking_uri": "sqlite:////private/var/folders/v5/hrww6dn52rg7q13b549_fbsc0000gn/T/pytest-of-luopeng/pytest-597/test_real_mlflow_run_can_be_re0/runs/mlflow.db",
+      "status": "succeeded",
+      "dataset_version": "ee890a898b9cc85b9eff34945f019753182cd63a99b7c377a4e21bf395de2e12",
+      "config_digest": "4ee94f6020b6604c187896e520496470217771bb0bd9bbe6fc6e22d1aa17d225"
+    },
+    {
+      "mlflow_version": "3.12.0",
+      "workbench_run_id": "wb-84be4da9cb3a4d6faf5b16675f43cb0a",
+      "mlflow_run_id": "ce91518e7f03479a81c561c199d56e04",
+      "tracking_uri": "sqlite:////private/var/folders/v5/hrww6dn52rg7q13b549_fbsc0000gn/T/pytest-of-luopeng/pytest-598/test_real_mlflow_run_can_be_re0/runs/mlflow.db",
+      "status": "succeeded",
+      "dataset_version": "ee890a898b9cc85b9eff34945f019753182cd63a99b7c377a4e21bf395de2e12",
+      "config_digest": "392bced5ff4d3b793732d965ce1fca618efc2ce8eccad8eb6edbb77c12d772cd"
+    }
+  ],
+  "verified_by": "tests/unit/test_workbench_training_runs.py::test_real_mlflow_run_can_be_reopened_with_dataset_and_config_tags",
+  "assertions": [
+    "FINISHED MLflow run",
+    "actual loss metric",
+    "workbench run/data/config tags",
+    "train partition path",
+    "persisted manifest and reopened service linkage"
+  ]
+}

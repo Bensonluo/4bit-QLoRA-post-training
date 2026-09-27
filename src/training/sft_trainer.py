@@ -10,7 +10,6 @@ import torch
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from peft.tuners.lora.loraga import preprocess_loraga
 from transformers import (
-    DataCollatorForLanguageModeling,
     Trainer,
     TrainingArguments,
 )
@@ -18,6 +17,7 @@ from transformers.trainer_callback import TrainerCallback
 
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.data import AlpacaDataset, BaseDataset, FinanceDataset
+from src.data.sft_collator import AttentionMaskCausalCollator
 from src.models import load_model_and_tokenizer
 from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
 from src.training.callbacks import MFUCallback
@@ -38,12 +38,22 @@ from src.utils.platform_utils import get_platform
 from peft.tuners.lora.config import LoraGAConfig  # isort: skip
 
 
-def _dataset_class_for(dataset_name: str) -> type[BaseDataset]:
+def _dataset_class_for(dataset_name: str, loader_name: str | None = None) -> type[BaseDataset]:
     """Select the dataset class for a dataset name.
 
     Shared by prepare_data (full training set) and LoRA-GA calibration
     (a small slice) so both see the exact same data-formatting path.
     """
+    if loader_name == "alpaca":
+        return AlpacaDataset
+    if loader_name == "finance":
+        return FinanceDataset
+    if loader_name == "medical_entity":
+        from src.data.medical_dataset import MedicalEntityDataset
+
+        return MedicalEntityDataset
+    if loader_name is not None:
+        raise ValueError(f"Unsupported dataset loader: {loader_name}")
     if "finance" in dataset_name.lower() or dataset_name == "yahma/alpaca-cleaned":
         return FinanceDataset
     if "medical_entity" in dataset_name.lower():
@@ -229,7 +239,9 @@ class SFTTrainer:
         gradients and initializes A/B from their SVD (LoRA-GA,
         arXiv:2407.05000).
         """
-        dataset_cls = _dataset_class_for(self.data_config.dataset_name)
+        dataset_cls = _dataset_class_for(
+            self.data_config.dataset_name, self.data_config.dataset_loader
+        )
         calib_dataset = dataset_cls(
             data_path=self.data_config.dataset_name,
             max_samples=self.lora_config.lora_ga_calibration_batches
@@ -246,7 +258,10 @@ class SFTTrainer:
         batch_size = max(1, self.training_config.batch_size)
         batches: list[dict[str, Any]] = []
         for start in range(0, len(tokenized), batch_size):
-            rows = tokenized[start : start + batch_size]
+            # HF Dataset slicing returns a dict of columns, not a list of rows.
+            rows = [
+                tokenized[index] for index in range(start, min(start + batch_size, len(tokenized)))
+            ]
             batches.append(
                 {
                     key: torch.tensor([row[key] for row in rows], dtype=torch.long)
@@ -272,7 +287,9 @@ class SFTTrainer:
 
         # Choose dataset type based on config (shared with LoRA-GA calibration)
         dataset: BaseDataset
-        dataset_cls = _dataset_class_for(self.data_config.dataset_name)
+        dataset_cls = _dataset_class_for(
+            self.data_config.dataset_name, self.data_config.dataset_loader
+        )
         dataset = dataset_cls(
             data_path=self.data_config.dataset_name,
             max_samples=self.data_config.max_samples,
@@ -308,7 +325,9 @@ class SFTTrainer:
             val_count = len(self.eval_dataset) if self.eval_dataset else 0
             console.print(f"[green]✓ Validation samples: {val_count:,}[/green]\n")
 
-        # Format datasets for training
+        # Format the selected partitions: split_dataset returns separate datasets
+        # but leaves the loader pointing at the full source dataset.
+        dataset.dataset = self.train_dataset
         self.train_dataset = dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
@@ -320,6 +339,7 @@ class SFTTrainer:
                     max_length=self.model_config.max_length,
                 )
             else:
+                dataset.dataset = self.eval_dataset
                 self.eval_dataset = dataset.format_for_training(
                     self.tokenizer,
                     max_length=self.model_config.max_length,
@@ -440,9 +460,8 @@ class SFTTrainer:
         training_args = TrainingArguments(**training_kwargs)
 
         # Data collator
-        data_collator = DataCollatorForLanguageModeling(
+        data_collator = AttentionMaskCausalCollator(
             tokenizer=self.tokenizer,
-            mlm=False,  # Causal LM, not masked LM
             pad_to_multiple_of=8,
         )
 

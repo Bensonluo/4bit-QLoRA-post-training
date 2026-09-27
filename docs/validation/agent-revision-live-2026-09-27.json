@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-26T18:20:37.782005+00:00",
+  "scope": "单次有目的在线验证：真实 Agent 依据坏例诊断提出数据修订方案。一次在线调用，不重试；密钥仅从环境读取，不落盘。不宣称业务效果。",
+  "attempted": false,
+  "status": "not_attempted",
+  "reason": "环境未设置 TUNESMITH_AGENT_API_KEY；按交接要求密钥仅从环境或会话取得，未尝试连接（非连接失败），不盲试。设置后重跑本脚本即可执行单次验证。",
+  "availability_audit": {
+    "audited_at": "2026-09-27（恢复会话）",
+    "sources_checked": [
+      "进程环境变量 TUNESMITH_AGENT_API_KEY（未设置）",
+      "outputs/workbench/agent-settings.json（按设计仅公共端点配置，无密钥）",
+      "shell 历史与环境文件 ~/.zsh_history/.zshenv/.zprofile/.bash_history（无该变量）",
+      "此前全部会话执行日志 ~/.zcode/cli/exec 与 ~/.claude/projects（无密钥泄露，日志卫生良好）",
+      "macOS 钥匙串常见服务名探测（tunesmith/glm/bigmodel/zhipu，无命中）",
+      "运行中进程与 ~/.config 等配置位置（无）"
+    ],
+    "conclusion": "密钥从未在本机持久化（符合交接设计）；当前不存在可用密钥，在线验证保持 not_attempted（未尝试连接，非失败，不盲试）。",
+    "user_next_step": "在用户终端执行：TUNESMITH_AGENT_API_KEY=<密钥> venv/bin/python scripts/verify_agent_revision_live.py ——密钥不应经对话或任何文件传递，脚本一次调用不重试，结果自动写入本文件。"
+  }
+}

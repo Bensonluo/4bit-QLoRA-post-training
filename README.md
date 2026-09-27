@@ -2,7 +2,9 @@
 
 # TuneSmith 🔨
 
-**Desktop fine-tuning workbench for vertical-domain engineers: guided data prep → local fine-tuning (0.5B–14B on consumer hardware) → model lifecycle management. Cross-platform (NVIDIA GPU / Apple Silicon / CPU), powered by 4-bit QLoRA, with a full dashboard for config → train → monitor → evaluate → registry.**
+**A fine-tuning workbench for small businesses and individuals who cannot hire an algorithm engineer. Start with a business goal and sample data; an Agent helps clarify the task, diagnose data gaps and preview a processing recipe. Existing local training, evaluation and model management support the next steps.**
+
+The goal-and-data workflow is under active development. Sample analysis, real conversion previews, full-data validation, training and iteration are connected and have been exercised with fictional data on local hardware. Real customer acceptance and demonstrated business benefit remain open. [North star & product goals](docs/plans/north-star.md) · [Configure your Agent provider (BYOK)](docs/agent-setup.md)
 
 * formerly "4-bit QLoRA Post-Training Framework"
 
@@ -29,6 +31,7 @@
 
 - [Why This Project](#-why-this-project)
 - [Key Highlights](#-key-highlights)
+- [Goal & Data Workflow (Agent-Assisted)](#-goal--data-workflow-agent-assisted)
 - [Supported Models & Hardware](#-supported-models--hardware)
 - [Quick Start](#-quick-start)
 - [Data Wizard (Guided Data Preparation)](#-data-wizard-guided-data-preparation)
@@ -43,6 +46,8 @@
 
 ## 💡 Why This Project
 
+The product's north star is to help small businesses and individuals complete fine-tuning that meets their own domain needs at an affordable cost, with less dependence on algorithm specialists. The first development priority is the work before training: understanding the goal together with the supplied data, finding missing supervision, resolving business ambiguity and executing the right data preparation. Templates are examples, not the limit of supported business needs. MLflow and result charts support validation later in this process.
+
 Most QLoRA tutorials assume an A100 and stop at `trainer.train()`. Reality for most practitioners:
 
 - ❌ You have an **RTX 4060 (8GB)** or a **MacBook Pro M2**, not a datacenter GPU
@@ -54,7 +59,7 @@ This project solves all of them:
 
 > 🔥 **Train Qwen3-4B in 8GB VRAM** with 4-bit QLoRA — or train **Qwen3-14B on Apple Silicon** in bf16 — with a Streamlit dashboard for the entire lifecycle and MLflow for experiment tracking.
 
-It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT, DPO, GRPO, domain adaptation, evaluation, and side-by-side model comparison.
+The existing implementation provides the training and evaluation foundation: SFT, DPO, GRPO, domain adaptation, evaluation, and side-by-side model comparison.
 
 ---
 
@@ -74,20 +79,59 @@ It's a **complete MLOps reference** for consumer-hardware LLM post-training: SFT
 | Up to 14B on 64GB | 84% VRAM savings | Cost estimation |
 | Zero-config detect | Multi-GPU scale-out | Deploy recommendations |
 
+| 🤝 Agent Intake | 🛡️ Long-Tail | 🔁 Iteration |
+|:---:|:---:|:---:|
+| BYOK analysis agent | Sandboxed adapter code | Frozen eval suites |
+| Goal + data joint diagnosis | Real OS isolation | Base / parent / round compare |
+| Real before/after previews | Business cases + counterexamples | Adopt / iterate / stop |
+
 | 📈 Stats | | |
 |:---:|:---:|:---:|
 | **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **4** post-training techniques |
-| **4** dashboard pages | **5+** model families | **FSDP + DeepSpeed + DDP** distributed |
+| **8** dashboard pages | **5+** model families | **FSDP + DeepSpeed + DDP** distributed |
 
 </div>
 
 ### 🧠 What makes it different
 
-1. **True cross-platform** — one codebase, auto-detects CUDA / MPS / CPU, no config flags
-2. **Full lifecycle dashboard** — not just training, but experiment management + evaluation + comparison
-3. **Domain adaptation system** — pluggable domains with a built-in medical entity showcase (Chinese drug/hospital name normalization)
-4. **Honest evaluation** — difficulty-stratified metrics (easy/medium/hard) instead of one aggregate number
-5. **Executive summaries** — auto-generated Markdown reports with cost estimation and deployment recommendations
+1. **Agent-assisted intake** — start from a business goal and a raw spreadsheet, not a prepared dataset; a BYOK analysis agent (GLM / local / any OpenAI-compatible service) turns "I have data" into a validated training recipe, and long-tail rules fall back to sandboxed adapter code instead of a dead end
+2. **True cross-platform** — one codebase, auto-detects CUDA / MPS / CPU, no config flags
+3. **Full lifecycle dashboard** — not just training, but experiment management + evaluation + comparison
+4. **Domain adaptation system** — pluggable domains with a built-in medical entity showcase (Chinese drug/hospital name normalization)
+5. **Honest evaluation** — difficulty-stratified metrics (easy/medium/hard) instead of one aggregate number; in business comparisons, failures and truncations stay in the denominator
+6. **Executive summaries** — auto-generated Markdown reports with cost estimation and deployment recommendations
+
+---
+
+## 🎯 Goal & Data Workflow (Agent-Assisted)
+
+The primary entry point. Describe a business goal in plain language, upload sample data (CSV / Excel / JSONL), and a BYOK analysis agent — GLM Coding Plan, GLM API, a local service, or any OpenAI-compatible endpoint — does the professional work between "I have some data" and "this is a valid training set":
+
+```text
+goal + samples ─▶ joint diagnosis & clarifying questions ─▶ data recipe + real before/after previews
+  ─▶ user confirms meaning ─▶ full-data validation ─▶ grouped train/val/test partitions (content-hash versioned)
+  ─▶ tokenizer preflight (real truncation & answer-loss stats) ─▶ agent-recommended training plan
+  ─▶ local training (one authorized OOM recovery) ─▶ baseline vs fine-tuned on the same frozen dev set
+  ─▶ bad-case evidence ─▶ next-round hypothesis ─▶ second round under a frozen eval suite
+  ─▶ base / parent / round 3-model comparison ─▶ adopt / iterate / stop ─▶ final acceptance on held-out test
+```
+
+The whole loop lives on one page (**目标与数据**, `ui/pages/07_Data_Intake.py`) or the equivalent CLI (`python scripts/data_intake.py create / analyze / materialize / plan-recommend / train-start / eval-compare / iteration-* / acceptance-*`).
+
+**Design properties:**
+
+| Property | What it means |
+|---|---|
+| Business confirmation, not code review | Users validate meaning through real transformation previews (raw row → model input → answer); agent-drafted long-tail adapter code is verified against business cases **and counterexamples** before use, never executed unreviewed on real data |
+| Real isolation for long-tail code | Adapter / custom-scoring code runs only inside Docker (`--network=none`, read-only, `--cap-drop=ALL`, non-root, pids/memory limits) or macOS Seatbelt (deny-by-default profile); no host fallback — an unavailable backend returns `unavailable`, not a silent bypass |
+| Content-hash identity | Base weights, data versions, and eval protocols are identified by SHA-256 of actual content; a changed file invalidates stale confirmations and cached comparisons instead of reusing them |
+| Frozen evaluation suites | Dev and final-test questions are frozen per round; new data can extend training but never rewrites the scored denominator, so round-over-round deltas stay comparable |
+| One authorized OOM recovery | A single technical retry (smaller micro-batch + more grad accumulation, or gradient checkpointing) is tied to the same business round and recorded as such — no silent re-runs passed off as evidence |
+| Honest evidence | Generation failures and truncations stay in the denominator; open-ended tasks stay "pending business review" instead of getting a fake accuracy; a round can conclude `insufficient_evidence` |
+
+**Status (2026-09):** the full loop — including a second improvement round, three-model comparison, and a separate final-acceptance workflow — is implemented and verified end-to-end on local hardware with fictional data (real Qwen3 training on Apple Silicon, real GLM analysis; evidence in [`docs/validation/`](docs/validation/)). Real customer tasks and demonstrated business benefit are the open milestone.
+
+📖 [North star & product goals](docs/plans/north-star.md) · [Agent setup (BYOK)](docs/agent-setup.md) · [Long-tail adapters & sandbox](docs/agent-adapters.md) · [Business evaluation & bad-case evidence](docs/business-evaluation.md)
 
 ---
 
@@ -129,7 +173,16 @@ pip install -e ".[ui]"        # Installs MLflow + Streamlit + Plotly
 python scripts/launch_dashboard.py
 ```
 
-Open http://localhost:8501 → pick a preset → click **Start Training**.
+Open http://localhost:8501 and choose **目标与数据**. Configure the analysis Agent,
+describe the business goal, and upload sample data. Review the Agent's questions
+and actual transformed examples, then provide full data and confirm the training
+partitions. The same page supports local model training, baseline/adapter
+comparison, and evidence-based next-step advice. See [Agent setup and workflow](docs/agent-setup.md).
+
+This workflow is under active development. Local execution has been verified on
+fictional data, including a second improvement round and a separate final
+acceptance workflow. Real customer acceptance and demonstrated business benefit
+remain open. Existing Training Lab presets are also available for prepared datasets.
 
 ### Option 2: Try the Live Dashboard
 
@@ -312,10 +365,11 @@ python scripts/registry_cli.py info \
 
 ## 📊 Dashboard Tour
 
-Seven pages covering the full ML lifecycle — data prep through chatting with the result:
+Eight pages covering the full ML lifecycle — business goal through chatting with the result:
 
 | Page | What you do there |
 |------|-------------------|
+| 🎯 **目标与数据 (Goal & Data)** | Start here — the agent-assisted workflow above: describe the goal, upload samples, review the Agent's diagnosis and real transformation previews, confirm full data and partitions, launch training, compare baseline vs fine-tuned, read bad-case evidence, drive the next round and final acceptance; every step also available via `scripts/data_intake.py` |
 | 🧪 **Training Lab** | Pick preset (⚡ Quick / 🔥 Standard / 🚀 Full) → configure hyperparams → launch → watch live loss curves; dataset pre-filled automatically when sent from Data Wizard; submit-time **dataset preflight** blocks nonexistent paths / wrong formats (with a fix suggestion) before a single GPU-minute is wasted; a 🔍 **preview station** inspects any local dataset on demand (format + record count + first 3 samples) — no submit needed; finished runs show a 🧭 **next-steps panel** with a **one-click merge** button (adapter → standalone model in `outputs/merged/`, idempotent — already-merged runs show a ✅ and link straight to Chat) plus evaluate/register commands instead of a dead-end ✅ |
 | 📈 **Experiments** | Browse all MLflow runs, filter by status/model, compare params, view metric diffs |
 | 🎯 **Evaluation** | Domain-specific charts: accuracy by difficulty, entity type breakdown, calibration curves |
@@ -366,16 +420,20 @@ Fine-tune Qwen3 to normalize drug names and hospital names — with **difficulty
 │   ├── models.yaml         # VRAM table + LoRA target modules
 │   └── domains/            # Domain training presets
 ├── src/
+│   ├── agent/              # BYOK analysis agent (providers, intake/training/eval/revision flows)
+│   ├── workbench/          # Goal→data→training→evaluation→iteration services (business evaluation, sandbox, acceptance, …)
 │   ├── models/             # Loading, quantization, merging
-│   ├── data/               # Alpaca / Finance / Medical / DPO loaders
-│   ├── training/           # SFT + Domain + DPO trainers + callbacks
+│   ├── data/               # Alpaca / Finance / Medical / DPO loaders + data wizard
+│   ├── data_flywheel/      # Bad-case mining / synthesis pipeline + dataset registry
+│   ├── training/           # SFT + Domain + DPO + GRPO trainers + callbacks
 │   ├── evaluation/         # Metrics, generation, comparison
-│   ├── tracking/           # MLflow integration + runner
+│   ├── inference/          # Chat model discovery + streaming engine
+│   ├── tracking/           # MLflow integration + runner + registry
 │   └── utils/              # Platform detection, logging, memory
 ├── ui/                     # Streamlit dashboard
 │   ├── app.py              # Entry point
 │   ├── components/         # Reusable charts, filters, adapters
-│   └── pages/              # 4 dashboard pages
+│   └── pages/              # 8 dashboard pages
 ├── domains/                # Self-contained domain modules
 ├── scripts/                # CLI entry points (train/eval/merge)
 ├── notebooks/              # Educational Jupyter notebooks
@@ -446,15 +504,23 @@ python scripts/launch_dashboard.py  # Starts both MLflow + Streamlit
 
 ## 🗺️ Roadmap
 
+**Core line — from business goal to verified fine-tuning** ([north star](docs/plans/north-star.md)):
+
+- [x] P0 · Goal + sample analysis: joint diagnosis, clarifying questions, data recipe with real previews
+- [x] P1 · Data pipeline: multi-source composition, sandboxed long-tail adapters, full-data validation, grouped partitions, tokenizer preflight
+- [x] P2 · First training round: agent-recommended plans, local training, baseline/adapter comparison on the same dev set, one authorized OOM recovery
+- [x] P3 · Second round & acceptance: bad-case evidence, frozen eval suites, hypothesis-driven data revision, base/parent/round comparison, adopt-iterate-stop decisions, final acceptance on held-out test
+- [ ] P0–P3 on real customer tasks (all stages above are technically verified end-to-end on fictional data; real business acceptance is the open milestone)
+- [ ] P4 · On demand: DPO/GRPO through the same goal→data loop, external API models in comparisons, time-based splits for forecasting tasks
+
+**Platform foundation (shipped):**
+
 - [x] Cross-platform training (NVIDIA / Apple Silicon / CPU)
-- [x] SFT + DPO + Domain Adaptation
-- [x] Streamlit dashboard (4 pages)
-- [x] MLflow experiment tracking
-- [x] Medical entity domain showcase
+- [x] SFT + DPO + GRPO + Domain Adaptation
+- [x] Streamlit dashboard (8 pages) + MLflow tracking + Model Registry
+- [x] Distributed training (FSDP / DeepSpeed / DDP)
+- [x] Medical entity + master data domain showcases
 - [x] Difficulty-stratified evaluation
-- [x] GRPO (Group Relative Policy Optimization)
-- [ ] vLLM deployment integration
-- [ ] More domains: legal, finance, code
 
 ---
 
@@ -486,13 +552,16 @@ If this project helped you fine-tune on budget hardware, please ⭐ star the rep
 
 ## 🇨🇳 中文说明
 
-**LLM 后训练框架** — 在消费级硬件上微调 0.6B–14B 大模型。
+**面向小公司和个人使用者的微调工作台** — 从业务目标和样例数据出发:分析 Agent(自带模型服务,支持智谱 GLM / 本地模型 / OpenAI 兼容端点)联合分析目标与数据、产出可执行的数据处理方案与真实转换预览;再经全量数据校验、独立分区物化、训练前 token 预检、训练方案推荐、本地训练、基座/微调同开发集对照、坏例诊断,进入固定题集下的第二轮改进与最终业务验收。训练底座在消费级硬件上微调 0.6B–14B 大模型(前身为 4-bit QLoRA 后训练框架)。
+
+> 当前状态:完整闭环已在本地用虚构数据端到端验证(真实 Qwen3 训练 + 真实 GLM 分析,证据见 `docs/validation/`);真实客户任务与业务验收尚未完成。
 
 ### 核心亮点
 
+- **目标与数据主线**:目标 + 样例 → Agent 联合分析 → 预览确认 → 全量校验 → 分区 → 训练 → 对照 → 下一轮
 - **跨平台训练**:自动检测 NVIDIA GPU(4-bit QLoRA)/ Apple Silicon(bf16 MPS)/ CPU
 - **四种后训练技术**:SFT(监督微调)、DPO(直接偏好优化)、GRPO(组相对策略优化,可插拔奖励)、领域适配
-- **Streamlit 全生命周期面板**:配置 → 训练 → 监控 → 评估 → 对比,4 个页面
+- **Streamlit 全生命周期面板**:目标与数据 → 配置训练 → 监控 → 评估 → 对比 → 对话,8 个页面
 - **MLflow 实验追踪**:自动记录指标、参数对比、运行历史
 - **领域适配系统**:内置医疗实体匹配示范(中文药品名/医院名归一化)
 - **难度分层评测**:简单/中等/困难三档,带置信度校准
@@ -527,11 +596,11 @@ python scripts/launch_dashboard.py
 ### How to record the hero GIF
 
 1. **Tool**: [Kap](https://getkap.co/) (Mac) or [licecap](https://www.cockos.com/licecap/) (cross-platform)
-2. **Content** (~30s):
-   - 0-5s: Open dashboard, show system status (auto-detected platform)
-   - 5-15s: Pick a preset in Training Lab, click Start Training
-   - 15-20s: Show live loss curve updating
-   - 20-30s: Switch to Model Comparison, show side-by-side deltas
+2. **Content**: Show the actual business workflow; label any skipped execution time.
+   - Describe a business goal and upload a small source sample in 目标与数据.
+   - Show the Agent's diagnosis and the real input/answer transformation preview.
+   - Validate full data and show the confirmed partitions passed to training.
+   - Compare complete baseline/adapter answers, including failed cases and the Agent's next-step advice.
 3. **Save to**: `docs/assets/dashboard.gif` (keep under 5MB)
 4. **Update**: Replace the placeholder `<img>` in the hero section
 

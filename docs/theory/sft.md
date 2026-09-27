@@ -215,4 +215,3 @@ This will:
 
 - **DPO**: Learn preference optimization in `dpo.md`
 - **QLoRA Deep Dive**: See `qlora.md`
-- **Finance Training**: See domain-specific guide in `../tutorials/finance_training.md`

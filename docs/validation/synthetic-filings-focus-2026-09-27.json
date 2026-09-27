@@ -1,0 +1,38 @@
+{
+  "data_kind": "synthetic_events_prices_calendar",
+  "session_id": "9f59eb64e5f940589c5870619b5dcac2",
+  "dataset_version": "3f7db099a2c1fbb2126bf01d17c56b8b0280ebecb08ed9af78fd4394d8d88027",
+  "suite_id": "0034ec749d6230936ba4eedb05da2e05d87490b7bcc4a5e560b1e67c3858ddbd",
+  "input_events": 9,
+  "horizon_sessions": 20,
+  "included": {
+    "train": 2,
+    "validation": 2,
+    "test": 2
+  },
+  "excluded": [
+    {
+      "event": "event-35",
+      "reason": "label_window_crosses_validation_start"
+    },
+    {
+      "event": "event-85",
+      "reason": "label_window_crosses_test_start"
+    },
+    {
+      "event": "event-135",
+      "reason": "label_not_mature"
+    }
+  ],
+  "sample_pending_target": null,
+  "all_included_rows_have_three_source_lineage": true,
+  "fixed_suite_survives_source_reorder": true,
+  "real_market_data": false,
+  "live_agent_called": false,
+  "model_trained": false,
+  "predictive_performance_verified": false,
+  "scope": "offline production data pipeline; proposal supplied by fixture, not live Agent reasoning",
+  "demo_session_id": "cd0ffd458e024e3da2436e8cf7267c35",
+  "demo_session_status": "awaiting_analysis",
+  "new_remote_calls": 0
+}

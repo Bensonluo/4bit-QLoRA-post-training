@@ -17,6 +17,7 @@ already logged the training params (model config, hyperparams) and metrics
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from config.base import LoggingConfig
@@ -150,6 +151,75 @@ def register_trained_model(
             "scripts/registry_cli.py[/yellow]"
         )
         return None
+
+
+def register_merged_model(
+    model_dir: str,
+    name: str,
+    stage: str = "Staging",
+    tracking_uri: str | None = None,
+    registered_via: str = "manual",
+) -> dict[str, Any]:
+    """Register an already-merged model directory as a new Registry version.
+
+    Unlike the automatic in-training registration (``register_trained_model``),
+    this needs no live training run: it opens a fresh MLflow run, logs the model
+    directory as its artifact (the lineage link), registers it as a new version
+    of ``name``, and transitions it to ``stage``.
+
+    Powers both the UI's one-click register (Training Lab → 下一步) and
+    ``scripts/registry_cli.py register``.
+
+    Args:
+        model_dir: Self-contained merged model dir (config.json + weights + tokenizer).
+        name: Registered model name ('/' is invalid — sanitized to '-').
+        stage: Registry stage for the new version ("Staging" / "None" to skip).
+        tracking_uri: MLflow tracking URI; defaults to the tracker's current setting.
+        registered_via: Provenance tag recorded on the lineage run.
+
+    Returns:
+        Dict with 'name', 'version', 'current_stage'.
+
+    Raises:
+        FileNotFoundError: ``model_dir`` does not exist.
+        RuntimeError: MLflow unavailable, or the log/register step failed.
+    """
+    from src.tracking.mlflow_tracker import get_tracker
+
+    model_path = Path(model_dir).expanduser()
+    if not model_path.is_dir():
+        raise FileNotFoundError(f"model directory not found: {model_dir}")
+
+    cfg = LoggingConfig(use_mlflow=True)
+    if tracking_uri:
+        cfg.mlflow_tracking_uri = tracking_uri
+    tracker = get_tracker(cfg)
+    if not tracker.active:
+        raise RuntimeError("MLflow is not available (not installed?) — cannot register.")
+
+    registry_name = name.replace("/", "-")
+    console.print(f"\n[bold cyan]Registering '{model_dir}' as '{registry_name}'...[/bold cyan]")
+    tracker.start_run(run_name=f"register-{registry_name}", tags={"registered_via": registered_via})
+    try:
+        tracker.log_params({"registered_via": registered_via, "source_dir": str(model_path)})
+        model_uri = tracker.log_model(model_dir=str(model_path), artifact_path="model")
+        if not model_uri:
+            raise RuntimeError("log_model failed — see MLflow output above")
+        info = tracker.register_model(model_uri=model_uri, name=registry_name)
+        if not info:
+            raise RuntimeError("register_model failed — see MLflow output above")
+        if stage and stage != "None":
+            tracker.transition_model_stage(
+                name=info["name"], version=str(info["version"]), stage=stage
+            )
+            info["current_stage"] = stage
+    finally:
+        tracker.end_run()
+    console.print(
+        f"[green]✓ Registered {info['name']} v{info['version']} "
+        f"({info.get('current_stage', 'None')})[/green]\n"
+    )
+    return info
 
 
 def _resolve_merged_dir(adapter_dir: str, registry_name: str) -> str:

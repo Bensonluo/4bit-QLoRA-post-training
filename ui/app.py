@@ -21,6 +21,11 @@ st.set_page_config(
 st.title("🔨 TuneSmith")
 st.caption("Configure, train, evaluate, and compare models — all in one place.")
 
+st.subheader("先说业务目标，再看数据")
+st.write("提供一份 CSV 样例，让 Agent 帮你判断数据是否适合、还缺什么，并预览真实处理结果。")
+if st.button("🧩 分析我的目标与数据", type="primary"):
+    st.switch_page("pages/07_Data_Intake.py")
+
 # ── System Status Bar ───────────────────────────────────────────
 
 status_cols = st.columns([1, 1, 1, 1, 2])

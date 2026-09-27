@@ -1,8 +1,10 @@
 """Domain adaptation trainer (extends SFT with domain-specific features)."""
 
+from pathlib import Path
+
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.data.base import BaseDataset
-from src.training.sft_trainer import SFTTrainer
+from src.training.sft_trainer import SFTTrainer, _dataset_class_for
 from src.utils import console
 
 
@@ -49,11 +51,20 @@ class DomainAdaptationTrainer(SFTTrainer):
             f"\n[bold cyan]=== Preparing {self.domain_name.title()} Domain Data ===[/bold cyan]\n"
         )
 
-        # Use FinanceDataset for finance domain
-        if self.domain_name == "finance":
+        # Materialized data already has approved filtering and formatting rules.
+        dataset: BaseDataset
+        if self.data_config.dataset_loader is not None:
+            dataset_class = _dataset_class_for(
+                self.data_config.dataset_name, self.data_config.dataset_loader
+            )
+            dataset = dataset_class(
+                data_path=self.data_config.dataset_name,
+                max_samples=self.data_config.max_samples,
+            )
+        elif self.domain_name == "finance":
             from src.data import FinanceDataset
 
-            dataset: BaseDataset = FinanceDataset(
+            dataset = FinanceDataset(
                 data_path=self.data_config.dataset_name,
                 max_samples=self.data_config.max_samples,
             )
@@ -75,22 +86,39 @@ class DomainAdaptationTrainer(SFTTrainer):
             seed=self.training_config.seed,
         )
 
+        # Match SFT's explicit validation-file path when automatic splitting is off.
+        validation_loader: BaseDataset | None = None
+        if self.eval_dataset is None and self.data_config.validation_file:
+            if Path(self.data_config.validation_file).exists():
+                validation_loader = type(dataset)(
+                    data_path=self.data_config.validation_file,
+                    max_samples=self.data_config.max_samples,
+                )
+                validation_loader.load()
+                self.eval_dataset = validation_loader.dataset
+            else:
+                console.print("[yellow]⚠ No validation data found[/yellow]")
+
         console.print(
             f"[green]✓ {self.domain_name.title()} train samples: {len(self.train_dataset):,}[/green]"
         )
-        console.print(
-            f"[green]✓ {self.domain_name.title()} val samples: {len(self.eval_dataset):,}[/green]\n"
-        )
+        val_count = len(self.eval_dataset) if self.eval_dataset is not None else 0
+        console.print(f"[green]✓ {self.domain_name.title()} val samples: {val_count:,}[/green]\n")
 
-        # Format for training
+        # The loader still holds the full source after split_dataset returns.
+        dataset.dataset = self.train_dataset
         self.train_dataset = dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
         )
-        self.eval_dataset = dataset.format_for_training(
-            self.tokenizer,
-            max_length=self.model_config.max_length,
-        )
+        if self.eval_dataset is not None:
+            if validation_loader is None:
+                validation_loader = dataset
+            validation_loader.dataset = self.eval_dataset
+            self.eval_dataset = validation_loader.format_for_training(
+                self.tokenizer,
+                max_length=self.model_config.max_length,
+            )
 
 
 def run_domain_adaptation(
