@@ -1036,6 +1036,10 @@ def main() -> int:
             print(
                 f"训练前检查：{session.training_preflight['status']}（未启动训练）", file=sys.stderr
             )
+            from src.workbench.report_summary import summarize_preflight
+
+            for line in summarize_preflight(session.training_preflight):
+                print(line, file=sys.stderr)
         elif args.command == "learnability-probe":
             from src.workbench.learnability_probe import probe_learnability, save_probe
 
