@@ -337,6 +337,7 @@ _100K_SINGLE_CELL_SAMPLE = "".join(
 ).encode()
 _100K_SINGLE_CELL_FULL = _hundred_k_cell_text(full=True).encode()
 
+
 # Excel「CSV UTF-8」导出(Windows Excel 2016+ 的默认 UTF-8 导出):UTF-8 带 BOM(EF BB BF)
 # + CRLF 行尾。BOM 若不剥掉,首列名会变成「\ufeff编号」;CRLF 若按裸行切分会残留 \r。
 def _bom_crlf(text: str) -> bytes:
@@ -349,6 +350,84 @@ _UTF8_BOM_FULL = _bom_crlf(
     "001,杯子破损,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n004,快递丢失,物流\n"
     "005,开不了机,质量\n006,地址填错,物流\n007,异味,质量\n008,延迟送达,物流\n"
     "009,无法充电,质量\n010,包装破损,物流\n"
+)
+
+
+# 多 Sheet Excel:xlsx 含两个 sheet——第一个 sheet 是工单数据,第二个是完全不同的
+# 员工表(一份工作簿装多个业务表的常见形态)。入口按证据只读第一个 sheet:
+# pd.read_excel 默认 sheet_name=0,第二个 sheet 被静默忽略(不报错、不提示)。
+_XLSX_CACHE: dict[str, bytes] = {}
+
+
+def _two_sheet_xlsx(key: str, rows: tuple[tuple[str, str, str], ...]) -> bytes:
+    cached = _XLSX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    from datetime import datetime
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    tickets = workbook.active
+    tickets.title = "工单表"
+    tickets.append(("编号", "客户描述", "类别"))
+    for row in rows:
+        tickets.append(row)
+    staff = workbook.create_sheet("员工表")
+    staff.append(("员工号", "姓名", "部门"))
+    staff.append(("E01", "张三", "质检"))
+    staff.append(("E02", "李四", "物流"))
+    stamp = datetime(2026, 9, 27, 8, 0, 0)  # 固定文档时间戳,同夹具字节可复现
+    workbook.properties.created = stamp
+    workbook.properties.modified = stamp
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+    _XLSX_CACHE[key] = data
+    return data
+
+
+# 干净 10 行(编号 001-010,质量/物流交替):多 sheet 与行序颠倒场景共用同源数据。
+_CLEAN_TEN_ROWS = (
+    ("001", "杯子破损", "质量"),
+    ("002", "物流未更新", "物流"),
+    ("003", "屏幕碎裂", "质量"),
+    ("004", "快递丢失", "物流"),
+    ("005", "开不了机", "质量"),
+    ("006", "地址填错", "物流"),
+    ("007", "异味", "质量"),
+    ("008", "延迟送达", "物流"),
+    ("009", "无法充电", "质量"),
+    ("010", "包装破损", "物流"),
+)
+
+
+def _rows_as_csv(rows: tuple[tuple[str, str, str], ...], target_column: str = "类别") -> bytes:
+    return (
+        f"编号,客户描述,{target_column}\n" + "".join(f"{a},{b},{c}\n" for a, b, c in rows)
+    ).encode()
+
+
+# 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
+# 全量含样例未覆盖的新测量值。value_kind 判定与旅程行为以实测为准。
+_CONTINUOUS_SAMPLE = _rows_as_csv(
+    (("001", "杯子破损", "1.0"), ("002", "物流未更新", "2.5")), target_column="处理时长"
+)
+_CONTINUOUS_FULL = _rows_as_csv(
+    (
+        ("001", "杯子破损", "1.0"),
+        ("002", "物流未更新", "2.5"),
+        ("003", "屏幕碎裂", "3.7"),
+        ("004", "快递丢失", "4.2"),
+        ("005", "开不了机", "0.8"),
+        ("006", "地址填错", "5.1"),
+        ("007", "异味", "2.9"),
+        ("008", "延迟送达", "3.3"),
+        ("009", "无法充电", "1.6"),
+        ("010", "包装破损", "4.8"),
+    ),
+    target_column="处理时长",
 )
 
 
@@ -979,6 +1058,69 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "共同构成入口编码家族边界"
             ),
             tags=("encoding", "utf8", "excel", "bom"),
+        ),
+        ScenarioSpec(
+            scenario_id="excel-multi-sheet",
+            goal="根据客户首次描述判断售后类别",
+            sample=_two_sheet_xlsx("sample", _CLEAN_TEN_ROWS[:2]),
+            sample_name="工单.xlsx",
+            full=_two_sheet_xlsx("full", _CLEAN_TEN_ROWS),
+            full_name="full.xlsx",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:xlsx 含两个 sheet(工单表+员工表,表结构完全不同)——入口按 "
+                "pd.read_excel 默认 sheet_name=0 只读第一个 sheet,第二个 sheet 被静默忽略:"
+                "不报错、不提示其存在,列名/数据/全旅程全部只来自工单表,八关全过。对照事实"
+                "(探针实测):数据放在第二个 sheet(第一个 sheet 是员工表)时,入口把员工表"
+                "当数据读入(列名 员工号/姓名/部门),同样不报错——用户得不到「数据在其他 "
+                "sheet」的提示。单 sheet 隐含限制是已知边界:多 sheet 工作簿须用户自行把要"
+                "分析的表放在第一个 sheet,入口不做 sheet 选择"
+            ),
+            tags=("excel", "multi-sheet", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="numeric-continuous-target",
+            goal="根据客户描述预估处理时长(小时)",
+            sample=_CONTINUOUS_SAMPLE,
+            sample_name="工单.csv",
+            full=_CONTINUOUS_FULL,
+            target_column="处理时长",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),"
+                "value_kind 按「均长<40 且去重数≤20」判成 categorical——数值语义不被识别,"
+                "回归任务当前被当多类别分类对待:分布 finding 把每个测量值各计一类"
+                "(「共 2 类:1.0×1、2.5×1」),预览/对比核验/盲标按精确字符串匹配"
+                "(「1.0」原样进答案),全量 8 个样例未覆盖的新测量值触发 new_categories "
+                "review 预警(对连续值而言是新值的常态提示,不阻断),八关全过。边界如实"
+                "记录:连续值回归未被如实对待为回归——需用户在数据侧离散化答案列,或配置 "
+                "Agent 走回归方案;本场景钉住当前判定,日后若引入数值型 value_kind 需随之改期望"
+            ),
+            tags=("numeric", "regression", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="row-order-reversed-full",
+            goal="根据客户首次描述判断售后类别",
+            sample=_rows_as_csv(_CLEAN_TEN_ROWS[:2]),
+            sample_name="工单.csv",
+            full=_rows_as_csv(tuple(reversed(_CLEAN_TEN_ROWS))),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:全量与样例同源但行序完全颠倒——内容级守卫全部按内容而非行号工作:"
+                "sample_answer_disagreement 按输入文本比对、new_categories 按答案值比对、"
+                "冲突/重复检出按 canonical 内容,行序不影响任何判断,全量验证无 blocking,"
+                "八关全过。血缘/版本(探针实测重传路径):行 ID 按物理行序重新编号"
+                "(r000001 从 001 变成 010)——行身份是位置的,不是内容的;同一会话重传后旧"
+                "盲标核验按 full_source_digest 失效(stale 如实标记,不静默复用),full/ 目录"
+                "按内容寻址同时保留正序与倒序两份原始字节,重新确认+重新盲标(对新绑定从"
+                "第 1 轮开始)后照常 verified,物化产生新版本并绑定重传文件的摘要"
+            ),
+            tags=("lineage", "row-order", "full-data"),
         ),
     ]
 

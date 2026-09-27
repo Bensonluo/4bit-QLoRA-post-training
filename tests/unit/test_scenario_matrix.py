@@ -128,7 +128,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 35, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 38, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -704,3 +704,224 @@ def test_excel_utf8_bom_csv_passes_full_journey(tmp_path):
     # 若入口不做 utf-8-sig 兜底,业务口径的列名会匹配不上(spaced-header-names 同款拦截)
     plain = read_source("工单.csv", spec.sample, scope="sample", encoding="utf-8")
     assert plain.columns[0] == "\ufeff编号"
+
+
+def test_excel_multi_sheet_reads_first_sheet_only(tmp_path):
+    """场景 36:xlsx 含两个 sheet——入口只读第一个 sheet,第二个被静默忽略(已知边界)。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "excel-multi-sheet" in specs, "缺少场景 excel-multi-sheet"
+
+    spec = specs["excel-multi-sheet"]
+
+    # 夹具真实性:工作簿确实有两个 sheet,且第二个 sheet 是完全不同的表(员工表)
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    for blob in (spec.sample, spec.full):
+        assert load_workbook(BytesIO(blob), read_only=True).sheetnames == ["工单表", "员工表"]
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 入口事实:只读第一个 sheet——列名与数据全部来自工单表,员工表的列不可见
+    from src.workbench.sources import read_source
+
+    source = read_source(spec.sample_name, spec.sample, scope="sample")
+    assert source.format == "xlsx"
+    assert source.columns == ["编号", "客户描述", "类别"], source.columns
+    assert [row.values["客户描述"] for row in source.rows] == ["杯子破损", "物流未更新"]
+
+    # 对照事实(探针实测):数据在第二个 sheet(第一个是员工表)时,入口把员工表
+    # 当数据读入,同样不报错——用户得不到「数据在其他 sheet」的提示
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    staff = workbook.active
+    staff.append(("员工号", "姓名", "部门"))
+    staff.append(("E01", "张三", "质检"))
+    tickets = workbook.create_sheet("工单表")
+    tickets.append(("编号", "客户描述", "类别"))
+    tickets.append(("001", "杯子破损", "质量"))
+    buffer = BytesIO()
+    workbook.save(buffer)
+    swapped = read_source("混合.xlsx", buffer.getvalue(), scope="sample")
+    assert swapped.columns == ["员工号", "姓名", "部门"], swapped.columns
+
+
+def test_numeric_continuous_target_treated_as_categorical(tmp_path):
+    """场景 37:答案列连续数值——value_kind 判成 categorical,回归被当分类对待(已知边界)。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "numeric-continuous-target" in specs, "缺少场景 numeric-continuous-target"
+
+    spec = specs["numeric-continuous-target"]
+
+    # 夹具真实性:答案列全为小数点数值(非离散类别),且全量含样例未覆盖的新测量值
+    def numbers(blob: bytes) -> list[str]:
+        return [line.rsplit(",", 1)[1] for line in blob.decode().splitlines()[1:]]
+
+    assert all("." in value for value in numbers(spec.sample) + numbers(spec.full)), "应为连续数值"
+    assert set(numbers(spec.full)) - set(numbers(spec.sample)), "全量应含样例未覆盖的新测量值"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 判定事实:数值语义不被识别——value_kind=categorical,分布 finding 按每值一类计数
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "numeric-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="处理时长", group_columns=("编号",))
+    assert analysis.recipe.targets[0].value_kind == "categorical", analysis.recipe.targets[0]
+    assert analysis.recipe.targets[0].transforms == []
+    distribution = next(f.message for f in analysis.findings if f.message.startswith("答案列"))
+    assert "共 2 类" in distribution and "1.0×1" in distribution and "2.5×1" in distribution
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    assert {row.target for row in session.preview.rows} == {"1.0", "2.5"}
+
+    # 全量事实:8 个新测量值触发 new_categories review 预警(不阻断,旅程继续)
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    service.submit_contrast_check(
+        session.session_id,
+        pending["check_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full
+    )
+    blocking = [issue for issue in session.full_data.issues if issue.severity == "blocking"]
+    assert not blocking, [issue.to_dict() for issue in blocking]
+    warning = next(issue for issue in session.full_data.issues if issue.code == "new_categories")
+    assert "样例未覆盖的 8 种答案" in warning.message
+    assert session.full_data.new_target_values == {
+        "处理时长": ["3.7", "4.2", "0.8", "5.1", "2.9", "3.3", "1.6", "4.8"]
+    }
+
+
+def test_row_order_reversed_full_passes_and_reupload_stays_content_stable(tmp_path):
+    """场景 38:全量行序完全颠倒——内容级守卫按内容稳定;重传后血缘/版本/盲标照常。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "row-order-reversed-full" in specs, "缺少场景 row-order-reversed-full"
+
+    spec = specs["row-order-reversed-full"]
+
+    # 夹具真实性:全量与样例同源(编号 001-010),但行序完全颠倒
+    def ids(blob: bytes) -> list[str]:
+        return [line.split(",")[0] for line in blob.decode().splitlines()[1:]]
+
+    assert ids(spec.full) == [f"{i:03d}" for i in range(10, 0, -1)], "全量应为 010→001 倒序"
+    assert ids(spec.sample) == ["001", "002"]
+
+    # 同源:样例每行的答案与全量同编号行完全一致(只是全量把行序颠倒了)
+    def label_of(blob: bytes) -> dict[str, str]:
+        return {
+            line.split(",")[0]: line.rsplit(",", 1)[1] for line in blob.decode().splitlines()[1:]
+        }
+
+    full_labels = label_of(spec.full)
+    assert all(full_labels[row_id] == label for row_id, label in label_of(spec.sample).items())
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 重传实测(探针路径):同一会话先走正序全量旅程,再用倒序字节重传全量。
+    # 正序夹具由场景倒序全量反推(同一批行,只还原行序),保证两份文件内容同源。
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+    from src.workbench.sources import canonical
+
+    lines = spec.full.decode().splitlines()
+    ordered_full = ("\n".join([lines[0], *reversed(lines[1:])]) + "\n").encode()
+
+    service = IntakeService(tmp_path / "roworder-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    service.submit_contrast_check(
+        session.session_id,
+        pending["check_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = service.confirm(session.session_id, session.revision)
+
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, ordered_full
+    )
+    digest_original = session.full_data.source.digest
+    rows_original = {
+        canonical({"编号": row.original["编号"], "答案": row.target})
+        for row in session.full_data.preview.rows
+    }
+    session = service.confirm_full_data(session.session_id, session.revision)
+    pending = service.start_label_verification(session.session_id, session.revision)
+    answers = {
+        item["row_id"]: next(
+            r.target for r in session.full_data.preview.rows if r.row_id == item["row_id"]
+        )
+        for item in pending["items"]
+    }
+    first = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert first["verdict"] == "verified", first
+    session = service.materialize_dataset(
+        session.session_id, session.revision, independent_rows_confirmed=False
+    )
+    version_original = session.dataset.version
+
+    # 倒序重传:全量验证不拦,内容集合不变,行 ID 按物理行序重新编号
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full
+    )
+    report = session.full_data
+    digest_reversed = report.source.digest
+    assert digest_reversed != digest_original, "行序颠倒后文件摘要必须不同"
+    assert not [issue for issue in report.issues if issue.severity == "blocking"], report.issues
+    assert not [issue for issue in report.issues if issue.code == "sample_answer_disagreement"]
+    rows_reversed = {
+        canonical({"编号": row.original["编号"], "答案": row.target}) for row in report.preview.rows
+    }
+    assert rows_reversed == rows_original, "行序颠倒不改变内容身份"
+    by_position = {row.row_id: row.original["编号"] for row in report.preview.rows}
+    assert by_position["r000001"] == "010" and by_position["r000010"] == "001", by_position
+    # 血缘:full/ 目录按内容寻址同时保留正序与倒序两份原始字节
+    stored = {
+        path.name for path in (tmp_path / "roworder-probe" / session.session_id / "full").iterdir()
+    }
+    assert f"{digest_original}.csv" in stored and f"{digest_reversed}.csv" in stored, stored
+
+    # 版本:重传后旧盲标核验按摘要失效(stale 如实标记,不静默复用),须重新确认+重新盲标
+    reloaded = service.load(session.session_id)
+    assert reloaded.label_verification == {
+        "stale": True,
+        "previous_verdict": "verified",
+        "previous_created_at": reloaded.label_verification["previous_created_at"],
+    }
+    session = service.confirm_full_data(session.session_id, session.revision)
+    pending = service.start_label_verification(session.session_id, session.revision)
+    answers = {
+        item["row_id"]: next(
+            r.target for r in session.full_data.preview.rows if r.row_id == item["row_id"]
+        )
+        for item in pending["items"]
+    }
+    second = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert second["verdict"] == "verified", second
+    session = service.materialize_dataset(
+        session.session_id, session.revision, independent_rows_confirmed=False
+    )
+    assert session.dataset.version != version_original, "重传后必须物化新版本"
+    assert session.dataset.source_digest == digest_reversed, "新版本绑定重传文件摘要"
