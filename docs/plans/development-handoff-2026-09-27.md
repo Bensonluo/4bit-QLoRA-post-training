@@ -582,3 +582,38 @@ label-verify 提交(c257ce6/337328c/1f06ea2)先后落库无冲突。全量回归
 1672 passed(--no-cov)。遗留下一轮候选:页面入口接 sheet 选择(A/页面域)、
 add-source/full-sources 的 sheet 参数对称补齐、服务层 sheet 选择的契约字段
 `sheet` 若日后需序号回显可另议。
+
+### 第 20 轮 = 盲标题目清单 CSV 导出 + agent-setup 盲标 CLI 用法逐字校对 + 页面域并行(第十一批)
+
+(B 线第十一批。)承接第十批 A 线把盲标 CLI 的证据说明补齐(evidence_note 预告、
+判定行下界、submit_hint 对齐),本批清偿「抽题只能在终端看题」的 offline 缺口,
+并把文档里盲标 CLI 的用法从简写升级为与实现逐字一致的完整用法。
+
+- **label-verify 加可选 `--export-csv`**(05ef05a,scripts/data_intake.py):与
+  learnability-probe 的候选清单导出同款口径——`--export-csv 路径` 抽题成功后把
+  题目清单落盘(BOM 表头、Excel 直开、父目录自动创建、stderr 告知导出路径),
+  供线下作答后再逐条照抄回 label-verify-submit 提交。关键差别是盲标清单**只含
+  行ID、题目输入、留空待填的盲标答案三列,绝不含数据标签**——导出文件一旦泄露
+  答案,盲标核验「独立复现业务含义」的价值就失效了;抽题被拒(如 revision 过期)
+  时不写文件也不装作导出成功。测试 test_label_verify_cli 5→7 项:清单内容与
+  抽样逐行一致(含真实输入列)、数据标签不泄露、行数=样本量+表头、失败不落盘。
+- **agent-setup.md 语义安全层段补盲标核验完整 CLI 用法**(9bc0382):新增
+  「盲标核验的完整 CLI 用法」小节——label-verify(--size 1–50、--export-csv)
+  与 label-verify-submit(每行一个 --answer、恰好覆盖抽样行、不收 --revision)
+  全参数;stderr 输出顺序逐字引用(提示句、evidence_note 证据预告、
+  shortfall_note、逐题清单),判定行「判定：verified（5/5 一致，95% 置信下界约
+  57%）」与通过/未通过两态注记照实写明;导出 CSV 三列结构与「清单不含数据答案」
+  边界一并入文。顺带清偿两处文档漂移:①关卡条目早期口径「系统随机抽取最多
+  5 条已标注行」改为当前真相(样本量 1–50 自选,默认 5),末尾过渡注记随之删除;
+  ②原条目 `[--size 5]` 的写法暗示样本量固定。全部引用字符串均以真实 CLI 进程
+  跑 label-verify/label-verify-submit 逐字比对(stderr 与 JSON 键),不凭记忆书写。
+- **本记录**(第三提交)。
+
+**A 线(另一并行 agent,页面方向):**(待其交付后由协调员或本人补记——预期涉及
+ui/pages/07_Data_Intake.py 与 test_data_intake_ui/test_workbench_training_ui,
+页面盲标/训练工作台方向。)
+
+回归:tests/unit 1674 passed(--no-cov;第 19 轮 1672 → +2 为本轮新增 label-verify
+导出测试);ruff check/format clean。本批只动 scripts/data_intake.py(仅 label-verify
+的参数、导出 helper 与分支接线)、tests/unit/test_label_verify_cli.py、
+docs/agent-setup.md 与本记录;未触碰 A 线并行文件(页面与 UI 测试域只读)。
