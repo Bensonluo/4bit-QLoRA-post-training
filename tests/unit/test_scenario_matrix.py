@@ -241,3 +241,23 @@ def test_single_row_sample_blocked_at_contrast_check(tmp_path):
     # create 与基础分析都不拦(一条有标签的行足以生成真实预览),拦截发生在配对核验
     assert result.stages["create"] == "passed"
     assert result.stages["baseline_analysis"] == "passed"
+
+
+def test_all_empty_target_column_blocked_at_contrast_check(tmp_path):
+    """场景 25:答案列所有值为空——分析阶段如实观察 0 类答案,旅程在对比核验被拦。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "all-empty-target-column" in specs, "缺少场景 all-empty-target-column"
+
+    spec = specs["all-empty-target-column"]
+    # 夹具真实性:样例与全量每一条数据行的答案字段都为空(表头保留「类别」列名)
+    data_lines = spec.sample.splitlines()[1:] + spec.full.splitlines()[1:]
+    assert data_lines and all(line.endswith(b",") for line in data_lines), "所有数据行答案应为空"
+    assert spec.sample.splitlines()[0].endswith(",类别".encode())
+
+    result = run_scenario(spec, tmp_path / "all-empty-target-column")
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "contrast_check", result.to_dict()
+    assert "对比核验需要至少两条答案不同的已标注行" in result.blocked_message
+    # 基础分析阶段既不静默通过也不拦:如实生成「0 类答案」的观察与逐行 needs_label 预览
+    assert result.stages["create"] == "passed"
+    assert result.stages["baseline_analysis"] == "passed"

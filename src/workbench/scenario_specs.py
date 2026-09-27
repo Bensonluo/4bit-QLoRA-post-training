@@ -603,6 +603,23 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("small-sample", "negative-scenario"),
         ),
+        ScenarioSpec(
+            scenario_id="all-empty-target-column",
+            goal="根据客户首次描述判断售后类别",
+            sample=_ALL_EMPTY_TARGET_SAMPLE,
+            sample_name="工单.csv",
+            full=_ALL_EMPTY_TARGET_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:contrast_check",
+            expect_note=(
+                "实测结局:答案列表头存在但所有值为空(样例与全量皆空)——基础分析不拦,"
+                "finding 如实观察「答案列非空取值 0/2 行,共 0 类」,预览逐行标 needs_label;"
+                "旅程在对比核验被拦:「对比核验需要至少两条答案不同的已标注行。」"
+                "不静默跳过、不自动补值;用户须先补标签再重走旅程"
+            ),
+            tags=("dirty-data", "empty-target"),
+        ),
     ]
 
 
