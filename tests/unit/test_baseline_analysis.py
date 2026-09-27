@@ -148,3 +148,25 @@ def test_duplicate_inputs_are_flagged(tmp_path):
         "完全重复" in f.message
         for f in propose_baseline_analysis(session2, target_column="类别").findings
     )
+
+
+def test_severe_class_imbalance_is_flagged(tmp_path):
+    """多数类占比≥80%时警告「准确率会骗人」;均衡数据不触发。"""
+    service = IntakeService(tmp_path / "intake")
+    rows = "描述,类别\n" + "".join(
+        f"问题{i},{'质量' if i <= 9 else '物流'}\n" for i in range(1, 11)
+    )
+    session = service.create("判断类别", "t.csv", rows.encode())
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    warnings = [f for f in analysis.findings if "不均衡" in f.message]
+    assert warnings and "准确率会骗人" in warnings[0].message and "90%" in warnings[0].message
+
+    balanced = IntakeService(tmp_path / "intake2")
+    rows2 = "描述,类别\n" + "".join(
+        f"问题{i},{'质量' if i % 2 else '物流'}\n" for i in range(1, 11)
+    )
+    session2 = balanced.create("判断类别", "t.csv", rows2.encode())
+    assert not any(
+        "不均衡" in f.message
+        for f in propose_baseline_analysis(session2, target_column="类别").findings
+    )

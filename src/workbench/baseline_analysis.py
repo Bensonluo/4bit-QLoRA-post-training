@@ -197,6 +197,22 @@ def propose_baseline_analysis(
                 ),
             )
         )
+    # 类别不均衡检出:多数类占比过高时,准确率会被「全猜多数类」撑起来
+    if target_values and len(target_values) >= 10:
+        majority_share = max(distribution.values()) / len(target_values)
+        if majority_share >= 0.8:
+            majority_label = distribution.most_common(1)[0][0]
+            findings.append(
+                Finding(
+                    kind="needs_business_input",
+                    message=(
+                        f"答案分布严重不均衡：「{majority_label}」占 {majority_share:.0%}"
+                        f"（{len(target_values)} 行）。模型只要全猜这一类就有 "
+                        f"{majority_share:.0%} 准确率——总体准确率会骗人。"
+                        "后续对照请看每一类的分别表现；少数类恰恰通常是业务上重要的类。"
+                    ),
+                )
+            )
     target_distinct = len(distribution)
     if len(target_values) >= 8 and target_distinct / max(len(target_values), 1) >= 0.9:
         findings.append(

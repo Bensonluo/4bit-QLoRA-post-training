@@ -200,6 +200,23 @@ def builtin_scenarios() -> list[ScenarioSpec]:
             ),
             tags=("boundary", "multi-source"),
         ),
+        ScenarioSpec(
+            scenario_id="severe-class-imbalance",
+            goal="根据客户首次描述判断是否需要人工复核",
+            sample=("编号,描述,需复核\n001,普通问题,否\n002,投诉升级,是\n").encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,描述,需复核\n"
+                + "".join(
+                    f"{i:03d},问题{i},{'是' if i % 10 == 0 else '否'}\n" for i in range(1, 21)
+                )
+            ).encode(),
+            target_column="需复核",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note="通过且带「分布严重不均衡」预警(多数类 90%:全猜多数类即 90% 准确率,准确率会骗人)",
+            tags=("imbalance",),
+        ),
     ]
 
 
