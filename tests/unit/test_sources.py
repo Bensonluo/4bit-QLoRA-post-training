@@ -292,3 +292,151 @@ def test_service_create_persists_merged_note(tmp_path):
     reloaded = service.load(session.session_id)
     assert "类别 C2:C4" in reloaded.source.merged_note
     assert "merged_note" in reloaded.profile
+
+
+def _formula_workbook_bytes(formulas: dict[str, str]) -> bytes:
+    """生成类别列含无缓存公式格的工作簿:坐标 → 公式(openpyxl 写公式即无缓存计算结果)。"""
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "客户描述", "类别"))
+    for number, text, label in (
+        ("001", "杯子破损", "质量"),
+        ("002", "物流未更新", "物流"),
+        ("003", "屏幕碎裂", "质量"),
+        ("004", "快递丢失", "物流"),
+    ):
+        sheet.append((number, text, label))
+    for coord, formula in formulas.items():
+        sheet[coord] = formula
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _cached_formula_workbook_bytes(cached: dict[str, str]) -> bytes:
+    """把无缓存公式格补上缓存计算结果,模拟真实 Excel 打开并保存过的文件形态。
+
+    openpyxl 写出的公式格 XML 是 <c r="C2"><f>…</f><v /></c>(空缓存);直接改 zip 里的
+    sheet XML,把空 <v /> 换成 t="str" 与缓存值——与 Excel 保存后的形态一致。找不到
+    目标格即断言失败,防止 openpyxl 输出漂移让夹具静默失效。
+    """
+    import re
+    import zipfile
+
+    data = _formula_workbook_bytes(
+        {coord: f'=IF(LEN({coord[0]}{coord[1:]})>0,"质量","物流")' for coord in cached}
+    )
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        entries = [(name, archive.read(name)) for name in archive.namelist()]
+    patched: list[tuple[str, bytes]] = []
+    for name, blob in entries:
+        if name == "xl/worksheets/sheet1.xml":
+            xml = blob.decode("utf-8")
+            for coord, value in cached.items():
+                pattern = re.compile(rf'<c r="{coord}">(.*?)<v\s*/></c>')
+                xml, count = pattern.subn(
+                    rf'<c r="{coord}" t="str">\1<v>{value}</v></c>', xml, count=1
+                )
+                assert count == 1, f"公式格 {coord} 未找到,openpyxl 输出形态漂移"
+            blob = xml.encode("utf-8")
+        patched.append((name, blob))
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, blob in patched:
+            archive.writestr(name, blob)
+    return buffer.getvalue()
+
+
+def test_formula_cells_read_as_empty_and_annotated():
+    """公式格无缓存计算结果如实点名:读为空串(不自动计算),formula_note 说出根因与修法。"""
+    data = _formula_workbook_bytes(
+        {"C2": '=IF(LEN(B2)>0,"物流","质量")', "C3": '=IF(LEN(B3)>0,"质量","物流")'}
+    )
+    source = read_source("工单.xlsx", data, scope="sample")
+    # 读取行为不变:无缓存公式格读为空串,绝不自动计算去猜值
+    # (C2/C3 即前两条数据行,因此空值在前的形态是公式夹具与合并夹具的天然差异)
+    assert [row.values["类别"] for row in source.rows] == ["", "", "质量", "物流"]
+    note = source.formula_note
+    assert "2 个没有缓存计算结果的公式单元格" in note, note
+    assert "类别 C2" in note and "类别 C3" in note, note  # 受影响列与坐标点名
+    assert "这些公式读为空值" in note, note
+    assert "没有自动计算" in note, note
+    assert profile_source(source)["formula_note"] == note  # profile 同步如实呈现
+
+
+def test_cached_formula_cells_read_values_without_false_positive():
+    """真实 Excel 保存过的公式格带缓存值:按缓存值正常读取,formula_note 不误报。"""
+    data = _cached_formula_workbook_bytes({"C2": "物流", "C3": "质量"})
+    source = read_source("工单.xlsx", data, scope="sample")
+    # 带缓存值的公式格按缓存值读取(C2 缓存=物流、C3 缓存=质量),
+    # 不因「存在公式」而列入 formula_note
+    assert [row.values["类别"] for row in source.rows] == ["物流", "质量", "质量", "物流"]
+    assert source.formula_note == ""
+    assert "formula_note" not in profile_source(source), profile_source(source)
+
+
+def test_formula_note_skips_out_of_region_and_unread_sheet():
+    """数据区之外的公式格不涉及本次读取不点名;未读取 sheet 的公式同样不点名;
+    干净文件与 CSV 的 profile 形状不变。"""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "类别"))
+    sheet.append(("001", "质量"))
+    sheet.append(("002", "物流"))
+    sheet["D9"] = "=1+1"  # 完全在数据区之外(无内容格)
+    other = workbook.create_sheet("备注表")
+    other.append(("备注", "标记"))
+    other.append(("正常", "=1+1"))  # 公式在另一个 sheet 的数据区内
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+
+    default = read_source("工作簿.xlsx", data)
+    assert default.formula_note == ""
+    assert "formula_note" not in profile_source(default)
+    second = read_source("工作簿.xlsx", data, sheet="备注表")
+    assert "标记 B2" in second.formula_note, second.formula_note  # 只看实际读取的 sheet
+
+    csv_source = read_source("工单.csv", "编号,类别\n001,质量\n".encode())
+    assert csv_source.formula_note == ""
+    assert "formula_note" not in profile_source(csv_source)
+
+
+def test_formula_note_lists_first_five_and_caps_long_lists():
+    """公式格超过 5 个时不逐一罗列,以「等」收尾——与 merged_note/sheet_note 同款口径。"""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "类别"))
+    for i in range(1, 13):
+        sheet.append((f"{i:03d}", "质量" if i % 2 else "物流"))
+    for row_no in range(2, 8):  # 类别列 B2..B7 共 6 个无缓存公式格
+        sheet[f"B{row_no}"] = f'=IF(A{row_no}>0,"质量","物流")'
+    buffer = BytesIO()
+    workbook.save(buffer)
+    source = read_source("工作簿.xlsx", buffer.getvalue())
+    note = source.formula_note
+    assert "6 个没有缓存计算结果的公式单元格" in note, note
+    assert "类别 B6" in note, note  # 只列前 5 个
+    assert "类别 B7" not in note, note
+    assert "等" in note, note
+
+
+def test_service_create_persists_formula_note(tmp_path):
+    """创建入口(服务层)透传:会话建在含无缓存公式格的文件上,存档回读后标注仍在。"""
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(
+        "根据客户首次描述判断售后类别",
+        "工单.xlsx",
+        _formula_workbook_bytes({"C2": '=IF(LEN(B2)>0,"物流","质量")'}),
+    )
+    assert "类别 C2" in session.source.formula_note
+    assert "formula_note" in session.profile
+    reloaded = service.load(session.session_id)
+    assert "类别 C2" in reloaded.source.formula_note
+    assert "formula_note" in reloaded.profile

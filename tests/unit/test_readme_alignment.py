@@ -284,3 +284,27 @@ def test_merged_cells_docs_pinned_and_backed_by_matrix():
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "merged-cells-in-target-column" in scenarios, "场景矩阵缺少合并单元格场景"
     assert scenarios["merged-cells-in-target-column"].expect == "blocked_at:confirm_sample"
+
+
+def test_formula_cells_docs_pinned_and_backed_by_matrix():
+    """Excel 公式格无缓存文档:formula_note/不自动计算/带缓存不列入/xls 边界关键句钉死,
+    由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 多份资料一起分析",
+        "### 长尾字段解析与受限适配",
+    )
+    assert "formula_note" in section
+    assert "这些公式读为空值" in section
+    assert "没有自动计算" in section
+    assert "缺少监督答案" in section, "空值根因与拦截的关联必须写明"
+    assert "带缓存值，按缓存值正常读取、不列入" in section
+    assert "分组列等其他列的公式同样读空" in section, "影响面不止答案列必须写明"
+    assert "xls 引擎不提供公式清单，不检测" in section
+
+    # 场景矩阵背书:formula-cells-in-target-column 场景真实存在且结局被钉住
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "formula-cells-in-target-column" in scenarios, "场景矩阵缺少公式格场景"
+    assert scenarios["formula-cells-in-target-column"].expect == "blocked_at:confirm_sample"

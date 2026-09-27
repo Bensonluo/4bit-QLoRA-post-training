@@ -475,6 +475,67 @@ _MERGED_SAMPLE = _merged_xlsx(
 _MERGED_FULL = _merged_xlsx("merged-full", _CLEAN_TEN_ROWS, ("C6:C8",))
 
 
+# Excel 公式单元格:目标列(类别)由公式生成——报表工具/脚本写出的 xlsx 公式格
+# 没有缓存计算结果,读取时读为空串(openpyxl 不计算公式)。read_source 检测数据区
+# 内无缓存值的公式格,formula_note 如实点名坐标与根因、说明没有自动计算;
+# 带缓存值的公式格(真实 Excel 保存过的)正常读取,不列入。
+def _formula_xlsx(
+    key: str,
+    rows: tuple[tuple[str, str, str | None], ...],
+    formulas: dict[str, str],
+) -> bytes:
+    """生成目标列含无缓存公式格的单 sheet 工作簿;坐标 → 公式字符串。"""
+
+    cached = _XLSX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    from datetime import datetime
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "工单表"
+    sheet.append(("编号", "客户描述", "类别"))
+    for row in rows:
+        sheet.append(row)
+    for coord, formula in formulas.items():
+        sheet[coord] = formula  # openpyxl 写入公式即无缓存计算结果
+    stamp = datetime(2026, 9, 27, 8, 0, 0)  # 固定文档时间戳,同夹具字节可复现
+    workbook.properties.created = stamp
+    workbook.properties.modified = stamp
+    buffer = BytesIO()
+    workbook.save(buffer)
+    data = buffer.getvalue()
+    _XLSX_CACHE[key] = data
+    return data
+
+
+_FORMULA_SAMPLE_ROWS = (
+    ("001", "杯子破损", "质量"),
+    ("002", "物流未更新", "物流"),
+    ("003", "屏幕碎裂", "质量"),
+    ("004", "快递丢失", "物流"),
+)
+# 样例:类别 C2/C3 是无缓存公式 → 001/004 字面值保留,002/003 读为空串。
+_FORMULA_SAMPLE = _formula_xlsx(
+    "formula-sample",
+    _FORMULA_SAMPLE_ROWS,
+    {"C2": '=IF(LEN(B2)>0,"物流","质量")', "C3": '=IF(LEN(B3)>0,"质量","物流")'},
+)
+# 全量:C6:C8 无缓存公式 → 006/007/008 读为空串,其余 7 行干净。
+_FORMULA_FULL = _formula_xlsx(
+    "formula-full",
+    _CLEAN_TEN_ROWS,
+    {
+        "C6": '=IF(LEN(B6)>0,"质量","物流")',
+        "C7": '=IF(LEN(B7)>0,"物流","质量")',
+        "C8": '=IF(LEN(B8)>0,"质量","物流")',
+    },
+)
+
+
 # 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
 # 全量含样例未覆盖的新测量值。value_kind 判定与旅程行为以实测为准。
 _CONTINUOUS_SAMPLE = _rows_as_csv(
@@ -1287,6 +1348,36 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "取消合并并逐行填写由用户决定,没有自动填充;xls 引擎不提供合并范围,不检测"
             ),
             tags=("excel", "merged-cells", "negative-scenario"),
+        ),
+        ScenarioSpec(
+            scenario_id="formula-cells-in-target-column",
+            goal="根据客户首次描述判断售后类别",
+            sample=_FORMULA_SAMPLE,
+            sample_name="工单.xlsx",
+            full=_FORMULA_FULL,
+            full_name="full.xlsx",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:confirm_sample",
+            expect_note=(
+                "实测结局:目标列(类别)由公式生成且无缓存计算结果——报表工具/脚本写出的 "
+                "xlsx 常见形态,openpyxl 不计算公式,公式格读为空串(C2/C3 空,001/004 字面值"
+                "保留)。create 不拦,formula_note 已上线且 create 即如实点名:「该 sheet 含 "
+                "2 个没有缓存计算结果的公式单元格(类别 C2、类别 C3):这些公式读为空值,"
+                "涉及答案列时这些行会按缺少监督答案处理。请用 Excel 等软件打开并保存以生成"
+                "计算结果;没有自动计算。」——用户在「缺少监督答案」被拦前就能看到根因是"
+                "公式无缓存。对比核验不拦(两条已标注行 001/004 答案不同足以配对);旅程在"
+                "样例确认被拦:「当前方案仍有业务问题、缺标签或转换问题,不能确认数据就绪。」"
+                "(通用缺标签门;对照探针实测:同样空答案但不含公式的文件拦在同一关同一条"
+                "报错——拦截本身与公式无关,公式的独有价值是 formula_note 点名根因)。全量侧"
+                "公式(C6:C8)对照实测:样例干净时旅程走到全量验证被硬拦「全量存在缺少监督答案"
+                "的记录,需要补充标签;没有自动生成真值。(3 条)」(与场景 19 同守卫,根因不同);"
+                "本场景取样例侧形态定局,两侧同现时样例侧更早拦截。对照事实(探针实测):真实 "
+                "Excel 保存过的公式格带缓存值,按缓存值正常读取、formula_note 不误报(XML 补 "
+                "<v> 探针);分组列(编号)的公式同样读空——影响不止答案列。边界如实记录:没有"
+                "自动计算,用 Excel 打开保存生成缓存值由用户决定;xls 引擎不提供公式清单,不检测"
+            ),
+            tags=("excel", "formula-cells", "negative-scenario"),
         ),
     ]
 

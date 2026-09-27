@@ -274,6 +274,64 @@ def test_merged_cells_in_target_column_blocked_at_confirm_sample(tmp_path):
     assert "类别 C6:C8" in full_source.merged_note, full_source.merged_note
 
 
+def test_formula_cells_in_target_column_blocked_at_confirm_sample(tmp_path):
+    """场景 43:目标列公式格无缓存计算结果——空读行走通用缺标签门(confirm_sample),
+    formula_note 在 create 即点名根因;不自动计算。有缓存值不误报、全量侧对照一并钉住。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "formula-cells-in-target-column" in specs, "缺少场景 formula-cells-in-target-column"
+
+    spec = specs["formula-cells-in-target-column"]
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "confirm_sample", result.to_dict()
+    assert result.stages["contrast_check"] == "passed", result.to_dict()  # 001/004 足以配对
+    assert "不能确认数据就绪" in result.blocked_message, result.blocked_message
+
+    # create 即点名根因:无缓存公式格读空串(不自动计算),formula_note 点名 类别 C2、C3
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "formula-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    # C2/C3 即前两条数据行:公式格无缓存读空串,后两条字面值保留
+    assert [row.values["类别"] for row in session.source.rows] == ["", "", "质量", "物流"]
+    note = session.source.formula_note
+    assert (
+        "2 个没有缓存计算结果的公式单元格" in note
+        and "类别 C2" in note
+        and "类别 C3" in note
+        and "没有自动计算" in note
+    ), note
+    assert session.profile["formula_note"] == note  # profile 同步如实呈现
+
+    # 全量侧对照(探针实测结论钉住):样例干净 + 全量公式(C6:C8)→ validate_full 硬拦 3 条
+    from src.workbench.scenario_matrix import ScenarioSpec
+
+    control = ScenarioSpec(
+        scenario_id="formula-full-control",
+        goal=spec.goal,
+        sample="编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n".encode(),
+        sample_name="工单.csv",
+        full=spec.full,
+        full_name="full.xlsx",
+        target_column="类别",
+        group_columns=("编号",),
+        expect="passes",  # 期望值不影响被测行为,仅让 verdict 判定有值
+    )
+    control_result = run_scenario(control, tmp_path / control.scenario_id)
+    assert control_result.blocked_at == "validate_full", control_result.to_dict()
+    assert "缺少监督答案" in control_result.blocked_message, control_result.blocked_message
+    assert "3 条" in control_result.blocked_message, control_result.blocked_message
+
+    # 全量来源同样点名公式根因:3 行空读来自 C6:C8 无缓存公式
+    from src.workbench.sources import read_source
+
+    full_source = read_source("full.xlsx", spec.full, scope="full")
+    assert [row.values["类别"] for row in full_source.rows].count("") == 3
+    assert "类别 C6" in full_source.formula_note and "类别 C8" in full_source.formula_note
+    # 有缓存值的公式格正常读取不误报(cached fixture 由 test_sources 的 XML 补丁夹具钉住)
+
+
 def test_duplicate_header_rows_in_both_sides_blocked_at_validate_full(tmp_path):
     """场景 40:重复表头行两侧同现——样例侧不拦(同场景 30 的不对称边界),全量侧硬拦
     (同场景 22),组合结局由全量侧决定:validate_full 拦下,不会带病物化。"""
@@ -303,7 +361,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 42, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 43, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0

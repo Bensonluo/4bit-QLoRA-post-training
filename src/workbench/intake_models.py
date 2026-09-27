@@ -41,6 +41,13 @@ class SampleSource(Contract):
         "点名合并范围与受影响列、说明合并区除左上角外均读为空值；不自动填充，"
         "是否取消合并由用户决定。当前仅 xlsx 检测，xls 不检测。",
     )
+    formula_note: str = Field(
+        default="",
+        description="Excel 公式单元格无缓存计算结果的如实说明（读取的 sheet 的数据区存在"
+        "此类公式格时非空）：点名坐标与受影响列、说明这些公式读为空值；不自动计算，"
+        "是否用 Excel 打开保存以生成计算结果由用户决定。带缓存值的公式格正常读取、"
+        "不列入。当前仅 xlsx 检测，xls 不检测。",
+    )
     columns: list[str]
     rows: list[SourceRow]
 

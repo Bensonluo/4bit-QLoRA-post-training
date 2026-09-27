@@ -795,3 +795,50 @@ full-sources)。历史记录不改写,本条如实更正:对称性在本轮补�
   src/workbench/scenario_specs.py、tests/unit/test_sources.py、
   tests/unit/test_scenario_matrix.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 25 轮 = Excel 公式无缓存如实点名 formula_note + 矩阵场景 43(恢复循环第 5 轮)
+
+(恢复的北极星打磨循环,第 5 轮。)核心痛点:报表工具/脚本写出的 xlsx(以及任何
+未经真实 Excel 打开保存过的文件)公式格没有缓存计算结果——openpyxl 不计算公式,
+这些格读为空串。用户在样例确认或全量验证被「缺少监督答案」拦下时,看到的只是
+一堆空值,无从知道根因是公式无缓存。与多 Sheet 静默忽略(第 18 轮)、合并单元格
+静默空读(第 24 轮)同源:事实不可见,不是判断错误。
+
+- **formula_note 如实点名**(`sources.py` + `intake_models.py`):探针实测
+  `load_workbook(read_only=False)`(data_only 默认 False)暴露 `cell.data_type=='f'`
+  与坐标;再开一次 `data_only=True` 比对,值非 None 的即有缓存——真实 Excel 保存
+  过的公式格按缓存值正常读取、不列入(无缓存误报为零)。数据区存在无缓存公式格时
+  来源携带 formula_note:「该 sheet 含 2 个没有缓存计算结果的公式单元格(类别 C2、
+  类别 C3):这些公式读为空值,涉及答案列时这些行会按缺少监督答案处理。请用 Excel
+  等软件打开并保存以生成计算结果;没有自动计算。」(超过 5 个以「等」收尾,与
+  sheet_note/merged_note 同口径);随 SampleSource 契约字段持久化(第 19 轮正道),
+  profile 同步呈现。实现与 merged_note 共享一次完整加载(`_excel_notes` 一次返回
+  两注),data_only 二次加载仅在实际存在公式格时发生;仅 xlsx(xls 引擎不提供
+  公式清单,如实不检测)。读取行为不变:**不自动计算**——是否用 Excel 打开保存
+  生成缓存值由用户决定(语义安全原则:不猜业务语义)。
+- **矩阵场景 43「目标列公式无缓存」**(`formula-cells-in-target-column`,先探针后
+  定局):样例侧 C2/C3 无缓存公式(空值在前两条)——create 不拦、formula_note
+  即时点名,对比核验不拦(两条已标注行 003/004 答案不同足以配对),旅程**在样例
+  确认被拦**「当前方案仍有业务问题、缺标签或转换问题,不能确认数据就绪。」;全量
+  侧公式(C6:C8)且样例干净:走到全量验证被硬拦「全量存在缺少监督答案的记录,
+  需要补充标签;没有自动生成真值。(3 条)」(与场景 19 同守卫,根因不同);对照
+  探针(同样空答案但不含公式)拦在同一关同一条报错——**拦截本身是通用缺标签门,
+  与公式无关;公式场景的独有价值是 formula_note 把根因点名给用户**。
+  expect=`blocked_at:confirm_sample`,测试另钉:profile 与来源的 formula_note 一致、
+  全量来源空读 3 行且点名 类别 C6/C8。两个对照事实均探针实测并入 expect_note:
+  ①有缓存值不误报——测试用 XML 补丁夹具钉死:解压 openpyxl 写出的 xlsx,把公式格
+  的空 `<v />` 补成 `t="str"` 与缓存值(正是 Excel 保存后的形态),断言找不到目标格
+  即失败,防 openpyxl 输出漂移让夹具静默失效;②分组列(编号)的公式同样读空——
+  影响不止答案列。矩阵 42→43,43/43 as_expected。
+- **文档钉死**(agent-setup.md + test_readme_alignment 17→18):多份资料小节新增
+  公式格段——formula_note 逐字示例、这些公式读为空值、没有自动计算、带缓存值
+  正常读取不列入、分组列公式同样读空、数据区之外/未读取 sheet 不列入、xls 不检测;
+  钉测试断言关键句且由场景矩阵 formula-cells-in-target-column 真实存在背书。
+- 回归:test_sources 15→20(空读不计算/缓存值不误报/区域与 sheet 过滤/前五上限/
+  服务层持久化)、test_scenario_matrix 30→31(全集下限 42→43)、test_readme_alignment
+  17→18;邻接套件(multisource/full_data/composed/data_intake/baseline_analysis 域)
+  83 passed;ruff check/format clean。全量回归 **tests/unit 1713 passed / 0 failed**
+  (--no-cov,无排除,168.49s)。本批只动 src/workbench/intake_models.py、src/workbench/
+  sources.py、src/workbench/scenario_specs.py、tests/unit/test_sources.py、
+  tests/unit/test_scenario_matrix.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。
