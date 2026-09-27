@@ -478,3 +478,19 @@ def test_custom_scoring_summary_docs_pinned():
     assert "不把通过数写成「答对」" in section
     assert "不做自动评分" in section
     assert "生成失败、缺失或截断的回答不能人工标为通过" in section
+
+
+def test_acceptance_summary_docs_pinned():
+    """最终验收 CLI stderr 人话摘要口径钉死:冻结标准、五态结论、分母口径与不作数边界。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 用独立测试题做单模型业务验收",
+        "## 从评测结果进入下一轮改进",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "运行前冻结的标准" in section, "冻结条款复述必须写明"
+    assert "证据不足，不能确认可交付" in section, "结论三态必须写明"
+    assert "失败与截断保留在全部题目分母中，按未通过计" in section, "分母口径必须写明"
+    assert "数值不能作为独立业务验收的结论" in section, "隔离未核验不作数边界必须写明"
+    assert "仅作描述" in section, "自定义规则业务评分均值的口径必须写明"
+    assert "不会自动部署模型" in section, "收尾边界必须写明"

@@ -335,3 +335,98 @@ def summarize_training_run(record: dict) -> list[str]:
             "训练完成只说明产出了模型；效果要用同一套开发题与基座对照来判断，请看对照报告。"
         )
     return lines
+
+
+_ACCEPTANCE_METRIC_NAMES = {
+    "exact_match": "严格匹配",
+    "pass_rate": "自定义规则通过率",
+    "manual_acceptance_rate": "人工逐题判断",
+}
+
+
+def summarize_acceptance(record: dict) -> list[str]:
+    """把一次最终验收翻译成人话：冻结了什么条款、结论是哪一态、哪些数字不作数。
+
+    只复述记录里的事实：通过数与分母口径（失败与截断按未通过计）、隔离未核验时
+    数值不作数、业务评分均值仅作描述。结论只对这次冻结的条款与固定测试题负责，
+    不替用户宣判可交付。
+    """
+    model = record.get("model") or {}
+    criteria = record.get("criteria") or {}
+    result = record.get("result") or {}
+    decision = result.get("decision") or "pending_run"
+    status = record.get("status") or "prepared"
+    metric = criteria.get("metric")
+    minimum_score = criteria.get("minimum_score")
+    minimum_cases = criteria.get("minimum_cases")
+
+    head = f"这次最终验收针对模型「{model.get('label', '未命名')}」"
+    if minimum_score is not None and minimum_cases is not None:
+        metric_name = _ACCEPTANCE_METRIC_NAMES.get(metric, metric or "评分")
+        head += f"，运行前冻结的标准是：{metric_name}至少 {minimum_score:.0%}，且至少 {minimum_cases} 道独立测试题"
+    lines = [head + "。"]
+
+    if decision == "pending_run":
+        lines.append(
+            "条款已冻结、验收尚未执行。执行时会先核验这些留出题是否已经揭示；"
+            "执行后这些测试题即被占用，即使生成失败也不能再伪装成首次盲测。"
+        )
+    elif status == "blocked":
+        lines.append(
+            "验收被阻断：这些测试题或同任务业务对象此前已经揭示，"
+            "换模型、重上传或换套件标识都不能重新变成盲测；请准备真正独立的新保留资料。"
+        )
+    elif status == "failed":
+        reason = result.get("reason") or "执行过程失败，没有形成可用的结论。"
+        lines.append(f"这次验收没有完整执行：{reason}")
+    elif decision == "pending_review":
+        reviewed = result.get("reviewed_cases")
+        total = result.get("total_cases")
+        counts = (
+            f"已记录 {reviewed}/{total} 题判断，"
+            if reviewed is not None and total is not None
+            else ""
+        )
+        lines.append(
+            f"等待逐题业务判断：{counts}生成失败、缺失或截断的回答已按未通过锁定，"
+            "不能人工改标为通过。"
+        )
+    else:
+        names = {
+            "passed": "达到运行前冻结的验收标准",
+            "failed": "未达到运行前冻结的验收标准",
+            "insufficient_evidence": "证据不足，不能确认可交付",
+        }
+        lines.append(f"当前结论：{names.get(decision, decision)}。")
+        accepted = result.get("accepted_cases")
+        total = result.get("total_cases")
+        score = result.get("score")
+        if accepted is not None and total and score is not None:
+            lines.append(
+                f"通过 {accepted}/{total} 题（通过率 {score:.1%}）；"
+                "失败与截断保留在全部题目分母中，按未通过计。"
+            )
+        usable = result.get("usable_cases")
+        if usable is not None and total and usable < total:
+            lines.append(f"其中可完整核查的有效输出只有 {usable}/{total} 题。")
+        observed = result.get("observed_decision")
+        if decision == "insufficient_evidence" and observed in {"passed", "failed"}:
+            wording = "达到标准" if observed == "passed" else "未达到标准"
+            lines.append(
+                f"单看通过率本会判为「{wording}」；但训练资料与留出题的隔离未能核验，"
+                "数值不能作为独立业务验收的结论。"
+            )
+        reason = result.get("reason")
+        if decision == "insufficient_evidence" and reason:
+            lines.append(f"原因：{reason}")
+        business_score = result.get("business_score")
+        if business_score is not None:
+            lines.append(
+                f"业务评分均值 {business_score:.2f}，仅作描述；"
+                "验收结论按冻结的逐题通过门槛与整体通过率计算。"
+            )
+    lines.append(
+        "以上结论只对这次冻结的条款与固定测试题负责；达到标准也不会自动部署模型，"
+        "是否交付由你按业务决定。"
+    )
+    return lines

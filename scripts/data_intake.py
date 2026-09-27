@@ -664,6 +664,11 @@ def main() -> int:
                             ],
                         )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if isinstance(result, dict):
+                from src.workbench.report_summary import summarize_acceptance
+
+                for line in summarize_acceptance(result):
+                    print(line, file=sys.stderr)
             return 0
         if args.command.startswith("plan-"):
             from src.workbench.training_plans import TrainingPlanService

@@ -164,3 +164,49 @@ def test_review_checks_task_revision_and_records_one_explicit_business_judgment(
     assert invoke(*args) == 2
     assert "业务任务不匹配" in capsys.readouterr().err
     assert len(calls) == 1
+
+
+def test_acceptance_commands_print_plain_language_summary_to_stderr(acceptance_cli, capsys):
+    """验收子命令 stdout 仍是纯 JSON,stderr 追加人话:冻结条款、结论态与「不自动部署」边界。"""
+    invoke, session, record, calls = acceptance_cli
+    assert (
+        invoke(
+            "acceptance-prepare",
+            session.session_id,
+            "run-fixture",
+            "--revision",
+            session.revision,
+            "--business-standard",
+            "分类必须严格正确",
+            "--minimum-score",
+            0.9,
+            "--minimum-cases",
+            20,
+        )
+        == 0
+    )
+    out = capsys.readouterr()
+    assert json.loads(out.out)["status"] == "prepared"
+    assert "这次最终验收针对模型「待验收模型」" in out.err
+    assert "条款已冻结、验收尚未执行" in out.err
+    assert "也不能再伪装成首次盲测" in out.err
+
+    assert invoke("acceptance-show", record["acceptance_id"]) == 0
+    shown = capsys.readouterr()
+    assert json.loads(shown.out)["acceptance_id"] == "acceptance-fixture"
+    assert "条款已冻结、验收尚未执行" in shown.err
+
+    assert (
+        invoke(
+            "acceptance-run",
+            session.session_id,
+            record["acceptance_id"],
+            "--revision",
+            session.revision,
+        )
+        == 0
+    )
+    run_out = capsys.readouterr()
+    assert json.loads(run_out.out)["result"]["decision"] == "insufficient_evidence"
+    assert "当前结论：证据不足，不能确认可交付。" in run_out.err
+    assert "不会自动部署模型" in run_out.err

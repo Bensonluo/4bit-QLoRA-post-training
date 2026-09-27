@@ -477,3 +477,141 @@ def test_comparison_custom_scoring_and_open_tasks_are_not_fake_zero():
     assert "答对" not in joined, "开放任务没有自动评分,不得出现「答对」措辞"
     assert "开放任务不做自动评分" in joined
     assert "不能人工标为通过" in joined
+
+
+def _acceptance_record(result, status="completed", metric="exact_match"):
+    return {
+        "status": status,
+        "model": {"label": "待验收模型"},
+        "criteria": {"metric": metric, "minimum_score": 0.9, "minimum_cases": 5},
+        "result": result,
+    }
+
+
+def test_acceptance_summary_final_decisions_state_counts_and_denominator():
+    """最终验收摘要:通过/未达到如实入句,分母口径(失败截断按未通过计)与隔离降级不作数。"""
+    from src.workbench.report_summary import summarize_acceptance
+
+    passed = _acceptance_record(
+        {
+            "decision": "passed",
+            "metric": "exact_match",
+            "score": 0.8,
+            "accepted_cases": 8,
+            "total_cases": 10,
+            "usable_cases": 10,
+            "minimum_score": 0.9,
+            "minimum_cases": 5,
+            "reason": "按运行前冻结的业务标准计算，失败及截断保留在全部题目分母中。",
+        }
+    )
+    lines = summarize_acceptance(passed)
+    joined = "\n".join(lines)
+    assert "这次最终验收针对模型「待验收模型」" in joined
+    assert "运行前冻结的标准是：严格匹配至少 90%，且至少 5 道独立测试题" in joined
+    assert "当前结论：达到运行前冻结的验收标准。" in joined
+    assert "通过 8/10 题（通过率 80.0%）" in joined
+    assert "失败与截断保留在全部题目分母中，按未通过计" in joined
+    assert "不会自动部署模型" in joined
+    assert "证据不足" not in joined
+
+    failed = _acceptance_record(
+        {
+            "decision": "failed",
+            "metric": "exact_match",
+            "score": 0.3,
+            "accepted_cases": 3,
+            "total_cases": 10,
+            "usable_cases": 10,
+        }
+    )
+    joined = "\n".join(summarize_acceptance(failed))
+    assert "当前结论：未达到运行前冻结的验收标准。" in joined
+
+    isolated = _acceptance_record(
+        {
+            "decision": "insufficient_evidence",
+            "observed_decision": "passed",
+            "metric": "exact_match",
+            "score": 0.95,
+            "accepted_cases": 19,
+            "total_cases": 20,
+            "usable_cases": 20,
+            "reason": "未能核验适配器训练资料与本次固定留出题的隔离，数值结果不能作为独立业务验收通过。",
+        }
+    )
+    joined = "\n".join(summarize_acceptance(isolated))
+    assert "当前结论：证据不足，不能确认可交付。" in joined
+    assert "单看通过率本会判为「达到标准」" in joined
+    assert "数值不能作为独立业务验收的结论" in joined
+    assert "原因：未能核验适配器训练资料与本次固定留出题的隔离" in joined
+
+    custom = _acceptance_record(
+        {
+            "decision": "passed",
+            "metric": "pass_rate",
+            "score": 0.9,
+            "accepted_cases": 9,
+            "total_cases": 10,
+            "usable_cases": 10,
+            "business_score": 0.62,
+        },
+        metric="pass_rate",
+    )
+    joined = "\n".join(summarize_acceptance(custom))
+    assert "自定义规则通过率至少 90%" in joined
+    assert "业务评分均值 0.62，仅作描述" in joined
+
+    partial_usable = _acceptance_record(
+        {
+            "decision": "failed",
+            "metric": "exact_match",
+            "score": 0.2,
+            "accepted_cases": 2,
+            "total_cases": 10,
+            "usable_cases": 7,
+        }
+    )
+    joined = "\n".join(summarize_acceptance(partial_usable))
+    assert "其中可完整核查的有效输出只有 7/10 题" in joined
+
+
+def test_acceptance_summary_pending_blocked_failed_and_bare_states():
+    """最终验收摘要:未执行/被阻断/执行失败/待人工判断各态如实;裸 result 不崩溃。"""
+    from src.workbench.report_summary import summarize_acceptance
+
+    prepared = _acceptance_record(None, status="prepared")
+    prepared.pop("result")
+    joined = "\n".join(summarize_acceptance(prepared))
+    assert "条款已冻结、验收尚未执行" in joined
+    assert "不能再伪装成首次盲测" in joined
+
+    blocked = _acceptance_record(
+        {"decision": "insufficient_evidence", "reason": "heldout_already_revealed"},
+        status="blocked",
+    )
+    joined = "\n".join(summarize_acceptance(blocked))
+    assert "验收被阻断" in joined
+    assert "已经揭示" in joined
+
+    failed_run = _acceptance_record(
+        {"decision": "insufficient_evidence", "reason": "模型释放失败"}, status="failed"
+    )
+    joined = "\n".join(summarize_acceptance(failed_run))
+    assert "这次验收没有完整执行：模型释放失败" in joined
+
+    pending = _acceptance_record(
+        {"decision": "pending_review", "total_cases": 10, "reviewed_cases": 3, "score": None},
+        status="needs_business_review",
+    )
+    joined = "\n".join(summarize_acceptance(pending))
+    assert "等待逐题业务判断" in joined
+    assert "已记录 3/10 题判断" in joined
+    assert "不能人工改标为通过" in joined
+
+    bare = _acceptance_record({"decision": "insufficient_evidence"})
+    lines = summarize_acceptance(bare)
+    joined = "\n".join(lines)
+    assert "当前结论：证据不足，不能确认可交付。" in joined
+    assert "原因：" not in joined, "裸 result 没有 reason,不得编造原因行"
+    assert "通过 " not in joined, "裸 result 没有计数,不得编造通过数"

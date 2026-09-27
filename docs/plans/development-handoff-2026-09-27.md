@@ -1242,3 +1242,45 @@ verbatim 渲染。这不是「少披露了一句」,是把业务通过数说成�
   基线 1749 + 新增 2)。本批只动 src/workbench/report_summary.py、
   tests/unit/test_report_summary.py、tests/unit/test_readme_alignment.py、
   docs/agent-setup.md 与本记录。
+
+### 第 34 轮 = 最终验收人话摘要(恢复循环第 15 轮)
+
+(恢复的北极星打磨循环,第 15 轮。)核心痛点:最终验收是产品最关键的业务决策点
+(是否达到交付标准),CLI 路径却零人话——acceptance-prepare/show/run/review 四个
+子命令全部收敛到同一处 `print(json.dumps(...)); return 0`,而其他每个阶段都有
+stderr 人话(eval-compare、train-status、preflight、materialize、label-verify、
+learnability-probe)。report_summary 四个 summarize_ 函数无一覆盖验收域。页面
+(07 show_final_acceptance)已渲染人话,缺的是 CLI 平权与摘要层覆盖(第 14 轮
+CLI-only 先例)。
+
+- **summarize_acceptance(report_summary.py)**:按记录五态翻译——首句复述运行前
+  冻结标准(评分口径名:严格匹配/自定义规则通过率/人工逐题判断+门槛+最低题数);
+  分支次序 pending_run(按 decision,prepared 记录无 result 键也能走)→ blocked
+  (已经揭示,换模型/重上传/换套件标识都变不回盲测)→ failed(裸 result 只有
+  reason,执行失败如实点名)→ pending_review(已记录 N/M 题判断;生成失败、
+  缺失或截断的回答已按未通过锁定,不能人工改标为通过)→ 最终三态(达到/未达到
+  运行前冻结的验收标准、证据不足不能确认可交付)。最终态附通过数与分母口径
+  (「失败与截断保留在全部题目分母中，按未通过计」)、可完整核查有效输出不足时
+  单独点名、隔离未核验降级时「单看通过率本会判为达到/未通过标准;但训练资料与
+  留出题的隔离未能核验,数值不能作为独立业务验收的结论」+ 原因行、自定义规则
+  附「业务评分均值 X,仅作描述」。每条摘要固定以「以上结论只对这次冻结的条款与
+  固定测试题负责;达到标准也不会自动部署模型,是否交付由你按业务决定」收尾——
+  与页面口径同源,不替用户宣判可交付。全部取值走 .get 链,CLI 测试夹具的裸
+  result(只有 decision,无 reason/计数)不崩溃也不编造行。
+- **CLI 接线**(data_intake.py 验收分派尾):JSON 照旧 stdout;`isinstance(result,
+  dict)` 守卫(acceptance-list 返回 list 不进摘要)后 stderr 逐行打印——与
+  eval-compare/preflight 先例同构。四个子命令一次性全覆盖。
+- **测试 +3**:test_report_summary 新增最终态(passed 8/10 通过率 80.0%、failed、
+  隔离降级单看通过率句、pass_rate 业务均值 0.62、usable 7/10)+ 未执行/阻断/
+  失败/待判断/裸态两函数;test_acceptance_cli +1(prepare→pending_run 句、show
+  同句、run→证据不足句+收尾句,stdout 仍纯 JSON);test_readme_alignment +1
+  钉文档(stderr 位点/冻结标准/证据不足/分母口径/不作数边界/仅作描述/不自动部署)。
+- **文档**(agent-setup.md 验收段):新增一段完整口径——stderr 追加人话、冻结标准
+  复述、五态结论、分母口径、隔离未核验不作数、业务均值仅作描述、不自动部署收尾。
+- 回归:ruff check/format clean(1 处 format 修正);定向套件(report_summary+
+  acceptance_cli+readme_alignment+cli_summaries+acceptance+acceptance_ui)
+  82 passed。全量回归 **tests/unit 1755 passed / 0 failed**(--no-cov,无排除;
+  基线 1751 + 新增 4)。本批只动 src/workbench/report_summary.py、
+  scripts/data_intake.py、tests/unit/test_report_summary.py、
+  tests/unit/test_acceptance_cli.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。
