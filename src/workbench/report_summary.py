@@ -763,3 +763,70 @@ def summarize_assessment(record: dict) -> list[str]:
         "也不会自动启动下一轮训练；是否有效仍需你的业务判断，不代表业务效果达标。"
     )
     return lines
+
+
+def summarize_full_report(record: dict) -> list[str]:
+    """把全量验证报告翻译成人话：来源、结论四态、逐条问题原文与不达标边界。
+
+    只复述记录里的事实：问题按报告原文逐条渲染（阻断在前，附涉及证据行条数），
+    状态与转换计数的词汇与页面全量验证区一致；全量验证只核对数据与已确认方案
+    的一致性，不代表模型效果或业务达标。
+    """
+    if not record:
+        return [
+            "这份全量报告没有可读的内容。",
+            "全量验证只核对数据事实，不代表模型效果或业务达标。",
+        ]
+    source = record.get("source") or {}
+    name = str(source.get("name") or "").strip()
+    rows = source.get("rows")
+    digest = str(source.get("digest") or "").strip()
+    head = "这份全量验证针对资料"
+    if name:
+        head += f" {name}"
+    facts = []
+    if isinstance(rows, list):
+        facts.append(f"{len(rows)} 条")
+    if digest:
+        facts.append(f"摘要 {digest[:12]}…")
+    if facts:
+        head += "（" + "、".join(facts) + "）"
+    lines = [head + "，报告中的行 ID 仅属于这份全量文件。"]
+    status = str(record.get("status") or "").strip()
+    status_names = {
+        "needs_revision": "存在阻断问题，需先按下面的问题修正资料或业务规则，再重新验证全量。",
+        "review": "没有阻断问题，待你核对报告与展示的记录后确认全量数据含义。",
+        "confirmed": "全量数据含义已确认，可以准备生成分区；尚未开始训练。",
+        "stale": "业务理解或方案已变化，这份全量报告已失效；重新分析并确认样例方案后再验证全量。",
+    }
+    if status:
+        lines.append(f"当前结论：{status_names.get(status, status)}")
+    issues = [item for item in (record.get("issues") or []) if isinstance(item, dict)]
+    order = {"blocking": 0, "review": 1, "info": 2}
+    severity_names = {"blocking": "阻断", "review": "需核对", "info": "说明"}
+    for issue in sorted(issues, key=lambda item: order.get(item.get("severity"), 3)):
+        message = str(issue.get("message") or "").strip()
+        if not message:
+            continue
+        text = f"[{severity_names.get(issue.get('severity'), '说明')}] {message}"
+        row_ids = issue.get("row_ids") or []
+        if row_ids:
+            text += f"（涉及 {len(row_ids)} 条证据行）"
+        lines.append(text)
+    preview = record.get("preview") or {}
+    counts = preview.get("counts") or {}
+    state_names = {
+        "ready": "已生成预览",
+        "needs_label": "缺少答案",
+        "invalid": "需修正处理",
+        "conflict": "答案有冲突",
+    }
+    rendered = [
+        f"{state_names[key]} {count} 条"
+        for key, count in counts.items()
+        if key in state_names and count
+    ]
+    if rendered:
+        lines.append("全量真实转换：" + "、".join(rendered) + "。")
+    lines.append("全量验证只核对数据事实与已确认方案的一致性，不代表模型效果或业务达标。")
+    return lines

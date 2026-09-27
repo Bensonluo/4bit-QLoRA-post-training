@@ -918,3 +918,55 @@ def test_assessment_summary_evidence_hypotheses_and_boundaries():
     assert bare[0] == "这份解读没有可读的内容。"
     assert len(bare) == 2
     assert "不代表业务效果达标" in bare[-1]
+
+
+def test_full_report_summary_states_issues_and_boundary():
+    """全量验证报告摘要:来源+结论四态+逐条问题原文(阻断在前)+转换计数+边界句。"""
+    from src.workbench.report_summary import summarize_full_report
+
+    record = {
+        "source": {"name": "main-full", "rows": [{}, {}, {}], "digest": "a" * 64},
+        "status": "needs_revision",
+        "issues": [
+            {
+                "code": "repeated_header_rows",
+                "severity": "review",
+                "message": "1 条记录与表头完全相同（通常是导出拼接产生的重复表头行）",
+                "row_ids": ["r000002"],
+            },
+            {
+                "code": "missing_required",
+                "severity": "blocking",
+                "message": "全量文件缺少当前方案必需字段：类别",
+                "row_ids": ["r000001", "r000003"],
+            },
+        ],
+        "preview": {"counts": {"ready": 3, "needs_label": 1, "invalid": 0, "conflict": 0}},
+    }
+    lines = summarize_full_report(record)
+    joined = "\n".join(lines)
+    assert (
+        lines[0]
+        == "这份全量验证针对资料 main-full（3 条、摘要 aaaaaaaaaaaa…），报告中的行 ID 仅属于这份全量文件。"
+    )
+    assert "当前结论：存在阻断问题，需先按下面的问题修正资料或业务规则，再重新验证全量。" in lines
+    # 阻断在前,逐条渲染报告原文并附证据行条数;零计数态不渲染
+    blocking_index = next(i for i, line in enumerate(lines) if line.startswith("[阻断]"))
+    review_index = next(i for i, line in enumerate(lines) if line.startswith("[需核对]"))
+    assert blocking_index < review_index
+    assert "[阻断] 全量文件缺少当前方案必需字段：类别（涉及 2 条证据行）" in lines
+    assert "全量真实转换：已生成预览 3 条、缺少答案 1 条。" in lines
+    assert lines[-1] == "全量验证只核对数据事实与已确认方案的一致性，不代表模型效果或业务达标。"
+
+    record["status"] = "confirmed"
+    joined = "\n".join(summarize_full_report(record))
+    assert "当前结论：全量数据含义已确认，可以准备生成分区；尚未开始训练。" in joined
+
+    record["status"] = "stale"
+    joined = "\n".join(summarize_full_report(record))
+    assert "业务理解或方案已变化，这份全量报告已失效" in joined
+
+    bare = summarize_full_report({})
+    assert bare[0] == "这份全量报告没有可读的内容。"
+    assert len(bare) == 2
+    assert "不代表模型效果或业务达标" in bare[-1]

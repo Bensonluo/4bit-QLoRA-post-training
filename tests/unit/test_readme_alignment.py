@@ -538,6 +538,25 @@ def test_assessment_summary_docs_pinned():
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
 
 
+def test_full_report_summary_docs_pinned():
+    """full-* CLI stderr 全量报告人话摘要口径钉死:结论四态、逐条问题原文与边界句。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 单份资料",
+        "### 连续数值答案的如实边界",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "summarize_full_report" in section, "摘要函数必须点名"
+    assert "存在阻断问题需先修正再重验" in section, "阻断态口径必须写明"
+    assert "尚未开始训练" in section, "确认态不启动训练边界必须写明"
+    assert "报告失效" in section, "失效态口径必须写明"
+    assert "阻断在前" in section, "问题排序口径必须写明"
+    assert "已生成预览" in section and "缺少答案" in section, "转换四态计数必须写明"
+    assert "不代表模型效果或业务达标" in section, "不作业务结论边界必须写明"
+    assert "页面全量验证区" in section, "页面同源位点必须写明"
+    assert "同源" in section, "页面与 CLI 词汇同源承诺必须写明"
+
+
 def test_acceptance_summary_docs_pinned():
     """最终验收 CLI stderr 人话摘要口径钉死:冻结标准、五态结论、分母口径与不作数边界。"""
     section = _section(

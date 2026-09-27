@@ -1596,3 +1596,39 @@ iteration-*、execution-* 等 CLI stderr 人话摘要补齐,但同一批记录�
   scripts/data_intake.py、ui/pages/07_Data_Intake.py、
   tests/unit/test_report_summary.py、tests/unit/test_business_evaluation_cli.py、
   tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+### 第 42 轮 = 全量验证报告人话摘要（恢复循环第 23 轮）
+
+痛点：CLI 人话系列（34-41 轮）覆盖了训练/评测/验收/迭代等下游决策面，但早期
+流程的语义门禁——全量验证报告——在 CLI 上仍是裸 JSON + 一行「下一步状态」。
+报告里的阻断问题、需核对事项、转换四态计数、失效态只躺在 JSON 里；页面全量
+验证区有完整渲染，CLI 用户读不到同一口径。这是全链路里最后一块大体积的
+CLI 零人话表面。
+
+- **summarize_full_report 函数**(report_summary.py 第 13 个摘要函数):首句
+  「这份全量验证针对资料 X（N 条、摘要 xxxx…），报告中的行 ID 仅属于这份全量
+  文件」→结论四态（存在阻断问题需先修正再重验／没有阻断待核对后确认／已确认
+  可准备分区、尚未开始训练／业务理解已变化报告失效）→逐条渲染报告问题原文
+  （阻断在前、需核对、说明排序；severity 人话名 [阻断]/[需核对]/[说明]，
+  附「涉及 N 条证据行」）→「全量真实转换：已生成预览 X 条、缺少答案 Y 条、
+  需修正处理 Z 条、答案有冲突 W 条」（零计数态不渲染，词汇与页面
+  full_status_names 一致）→边界句「全量验证只核对数据事实与已确认方案的一致性，
+  不代表模型效果或业务达标」。裸记录降级:缺位句+边界句。
+- **CLI 接线**(data_intake.py 通用尾):session.full_data 存在时在「下一步状态」
+  行之后追加 stderr 摘要——full-validate/full-sources/full-confirm 三个主入口
+  与 show 等返回任务记录的命令同享;方案变化后的 analyze/add-source 也会如实
+  渲染失效态。
+- **测试 +2 个新函数+1 处既有扩展**:test_report_summary 新增
+  test_full_report_summary_states_issues_and_boundary(来源首句精确匹配、阻断
+  排序在需核对前、证据行条数、零计数态不渲染、confirmed/stale 变体、裸记录);
+  test_full_data_cli 扩展(subprocess 真实 CLI:validate stderr 含来源句/结论句/
+  「已生成预览 3 条」/边界句,confirm stderr 含「尚未开始训练」);test_readme_alignment
+  新增 test_full_report_summary_docs_pinned(10 断言钉死文档段)。定向 74 passed。
+- **文档**(agent-setup.md「### 单份资料」新增一段):stderr 位点+三命令与 show
+  同享+结论四态+阻断在前逐条渲染+四态计数+边界句+与页面全量验证区词汇同源。
+- 回归:ruff check/format clean(1 处仅测试文件重排);定向 3 文件 74 passed。
+  全量回归 **tests/unit 1774 passed / 0 failed**(--no-cov,基线 1772 + 2 个
+  新测试函数)。本批只动 src/workbench/report_summary.py、
+  scripts/data_intake.py、tests/unit/test_report_summary.py、
+  tests/unit/test_full_data_cli.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。

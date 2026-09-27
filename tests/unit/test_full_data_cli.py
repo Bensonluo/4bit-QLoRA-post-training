@@ -48,6 +48,11 @@ def test_cli_full_validate_and_confirm_share_service_state(service, tmp_path):
     payload = json.loads(result.stdout)
     assert payload["full_data"]["preview"]["counts"]["ready"] == 3
     assert "review_full_data" in result.stderr
+    # 全量报告人话摘要与页面全量验证区同词汇：来源、结论态、转换计数与边界句。
+    assert "这份全量验证针对资料" in result.stderr
+    assert "当前结论：没有阻断问题，待你核对" in result.stderr
+    assert "已生成预览 3 条" in result.stderr
+    assert "不代表模型效果或业务达标" in result.stderr
     assert service.load(session.session_id).source == session.source
     confirmed = invoke(
         service, "full-confirm", session.session_id, "--revision", payload["revision"]
@@ -55,6 +60,7 @@ def test_cli_full_validate_and_confirm_share_service_state(service, tmp_path):
     assert confirmed.returncode == 0, confirmed.stderr
     assert next_action(service.load(session.session_id)) == "awaiting_dataset_split"
     assert "awaiting_dataset_split" in confirmed.stderr
+    assert "全量数据含义已确认，可以准备生成分区；尚未开始训练。" in confirmed.stderr
     stale = invoke(service, "full-confirm", session.session_id, "--revision", payload["revision"])
     assert stale.returncode == 2
     assert "已变化" in stale.stderr

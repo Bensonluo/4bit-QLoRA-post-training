@@ -1329,6 +1329,14 @@ def main() -> int:
             session = service.load(args.session_id)
         print(session.model_dump_json(indent=2))
         print(f"\n下一步状态: {next_action(session)}", file=sys.stderr)
+        if session.full_data is not None:
+            # 全量验证报告的人话摘要与页面全量验证区同词汇：结论四态、逐条问题
+            # 原文（阻断在前，附证据行条数）、真实转换四态计数；full-* 三命令与
+            # show 等返回任务记录的命令同享，方案变化后如实渲染失效态。
+            from src.workbench.report_summary import summarize_full_report
+
+            for line in summarize_full_report(session.full_data.model_dump()):
+                print(line, file=sys.stderr)
         return 0
     except (ValueError, RuntimeError, OSError, ImportError) as exc:
         print(str(exc), file=sys.stderr)
