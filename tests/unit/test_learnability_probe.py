@@ -167,6 +167,26 @@ def test_candidates_csv_export_is_excel_friendly():
     assert data.startswith(b"\xef\xbb\xbf")  # BOM: Excel 直接打开不乱码
 
 
+def test_candidates_csv_export_covers_all_rows_beyond_one_page():
+    """页面候选分页只影响展示;CSV 导出必须包含全部候选,不止当前页。"""
+    from src.workbench.learnability_probe import candidates_to_csv
+
+    candidates = [
+        {
+            "row_id": f"r{index:06d}",
+            "data_label": "质量",
+            "base_zero_shot": "物流",
+            "user_blind_answer": None,
+            "evidence": "弱信号",
+        }
+        for index in range(1, 26)
+    ]
+    text = candidates_to_csv(candidates).decode("utf-8-sig")
+    lines = [line for line in text.splitlines() if line.strip()]
+    assert len(lines) == 26  # 表头 + 全部 25 行,不是只有第一页的 20 行
+    assert "r000025" in text
+
+
 def test_saved_probe_can_be_loaded_back_per_dataset_version(store, tmp_path):
     """探针结果存盘后必须能按数据版本回读——重看结论不需要重新加载模型。"""
     from src.workbench.learnability_probe import load_latest_probe

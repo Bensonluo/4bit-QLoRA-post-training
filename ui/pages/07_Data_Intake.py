@@ -190,6 +190,25 @@ def render_probe_result(result: dict) -> None:
     candidates = result.get("label_error_candidates") or []
     st.subheader("标签问题候选(优先人工核对)")
     if candidates:
+        # 证据强者在先不依赖存盘顺序;候选多于 20 条分页展示,防止全量渲染淹没页面。
+        # 分页只影响展示:计数始终如实,CSV 导出不受分页影响,始终包含全部候选。
+        candidates = sorted(candidates, key=lambda item: not item.get("user_blind_answer"))
+        page_size = 20
+        pages = (len(candidates) + page_size - 1) // page_size
+        page_number = 1
+        if pages > 1:
+            page_number = int(
+                st.number_input(
+                    "候选预览页码",
+                    min_value=1,
+                    max_value=pages,
+                    value=1,
+                    step=1,
+                    key=f"probe_candidates_page_{result.get('dataset_version', 'x')}",
+                )
+            )
+        start = (page_number - 1) * page_size
+        visible = candidates[start : start + page_size]
         st.dataframe(
             [
                 {
@@ -199,10 +218,15 @@ def render_probe_result(result: dict) -> None:
                     "你的盲标答案": item.get("user_blind_answer") or "—",
                     "证据": item["evidence"],
                 }
-                for item in candidates
+                for item in visible
             ],
             hide_index=True,
             width="stretch",
+        )
+        st.caption(
+            f"显示第 {start + 1}–{start + len(visible)} 条，共 {len(candidates)} 条候选"
+            + (f"（第 {page_number}/{pages} 页，每页 {page_size} 条）" if pages > 1 else "")
+            + "；下方 CSV 导出包含全部候选，不止当前页。"
         )
         st.caption(result.get("candidates_note", ""))
         from src.workbench.learnability_probe import candidates_to_csv

@@ -97,6 +97,90 @@ def test_probe_no_candidates_shows_clean_info(probe_page, monkeypatch):
     assert any("没有发现值得优先核对的行" in i.value for i in page.info)
 
 
+def _candidate(index, *, blind=None):
+    return {
+        "row_id": f"r{index:06d}",
+        "data_label": f"标签{index}",
+        "base_zero_shot": f"基座输出{index}",
+        "user_blind_answer": blind,
+        "evidence": "强证据,优先人工核对" if blind else "弱信号供参考",
+    }
+
+
+def test_probe_candidates_over_twenty_paginate_with_honest_counts(probe_page, monkeypatch):
+    """候选 >20 分页展示:每页 20,强证据在先不被分页打乱,总数说明始终如实。"""
+    service, session, page = probe_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    textbox = next(t for t in page.text_input if "本地基础模型目录" in t.label)
+    textbox.input("/tmp/local-base").run()
+
+    candidates = [_candidate(1, blind="用户答案A"), _candidate(2), _candidate(3, blind="用户答案C")]
+    candidates += [_candidate(index) for index in range(4, 26)]  # 共 25 条 → 两页
+
+    import src.workbench.learnability_probe as probe_module
+
+    monkeypatch.setattr(
+        probe_module,
+        "probe_learnability",
+        lambda current, model_path, **kw: _probe_result(
+            candidates, version=session.dataset.version
+        ),
+    )
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert not page.exception
+    pager = next(n for n in page.number_input if n.label == "候选预览页码")
+    assert pager.value == 1
+    assert any("第 1/2 页" in item.value for item in page.caption)
+    assert any("共 25 条候选" in item.value for item in page.caption)
+
+    def visible_ids():
+        table = next(frame.value for frame in page.dataframe if "证据" in frame.value.columns)
+        return list(table["行ID"]), list(table["你的盲标答案"])
+
+    ids, blinds = visible_ids()
+    assert ids == [f"r{index:06d}" for index in (1, 3, 2)] + [
+        f"r{index:06d}" for index in range(4, 21)
+    ]
+    assert blinds[:3] == ["用户答案A", "用户答案C", "—"], "强证据在先不因分页打乱"
+
+    pager.set_value(2).run()
+    assert not page.exception
+    assert any("第 2/2 页" in item.value for item in page.caption)
+    assert any("显示第 21–25 条，共 25 条候选" in item.value for item in page.caption)
+    ids, _ = visible_ids()
+    assert ids == [f"r{index:06d}" for index in range(21, 26)]
+
+    # 探针区还应保留 CSV 导出入口,说明文本如实(导出含全部候选)
+    assert any("导出候选为 CSV" in b.label for b in page.get("download_button"))
+    assert any("包含全部候选" in item.value for item in page.caption)
+
+
+def test_probe_candidates_twenty_exact_needs_no_pager(probe_page, monkeypatch):
+    """恰好 20 条不出现分页控件,一次展示全部,计数如实。"""
+    service, session, page = probe_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    textbox = next(t for t in page.text_input if "本地基础模型目录" in t.label)
+    textbox.input("/tmp/local-base").run()
+
+    import src.workbench.learnability_probe as probe_module
+
+    monkeypatch.setattr(
+        probe_module,
+        "probe_learnability",
+        lambda current, model_path, **kw: _probe_result(
+            [_candidate(index) for index in range(1, 21)], version=session.dataset.version
+        ),
+    )
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert not page.exception
+    assert not any(n.label == "候选预览页码" for n in page.number_input)
+    assert any("显示第 1–20 条，共 20 条候选" in item.value for item in page.caption)
+    table = next(frame.value for frame in page.dataframe if "证据" in frame.value.columns)
+    assert list(table["行ID"]) == [f"r{index:06d}" for index in range(1, 21)]
+
+
 def test_probe_result_survives_page_rerun_from_saved_record(probe_page, monkeypatch):
     """探针结果已存盘:任何交互后回读最近一次结果,不需要重新加载模型重跑。"""
     service, session, page = probe_page
