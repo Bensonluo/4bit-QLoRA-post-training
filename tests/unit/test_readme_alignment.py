@@ -464,3 +464,17 @@ def test_field_accuracy_disclosure_docs_pinned():
     assert "全部字段都对" in section
     assert "保持沉默" in section  # 非 JSON 任务沉默边界
     assert "大白话解读" in section  # 页面位点
+
+
+def test_custom_scoring_summary_docs_pinned():
+    """自定义/开放任务对照的人话摘要口径钉死:不把通过数写成答对,开放任务只报生成事实。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 定义并确认自定义业务评分",
+        "## 用独立测试题做单模型业务验收",
+    )
+    assert "大白话解读" in section
+    assert "业务评分均值" in section and "通过" in section
+    assert "不把通过数写成「答对」" in section
+    assert "不做自动评分" in section
+    assert "生成失败、缺失或截断的回答不能人工标为通过" in section

@@ -429,3 +429,51 @@ def test_comparison_names_weakest_field_for_json_tasks():
     perfect["metrics"]["field_accuracy"] = {"类别": 1.0}
     joined = "\n".join(summarize_comparison(_report([perfect])))
     assert "最弱的是" not in joined
+
+
+def test_comparison_custom_scoring_and_open_tasks_are_not_fake_zero():
+    """自定义评分对照:通过数与业务分均值如实入句,不渲染「答对 0/10」假零分结论;
+    开放任务只报生成事实,不虚构答对。"""
+    prompt = "题目:某指令文本较长较长较长较长"
+
+    def custom(label, pass_rate, business_score):
+        rows = [{"status": "scored", "output": "答", "prompt": prompt} for _ in range(10)]
+        return {
+            "label": label,
+            "metrics": {
+                "total": 10,
+                "exact_match": None,
+                "business_score": business_score,
+                "pass_rate": pass_rate,
+            },
+            "rows": rows,
+        }
+
+    joined = "\n".join(
+        summarize_comparison(_report([custom("基座", 0.3, 0.35), custom("本轮微调", 0.8, 0.75)]))
+    )
+    assert "基座业务评分均值 0.35、通过 3/10" in joined
+    assert "本轮微调业务评分均值 0.75、通过 8/10" in joined
+    assert "答对 0/10" not in joined
+    assert "没有一个模型答对任何题" not in joined
+    assert "微调后仍是零分" not in joined
+    assert "两者都不是严格准确率" in joined
+    assert "逐题查看评分理由" in joined
+
+    # 开放任务:exact_match 与 pass_rate 都缺,摘要只说生成事实
+    def open_task(label):
+        rows = [
+            {"status": "needs_business_review", "output": "开放回答" * 20, "prompt": prompt}
+            for _ in range(10)
+        ]
+        return {
+            "label": label,
+            "metrics": {"total": 10, "exact_match": None, "field_accuracy": {}},
+            "rows": rows,
+        }
+
+    joined = "\n".join(summarize_comparison(_report([open_task("基座"), open_task("本轮微调")])))
+    assert "基座生成了 10/10 条回答" in joined
+    assert "答对" not in joined, "开放任务没有自动评分,不得出现「答对」措辞"
+    assert "开放任务不做自动评分" in joined
+    assert "不能人工标为通过" in joined

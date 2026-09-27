@@ -39,6 +39,9 @@ def summarize_comparison(report: Any) -> list[str]:
         output_echoes_prompt,
     )
 
+    first_metrics = models[0]["metrics"]
+    strict = first_metrics.get("exact_match") is not None
+    custom = (not strict) and first_metrics.get("pass_rate") is not None
     best_label, best_correct, best_score = None, -1, -1.0
     stats: dict[str, dict[str, Any]] = {}
     truncated_questions: set[int] = set()
@@ -49,6 +52,7 @@ def summarize_comparison(report: Any) -> list[str]:
         rows = model["rows"]
         score_value = metrics.get("exact_match")
         correct = round((score_value or 0.0) * total)
+        passed = round((metrics.get("pass_rate") or 0.0) * total)
         truncated = sum(row.get("status") == "truncated" for row in rows)
         failed = sum(row.get("status") == "failed" for row in rows)
         echo = count_instruction_echo(rows)
@@ -60,22 +64,30 @@ def summarize_comparison(report: Any) -> list[str]:
                 failed_questions.add(position)
             if output_echoes_prompt(row.get("output"), row.get("prompt")):
                 echo_questions.add(position)
-        parts = [f"{model['label']}答对 {correct}/{total}"]
+        if strict:
+            parts = [f"{model['label']}答对 {correct}/{total}"]
+        elif custom:
+            mean_score = metrics.get("business_score") or 0.0
+            parts = [f"{model['label']}业务评分均值 {mean_score:.2f}、通过 {passed}/{total}"]
+        else:
+            generated = sum(row.get("output") is not None for row in rows)
+            parts = [f"{model['label']}生成了 {generated}/{total} 条回答"]
         if truncated:
             parts.append(f"{truncated} 题没写完被截断")
         if failed:
             parts.append(f"{failed} 题生成失败")
         if echo:
             parts.append(f"{echo} 题在复述题目而不是作答")
-        if not (truncated or failed or echo) and correct == total:
+        if strict and not (truncated or failed or echo) and correct == total:
             parts.append("全部答对")
         lines.append("· " + "、".join(parts) + "。")
         score = score_value or 0.0
-        if score > best_score:
+        if strict and score > best_score:
             best_label, best_correct, best_score = model["label"], correct, score
 
+    field_models = models if strict else ()  # 「答对」措辞只在严格评分下成立
     field_parts: list[str] = []
-    for model in models:
+    for model in field_models:
         field_accuracy = model["metrics"].get("field_accuracy") or {}
         if not field_accuracy:
             continue
@@ -108,7 +120,18 @@ def summarize_comparison(report: Any) -> list[str]:
     base_stats = _pick_counterpart(stats, "基座")
     tuned_stats = _pick_counterpart(stats, "本轮微调", "微调")
 
-    if best_score == 0:
+    if custom:
+        lines.append(
+            "自定义业务评分按已确认规则逐题打分:上面的「通过」指达到单题通过分数,"
+            "业务评分均值是各题得分的平均数,两者都不是严格准确率;"
+            "要知道哪里扣分,请逐题查看评分理由。"
+        )
+    elif not strict:
+        lines.append(
+            "开放任务不做自动评分:以上只有生成与失败事实,每题通过与否由你逐题人工判断,"
+            "生成失败、缺失或截断的回答不能人工标为通过。"
+        )
+    elif best_score == 0:
         lines.append(
             "没有一个模型答对任何题:目前不能说任何模型学会了这个任务,常见原因是题目太难、数据太少或提示格式不匹配,可查看每题的完整输出再判断。"
         )
@@ -144,7 +167,7 @@ def summarize_comparison(report: Any) -> list[str]:
         lines.append(
             f"答对最多的是{best_label}({best_correct}/{total});请结合逐题输出判断答错的部分是否可接受。"
         )
-    if best_score > 0 and base_stats and tuned_stats:
+    if strict and best_score > 0 and base_stats and tuned_stats:
         diff = tuned_stats["score"] - base_stats["score"]
         if diff >= 0.2:
             lines.append(
@@ -157,7 +180,7 @@ def summarize_comparison(report: Any) -> list[str]:
                 f"{base_stats['correct']}/{total})——数据量不足或任务难度过高都可能是原因;"
                 "先逐题核对输出,再决定是加数据还是改任务定义。"
             )
-    if 0 < total < 20:
+    if (strict or custom) and 0 < total < 20:
         lines.append(f"注意:开发集只有 {total} 道题,任何百分比都受单题影响很大,只当方向参考。")
     lines.append("以上是观察事实,不是业务达标结论;是否采用仍由你按业务标准决定。")
     return lines

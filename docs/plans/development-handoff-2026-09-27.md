@@ -1191,3 +1191,54 @@ json_fields_exact 评分规则早已计算逐字段准确率(`field_accuracy`,�
   **tests/unit 1749 passed / 0 failed**(--no-cov,无排除;基线 1747 + 新增 2)。
   本批只动 src/workbench/report_summary.py、tests/unit/test_report_summary.py、
   tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+### 第 33 轮 = 自定义评分/开放任务对照摘要去误翻译(恢复循环第 14 轮)
+
+(恢复的北极星打磨循环,第 14 轮。)核心痛点:前几轮补的是「披露缺失」,本轮修的是
+**主动说错话**——business_evaluation 对 `custom_rules`(自定义业务评分)与
+`open_review`(开放任务)评分时 `exact_match` 恒为 None,而 `summarize_comparison`
+按 `(None or 0.0) * total` 兜底,把真实的 8/10 通过渲染成「答对 0/10」,并级联触发
+零分分支的「没有一个模型答对任何题」「微调后仍是零分」「零分更可能来自答案格式
+不匹配」——三条没有一条是真的。探针实测(custom_rules pass_rate 0.3/0.8 双模型、
+open_review 双模型)逐字确认两族误翻译。生产路径真实存在:`eval-compare
+--scoring-id` 与页面「大白话解读」都把这类报告交给 summarize_comparison 逐行
+verbatim 渲染。这不是「少披露了一句」,是把业务通过数说成零分——比披露缺口严重
+一档。
+
+- **summarize_comparison 三协议分流**(report_summary.py):按首模型 metrics 判族
+  ——`exact_match` 非 None 为 strict(分类/JSON,行为完全不变);None 且有
+  `pass_rate` 为 custom;其余为 open_review。custom 逐模型句改报「业务评分均值
+  X、通过 Y/N」(均值 `:.2f`、通过数 `round(pass_rate*total)`),措辞对齐
+  agent-setup 第 320 行既有口径「两者不称为严格准确率」;open 逐模型句只报
+  「生成了 N/total 条回答」(按 row.output 非 None 计数)。截断/失败/复述计数
+  两族照常追加(生成事实对所有协议成立)。**strict 专属叙事全部加门**:
+  field_accuracy 逐字段分支(field_models = models if strict else(),「答对」
+  措辞只在严格评分下成立)、零分/全部答对/答对最多三分支、基座对比增益句
+  (strict and best_score>0)——custom/open 不再触发任何一条。custom 追加口径句
+  (「通过」指达到单题通过分数、业务评分均值是各题得分的平均数、两者都不是严格
+  准确率、逐题查看评分理由);open 追加诚实句(开放任务不做自动评分、以上只有
+  生成与失败事实、每题通过与否由你逐题人工判断、生成失败缺失或截断的回答不能
+  人工标为通过——与验收页既有口径同句)。小样本提示限定 strict or custom
+  (open 没有任何百分比,提示无对象)。消费方零改动:07 页面与 CLI 逐行渲染,
+  新句自动上页面与 stderr。
+- **测试**(test_report_summary.py +1):`test_comparison_custom_scoring_and_
+  open_tasks_are_not_fake_zero` 双族钉死——custom(基座 0.35/3 过、本轮微调
+  0.75/8 过)断言两句均值+通过数逐字、负例「答对 0/10」「没有一个模型答对
+  任何题」「微调后仍是零分」全不出现、口径句在场;open(双模型 10 题
+  needs_business_review)断言「生成了 10/10 条回答」、全篇无「答对」二字、
+  「开放任务不做自动评分」「不能人工标为通过」在场。数值断言探针口径复用
+  (0.3×10、0.8×10 均为精确表示,round 确定)。
+- **文档钉死**(agent-setup.md + test_readme_alignment.py 25→26):「定义并确认
+  自定义业务评分」段在既有业务分均值/业务通过率段后新增摘要口径段——页面
+  「大白话解读」与 CLI 逐模型句报「业务评分均值 X、通过 Y/N」、不把通过数写成
+  「答对」、不触发只对严格准确率成立的结论句、逐题查看评分理由;开放任务对照
+  只报生成事实、明确说明不做自动评分、每题由用户逐题判断、生成失败缺失或截断
+  的回答不能人工标为通过。新钉测试 `test_custom_scoring_summary_docs_pinned`
+  (五断言)。无新矩阵场景——eval 域在八关旅程之外,沿第 27/32 轮先例;场景数
+  保持 47。
+- 回归:ruff check/format clean;定向套件(test_report_summary+test_readme_
+  alignment+test_business_evaluation+test_cli_summaries)65 passed(基线 63 +
+  新增 2)。全量回归 **tests/unit 1751 passed / 0 failed**(--no-cov,无排除;
+  基线 1749 + 新增 2)。本批只动 src/workbench/report_summary.py、
+  tests/unit/test_report_summary.py、tests/unit/test_readme_alignment.py、
+  docs/agent-setup.md 与本记录。
