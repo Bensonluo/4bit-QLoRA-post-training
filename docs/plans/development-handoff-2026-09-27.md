@@ -1094,3 +1094,56 @@ hidden/blank,第 18/24/25/26/28 轮)至此只剩这一处静默。
   tests/unit/test_data_materialize.py、tests/unit/test_data_intake_ui.py、
   tests/unit/test_report_summary.py、tests/unit/test_scenario_matrix.py、
   tests/unit/test_readme_alignment.py 与本记录。
+
+### 第 31 轮 = 完全相同例题如实点名 duplicate_note(恢复循环第 12 轮)
+
+(恢复的北极星打磨循环,第 12 轮。)核心痛点:物化统计一直携带双口径重复行计数
+——`rendered_exact_duplicate_rows`(渲染后输入与答案逐字一致的重复条数)与
+`source_exact_duplicate_rows`(原始行每个字段完全一致的重复条数)——但这两个
+数字只躺在 statistics 里,人话摘要、页面与 CLI 从不翻译(round 27 勘察时记录的
+缺口)。重复例题等于训练隐式加权(同一道例题出现多次),用户在看到模型对个别
+例题过拟合前毫无线索;连 UI 默认夹具(FULL 9 行,rendered=2/source=1)都触发
+同一形态。选题前先排除候选 (a)「相同渲染输入不同答案」:full_data.py 的
+conflict status blocking + materialize 非 ready 行 raise 早已硬拦,非静默——
+重复行是答案一致时的兄弟形态,披露缺口才是真缺口。
+
+- **`_duplicate_note` 助手 + statistics 附件**(materialize.py):门控
+  `rendered_extra > 0`(计数为零缺键;与 20 值门控不同,计数本身总是有信息量,
+  无需上限)。note 分述两种成因——`source_extra < rendered_extra` 时「其中 N 条
+  原始行完全重复(每个字段都一致,多见于导出拼接或关联重复);另有 M 条是不同
+  原始行渲染成同一例题(原始字段不同、例题相同)」,只有原始重复时「均为原始行
+  完全重复…」,只有渲染重复时「均为不同原始行渲染成同一例题…」。点名隐式加权
+  效应与独立例题数(「N 条记录去重后只有 N-M 道独立例题」);写明与 conflict
+  硬拦的分界(「相同输入配不同答案已被全量验证拦下,不会出现在任何分区」)、
+  同分区事实(「完全相同的记录保持在同一分区」)与语义安全边界(「全部记录
+  原样保留;没有自动去重,去留由你决定」)。三种切分方式同口径。
+- **人话摘要与 CLI**(report_summary.py + data_intake.py):summarize_dataset
+  在 coverage_note 之后、边界句「分区就绪只说明…」前渲染 duplicate_note(UI
+  数据集版本区经 st.write 自动可见);CLI materialize 输出沿用 coverage_note
+  stderr 先例。
+- **场景矩阵 47**(`exact-duplicate-rows-in-full`,先探针后定局):全量 12 行
+  =干净 10 行(001-010)+ 005 原始行完全重复 + 011(不同编号、同一「开不了机/
+  质量」例题);样例两类答案(001 质量/002 物流,对比可配对)。探针实测:
+  validate_full 对重复行不拦(答案一致不触发 conflict,唯一 review 是与重复无关
+  的 split_not_validated);「开不了机」三条记录经相同输入连接成同一分组、
+  全落训练集;10 组贪心切分 10/1/1;rendered=2/source=1;answer_coverage_note
+  正确沉默(训练集见过全部答案类别)。expect=passes(八关全过,披露不阻断、
+  不自动去重)。矩阵下限 46→47。
+- **文档钉死**(agent-setup.md + test_readme_alignment 23→24):「生成独立
+  数据分区与版本」段在答案覆盖段后新增完全相同例题披露段——双计数键、note
+  原文例、两种成因分述、隐式加权、与冲突守卫分界、永不跨分区、缺键即零重复、
+  不自动去重、页面与 CLI 位点。新钉测试
+  `test_duplicate_rows_docs_pinned_and_backed_by_matrix`(关键句 + 场景矩阵
+  背书 expect=="passes")。
+- **回归**:test_data_materialize 首测扩展 duplicate_note 断言(「2 条记录」
+  「去重后只有 7 道独立例题」「其中 1 条原始行完全重复」「另有 1 条」「没有
+  自动去重」)+ rare 测试加无键负例;test_report_summary +1(双注顺序:
+  coverage→duplicate→边界句,负例不多说);test_scenario_matrix +1(场景 47
+  钉测试:005 两次且每字段一致、011 同例题不同编号的夹具真实性 + run_scenario
+  八关 + 手动探针 statistics + 「开不了机」同分区断言)。定向套件 102 passed;
+  全量回归 **tests/unit 1747 passed / 0 failed**(--no-cov,无排除,169.66s;
+  基线 1744 + 新增 3)。本批只动 src/workbench/materialize.py、src/workbench/
+  report_summary.py、src/workbench/scenario_specs.py、scripts/data_intake.py、
+  docs/agent-setup.md、tests/unit/test_data_materialize.py、
+  tests/unit/test_report_summary.py、tests/unit/test_scenario_matrix.py、
+  tests/unit/test_readme_alignment.py 与本记录。

@@ -617,6 +617,15 @@ _RARE_CATEGORY_FULL = _rows_as_csv(
 )
 
 
+# 物化层完全相同例题:干净 10 行 + 005 原始行完全重复(每个字段一致,导出拼接形态)
+# + 011 不同编号渲染成同一例题(「开不了机/质量」)→ 12 行、10 组、rendered 2 / source 1。
+# duplicate_note(第 31 轮)分述两种成因并点名隐式加权,披露不阻断、不自动去重。
+_DUPLICATE_SAMPLE = _rows_as_csv((("001", "杯子破损", "质量"), ("002", "物流未更新", "物流")))
+_DUPLICATE_FULL = _rows_as_csv(
+    _CLEAN_TEN_ROWS + (("005", "开不了机", "质量"), ("011", "开不了机", "质量"))
+)
+
+
 # 目标列数字型连续值:答案列是 1.0/2.5/3.7 这类连续测量值(回归形态,非离散类别),
 # 全量含样例未覆盖的新测量值。value_kind 判定与旅程行为以实测为准。
 _CONTINUOUS_SAMPLE = _rows_as_csv(
@@ -1546,6 +1555,34 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "三种切分方式同口径"
             ),
             tags=("materialize", "answer-coverage", "rare-category"),
+        ),
+        ScenarioSpec(
+            scenario_id="exact-duplicate-rows-in-full",
+            goal="根据客户首次描述判断售后类别",
+            sample=_DUPLICATE_SAMPLE,
+            sample_name="工单.csv",
+            full=_DUPLICATE_FULL,
+            full_name="full.csv",
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:全量 12 行——干净 10 行(001-010)+ 005 原始行完全重复"
+                "(每个字段都一致,导出拼接或关联重复形态)+ 011 行(不同编号、"
+                "同一「开不了机/质量」例题)。validate_full 对重复行不拦(重复行"
+                "答案一致,不触发 conflict;唯一 review 是与重复无关的"
+                " split_not_validated),重复例题经相同输入连接成同一分组、"
+                "永不跨分区(实测「开不了机」三条记录全落训练集),10 个独立分组"
+                "贪心切分 10/1/1。duplicate_note 已上线:物化统计在"
+                " rendered_exact_duplicate_rows=2 / source_exact_duplicate_rows=1"
+                " 之外生成人话披露——「12 条记录去重后只有 10 道独立例题」「其中"
+                " 1 条原始行完全重复…另有 1 条是不同原始行渲染成同一例题」「训练"
+                "等效于给这些例题加权」「没有自动去重,去留由你决定」。八关全过"
+                "(披露不阻断,全部记录原样保留);answer_coverage_note 正确沉默"
+                "——训练集见过全部答案类别,答案覆盖无缺口。边界与 conflict 硬拦"
+                "分界:相同输入配不同答案会被全量验证硬拦,不会出现在任何分区"
+            ),
+            tags=("materialize", "duplicates"),
         ),
     ]
 

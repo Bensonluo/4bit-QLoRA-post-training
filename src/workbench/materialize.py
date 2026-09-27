@@ -81,6 +81,27 @@ def _answer_coverage_note(train_missing: dict[str, dict[str, int]], cause: str) 
     )
 
 
+def _duplicate_note(rendered_extra: int, source_extra: int, total_rows: int) -> str:
+    """把「完全相同例题」翻成人话：分述两种成因，点名加权效应，不自动去重。"""
+    if source_extra and rendered_extra > source_extra:
+        cause = (
+            f"其中 {source_extra} 条原始行完全重复（每个字段都一致，多见于导出拼接或关联重复）；"
+            f"另有 {rendered_extra - source_extra} 条是不同原始行渲染成同一例题"
+            "（原始字段不同、例题相同）。"
+        )
+    elif source_extra:
+        cause = "均为原始行完全重复（每个字段都一致，多见于导出拼接或关联重复）。"
+    else:
+        cause = "均为不同原始行渲染成同一例题（原始字段不同、例题相同）。"
+    return (
+        f"本版本有 {rendered_extra} 条记录与前面的记录渲染后完全相同（输入与答案逐字一致）——"
+        f"同一道例题会出现多次，训练等效于给这些例题加权；{total_rows} 条记录去重后只有 "
+        f"{total_rows - rendered_extra} 道独立例题。{cause}"
+        "相同输入配不同答案已被全量验证拦下，不会出现在任何分区；"
+        "完全相同的记录保持在同一分区。全部记录原样保留；没有自动去重，去留由你决定。"
+    )
+
+
 def materialize_dataset(
     session: IntakeSession,
     *,
@@ -277,6 +298,12 @@ def materialize_dataset(
                     "分组隔离优先于比例且未做类别分层，稀有类别的整组记录可能全部落在验证或测试。"
                 )
             statistics["answer_coverage_note"] = _answer_coverage_note(train_missing, cause)
+    # 完全相同例题披露：重复例题=隐式加权；相同输入配不同答案已被 conflict 守卫硬拦。
+    rendered_extra = statistics["rendered_exact_duplicate_rows"]
+    if rendered_extra:
+        statistics["duplicate_note"] = _duplicate_note(
+            rendered_extra, statistics["source_exact_duplicate_rows"], len(rows)
+        )
     metadata = {
         "operation": "confirmed_intake_alpaca_split_v1",
         "source_digest": report.source.digest,

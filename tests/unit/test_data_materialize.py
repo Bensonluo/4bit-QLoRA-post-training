@@ -123,6 +123,12 @@ def test_confirmed_full_data_is_materialized_without_row_loss_or_entity_leakage(
     assert artifact.statistics["independent_groups"] == 5
     assert artifact.statistics["source_exact_duplicate_rows"] == 1
     assert artifact.statistics["rendered_exact_duplicate_rows"] == 2
+    # 完全相同例题如实点名:两种成因分述 + 隐式加权 + 不自动去重(披露不阻断)
+    note = artifact.statistics["duplicate_note"]
+    assert "2 条记录与前面的记录渲染后完全相同" in note, note
+    assert "去重后只有 7 道独立例题" in note, note
+    assert "其中 1 条原始行完全重复" in note and "另有 1 条" in note, note
+    assert "等效于给这些例题加权" in note and "没有自动去重" in note, note
     assert sum(artifact.statistics["row_counts"].values()) == 9
     assert artifact.statistics["stratified"] is False
     assert artifact.full_confirmed_revision == session.full_data.confirmed_revision
@@ -268,6 +274,8 @@ def test_rare_answer_landing_only_in_holdout_is_disclosed(service):
     assert "1 类答案" in note and "screen×1（测试1 条）" in note, note
     assert "从未出现在训练集" in note and "逐字" in note and "照常打分" in note
     assert "没有自动重新切分" in note, note
+    # 负例:该夹具 18 行无任何重复例题——duplicate_note 不应出现
+    assert "duplicate_note" not in statistics, "无重复行不应携带 duplicate_note"
 
 
 def test_open_answer_space_skips_coverage_keys(service):

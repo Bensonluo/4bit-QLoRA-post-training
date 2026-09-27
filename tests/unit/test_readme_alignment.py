@@ -424,3 +424,28 @@ def test_answer_coverage_docs_pinned_and_backed_by_matrix():
     scenarios = {s.scenario_id: s for s in builtin_scenarios()}
     assert "rare-category-only-in-holdout" in scenarios, "场景矩阵缺少稀有答案落保留分区场景"
     assert scenarios["rare-category-only-in-holdout"].expect == "passes"
+
+
+def test_duplicate_rows_docs_pinned_and_backed_by_matrix():
+    """完全相同例题披露文档:双计数键/两种成因分述/隐式加权/与冲突守卫分界/
+    同分区/没有自动去重关键句钉死,由场景矩阵背书。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 生成独立数据分区与版本",
+        "## 时间预测任务：先核对来源与标签窗口",
+    )
+    for key in ("rendered_exact_duplicate_rows", "source_exact_duplicate_rows", "duplicate_note"):
+        assert key in section, f"重复例题披露缺少统计键说明: {key}"
+    assert "渲染后完全相同" in section, "渲染重复的判定口径必须写明"
+    assert "等效于给这些例题加权" in section, "隐式加权效应必须写明"
+    assert "原始行完全重复" in section and "渲染成同一例题" in section, "两种成因分述必须写明"
+    assert "相同输入配不同答案会被全量验证硬拦" in section, "与冲突守卫的分界必须写明"
+    assert "永不跨分区" in section, "重复例题同分区事实必须写明"
+    assert "没有自动去重" in section, "不自动去重的语义安全边界必须写明"
+
+    # 场景矩阵背书:exact-duplicate-rows-in-full 场景真实存在且结局钉住(披露不阻断)
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    scenarios = {s.scenario_id: s for s in builtin_scenarios()}
+    assert "exact-duplicate-rows-in-full" in scenarios, "场景矩阵缺少完全相同例题场景"
+    assert scenarios["exact-duplicate-rows-in-full"].expect == "passes"

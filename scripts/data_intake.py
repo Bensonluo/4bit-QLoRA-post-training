@@ -1116,6 +1116,9 @@ def main() -> int:
             coverage_note = session.dataset.statistics.get("answer_coverage_note")
             if coverage_note:
                 print(coverage_note, file=sys.stderr)
+            duplicate_note = session.dataset.statistics.get("duplicate_note")
+            if duplicate_note:
+                print(duplicate_note, file=sys.stderr)
         elif args.command == "preflight":
             from src.workbench.training_preflight import load_local_tokenizer
 

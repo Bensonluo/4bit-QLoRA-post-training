@@ -190,6 +190,9 @@ def summarize_dataset(statistics: dict) -> list[str]:
     coverage_note = statistics.get("answer_coverage_note")
     if coverage_note:
         lines.append(coverage_note)
+    duplicate_note = statistics.get("duplicate_note")
+    if duplicate_note:
+        lines.append(duplicate_note)
     lines.append("分区就绪只说明数据已按规则隔离、可以进入训练前检查；不代表模型效果或业务达标。")
     return lines
 

@@ -457,7 +457,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 46, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 47, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -1329,3 +1329,80 @@ def test_rare_category_only_in_holdout_disclosed_in_materialize_statistics(tmp_p
     note = statistics["answer_coverage_note"]
     assert "屏幕×1（测试1 条）" in note and "从未出现在训练集" in note, note
     assert "照常打分" in note and "没有自动重新切分" in note, note
+
+
+def test_exact_duplicate_rows_disclosed_in_materialize_statistics(tmp_path):
+    """场景 47:完全相同例题(原始行完全重复+不同行渲染同例题)——八关全过
+    (披露不阻断、不自动去重),duplicate_note 分述两种成因并点名隐式加权;
+    重复例题经相同输入连接成同一分组,永不跨分区。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "exact-duplicate-rows-in-full" in specs, "缺少场景 exact-duplicate-rows-in-full"
+
+    spec = specs["exact-duplicate-rows-in-full"]
+
+    # 夹具真实性:全量 12 行;005 出现两次且每字段一致(原始行完全重复);
+    # 011 与 005 编号不同、输入与答案相同(不同原始行渲染成同一例题)
+    lines = spec.full.decode().splitlines()
+    assert lines[0] == "编号,客户描述,类别"
+    records = [line.split(",") for line in lines[1:]]
+    assert len(records) == 12
+    rows_005 = [record for record in records if record[0] == "005"]
+    assert len(rows_005) == 2 and rows_005[0] == rows_005[1], "005 必须原始行完全重复"
+    row_011 = next(record for record in records if record[0] == "011")
+    assert row_011[1:] == rows_005[0][1:] == ["开不了机", "质量"], "011 与 005 渲染成同一例题"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()  # 披露不阻断:八关全过
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 手动探针:同一夹具走真实旅程,materialize 默认 seed 42 → 10/1/1、10 组
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "duplicate-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    pending = service.start_contrast_check(session.session_id, session.revision)
+    targets = {row.row_id: row.target for row in session.preview.rows}
+    service.submit_contrast_check(
+        session.session_id,
+        pending["check_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full
+    )
+    # validate_full 对重复行不拦:无 blocking(重复行答案一致,不触发 conflict)
+    assert not [i for i in session.full_data.issues if i.severity == "blocking"]
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
+    statistics = session.dataset.statistics
+    assert statistics["row_counts"] == {"train": 10, "validation": 1, "test": 1}
+    assert statistics["independent_groups"] == 10
+    assert statistics["rendered_exact_duplicate_rows"] == 2
+    assert statistics["source_exact_duplicate_rows"] == 1
+    note = statistics["duplicate_note"]
+    assert "2 条记录与前面的记录渲染后完全相同" in note, note
+    assert "去重后只有 10 道独立例题" in note, note
+    assert "其中 1 条原始行完全重复" in note and "另有 1 条" in note, note
+    assert "等效于给这些例题加权" in note, note
+    assert "已被全量验证拦下" in note and "没有自动去重" in note, note
+    # 训练集见过全部答案类别:答案覆盖披露正确沉默
+    assert "answer_coverage_note" not in statistics
+
+    # 重复例题永不跨分区:「开不了机」的三条记录全部落在同一分区
+    from src.data_flywheel.dataset_registry import LocalDatasetRegistry
+
+    registry = LocalDatasetRegistry(session.dataset.registry_root)
+    locations = {
+        split
+        for split in ("train", "validation", "test")
+        if any(
+            "开不了机" in row["input"]
+            for row in registry.load_split(session.dataset.name, session.dataset.version, split)
+        )
+    }
+    assert locations == {"train"}, "相同输入连接成同一分组,重复例题必须同分区"

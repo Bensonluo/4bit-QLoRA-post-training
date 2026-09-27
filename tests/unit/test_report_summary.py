@@ -374,3 +374,35 @@ def test_summarize_dataset_renders_answer_coverage_note_before_boundary_line():
         {"total_rows": 3, "row_counts": {"train": 1, "validation": 1, "test": 1}}
     )
     assert not any("从未出现在训练集" in line for line in quiet)
+
+
+def test_summarize_dataset_renders_duplicate_note_after_coverage_note():
+    """完全相同例题披露进人话摘要:渲染在边界句前、覆盖披露之后;无重复时不多说。"""
+    from src.workbench.report_summary import summarize_dataset
+
+    duplicate_note = (
+        "本版本有 2 条记录与前面的记录渲染后完全相同（输入与答案逐字一致）——"
+        "同一道例题会出现多次，训练等效于给这些例题加权；12 条记录去重后只有 "
+        "10 道独立例题。没有自动去重，去留由你决定。"
+    )
+    coverage_note = "验证/测试集中有 1 类答案（screen×1（测试1 条））从未出现在训练集。"
+    statistics = {
+        "total_rows": 12,
+        "row_counts": {"train": 10, "validation": 1, "test": 1},
+        "independent_groups": 10,
+        "rendered_exact_duplicate_rows": 2,
+        "source_exact_duplicate_rows": 1,
+        "answer_coverage_note": coverage_note,
+        "duplicate_note": duplicate_note,
+    }
+    lines = summarize_dataset(statistics)
+    # 顺序固定:…→ 覆盖披露 → 重复例题披露 → 边界句
+    assert lines[-3] == coverage_note
+    assert lines[-2] == duplicate_note
+    assert lines[-1].startswith("分区就绪只说明")
+
+    # 负例:无重复行(缺键)时摘要不渲染重复披露句
+    quiet = summarize_dataset(
+        {"total_rows": 3, "row_counts": {"train": 1, "validation": 1, "test": 1}}
+    )
+    assert not any("渲染后完全相同" in line for line in quiet)
