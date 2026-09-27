@@ -2317,6 +2317,26 @@ if dataset is not None:
                         delta_color="normal" if delta >= 0 else "inverse",
                     )
                     st.info(f"{verdict}。{result['note']}")
+                    candidates = result.get("label_error_candidates") or []
+                    st.subheader("标签问题候选(优先人工核对)")
+                    if candidates:
+                        st.dataframe(
+                            [
+                                {
+                                    "行ID": item["row_id"],
+                                    "数据标签": item["data_label"],
+                                    "基座零样本输出": item["base_zero_shot"],
+                                    "你的盲标答案": item.get("user_blind_answer") or "—",
+                                    "证据": item["evidence"],
+                                }
+                                for item in candidates
+                            ],
+                            hide_index=True,
+                            width="stretch",
+                        )
+                        st.caption(result.get("candidates_note", ""))
+                    else:
+                        st.info("没有发现值得优先核对的行。")
                 except (ValueError, RuntimeError, OSError, ImportError) as exc:
                     st.error(str(exc))
         with st.form(f"training_preflight_{session.session_id}"):
