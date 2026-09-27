@@ -252,6 +252,11 @@ def main() -> int:
     probe.add_argument("--model-path", required=True, help="已准备好的本地基础模型目录")
     probe.add_argument("--size", type=int, default=8)
     probe.add_argument("--max-new-tokens", type=int, default=32)
+    probe.add_argument(
+        "--export-csv",
+        type=Path,
+        help="发现候选时把人工核对清单导出为 CSV 文件（Excel 直开）；没有候选则不写文件",
+    )
     probe_show = sub.add_parser(
         "learnability-probe-show",
         help="回读当前数据版本最近一次已保存的探针结果，不重新加载模型",
@@ -1092,6 +1097,7 @@ def main() -> int:
             return 0
         elif args.command == "learnability-probe":
             from src.workbench.learnability_probe import (
+                candidates_to_csv,
                 describe_candidates,
                 probe_learnability,
                 save_probe,
@@ -1111,6 +1117,13 @@ def main() -> int:
             print(f"\n探针记录已保存：{path}", file=sys.stderr)
             for line in describe_candidates(result.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
+            if args.export_csv is not None:
+                if result.get("label_error_candidates"):
+                    args.export_csv.parent.mkdir(parents=True, exist_ok=True)
+                    args.export_csv.write_bytes(candidates_to_csv(result["label_error_candidates"]))
+                    print(f"候选核对清单已导出：{args.export_csv}", file=sys.stderr)
+                else:
+                    print("没有候选，未生成核对清单 CSV。", file=sys.stderr)
             return 0
         elif args.command == "label-verify":
             pending = service.start_label_verification(

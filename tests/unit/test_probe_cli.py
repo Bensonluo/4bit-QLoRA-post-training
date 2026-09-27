@@ -59,7 +59,7 @@ def _run_probe(monkeypatch, service, evaluation_root, session, *extra):
             str(session.revision),
             "--model-path",
             "/tmp/base",
-            *extra,
+            *map(str, extra),
         ],
     )
     return data_intake.main()
@@ -147,3 +147,37 @@ def test_cli_probe_show_roundtrips_candidates_and_note(store, tmp_path, monkeypa
     for candidate in payload["label_error_candidates"]:
         assert f"行 {candidate['row_id']}" in err
     assert err.count("⚠") == len(payload["label_error_candidates"])
+
+
+def test_cli_probe_export_csv_writes_checklist_with_header(store, tmp_path, monkeypatch, capsys):
+    """--export-csv 有候选时落盘:文件存在、带表头、每行候选都在清单里。"""
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    csv_path = tmp_path / "exports" / "candidates.csv"
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    answers = {item["row_id"]: "用户也不认同的答案" for item in pending["items"]}
+    service.submit_label_verification(session.session_id, pending["verification_id"], answers)
+
+    _mock_runtime(monkeypatch, "绝不正确的答案")
+    assert _run_probe(monkeypatch, service, evaluation_root, session, "--export-csv", csv_path) == 0
+    out, err = capsys.readouterr()
+    assert csv_path.exists()
+    text = csv_path.read_bytes().decode("utf-8-sig")
+    assert text.startswith("行ID")  # 表头:BOM 之后第一行就是列名
+    for candidate in json.loads(out)["label_error_candidates"]:
+        assert candidate["row_id"] in text
+    assert "候选核对清单已导出" in err
+
+
+def test_cli_probe_export_csv_without_candidates_writes_nothing(
+    store, tmp_path, monkeypatch, capsys
+):
+    """没有候选时不写 CSV,也不装作导出成功。"""
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    csv_path = tmp_path / "candidates.csv"
+    _mock_runtime(monkeypatch, "yes")  # 全部命中:零候选
+    assert _run_probe(monkeypatch, service, evaluation_root, session, "--export-csv", csv_path) == 0
+    _, err = capsys.readouterr()
+    assert not csv_path.exists()
+    assert "没有候选，未生成核对清单 CSV" in err
