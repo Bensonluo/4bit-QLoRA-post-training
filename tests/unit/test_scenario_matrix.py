@@ -3,6 +3,8 @@
 import csv
 import io
 
+import pytest
+
 from src.workbench.scenario_matrix import ScenarioSpec, run_matrix, run_scenario
 from src.workbench.scenario_specs import builtin_scenarios
 
@@ -126,7 +128,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 29, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 32, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -435,3 +437,136 @@ def test_extreme_long_single_cell_passes_full_journey(tmp_path):
     long_row = max(session.preview.rows, key=lambda row: len(row.input))
     assert len(long_row.input) >= 30_000, "预览应原样携带 3 万字符输入"
     assert long_row.status == "ready", long_row
+
+
+def test_duplicate_header_row_in_sample_passes_without_sample_side_check(tmp_path):
+    """场景 30:样例(非全量)中部混入重复表头行——样例侧不拦、按普通数据行读入,
+    与全量侧硬拦(duplicate-header-rows-in-full)构成不对称边界,期望以实测为准。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "duplicate-header-row-in-sample" in specs, "缺少场景 duplicate-header-row-in-sample"
+
+    spec = specs["duplicate-header-row-in-sample"]
+    # 夹具真实性:重复表头行混在样例数据中部;全量是干净数据(表头只出现一次)
+    lines = spec.sample.split(b"\n")
+    header = lines[0]
+    assert header in lines[1:-1], "样例应在数据中部含重复表头行"
+    assert spec.full.split(b"\n").count(header) == 1, "全量不应含重复表头行"
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 入口与预览事实:重复表头行按普通数据行读入(3 行数据),原样成为「就绪」预览行
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "dup-header-sample-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert len(session.source.rows) == 3, "重复表头行应被当作一条普通数据行"
+    assert session.source.rows[1].values == {
+        "编号": "编号",
+        "客户描述": "客户描述",
+        "类别": "类别",
+    }
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    distribution = next(
+        finding.message for finding in analysis.findings if finding.message.startswith("答案列")
+    )
+    assert "共 3 类" in distribution and "类别×1" in distribution, distribution
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    junk = session.preview.rows[1]
+    assert junk.status == "ready", junk
+    assert junk.input == "客户描述: 客户描述", junk
+    assert junk.target == "类别", junk
+
+    # 该行只污染样例确认旅程,不进入物化数据集(物化只消费全量预览,全量为干净 10 行)
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, spec.full_name, spec.full
+    )
+    assert len(session.full_data.preview.rows) == 10
+    assert all(row.original.get("编号") != "编号" for row in session.full_data.preview.rows)
+
+
+def test_multiline_quoted_cells_kept_verbatim_through_journey(tmp_path):
+    """场景 31:引号内含换行的多行单元格——读取/预览/核验原样保留,精确匹配以实测为准。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "multiline-quoted-cells" in specs, "缺少场景 multiline-quoted-cells"
+
+    spec = specs["multiline-quoted-cells"]
+
+    # 夹具真实性:按 CSV 规范解析后,输入与标签单元格都真含引号内换行
+    def data_rows(blob: bytes) -> list[list[str]]:
+        return list(csv.reader(io.StringIO(blob.decode())))[1:]
+
+    assert any("\n" in row[1] for row in data_rows(spec.sample)), "样例输入应含引号内换行"
+    assert all("\n" in row[2] for row in data_rows(spec.sample)), "样例标签应含引号内换行"
+    assert {row[2] for row in data_rows(spec.full)} == {
+        "质量\n（外观破损）",
+        "物流\n（一直未更新）",
+    }
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 入口事实:多行单元格原样读入,行号是记录起始物理行,分隔符嗅探不受换行干扰
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "multiline-cells-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    assert session.source.delimiter == ","
+    first, second = session.source.rows
+    assert first.values["客户描述"] == "杯子破损，\n附照片一张，杯身有明显裂纹。"
+    assert first.values["类别"] == "质量\n（外观破损）"
+    assert (first.line, second.line) == (2, 5), (first.line, second.line)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    assert session.preview.counts["ready"] == 2
+    assert session.preview.rows[0].input == "客户描述: 杯子破损，\n附照片一张，杯身有明显裂纹。"
+    assert session.preview.rows[0].target == "质量\n（外观破损）"
+
+    # 对照事实(实测):同样的换行不加引号(裸换行),入口按列数不一致诚实拒绝
+    bare = "编号,客户描述,类别\n001,杯子破损,\n质量\n002,物流未更新,物流\n".encode()
+    with pytest.raises(ValueError, match="第 3 行有 1 列"):
+        service.create(spec.goal, spec.sample_name, bare)
+
+
+def test_target_case_variants_pass_without_case_normalization(tmp_path):
+    """场景 32:Yes/yes/YES 大小写变体——strip 已有、大小写无归一,变体检出不覆盖,原样通过。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "target-case-variants" in specs, "缺少场景 target-case-variants"
+
+    spec = specs["target-case-variants"]
+
+    # 夹具真实性:三种大小写写法在样例与全量都出现(同一业务取值的变体)
+    def labels(blob: bytes) -> list[str]:
+        return [line.rsplit(",", 1)[1] for line in blob.decode().splitlines()[1:]]
+
+    assert set(labels(spec.sample)) == {"Yes", "yes", "YES"}
+    assert set(labels(spec.full)) == {"Yes", "yes", "YES"}
+
+    result = run_scenario(spec, tmp_path / spec.scenario_id)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at is None, result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values()), result.to_dict()
+
+    # 基础分析事实:大小写差异不算变体——不发「标签多种写法」预警、不生成 map_values 草案
+    # (与 dirty-label-variants 的句号变体形成明确分界:那里检出并预置草案,这里原样通过)
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "case-variants-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    messages = [finding.message for finding in analysis.findings]
+    distribution = next(message for message in messages if message.startswith("答案列"))
+    assert "共 3 类" in distribution, distribution
+    assert "Yes×1" in distribution and "yes×1" in distribution and "YES×1" in distribution
+    assert not any("多种写法" in message for message in messages), messages
+    assert analysis.recipe.targets[0].transforms == [], analysis.recipe.targets[0]
+    session = service.apply_analysis(session, analysis, model="scenario-matrix")
+    assert {row.target for row in session.preview.rows} == {"Yes", "yes", "YES"}

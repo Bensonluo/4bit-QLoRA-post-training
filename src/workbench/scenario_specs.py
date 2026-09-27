@@ -246,6 +246,55 @@ _LONG_LINE_LINES = _long_line_text().splitlines(keepends=True)
 _LONG_LINE_SAMPLE = "".join(_LONG_LINE_LINES[:3]).encode()
 _LONG_LINE_FULL = "".join(_LONG_LINE_LINES).encode()
 
+# 样例(非全量)中部混入重复表头行:与 _DUP_HEADER_FULL 方向相反的脏数据——
+# 全量侧已有硬拦(repeated_header_rows),样例侧是否拦、读成什么,以实测为准。
+_DUP_HEADER_IN_SAMPLE = (
+    "编号,客户描述,类别\n001,杯子破损,质量\n编号,客户描述,类别\n002,物流未更新,物流\n"
+).encode()
+
+# 引号内含换行的多行单元格:输入与标签都按 CSV 规范加引号且引号内有换行,
+# 读取/预览/对比核验/盲标是否原样保留、精确匹配行为如何,以实测为准。
+_MULTILINE_CELLS_ROWS = (
+    ("001", "杯子破损，\n附照片一张，杯身有明显裂纹。", "质量\n（外观破损）"),
+    ("002", "物流未更新", "物流\n（一直未更新）"),
+    ("003", "屏幕碎裂，\n无法正常显示。", "质量\n（外观破损）"),
+    ("004", "快递丢失", "物流\n（一直未更新）"),
+    ("005", "开不了机，\n按电源键无反应，\n充电指示灯也不亮。", "质量\n（外观破损）"),
+    ("006", "地址填错", "物流\n（一直未更新）"),
+    ("007", "异味", "质量\n（外观破损）"),
+    ("008", "延迟送达", "物流\n（一直未更新）"),
+    ("009", "无法充电，\n更换充电器与数据线后依旧。", "质量\n（外观破损）"),
+    ("010", "包装破损", "物流\n（一直未更新）"),
+)
+
+
+def _multiline_cells_text(row_count: int) -> str:
+    import csv as _csv
+    import io as _io
+
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer, lineterminator="\n")
+    writer.writerow(("编号", "客户描述", "类别"))
+    for row in _MULTILINE_CELLS_ROWS[:row_count]:
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
+_MULTILINE_CELLS_SAMPLE = _multiline_cells_text(2).encode()
+_MULTILINE_CELLS_FULL = _multiline_cells_text(10).encode()
+
+# 目标列大小写变体:Yes/yes/YES 指同一业务取值,入口已有 strip;大小写是否归一、
+# 标签变体检出是否覆盖,以实测为准。样例三种写法各一条(配对核验需要不同答案)。
+_CASE_VARIANTS_SAMPLE = (
+    "编号,客户描述,类别\n001,杯子破损,Yes\n002,物流未更新,yes\n003,屏幕碎裂,YES\n"
+).encode()
+_CASE_VARIANTS_FULL = (
+    "编号,客户描述,类别\n"
+    "001,杯子破损,Yes\n002,物流未更新,yes\n003,屏幕碎裂,YES\n004,快递丢失,yes\n"
+    "005,开不了机,Yes\n006,地址填错,YES\n007,异味,yes\n008,延迟送达,YES\n"
+    "009,无法充电,Yes\n010,包装破损,yes\n"
+).encode()
+
 
 def builtin_scenarios() -> list[ScenarioSpec]:
     return [
@@ -751,6 +800,66 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "长格(逗号裸奔)在 create 即按「列数与表头不一致」拒绝,规范内的完整通过"
             ),
             tags=("long-text", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="duplicate-header-row-in-sample",
+            goal="根据客户首次描述判断售后类别",
+            sample=_DUP_HEADER_IN_SAMPLE,
+            sample_name="工单.csv",
+            full=_CLEAN_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:样例(非全量)中部的重复表头行不被拦——入口按普通数据行读入"
+                "(3 行数据),该行以「就绪」面目进入预览:输入是列名「客户描述」、答案是"
+                "列名「类别」,分布 finding 如实把「类别」计为一类,对比核验也可能拿它"
+                "出题(探针实测:配对项与选项都出现列名);与全量侧 "
+                "duplicate-header-rows-in-full(验证硬拦、点名行号)构成不对称边界:"
+                "样例侧没有对称检查,靠用户在预览逐行核对自行识别。该行不进入物化数据集"
+                "(物化只消费全量预览),全量干净时全旅程通过"
+            ),
+            tags=("dirty-data", "header-hygiene"),
+        ),
+        ScenarioSpec(
+            scenario_id="multiline-quoted-cells",
+            goal="根据客户首次描述判断售后类别",
+            sample=_MULTILINE_CELLS_SAMPLE,
+            sample_name="工单.csv",
+            full=_MULTILINE_CELLS_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:CSV 引号内的换行按规范完整读入——多行输入与多行标签原样保留,"
+                "行号记录的是记录起始物理行,分隔符嗅探不受换行干扰;预览输入/答案逐字"
+                "含换行,对比核验与盲标按精确原文匹配,全旅程通过。两个对照事实均实测:"
+                "同样的换行不加引号(裸换行)在 create 即按「列数与表头不一致」诚实拒绝;"
+                "标签首尾带换行(如「\\n质量\\n」)时盲标必拦——提交侧按 strip 比对、"
+                "数据侧保留原文,用户照抄预览答案也对不上(探针实测,未入夹具);"
+                "含内部换行的标签(本场景夹具形态)不受影响"
+            ),
+            tags=("csv-format", "multiline", "boundary-note"),
+        ),
+        ScenarioSpec(
+            scenario_id="target-case-variants",
+            goal="根据客户首次描述判断售后类别",
+            sample=_CASE_VARIANTS_SAMPLE,
+            sample_name="工单.csv",
+            full=_CASE_VARIANTS_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "实测结局:Yes/yes/YES 被当成 3 个不同类别原样通过——入口已有 strip,"
+                "大小写无归一;标签变体检出只覆盖 strip/末尾标点归一后相同的写法,"
+                "大小写差异不在归一范围,因此不发「标签多种写法」预警、不生成 map_values"
+                " 草案(与 dirty-label-variants 的句号变体明确分界:那里检出并预置草案,"
+                "这里原样通过);分布 finding 如实列出 3 类,全量无新增类别,全旅程通过。"
+                "边界如实记录:大小写变体会被模型当不同答案学习,如需归一须用户手工加"
+                " map_values 规则或在数据侧统一写法"
+            ),
+            tags=("dirty-data", "case-variants", "boundary-note"),
         ),
     ]
 
