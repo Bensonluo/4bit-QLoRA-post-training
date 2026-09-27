@@ -177,6 +177,13 @@ _UTF16_NOBOM_FULL = (
     + "".join(f"{i:03d}\t问题{i}\t{'质量' if i % 2 else '物流'}\n" for i in range(1, 11))
 ).encode("utf-16-le")
 
+# 答案列单一取值:样例与全量所有行都是同一类别(某一时期只产生单一类别工单,
+# 或标注者把所有行标成了同一类)——样例取满 10 行,让不均衡检出有机会说话。
+_CONSTANT_TARGET_SAMPLE = (
+    "编号,客户描述,类别\n" + "".join(f"{i:03d},问题{i},质量\n" for i in range(1, 11))
+).encode()
+_CONSTANT_TARGET_FULL = _CONSTANT_TARGET_SAMPLE
+
 
 def _long_line_text() -> str:
     import csv as _csv
@@ -637,6 +644,24 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "与带 BOM 的 utf16-excel-export(按 BOM 证据自动识别)构成编码家族的完整边界"
             ),
             tags=("encoding", "utf16", "excel"),
+        ),
+        ScenarioSpec(
+            scenario_id="constant-target",
+            goal="根据客户首次描述判断售后类别",
+            sample=_CONSTANT_TARGET_SAMPLE,
+            sample_name="工单.csv",
+            full=_CONSTANT_TARGET_FULL,
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:contrast_check",
+            expect_note=(
+                "实测结局:答案列只有一种取值——create 与基础分析都不拦,基础分析如实发出"
+                "「分布严重不均衡:「质量」占 100%(10 行),全猜这一类就有 100% 准确率」的"
+                "非阻断预警;旅程在对比核验被拦:「对比核验需要至少两条答案不同的已标注行。」"
+                "单一类别连配对核验都组不成,模型没有可学习的区分边界;"
+                "用户须让数据覆盖至少两个类别,或确认答案列本身选错"
+            ),
+            tags=("dirty-data", "single-class"),
         ),
     ]
 

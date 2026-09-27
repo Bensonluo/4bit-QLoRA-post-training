@@ -123,7 +123,7 @@ def test_builtin_matrix_all_scenarios_as_expected(tmp_path):
     """内置场景全集跑台:无论多少个,全部必须 as_expected(意外=产品缺陷)。"""
     report = run_matrix(builtin_scenarios(), tmp_path)
     total = report["summary"]["total"]
-    assert total >= 26, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
+    assert total >= 27, f"内置场景应随 known-gap 清偿持续增长,当前 {total}"
     assert report["summary"]["as_expected"] == total
     assert report["summary"]["unexpected_pass"] == 0
     assert report["summary"]["unexpected_block"] == 0
@@ -288,3 +288,34 @@ def test_utf16_no_bom_rejected_at_create(tmp_path):
     assert "原始数据未修改" in result.blocked_message
     # 旅程在第一关即停,没有任何后续阶段被记录
     assert set(result.stages) == {"create"}
+
+
+def test_constant_target_blocked_at_contrast_check(tmp_path):
+    """场景 27:答案列单一取值——不均衡预警先行(不拦),旅程在对比核验被拦。"""
+    specs = {spec.scenario_id: spec for spec in builtin_scenarios()}
+    assert "constant-target" in specs, "缺少场景 constant-target"
+
+    spec = specs["constant-target"]
+    # 夹具真实性:样例与全量的每一条数据行都是同一类别「质量」
+    for blob in (spec.sample, spec.full):
+        data_lines = blob.splitlines()[1:]
+        assert data_lines, "样例与全量都应有数据行"
+        assert all(line.endswith(",质量".encode()) for line in data_lines), "所有行答案应同为「质量」"
+
+    result = run_scenario(spec, tmp_path / "constant-target")
+    assert result.verdict == "as_expected", result.to_dict()
+    assert result.blocked_at == "contrast_check", result.to_dict()
+    assert "对比核验需要至少两条答案不同的已标注行" in result.blocked_message
+    # create 与基础分析都不拦;有价值的提示发生在基础分析(不均衡预警),拦截发生在配对核验
+    assert result.stages["create"] == "passed"
+    assert result.stages["baseline_analysis"] == "passed"
+
+    # 基础分析对单一取值有如实、不阻断的关卡提示:100% 多数类预警
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+
+    service = IntakeService(tmp_path / "constant-target-probe")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
+    messages = [finding.message for finding in analysis.findings]
+    assert any("分布严重不均衡" in message and "100%" in message for message in messages), messages
