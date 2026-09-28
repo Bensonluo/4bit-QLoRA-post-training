@@ -131,6 +131,36 @@ def model_for(result):
     return ScriptedModel(steps)
 
 
+def test_analyze_cli_appends_analysis_summary_to_stderr(
+    monkeypatch, capsys, tmp_path, service, session
+):
+    """analyze 双流契约:stdout 纯 JSON,stderr 追加与页面同词汇的发现与待确认问题摘要。"""
+    import sys
+
+    from scripts import data_intake
+
+    result = analysis()
+    monkeypatch.setattr(data_intake, "_client", lambda args, probe=False: model_for(result))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "analyze",
+            session.session_id,
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    json.loads(captured.out)  # stdout 仍是纯 JSON,人话只走 stderr
+    assert "这份分析给出数据判断与待确认问题：发现 1 条、待确认问题 0 个。" in captured.err
+    assert "已观察：不同问题可能都通过补发处理，处理结果不是问题类别。" in captured.err
+    assert "暂定微调思路：确认标签后可考虑 SFT，规模等待全量检查。" in captured.err
+    assert "不代表业务效果达标。" in captured.err
+
+
 def test_csv_preserves_codes_whitespace_null_strings_and_multiline():
     source = read_source("s.csv", '编号;描述;答案\n001;" 首行\n第二行 ";NULL\n002;;0\n'.encode())
     assert source.delimiter == ";"

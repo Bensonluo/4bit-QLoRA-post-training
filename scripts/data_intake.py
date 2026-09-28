@@ -1151,6 +1151,11 @@ def main() -> int:
             if args.answer:
                 service.answer(args.session_id, args.answer)
             session = service.analyze(args.session_id, client)
+            if session.analysis:
+                from src.workbench.report_summary import summarize_analysis
+
+                for line in summarize_analysis(session.analysis.model_dump()):
+                    print(line, file=sys.stderr)
         elif args.command == "confirm":
             session = service.confirm(args.session_id, args.revision)
             # 对比核验是软门禁：确认不因未核验而阻断（区别于盲标的硬门禁），但

@@ -1011,3 +1011,59 @@ def test_model_discovery_summary_empty_guidance_and_breakdown():
     complete = summarize_model_discovery([{"status": "available"}, {"status": "available"}])
     assert complete[0] == "发现 2 个本地模型：2 个文件完整、0 个文件不完整。"
     assert complete[1] == mixed[1]
+
+
+def test_analysis_summary_translates_findings_questions_and_gaps():
+    """analyze 尾行:发现/待确认问题/能力缺口/微调思路与页面同词汇,裸记录只给缺位句。"""
+    from src.workbench.report_summary import summarize_analysis
+
+    record = {
+        "findings": [
+            {
+                "kind": "observed",
+                "message": "不同问题可能都通过补发处理，处理结果不是问题类别。",
+                "evidence_row_ids": ["r000001", "r000002"],
+            }
+        ],
+        "questions": [
+            {
+                "question": "处理结果是否需要作为输入特征？",
+                "why": "同一处理结果对应多种问题类型",
+                "options": ["是", "否"],
+            }
+        ],
+        "capability_gaps": ["缺少问题类别的历史人工标注"],
+        "training_approach": "确认标签后可考虑 SFT，规模等待全量检查。",
+        "next_steps": ["核对样例转换，随后提供全量数据。"],
+    }
+    lines = summarize_analysis(record)
+    assert lines[0] == "这份分析给出数据判断与待确认问题：发现 1 条、待确认问题 1 个。"
+    # message 与（证据：之间有一个空格(f-string 拼接后 rstrip 只削行尾,不削内部)
+    assert (
+        lines[1]
+        == "已观察：不同问题可能都通过补发处理，处理结果不是问题类别。 （证据：r000001, r000002）"
+    )
+    assert (
+        lines[2]
+        == "待确认问题：处理结果是否需要作为输入特征？——同一处理结果对应多种问题类型（可选解释：是 / 否）"
+    )
+    assert lines[3] == "当前能力缺口：缺少问题类别的历史人工标注"
+    assert lines[4] == "暂定微调思路：确认标签后可考虑 SFT，规模等待全量检查。"
+    assert lines[5] == "下一步：核对样例转换，随后提供全量数据。"
+    assert (
+        lines[-1]
+        == "以上发现中「已观察」是数据里的事实，其余是待确认的推断或业务解释；"
+        "分析待你确认并经真实预览核对，不代表业务效果达标。"
+    )
+
+    # 其余 kind 同样按页面词汇翻译;无证据行的发现经 rstrip 收尾不带尾空格。
+    variant = summarize_analysis(
+        {"findings": [{"kind": "needs_full_data", "message": "标签变体需全量核对。"}]}
+    )
+    assert variant[0] == "这份分析给出数据判断与待确认问题：发现 1 条、待确认问题 0 个。"
+    assert variant[1] == "需要全量验证：标签变体需全量核对。"
+
+    bare = summarize_analysis({})
+    assert len(bare) == 2
+    assert bare[0] == "这份分析没有可读的内容。"
+    assert bare[1] == lines[-1]

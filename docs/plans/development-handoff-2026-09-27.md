@@ -1919,3 +1919,52 @@ readme_alignment 40 + training_cli 5）。全量回归 tests/unit 预期
 本批只动 src/workbench/report_summary.py、scripts/data_intake.py、
 tests/unit/test_report_summary.py、tests/unit/test_training_plan_cli.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+## 第 49 轮 = 分析发现人话上 CLI（恢复循环第 30 轮）
+
+**背景**：第 48 轮补齐 model-list 后复盘全部子命令，`analyze` 是最后一个
+返回大块业务语义 JSON 但 stderr 零人话的核心命令：findings（四类 kind）、
+questions（待确认问题）、capability_gaps、training_approach、next_steps
+五类内容只有英文枚举与原文。页面「数据判断与待确认问题」区已有成熟译名
+（已观察／待验证推断／需要业务解释／需要全量验证），CLI 照搬即可同源；
+此前 CLI 用户读不到「哪些是事实、哪些是推断」的区分，边界句也缺位。
+
+**实现**：
+- src/workbench/report_summary.py 新增 `summarize_analysis(record)`：
+  计数行「这份分析给出数据判断与待确认问题：发现 N 条、待确认问题 M 个。」
+  → 逐条翻译 findings（kind 四译名 + 「（证据：行ID, …）」引用，与页面
+  候选行证据引用同构）→ questions（原文＋——为什么＋（可选解释：…））→
+  capability_gaps（当前能力缺口：…）→ training_approach（暂定微调思路：…）
+  → next_steps（下一步：…）→ 固定边界句「以上发现中「已观察」是数据里
+  的事实，其余是待确认的推断或业务解释；分析待你确认并经真实预览核对，
+  不代表业务效果达标。」裸记录 → 「这份分析没有可读的内容。」+ 边界句。
+- scripts/data_intake.py 的 analyze 分支：session.analysis 存在时 stderr
+  逐行追加 summarize_analysis(session.analysis.model_dump())；澄清态
+  （analysis is None，Agent 只提了问题）不编造摘要——该态由共享尾行的
+  needs_business_answers 人话兜底。
+
+**测试**（+3 函数）：
+- test_report_summary.py::test_analysis_summary_translates_findings_questions_and_gaps
+  —— 计数行/发现+证据/待确认问题/能力缺口/思路/下一步/边界句逐字断言；
+  needs_full_data kind 译名与无证据行 rstrip 不带尾空格；裸记录双行。
+- test_data_intake.py::test_analyze_cli_appends_analysis_summary_to_stderr
+  —— CLI 双流契约：stdout 纯 JSON（json.loads 可解析）、stderr 含计数行、
+  发现译名、暂定思路与边界句。fixture 复用 model_for(analysis()) 的
+  ScriptedModel，argv 注入与 R36 同款（--store 必须等于 fixture 的
+  tmp_path/intake 字符串形态）。
+- test_readme_alignment.py::test_analysis_summary_docs_pinned —— 文档钉死：
+  stderr 位点、summarize_analysis 单一来源、kind 四译名、「（证据：」、
+  待确认问题、暂定微调思路、「数据判断与待确认问题」区同词汇、边界句。
+
+**文档**（agent-setup.md CLI 段 ~67，--base-url 段之后、下一章节之前）：
+analyze stderr 摘要说明段（计数行、四译名、证据引用、问题翻译、缺口/
+思路/下一步、固定收尾句、空态缺位句不编造）。
+
+**错误与修复**：无运行期错误；一次成型（实现先经真实 probe 脚本核验
+输出 7 行逐字后才写断言，避免先写后试）。ruff 全绿无格式重排。
+
+**回归**：定向 3 新函数 3 passed；全量 tests/unit 预期 **1793 passed**
+（R48 基线 1790 + 3 个新测试函数）。本批只动
+src/workbench/report_summary.py、scripts/data_intake.py、
+tests/unit/test_report_summary.py、tests/unit/test_data_intake.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

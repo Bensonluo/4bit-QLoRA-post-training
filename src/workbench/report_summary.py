@@ -863,3 +863,51 @@ def summarize_model_discovery(items: list) -> list[str]:
         count_line + "。",
         "文件完整只表示可以进一步检查；模型是否兼容、训练长度和机器是否适合，仍由方案检查判断。",
     ]
+
+
+def summarize_analysis(analysis: dict) -> list[str]:
+    """analyze 尾行:与页面「数据判断与待确认问题」区同词汇的发现与待确认问题翻译。"""
+    findings = analysis.get("findings") or []
+    questions = analysis.get("questions") or []
+    gaps = analysis.get("capability_gaps") or []
+    approach = analysis.get("training_approach") or ""
+    next_steps = analysis.get("next_steps") or []
+    boundary = (
+        "以上发现中「已观察」是数据里的事实，其余是待确认的推断或业务解释；"
+        "分析待你确认并经真实预览核对，不代表业务效果达标。"
+    )
+    if not findings and not questions and not approach and not next_steps:
+        return ["这份分析没有可读的内容。", boundary]
+    lines = [
+        f"这份分析给出数据判断与待确认问题：发现 {len(findings)} 条、待确认问题 {len(questions)} 个。"
+    ]
+    kinds = {
+        "observed": "已观察",
+        "hypothesis": "待验证推断",
+        "needs_business_input": "需要业务解释",
+        "needs_full_data": "需要全量验证",
+    }
+    for finding in findings:
+        label = kinds.get(finding.get("kind"), finding.get("kind") or "发现")
+        message = finding.get("message") or ""
+        row_ids = finding.get("evidence_row_ids") or []
+        evidence = f"（证据：{', '.join(row_ids)}）" if row_ids else ""
+        lines.append(f"{label}：{message} {evidence}".rstrip())
+    for question in questions:
+        text = question.get("question") or ""
+        why = question.get("why") or ""
+        options = question.get("options") or []
+        line = f"待确认问题：{text}"
+        if why:
+            line += f"——{why}"
+        if options:
+            line += f"（可选解释：{' / '.join(options)}）"
+        lines.append(line)
+    for gap in gaps:
+        lines.append(f"当前能力缺口：{gap}")
+    if approach:
+        lines.append(f"暂定微调思路：{approach}")
+    if next_steps:
+        lines.append(f"下一步：{'；'.join(next_steps)}")
+    lines.append(boundary)
+    return lines

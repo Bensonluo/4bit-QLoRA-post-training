@@ -728,3 +728,23 @@ def test_model_list_tail_docs_pinned():
     assert "issues 字段" in section, "缺文件明细指引必须写明"
     assert "文件完整只表示可以进一步检查" in section, "文件完整边界必须写明"
     assert "与页面候选模型区同词汇" in section, "页面与 CLI 同源必须写明"
+
+
+def test_analysis_summary_docs_pinned():
+    """analyze stderr 发现与待确认问题摘要钉死:单一来源、kind 四译名、证据行引用与边界句。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## CLI 配置与检查",
+        "## 从样例继续到全量数据",
+    )
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "`summarize_analysis` 单一来源" in section, "摘要单一来源必须写明"
+    assert "已观察" in section, "kind 译名(已观察)必须写明"
+    assert "待验证推断" in section, "kind 译名(待验证推断)必须写明"
+    assert "需要业务解释" in section, "kind 译名(需要业务解释)必须写明"
+    assert "需要全量验证" in section, "kind 译名(需要全量验证)必须写明"
+    assert "（证据：" in section, "证据行引用必须写明"
+    assert "待确认问题" in section, "待确认问题翻译必须写明"
+    assert "暂定微调思路" in section, "暂定微调思路行必须写明"
+    assert "「数据判断与待确认问题」区同词汇" in section, "与页面同词汇必须写明"
+    assert "不代表业务效果达标" in section, "固定边界句必须写明"
