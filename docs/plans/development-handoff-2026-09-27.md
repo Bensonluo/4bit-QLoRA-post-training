@@ -2369,3 +2369,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **文档**：north-star.md 本体即交付物；agent-setup.md 无涉（本轮不改产品行为）。
 
 **回归与错误修复**：定向 readme_alignment 47 项全绿；全量回归 **1840 passed / 0 failed**（1839 基线 + 1 钉测试，/tmp/round56_regression.log，277 秒）。ruff format 一处换行修正后 check 干净；本轮零代码改动，无运行期错误。
+
+## 第 57 轮 = 成本账上 CLI（恢复循环第 38 轮）
+
+**背景**：R56 修订后的北极星差距清单里，第④项「成本可计算的 CLI 平权缺口」是唯一不依赖外部资源（真实用户/API 密钥）也不需要大篇幅写作（对照第③项架构文档）的差距——训练成本账（时长/功耗电价/API 对比口径）此前只在 07 页面成功训练记录的折叠区渲染（07_Data_Intake.py 3249-3276，grep 核实），CLI 侧零入口，违背度量体系「成本可计算」双侧平权的一贯模式（R51 起每个 train-* 人话摘要都是页面/CLI 同源）。先核实的证据链：cost_summary.py（M3 第 4 轮 dc74056）已是单一来源——`summarize_run_cost` 出 JSON 账、`cost_lines` 出人话，签名带 `api_price_per_million_tokens`/`expected_monthly_queries`（两者都给且 >0 才出 API 对比块）与 `device` 参数；页面输入用 `or None` 惯用法（0/空 → 不对比）；repr() 探针预先钉死输出句式（半角标点）与数值口径（60W×1.5h×0.6 元/度=0.05 元；1,000,000 次×512 token×8 元/百万=4096.0 元/月）。
+
+**实现**（scripts/data_intake.py，train-* 家族第 10 个子命令）：
+- 解析器（train-export 与 train-list 之间）：`train-cost RUN_ID [--api-price FLOAT] [--monthly-queries INT] [--device STR]`，help 文本「查看这次训练的成本账（时长实测、功耗电价估计、可选 API 对比）」，`description=help_text` 规避 argparse 子命令 --help 不复述 help 的坑（R51/R52 教训）。
+- 分派（train-export 分支后）：只读查询——`training.get_status(run_id)` → `summarize_run_cost(run, device=args.device or get_platform().device, api_price_per_million_tokens=args.api_price or None, expected_monthly_queries=args.monthly_queries or None)`；stdout 纯 JSON 账，stderr 逐行 `cost_lines` 人话。`or None` 惯用法与页面输入同款（0 不对比）；`args.device or get_platform().device` 短路求值——显式 `--device` 不触发平台检测，缺省时 dispatch 内延迟导入检测本机设备。不新增模块，零新翻译逻辑。
+
+**测试**：test_cli_summaries +1（test_train_cost_cli_prints_json_and_cost_lines）——真实分派路径 + 桩 TrainingRunService，钉死双流契约：stdout JSON（kind=run_cost、duration_hours=1.5、electricity_cost_estimated=0.05、api_monthly_cost_estimated=4096.0）与 stderr 人话四句（时长实测句/估计值非电表句/月成本句/口径不同仅量级比较句）；显式 `--device cpu` 保证主机无关。test_readme_alignment +1（test_train_cost_docs_pinned）——11 条文档断言（单一来源/0 不对比/设备默认/估计值边界/API 口径/页面位点/同源同词汇）+ 子命令 --help 面（收 RUN_ID 与三参数；不收 --revision/--tail/--output-dir）。R56 北极星钉测试的收口证据元组补 "train-cost"。
+
+**文档**：agent-setup.md「在同一任务中启动真实训练」节——CLI 块加 `train-cost RUN_ID` 行；train-export 段后新增 train-cost 段（口径与页面一致：时长实测、功耗电费估计值非电表读数、API 对比口径不同仅量级比较）。north-star.md 差距对照：第 67 段追加第 57 轮收口第④项的证据句（保留「CLI 平权」字样，R56 钉测试依赖），差距清单删第④项，开放差距收敛为 1-3。
+
+**回归与错误修复**：定向 61 项全绿（cli_summaries 13 + readme_alignment 48 + cost_summary 3）；ruff check 通过，format 一处换行修正。首轮定向 1 败：新 CLI 测试的两条 stderr 断言用了全角逗号，而 cost_lines 输出是半角（探针摘要转写引入的偏差）——按失败输出逐字修正断言后全绿，生产行为零改动。全量回归 **1842 passed / 0 failed**（1840 基线 + 2 新测试，/tmp/round57_regression.log，280 秒）。

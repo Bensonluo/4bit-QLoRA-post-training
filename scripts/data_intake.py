@@ -382,6 +382,16 @@ def main() -> int:
     train_export.add_argument(
         "--output-dir", type=Path, help="覆盖默认导出目录（默认 outputs/workbench/merged/RUN_ID）"
     )
+    _train_cost_help = "查看这次训练的成本账（时长实测、功耗电价估计、可选 API 对比）"
+    train_cost = sub.add_parser("train-cost", help=_train_cost_help, description=_train_cost_help)
+    train_cost.add_argument("run_id")
+    train_cost.add_argument(
+        "--api-price", type=float, default=0.0, help="对比用 API 单价（元/百万 token，0 不对比）"
+    )
+    train_cost.add_argument(
+        "--monthly-queries", type=int, default=0, help="预计月调用量（次，0 不对比）"
+    )
+    train_cost.add_argument("--device", help="设备类别（cuda/mps/cpu，默认自动检测本机设备）")
     train_list = sub.add_parser("train-list", help="列出数据任务的训练版本")
     train_list.add_argument("session_id")
     _funnel_help = "全部任务在闭环各环节的当前停点计数（只读快照，不发起计算）"
@@ -1159,6 +1169,23 @@ def main() -> int:
                 from src.workbench.report_summary import summarize_export
 
                 for line in summarize_export(result):
+                    print(line, file=sys.stderr)
+                return 0
+            elif args.command == "train-cost":
+                # 成本账 CLI 平权:与页面同一来源(summarize_run_cost/cost_lines),
+                # 只读查询;页面在成功训练记录下渲染同一份成本账。
+                from src.utils.platform_utils import get_platform
+                from src.workbench.cost_summary import cost_lines, summarize_run_cost
+
+                run = training.get_status(args.run_id)
+                account = summarize_run_cost(
+                    run,
+                    device=args.device or get_platform().device,
+                    api_price_per_million_tokens=args.api_price or None,
+                    expected_monthly_queries=args.monthly_queries or None,
+                )
+                print(json.dumps(account, ensure_ascii=False, indent=2))
+                for line in cost_lines(account):
                     print(line, file=sys.stderr)
                 return 0
             else:

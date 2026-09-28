@@ -189,9 +189,7 @@ def test_train_status_without_preflight_does_not_invent_one(train_status_cli, ca
     assert "训练前检查" not in err
 
 
-def test_train_status_appends_loss_trend_when_metrics_present(
-    train_status_cli, tmp_path, capsys
-):
+def test_train_status_appends_loss_trend_when_metrics_present(train_status_cli, tmp_path, capsys):
     """记录带指标时,stderr 在训练摘要之后追加逐条 loss 趋势人话(与页面曲线
     同一来源);旧产物目录没有序列文件时如实说没有,不崩、不编造。"""
     invoke, record = train_status_cli
@@ -211,9 +209,7 @@ def test_train_status_appends_loss_trend_when_metrics_present(
     )
     assert invoke("train-status", "run-9") == 0
     err = capsys.readouterr().err
-    assert (
-        "loss 从第 0 步的 2.0000 走到第 5 步的 1.5000（共 6 个记录点），整体在下降。" in err
-    )
+    assert "loss 从第 0 步的 2.0000 走到第 5 步的 1.5000（共 6 个记录点），整体在下降。" in err
     assert "loss 下降只说明模型在逐步记住训练题" in err
     # 旧产物目录没有序列文件:趋势区如实说没有逐条记录,不让命令崩掉。
     record["output_dir"] = str(tmp_path / "missing-dir")
@@ -291,9 +287,7 @@ def test_train_lineage_cli_prints_json_and_registration_summary(tmp_path, monkey
     import mlflow.tracking
 
     client = SimpleNamespace()
-    client.search_registered_models = lambda max_results=None: [
-        SimpleNamespace(name="工单分类")
-    ]
+    client.search_registered_models = lambda max_results=None: [SimpleNamespace(name="工单分类")]
     client.search_model_versions = lambda query: [
         SimpleNamespace(
             name="工单分类",
@@ -438,3 +432,56 @@ def test_train_export_cli_blocked_run_exits_two(tmp_path, monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "只有成功完成的训练才能合并导出；这次运行当前状态是 running。" in captured.err
+
+
+def test_train_cost_cli_prints_json_and_cost_lines(tmp_path, monkeypatch, capsys):
+    """train-cost 双流契约:stdout 纯 JSON 成本账,stderr 与页面同一份 cost_lines 人话。"""
+    import src.workbench.training_runs
+
+    IntakeService(tmp_path / "intake")  # train-cost 不读任务,--store 只需可用
+    record = {
+        "run_id": "run-x",
+        "status": "succeeded",
+        "started_at": "2026-09-28T10:00:00",
+        "finished_at": "2026-09-28T11:30:00",
+    }
+
+    class Training:
+        def __init__(self, root, project_root=None):
+            pass
+
+        def get_status(self, run_id):
+            return record
+
+    monkeypatch.setattr(src.workbench.training_runs, "TrainingRunService", Training)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "--training-root",
+            str(tmp_path / "training"),
+            "train-cost",
+            "run-x",
+            "--api-price",
+            "8.0",
+            "--monthly-queries",
+            "1000000",
+            "--device",
+            "cpu",
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    account = json.loads(captured.out)
+    assert account["kind"] == "run_cost"
+    assert account["duration_hours"] == 1.5
+    assert account["electricity_cost_estimated"] == 0.05
+    assert account["api_comparison"]["api_monthly_cost_estimated"] == 4096.0
+    err = captured.err
+    assert "这次训练实际运行了 1.5 小时(设备:cpu)。" in err
+    assert "这是估计值,不是电表读数" in err
+    assert "月成本约 4096.0 元" in err
+    assert "口径不同,仅供量级比较,不是精确账单" in err

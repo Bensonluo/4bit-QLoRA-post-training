@@ -234,6 +234,7 @@ def test_north_star_gap_section_pins_closed_evidence_and_remaining_gaps():
     for phrase in (
         "与现状的对照(2026-09-28",
         "train-export",
+        "train-cost",
         "过程漏斗",
         "f24cfbd..3aa6eef",
     ):
@@ -908,3 +909,31 @@ def test_funnel_report_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "run_id" not in help_text, "funnel-report 不收 RUN_ID"
     assert "--revision" not in help_text, "快照不针对具体修订"
     assert "--tail" not in help_text, "--tail 是 train-logs 专属"
+
+
+def test_train_cost_docs_pinned(monkeypatch, capsys, tmp_path):
+    """train-cost(成本账 CLI 平权)口径钉死:单一来源、0 不对比、估计值边界与页面同源。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 在同一任务中启动真实训练",
+        "## 允许一次显存不足技术恢复",
+    )
+    assert "train-cost RUN_ID" in section, "CLI 块必须列 train-cost"
+    assert "`summarize_run_cost` 出账" in section and "`cost_lines` 出人话" in section, (
+        "单一来源必须写明"
+    )
+    assert "0 不对比" in section, "API 对比开关口径必须写明"
+    assert "默认自动检测本机设备" in section, "设备默认口径必须写明"
+    assert "不是电表读数" in section, "估计值边界必须写明"
+    assert "口径不同，仅供量级比较" in section, "API 对比口径必须写明"
+    assert "页面在成功训练记录下渲染的成本账同一来源" in section, "页面位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    # 帮助文本与命令面同步:收 RUN_ID 与三个可选参数,不收其他 train-* 家族参数。
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "train-cost")
+    assert "run_id" in help_text, "train-cost 收位置参数 RUN_ID"
+    for flag in ("--api-price", "--monthly-queries", "--device"):
+        assert flag in help_text, f"train-cost 缺少 {flag}"
+    assert "--revision" not in help_text, "成本账是只读查询,不收 --revision"
+    assert "--tail" not in help_text, "--tail 是 train-logs 专属"
+    assert "--output-dir" not in help_text, "--output-dir 是 train-export 专属"
+    assert "成本账" in help_text, "帮助文本必须说明这是成本账查询"

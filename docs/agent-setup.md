@@ -276,6 +276,7 @@ python scripts/data_intake.py train-stop RUN_ID
 python scripts/data_intake.py train-list SESSION_ID
 python scripts/data_intake.py train-lineage RUN_ID
 python scripts/data_intake.py train-export RUN_ID
+python scripts/data_intake.py train-cost RUN_ID
 ```
 
 `RUN_ID` 来自准备结果；有预检风险且已完成核对时，启动命令增加 `--acknowledge-warnings`。`train-prepare` 另支持 `--learning-rate`、`--gradient-accumulation`、`--lora-rank` 和 `--load-in-4bit`。这里需要已准备好的本地基础模型目录，工作台不会悄悄更换底座或下载另一个模型。
@@ -285,6 +286,8 @@ python scripts/data_intake.py train-export RUN_ID
 `train-lineage RUN_ID` 在 stdout 输出 JSON 的同时向 stderr 追加这次训练在模型库的注册状态人话摘要（`summarize_registration` 单一来源）：已注册时点名全部版本与别名（如 champion）；尚未注册时如实说明，并给出可照抄的合并与注册命令（带血缘旗标，注册后可反查本轮训练与数据版本）；查询失败如实报告原因，不编造状态。已注册与未注册两种状态都以「注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标」收尾。页面训练记录区渲染同一份摘要，页面与 CLI 同源同词汇。反方向用 `python scripts/registry_cli.py lineage --model-name NAME --version N` 从模型库版本查回训练运行、数据版本与配置摘要（`summarize_lineage` 单一来源，缺项如实显示「-」，不显示 None）——模型、实验与数据三点由此可以互相追溯。
 
 `train-export RUN_ID` 是旅程的最后一环（交接）：把这次训练的适配器合并进它使用的基础模型，产出可被 vLLM、Ollama、LM Studio 直接加载的完整模型目录（默认 `outputs/workbench/merged/RUN_ID`，可用 `--output-dir` 覆盖）。合并复用框架层 `merge_adapter_to_dir`，基座路径取自训练记录，不下载、不更换底座；导出完成后在模型目录写入 `export_evidence.json` 证据链（来自哪次训练、哪个数据版本、哪个基础模型、何时导出）。命令在 stdout 输出 JSON、stderr 追加人话摘要（`summarize_export` 单一来源）：导出完成时点名输出目录、可直接加载的事实与证据文件；此前已导出则如实说明目录已完整、重复导出不会改变模型内容（幂等）；盘点不过关（训练未成功、产物目录缺少 adapter 文件、基础模型目录不存在、导出目录已被其他内容占用）时命令直接失败并逐条点名原因，不静默降级。每条摘要都以「导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署」收尾——与验收/采用记录同口径。页面在成功训练记录的「📦 合并导出」折叠区渲染同一份摘要（只读盘点，不在页面执行合并），页面与 CLI 同源同词汇。
+
+`train-cost RUN_ID` 把训练成本账带到 CLI（度量体系「成本可计算」的平权入口）：stdout 输出 JSON 成本账、stderr 逐行追加人话摘要，与页面在成功训练记录下渲染的成本账同一来源——`summarize_run_cost` 出账、`cost_lines` 出人话，页面与 CLI 同源同词汇。可选 `--api-price`（元/百万 token）与 `--monthly-queries`（次）给出 API 对比口径，两者留 0 不对比（与页面输入同款默认）；`--device` 可指定 cuda/mps/cpu，默认自动检测本机设备。口径边界与页面一致：时长是实测，功耗与电费是估计值、不是电表读数（按设备类别估计功耗与居民电价，硬件购置成本不含在内）；API 对比与本地训练两者口径不同，仅供量级比较，不是精确账单。
 
 ## 允许一次显存不足技术恢复
 
