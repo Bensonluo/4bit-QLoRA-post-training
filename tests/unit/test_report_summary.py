@@ -1202,3 +1202,41 @@ def test_lineage_summary_dash_fallbacks_and_external_states():
     unavailable = {"model": "X v1", "status": "mlflow_unavailable"}
     assert summarize_lineage(unavailable) == ["模型：X v1", "未安装 mlflow，无法查询这份血缘。"]
     assert summarize_lineage({}) == ["这份血缘记录没有可读的内容。"]
+
+
+def test_export_summary_covers_all_states():
+    """summarize_export 六态:exported/already/ready/blocked/unknown/empty,边界句固定收尾。"""
+    from src.workbench.report_summary import summarize_export
+
+    exported = {
+        "status": "exported",
+        "output_dir": "/out/wb-1",
+        "run_id": "wb-1",
+        "dataset_version": "ds-v3",
+    }
+    lines = summarize_export(exported)
+    assert lines[0] == "合并导出完成：这次训练的适配器已并入基础模型，输出目录 /out/wb-1。"
+    assert "可被 vLLM、Ollama、LM Studio 直接加载" in lines[1]
+    assert "export_evidence.json" in lines[1]
+    assert lines[-1] == "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署。"
+
+    already = summarize_export({"status": "already_exported", "output_dir": "/out/wb-1"})
+    assert already[0] == (
+        "这次训练此前已合并导出到 /out/wb-1；目录已完整，重复导出不会改变模型内容。"
+    )
+    assert already[-1].startswith("导出只产出")
+
+    ready = summarize_export({"status": "ready", "run_id": "wb-9", "output_dir": "/m/wb-9"})
+    assert any("python scripts/data_intake.py train-export wb-9" in line for line in ready)
+    assert "默认输出目录：/m/wb-9。" in ready
+    assert ready[-1].startswith("导出只产出")
+
+    blocked = summarize_export(
+        {"status": "adapter_missing", "reasons": ["训练记录为成功，但产物目录缺少完整的 adapter 文件：/x"]}
+    )
+    assert blocked[0].startswith("训练记录为成功，但产物目录缺少")
+    assert blocked[-1].startswith("导出只产出")
+
+    # 无 reasons 的未知态只显状态,不编造原因。
+    assert summarize_export({"status": "weird"}) == ["导出盘点返回状态 weird，没有更多说明。"]
+    assert summarize_export({}) == ["这份导出记录没有可读的内容。"]

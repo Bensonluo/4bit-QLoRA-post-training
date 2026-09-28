@@ -795,3 +795,32 @@ def test_train_lineage_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "--tail" not in help_text, "--tail 是 train-logs 专属"
     assert "--revision" not in help_text, "血缘是只读查询,不收 --revision"
     assert "注册状态" in help_text, "帮助文本必须说明这是注册状态查询"
+
+
+def test_train_export_docs_pinned(monkeypatch, capsys, tmp_path):
+    """train-export(环节⑨交接)人话口径钉死:默认目录、证据链、幂等、阻塞点名与边界句。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 在同一任务中启动真实训练",
+        "## 允许一次显存不足技术恢复",
+    )
+    assert "train-export RUN_ID" in section, "CLI 块必须列 train-export"
+    assert "`summarize_export` 单一来源" in section, "摘要单一来源必须写明"
+    assert "默认 `outputs/workbench/merged/RUN_ID`" in section, "默认导出目录必须写明"
+    assert "`--output-dir` 覆盖" in section, "输出目录覆盖参数必须写明"
+    assert "不下载、不更换底座" in section, "复用训练记录基座的边界必须写明"
+    assert "export_evidence.json" in section, "证据链文件必须写明"
+    assert "重复导出不会改变模型内容" in section, "幂等口径必须写明"
+    assert "逐条点名原因，不静默降级" in section, "阻塞态口径必须写明"
+    assert (
+        "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署" in section
+    ), "导出边界句必须写明"
+    assert "只读盘点，不在页面执行合并" in section, "页面只读盘点边界必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    # 帮助文本与命令面同步:收 RUN_ID 与 --output-dir,不收只读族没有的 --revision/--tail。
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "train-export")
+    assert "run_id" in help_text, "train-export 收位置参数 RUN_ID"
+    assert "--output-dir" in help_text
+    assert "--revision" not in help_text, "导出沿用训练记录,不收 --revision"
+    assert "--tail" not in help_text, "--tail 是 train-logs 专属"
+    assert "合并导出" in help_text, "帮助文本必须说明这是合并导出"

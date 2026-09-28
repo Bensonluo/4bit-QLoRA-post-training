@@ -374,6 +374,16 @@ def main() -> int:
         command.add_argument("run_id")
         if name == "train-logs":
             command.add_argument("--tail", type=int, default=100)
+    _train_export_help = (
+        "把成功训练的适配器合并导出为 vLLM/Ollama/LM Studio 可直接加载的模型目录"
+    )
+    train_export = sub.add_parser(
+        "train-export", help=_train_export_help, description=_train_export_help
+    )
+    train_export.add_argument("run_id")
+    train_export.add_argument(
+        "--output-dir", type=Path, help="覆盖默认导出目录（默认 outputs/workbench/merged/RUN_ID）"
+    )
     train_list = sub.add_parser("train-list", help="列出数据任务的训练版本")
     train_list.add_argument("session_id")
     eval_compare = sub.add_parser(
@@ -1111,6 +1121,28 @@ def main() -> int:
                 from src.workbench.report_summary import summarize_registration
 
                 for line in summarize_registration(result):
+                    print(line, file=sys.stderr)
+                return 0
+            elif args.command == "train-export":
+                # 环节⑨交接:合并导出是写操作,盘点不过关直接报错退出(exit 2),
+                # 不像只读的 train-lineage 返回状态 JSON。
+                from src.workbench.model_export import (
+                    default_export_dir,
+                    export_model,
+                    plan_model_export,
+                )
+
+                run = training.get_status(args.run_id)
+                target = (
+                    args.output_dir
+                    if args.output_dir is not None
+                    else default_export_dir(args.training_root, args.run_id)
+                )
+                result = export_model(plan_model_export(run, target))
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                from src.workbench.report_summary import summarize_export
+
+                for line in summarize_export(result):
                     print(line, file=sys.stderr)
                 return 0
             else:

@@ -273,11 +273,14 @@ python scripts/data_intake.py train-logs RUN_ID --tail 100
 python scripts/data_intake.py train-stop RUN_ID
 python scripts/data_intake.py train-list SESSION_ID
 python scripts/data_intake.py train-lineage RUN_ID
+python scripts/data_intake.py train-export RUN_ID
 ```
 
 `RUN_ID` 来自准备结果；有预检风险且已完成核对时，启动命令增加 `--acknowledge-warnings`。`train-prepare` 另支持 `--learning-rate`、`--gradient-accumulation`、`--lora-rank` 和 `--load-in-4bit`。这里需要已准备好的本地基础模型目录，工作台不会悄悄更换底座或下载另一个模型。
 
 `train-lineage RUN_ID` 在 stdout 输出 JSON 的同时向 stderr 追加这次训练在模型库的注册状态人话摘要（`summarize_registration` 单一来源）：已注册时点名全部版本与别名（如 champion）；尚未注册时如实说明，并给出可照抄的合并与注册命令（带血缘旗标，注册后可反查本轮训练与数据版本）；查询失败如实报告原因，不编造状态。已注册与未注册两种状态都以「注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标」收尾。页面训练记录区渲染同一份摘要，页面与 CLI 同源同词汇。反方向用 `python scripts/registry_cli.py lineage --model-name NAME --version N` 从模型库版本查回训练运行、数据版本与配置摘要（`summarize_lineage` 单一来源，缺项如实显示「-」，不显示 None）——模型、实验与数据三点由此可以互相追溯。
+
+`train-export RUN_ID` 是旅程的最后一环（交接）：把这次训练的适配器合并进它使用的基础模型，产出可被 vLLM、Ollama、LM Studio 直接加载的完整模型目录（默认 `outputs/workbench/merged/RUN_ID`，可用 `--output-dir` 覆盖）。合并复用框架层 `merge_adapter_to_dir`，基座路径取自训练记录，不下载、不更换底座；导出完成后在模型目录写入 `export_evidence.json` 证据链（来自哪次训练、哪个数据版本、哪个基础模型、何时导出）。命令在 stdout 输出 JSON、stderr 追加人话摘要（`summarize_export` 单一来源）：导出完成时点名输出目录、可直接加载的事实与证据文件；此前已导出则如实说明目录已完整、重复导出不会改变模型内容（幂等）；盘点不过关（训练未成功、产物目录缺少 adapter 文件、基础模型目录不存在、导出目录已被其他内容占用）时命令直接失败并逐条点名原因，不静默降级。每条摘要都以「导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署」收尾——与验收/采用记录同口径。页面在成功训练记录的「📦 合并导出」折叠区渲染同一份摘要（只读盘点，不在页面执行合并），页面与 CLI 同源同词汇。
 
 ## 允许一次显存不足技术恢复
 

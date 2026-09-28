@@ -2086,3 +2086,77 @@ registry_cli.py lineage 入口与 summarize_lineage 单一来源 + 缺项「-」
 scripts/data_intake.py、scripts/registry_cli.py、ui/pages/07_Data_Intake.py、
 tests/unit/test_report_summary.py、tests/unit/test_cli_summaries.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+## 第 52 轮 = 合并导出上 CLI（环节⑨交接出口）
+
+**背景**：北极星差距①「按旅程串联」的最后一个断点在闭环第 9 环。旅程走到
+终点的用户拿到了验收结论与采用记录，却没有任何入口把模型带出工作台——
+`merge_adapter_to_dir` 在整个 workbench 链路零引用（grep 核实），07 页面与
+data_intake.py CLI 都没有导出命令；验收/采用尾部只说「不会自动部署」，但
+「不自动部署」之后去哪拿模型无人回答。Training Lab 旧链路有合并导出，但
+新旅程（07 页面 + data_intake CLI）的用户永远走不到那里。
+
+**实现**（环节⑨垂直切片，服务函数 + CLI + 页面只读盘点 + 摘要 + 文档）：
+- 新增 `src/workbench/model_export.py`：`plan_model_export(run_record,
+  output_dir)` 只读盘点（六态：ready / already_exported / not_succeeded /
+  adapter_missing / base_missing / target_conflict，阻塞原因逐条人话点名，
+  不加载模型不写文件）；`export_model(plan)` 执行合并——复用框架层
+  `merge_adapter_to_dir`（基座路径取训练记录 model_path，本地绝对路径不走
+  HF hub 解析；延迟导入，peft/transformers 不进盘点路径），合并后在模型
+  目录写 `export_evidence.json` 证据链（run_id / session_id /
+  dataset_version / base_model_path / adapter_dir / exported_at）；幂等复用
+  `looks_merged`（与 Training Lab、Chat 页同一判定），already 态直接返回
+  不再合并；`default_export_dir` = 训练根目录的 merged 兄弟目录按 run_id
+  命名（outputs/workbench/merged/RUN_ID）。
+- `summarize_export`（report_summary 第 19 个摘要函数）：exported 点名输出
+  目录 + 「可被 vLLM、Ollama、LM Studio 直接加载」+ 证据文件行；already
+  幂等句；ready 给可照抄命令与默认目录；阻塞态逐条复述原因；固定边界句
+  「导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署」
+  ——与验收/采用记录同口径。
+- `scripts/data_intake.py` 新子命令 `train-export RUN_ID [--output-dir]`：
+  stdout 纯 JSON + stderr 人话的双流契约。与只读的 train-lineage 不同，
+  这是写操作：盘点不过关 raise ValueError → CLI exit 2，逐条点名原因，
+  不静默降级。
+- `ui/pages/07_Data_Intake.py`：成功训练记录下新增「📦 合并导出：把这次
+  训练的模型带出工作台」折叠区——`plan_model_export` 只读盘点 + 同一份
+  `summarize_export` 渲染（页面与 CLI 同源同词汇）；页面不执行合并，导出
+  动作留给 CLI（重合并不该在浏览会话里跑）。
+- `docs/agent-setup.md`：「在同一任务中启动真实训练」段 CLI 块增
+  train-export 一行；train-lineage 段后新增导出契约段（默认目录、
+  --output-dir、复用训练记录基座不换底座、证据链、幂等、四类阻塞点名、
+  边界句、页面只读盘点）。
+
+**测试**（+10 函数，107 项爆炸半径全绿）：
+- 新文件 `tests/unit/test_model_export.py`（8 函数）：plan 六态逐字断言
+  （含 model_path 缺字段与 target_conflict）；export_model 打桩
+  `src.models.merger.merge_adapter_to_dir`（函数内延迟 import，打模块属性
+  可拦截）——happy path 断言合并参数逐项来自 plan、证据链内容、
+  looks_merged 幂等不被证据文件破坏；already 幂等不触发合并；blocked
+  raise ValueError 不触发合并；default_export_dir 路径数学。
+- test_cli_summaries.py 两新函数：train-export 双流契约（真实分派 +
+  fake TrainingRunService + 打桩合并层；stdout exported + 默认目录数学 +
+  证据文件真写盘 + stderr 逐字句）与 blocked exit 2（stdout 空、stderr
+  点名状态原因）。
+- test_report_summary.py 一新函数：summarize_export 六态逐字断言
+  （exported 三行 / already 幂等句 / ready 可照抄命令 / blocked reasons
+  原文 / unknown 只显状态 / empty 缺位句）。
+- test_readme_alignment.py 一新函数：文档段钉死 + `_cli_help_text
+  ("train-export")` 帮助同步（收 run_id 与 --output-dir、不收
+  --revision/--tail、说明合并导出）。
+- test_workbench_training_ui.py 成功态用例追加折叠区标签钉死：「📦 合并导出：
+  把这次训练的模型带出工作台」在 page.expander 中逐字断言——该用例本来就
+  真实渲染成功记录块（最初误判「成功块无 UI 覆盖」，核实后确认在案），
+  盘点函数与摘要已被上述测试钉死，UI 层钉住入口在场即可。
+
+**文档**：见上——agent-setup.md 两处编辑（CLI 块 + 契约段）。
+
+**回归与错误修复**：针对性 12 项 + UI 钉死 3 参数化用例 → 爆炸半径 107 项
+全绿。开发中修复三处：(a) argparse 复用 R51 坑——子命令自身 --help 不复述
+help=，train-export 解析器补 `description=` 才让帮助同步测试通过；(b) 测试
+夹具 `_make_run(with_adapter=False)` 未清除共享 tmp 目录里上一用例写入的
+adapter 文件，缺件场景变成 ready——补 unlink 清理；(c) UI 测试夹具
+TrainingFixture 丢弃构造参数 root，新折叠区读 `training_service.root` 时
+7 个 UI 用例 AttributeError——真实 TrainingRunService 公开 root，夹具补
+`self.root = root` 对齐（此前注册块的 try/except 一直在静默吞同一缺失，
+本次连带暴露）。全量回归 **1814 passed / 0 failed**（1802 基线 + 12 新增，
+/tmp/round52_regression.log，272 秒）。

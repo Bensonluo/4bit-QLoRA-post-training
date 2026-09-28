@@ -281,3 +281,111 @@ def test_train_lineage_cli_prints_json_and_registration_summary(tmp_path, monkey
     # stderr 人话与页面训练记录区同一份摘要:点名版本与别名 + 注册边界句
     assert "这次训练已注册到模型库：工单分类 v3（champion）。" in captured.err
     assert "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标。" in captured.err
+
+
+def test_train_export_cli_prints_json_and_export_summary(tmp_path, monkeypatch, capsys):
+    """train-export 双流契约:stdout 纯 JSON,stderr 给导出人话;合并层打桩,证据链真写。"""
+    from pathlib import Path
+
+    import src.models.merger
+    import src.workbench.training_runs
+
+    IntakeService(tmp_path / "intake")  # train-export 不读任务,--store 只需可用
+    adapter_dir = tmp_path / "training" / "wb-x" / "model"
+    adapter_dir.mkdir(parents=True)
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    (adapter_dir / "adapter_model.safetensors").write_text("w", encoding="utf-8")
+    base_dir = tmp_path / "base-model"
+    base_dir.mkdir()
+    record = {
+        "run_id": "wb-x",
+        "session_id": "sess-1",
+        "dataset_version": "ds-v3",
+        "status": "succeeded",
+        "model_path": str(base_dir),
+        "output_dir": str(adapter_dir),
+    }
+
+    class Training:
+        def __init__(self, root, project_root=None):
+            pass
+
+        def get_status(self, run_id):
+            return record
+
+    monkeypatch.setattr(src.workbench.training_runs, "TrainingRunService", Training)
+
+    def fake_merge(adapter, output_dir, base_model_name=None, dtype="bfloat16"):
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "config.json").write_text("{}", encoding="utf-8")
+        (out / "model.safetensors").write_text("w", encoding="utf-8")
+        return str(out)
+
+    # export_model 在函数内 from src.models.merger import ...,打模块属性即可拦截。
+    monkeypatch.setattr(src.models.merger, "merge_adapter_to_dir", fake_merge)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "--training-root",
+            str(tmp_path / "training"),
+            "train-export",
+            "wb-x",
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "exported"
+    assert payload["dataset_version"] == "ds-v3"
+    # 默认导出目录:训练根目录的 merged 兄弟目录下按 run_id 命名。
+    assert payload["output_dir"] == str(tmp_path / "merged" / "wb-x")
+    evidence = json.loads(
+        (tmp_path / "merged" / "wb-x" / "export_evidence.json").read_text(encoding="utf-8")
+    )
+    assert evidence["run_id"] == "wb-x"
+    assert evidence["dataset_version"] == "ds-v3"
+    err = captured.err
+    assert "合并导出完成：这次训练的适配器已并入基础模型" in err
+    assert str(tmp_path / "merged" / "wb-x") in err
+    assert "可被 vLLM、Ollama、LM Studio 直接加载" in err
+    assert "export_evidence.json" in err
+    assert "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署。" in err
+
+
+def test_train_export_cli_blocked_run_exits_two(tmp_path, monkeypatch, capsys):
+    """盘点不过关是写操作失败:exit 2,stderr 逐条点名原因,不产出任何 JSON。"""
+    import src.workbench.training_runs
+
+    IntakeService(tmp_path / "intake")
+
+    class Training:
+        def __init__(self, root, project_root=None):
+            pass
+
+        def get_status(self, run_id):
+            return {"run_id": "wb-y", "status": "running", "model_path": "", "output_dir": ""}
+
+    monkeypatch.setattr(src.workbench.training_runs, "TrainingRunService", Training)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "--training-root",
+            str(tmp_path / "training"),
+            "train-export",
+            "wb-y",
+        ],
+    )
+    assert data_intake.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "只有成功完成的训练才能合并导出；这次运行当前状态是 running。" in captured.err

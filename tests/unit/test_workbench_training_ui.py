@@ -27,7 +27,8 @@ def training_page(data_page, monkeypatch):
 
     class TrainingFixture:
         def __init__(self, root, project_root=None):
-            pass
+            # 真实 TrainingRunService 公开 root(页面注册区与合并导出盘点都读它)。
+            self.root = root
 
         def list_runs(self, session_id=None):
             return deepcopy(records)
@@ -328,6 +329,10 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert calls == []
+    # 环节⑨交接出口在场:成功记录下合并导出折叠区做只读盘点,页面不执行合并。
+    assert any(
+        block.label == "📦 合并导出：把这次训练的模型带出工作台" for block in page.expander
+    )
     button(page, "比较基座与本轮微调效果").click().run()
     assert not page.exception
     assert calls[0][1].scorer == (

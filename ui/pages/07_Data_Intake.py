@@ -3163,6 +3163,23 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                                 st.caption(line)
                     except Exception as exc:  # 血缘查询失败不阻塞训练信息展示
                         st.caption(f"模型库查询失败：{exc}")
+                    # 环节⑨交接出口:北极星旅程的最后一环是「模型 + 证据」离场。
+                    # 页面只做只读盘点(不在页面跑重合并),命令与状态人话由
+                    # summarize_export 单一来源输出,与 CLI train-export 同源同词汇。
+                    with st.expander("📦 合并导出：把这次训练的模型带出工作台"):
+                        from src.workbench.model_export import (
+                            default_export_dir,
+                            plan_model_export,
+                        )
+
+                        export_plan = plan_model_export(
+                            run,
+                            default_export_dir(Path(training_service.root), run_id),
+                        )
+                        from src.workbench.report_summary import summarize_export
+
+                        for line in summarize_export(export_plan):
+                            st.caption(line)
                     with st.expander("这次训练花了多少成本（如实估算）"):
                         from src.utils.platform_utils import get_platform
                         from src.workbench.cost_summary import cost_lines, summarize_run_cost

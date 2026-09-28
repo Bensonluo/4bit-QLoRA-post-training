@@ -1002,3 +1002,39 @@ def summarize_lineage(result: dict) -> list[str]:
     if message:
         lines.append(message)
     return lines
+
+
+def summarize_export(record: dict) -> list[str]:
+    """train-export 尾行:合并导出(环节⑨交接)人话翻译。
+
+    exported 点名输出目录与证据文件;already_exported 幂等说明;ready 给可照抄
+    命令;阻塞态逐条复述原因。页面「📦 合并导出」折叠区渲染同一份摘要,
+    页面与 CLI 同源同词汇——收尾边界与验收/采用记录同口径:导出不自动部署。
+    """
+    if not isinstance(record, dict) or not record.get("status"):
+        return ["这份导出记录没有可读的内容。"]
+    boundary = "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署。"
+    state = record["status"]
+    if state == "exported":
+        return [
+            f"合并导出完成：这次训练的适配器已并入基础模型，输出目录 {record.get('output_dir') or '?'}。",
+            "这个目录包含完整模型与分词器，可被 vLLM、Ollama、LM Studio 直接加载；"
+            "目录里的 export_evidence.json 记录了它来自哪次训练与哪个数据版本。",
+            boundary,
+        ]
+    if state == "already_exported":
+        return [
+            f"这次训练此前已合并导出到 {record.get('output_dir') or '?'}；目录已完整，重复导出不会改变模型内容。",
+            boundary,
+        ]
+    if state == "ready":
+        return [
+            "这次训练的产物已齐备，可合并导出成可被 vLLM、Ollama、LM Studio 直接加载的完整模型：",
+            f"python scripts/data_intake.py train-export {record.get('run_id') or 'RUN_ID'}",
+            f"默认输出目录：{record.get('output_dir') or '-'}。",
+            boundary,
+        ]
+    reasons = record.get("reasons") or []
+    if reasons:
+        return [*reasons, boundary]
+    return [f"导出盘点返回状态 {state}，没有更多说明。"]
