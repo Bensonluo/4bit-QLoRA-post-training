@@ -60,6 +60,8 @@ def test_cli_full_validate_and_confirm_share_service_state(service, tmp_path):
     assert confirmed.returncode == 0, confirmed.stderr
     assert next_action(service.load(session.session_id)) == "awaiting_dataset_split"
     assert "awaiting_dataset_split" in confirmed.stderr
+    # 尾行人话:枚举保留(脚本可解析),人话对照紧跟其后(next_action_phrase 单一来源)。
+    assert "下一步状态: awaiting_dataset_split（可以准备独立训练与评测分区" in confirmed.stderr
     assert "全量数据含义已确认，可以准备生成分区；尚未开始训练。" in confirmed.stderr
     stale = invoke(service, "full-confirm", session.session_id, "--revision", payload["revision"])
     assert stale.returncode == 2

@@ -121,6 +121,21 @@ def test_contrast_cli_docs_pinned():
     assert "自动失效" in section, "失效规则必须写明"
 
 
+def test_next_action_tail_docs_pinned():
+    """stderr 尾行人话对照钉死:枚举保留+人话翻译+单一来源+未知态不编造。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## CLI 配置与检查",
+        "## 从样例继续到全量数据",
+    )
+    assert "下一步状态: 枚举（人话对照）" in section, "尾行格式必须写明"
+    assert "`next_action_phrase` 单一来源" in section, "人话对照单一来源必须写明"
+    assert "13 个状态全覆盖" in section and "未知状态只显枚举不编造" in section
+    assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"
+    for command in ("show", "create", "analyze", "confirm", "materialize"):
+        assert f"`{command}`" in section, "尾行命令清单必须列明"
+
+
 def test_agent_setup_contrast_check_help_matches_documentation(monkeypatch, capsys, tmp_path):
     """对比核验用法与真实 argparse 同步:--revision 必填;--check-id/--answer 提交参数。"""
     help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "contrast-check")

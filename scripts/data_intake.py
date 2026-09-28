@@ -14,7 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.agent.intake import CompatibleChatClient
 from src.agent.providers import PROVIDERS, AgentSettings, check_connection, load_settings
-from src.workbench.intake_service import IntakeService, contrast_streak_banner, next_action
+from src.workbench.intake_service import (
+    IntakeService,
+    contrast_streak_banner,
+    next_action,
+    next_action_phrase,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -1437,7 +1442,12 @@ def main() -> int:
         else:
             session = service.load(args.session_id)
         print(session.model_dump_json(indent=2))
-        print(f"\n下一步状态: {next_action(session)}", file=sys.stderr)
+        # 尾行人话:枚举保留(脚本可解析),人话对照紧跟其后(next_action_phrase 单一来源),
+        # CLI 用户不必反查文档才知道每个英文枚举是什么意思。
+        status = next_action(session)
+        phrase = next_action_phrase(status)
+        tail = f"\n下一步状态: {status}" + (f"（{phrase}）" if phrase else "")
+        print(tail, file=sys.stderr)
         if session.full_data is not None:
             # 全量验证报告的人话摘要与页面全量验证区同词汇：结论四态、逐条问题
             # 原文（阻断在前，附证据行条数）、真实转换四态计数；full-* 三命令与

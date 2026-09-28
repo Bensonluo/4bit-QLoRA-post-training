@@ -58,6 +58,8 @@ python scripts/data_intake.py analyze SESSION_ID --answer '质检类别才是需
 python scripts/data_intake.py show SESSION_ID
 ```
 
+凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。
+
 `--base-url` 和 `--model` 可临时覆盖分析或连接检查的配置。若已有环境密钥，临时地址与解析后的地址不同，CLI 会拒绝请求。要改用另一个服务，应同时配置该服务的 `TUNESMITH_AGENT_BASE_URL`、`TUNESMITH_AGENT_MODEL` 和配套密钥，再重试，避免旧密钥被带到新服务。
 
 ## 从样例继续到全量数据

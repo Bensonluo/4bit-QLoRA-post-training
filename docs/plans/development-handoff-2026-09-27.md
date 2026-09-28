@@ -1773,3 +1773,49 @@ CLI 不各说各话）。
 scripts/data_intake.py、ui/pages/07_Data_Intake.py、
 tests/unit/test_label_verification.py、tests/unit/test_contrast_cli.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+---
+
+## 第 46 轮 = 下一步状态人话上 CLI（恢复循环第 27 轮）
+
+**问题**：CLI 每个返回任务记录的命令（show、create、add-source、analyze、
+confirm、full-*、materialize）在 stderr 尾行打印
+「下一步状态: awaiting_dataset_split」——裸 snake_case 枚举出现在人读面。
+人话摘要系列已覆盖全部业务决策表面（R41-R45），唯独这条出现频次最高的
+尾行仍是机器词汇，CLI 用户必须反查文档才知道枚举是什么意思。
+
+**设计**（沿 probe_verdict_phrase / contrast_streak_banner 先例，单一来源）：
+- intake_service.py 新增模块级 `_NEXT_ACTION_PHRASES` 字典 +
+  `next_action_phrase(status)`（紧跟 next_action 之后、类定义之前）：13 个
+  next_action 状态全覆盖；未知状态返回空串由调用方只显枚举，不编造人话。
+  awaiting_full_data / awaiting_full_validation / awaiting_dataset_split 三句
+  与页面提示语逐字对齐（页面 2098-2207 行的 st.success/st.info 词汇）。
+- CLI（data_intake.py）：import 加 next_action_phrase；尾行改为
+  「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析（既有子串断言
+  「awaiting_dataset_split in stderr」不受影响），人话紧跟其后。
+
+**测试**（+2 函数）：
+test_next_action_phrase_translates_every_state_without_fabricating
+（对照表键集 == next_action 全部 13 态——多一个是死键、少一个是漏翻译；
+逐态非空且非 ASCII；三句页面词汇锚点逐字断言；未知态空串）；
+test_next_action_tail_docs_pinned（尾行格式、next_action_phrase 单一来源、
+13 态全覆盖、未知态不编造、页面同词汇、命令清单逐个点名）。
+CLI 扩展：full-confirm 测试加 1 断言（尾行
+「下一步状态: awaiting_dataset_split（可以准备独立训练与评测分区」）。
+
+**文档**（agent-setup.md「## CLI 配置与检查」analyze/show 示例块后新增
+一段）：尾行输出位置与格式、枚举保留、next_action_phrase 单一来源、
+13 态全覆盖、未知态只显枚举不编造、与页面提示同词汇。
+
+**错误与修复**：新测试里写了一行「import 占位」死代码
+（`assert next_action(session) if False else True`）——条件表达式惰性求值
+不会触碰 session，但它是纯噪音且引用了不在作用域的名字；写完立即删除。
+ruff 另报 1 处未用导入（next_action 在测试内联导入但测试文件顶部已导入），
+`ruff check --fix` 自动清除。
+
+**回归**：ruff check/format clean（--fix 1 处）。定向 3 文件
+68 passed。全量回归 tests/unit **1786 passed / 0 failed**（--no-cov，
+基线 1784 + 2 个新测试函数；CLI 扩展断言不增量）。本批只动
+src/workbench/intake_service.py、scripts/data_intake.py、
+tests/unit/test_data_intake.py、tests/unit/test_full_data_cli.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

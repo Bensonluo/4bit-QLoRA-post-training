@@ -79,6 +79,32 @@ def next_action(session: IntakeSession) -> str:
     return "awaiting_full_data" if session.source.scope == "sample" else "awaiting_full_validation"
 
 
+_NEXT_ACTION_PHRASES: dict[str, str] = {
+    "awaiting_analysis": "尚未分析，先运行 analyze 生成业务理解与转换方案。",
+    "needs_business_answers": "Agent 还有业务问题待回答，回答后重新分析才能生成方案。",
+    "needs_capability": "当前资料不足以支撑任务目标，请调整目标或补充资料。",
+    "needs_recipe": "还没有转换方案，请完成分析生成处理规则。",
+    "needs_data_revision": "转换存在异常或同输入答案冲突，请查看问题行并补充业务规则后重新分析。",
+    "needs_labels": "样例缺少可学习的答案，补齐标注后才能核对预览。",
+    "review_preview": "样例转换含义待确认：核对预览并完成对比核验（二连对）。",
+    "review_full_data": "全量报告待核对：确认覆盖与问题处理后再继续。",
+    "needs_full_data_revision": "全量报告仍有阻断问题，处理后需重新验证。",
+    "ready_for_training_preflight": "数据已就绪，可运行 preflight 做训练前检查（尚未开始训练）。",
+    "awaiting_dataset_split": "可以准备独立训练与评测分区（运行 materialize；尚未认定可以正式训练）。",
+    "awaiting_full_data": "样例转换含义已确认，请提供全量数据并验证覆盖、冲突与独立分组。",
+    "awaiting_full_validation": "转换含义已确认，仍需完成全量业务质量、分区与训练消费检查。",
+}
+
+
+def next_action_phrase(status: str) -> str:
+    """下一步状态的人话对照:CLI stderr 尾行与页面提示同源同词汇的唯一出处。
+
+    next_action 返回机器枚举(页面/脚本按枚举分支渲染),人读面由这里统一翻译;
+    未知状态返回空串由调用方只显枚举,不编造人话。
+    """
+    return _NEXT_ACTION_PHRASES.get(status, "")
+
+
 def _stratified_sample(rows: list, size: int, seed: int) -> list[int]:
     """分层抽样:样本少于类别数时,按标签轮转保证每个类别至少一条被抽到。
 

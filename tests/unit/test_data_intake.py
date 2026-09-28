@@ -375,3 +375,40 @@ def test_capability_gap_can_be_saved_without_fabricated_preview(service, session
     )
     assert next_action(result) == "needs_capability"
     assert result.preview is None
+
+
+def test_next_action_phrase_translates_every_state_without_fabricating():
+    """下一步状态人话对照:13 态全覆盖、与页面词汇同源、未知态不编造。"""
+    from src.workbench.intake_service import _NEXT_ACTION_PHRASES, next_action_phrase
+
+    every_state = {
+        "awaiting_analysis",
+        "needs_business_answers",
+        "needs_capability",
+        "needs_recipe",
+        "needs_data_revision",
+        "needs_labels",
+        "review_preview",
+        "review_full_data",
+        "needs_full_data_revision",
+        "ready_for_training_preflight",
+        "awaiting_dataset_split",
+        "awaiting_full_data",
+        "awaiting_full_validation",
+    }
+    # 对照表恰好覆盖 next_action 可能返回的全部状态:多一个是死键,少一个是漏翻译。
+    assert set(_NEXT_ACTION_PHRASES) == every_state
+    for status in every_state:
+        phrase = next_action_phrase(status)
+        assert phrase and not phrase.isascii(), f"状态 {status} 必须有人话翻译"
+    # 页面词汇同源锚点:这三句与 07_Data_Intake.py 的提示语逐字一致方向。
+    assert next_action_phrase("awaiting_full_data") == (
+        "样例转换含义已确认，请提供全量数据并验证覆盖、冲突与独立分组。"
+    )
+    assert next_action_phrase("awaiting_dataset_split") == (
+        "可以准备独立训练与评测分区（运行 materialize；尚未认定可以正式训练）。"
+    )
+    assert next_action_phrase("ready_for_training_preflight") == (
+        "数据已就绪，可运行 preflight 做训练前检查（尚未开始训练）。"
+    )
+    assert next_action_phrase("not_a_real_state") == "", "未知状态不编造人话"
