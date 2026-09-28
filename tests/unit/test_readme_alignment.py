@@ -931,6 +931,11 @@ def test_task_spec_show_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "「📋 任务规约投影」" in section, "页面位点必须写明"
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
     assert "不代表模型效果达标" in section, "边界句必须写明"
+    # 规约确认联动(R60 切片 A):启动决策点同读这份投影,折叠区 label、train-start stderr 与勾选文案同段钉死。
+    assert "「📋 任务规约（启动本轮训练前的口径）」" in section, "启动位折叠区 label 必须逐字写明"
+    assert "`train-start` 在启动时输出同一份规约摘要" in section, "train-start 启动时输出规约摘要必须写明"
+    assert "已核对任务规约与预检提示，按当前方案开始训练。" in section, "预检警告勾选文案必须逐字写明"
+    assert "页面与 CLI 同源同词汇" in section, "启动决策点页面与 CLI 同口径承诺必须写明"
     # 帮助文本与命令面同步:收 SESSION_ID,只读投影不收 --revision/--tail。
     help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "task-spec-show")
     assert "session_id" in help_text, "task-spec-show 收位置参数 SESSION_ID"
@@ -986,3 +991,10 @@ def test_task_spec_design_doc_pinned():
     assert "task-spec-show SESSION" in doc, "落地入口必须点名"
     assert "src/workbench/task_spec_projection.py" in doc, "实现位点必须可追溯"
     assert "不纳入自主迭代" in doc, "外部依赖边界必须写明"
+    # Phase 2 切片 A(规约确认联动:训练启动决策点引用规约)按同一格式登记,Phase 3 顶上下一轮候选。
+    assert "已完成（切片 A，2026-09-28）" in doc, "Phase 2 切片 A 落地必须如实登记"
+    assert "`train-start` 启动时向 stderr 注入 `summarize_task_spec` 规约摘要" in doc, (
+        "CLI 实现位点必须点名"
+    )
+    assert "「📋 任务规约（启动本轮训练前的口径）」折叠区" in doc, "页面实现位点必须点名"
+    assert "Phase 3（下一轮候选）——协作轨迹统一" in doc, "Phase 3 必须顶上下一轮候选"

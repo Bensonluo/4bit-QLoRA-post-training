@@ -158,7 +158,7 @@ def test_preflight_warnings_require_review_and_failures_remain_visible(training_
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert button(page, "启动这轮训练").disabled
-    next(c for c in page.checkbox if c.label.startswith("已核对本轮预检提示")).check().run()
+    next(c for c in page.checkbox if c.label.startswith("已核对任务规约与预检提示")).check().run()
     button(page, "启动这轮训练").click().run()
     assert calls[-1][-1] is True
     records[0].update(status="failed", failure={"stage": "training", "message": "fixture failure"})
@@ -171,6 +171,22 @@ def test_preflight_warnings_require_review_and_failures_remain_visible(training_
     assert not reloaded.exception
     assert any("fixture failure" in message.value for message in reloaded.error)
     assert not any(b.label == "启动这轮训练" for b in reloaded.button)
+
+
+def test_prepared_run_shows_task_spec_before_launch_button(training_page):
+    """R60: 能启动(prepared 未启动)时,启动按钮前仍可见任务规约折叠区,与规约卡同源同词汇。"""
+    _, session, page, _, _ = training_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    next(t for t in page.text_input if t.label == "本地基础模型目录").input("/tmp/local-base")
+    button(page, "准备本轮训练方案").click().run()
+    assert not page.exception
+    labels = [expander.label for expander in page.expander]
+    assert any(label == "📋 任务规约（启动本轮训练前的口径）" for label in labels)
+    texts = [block.value for block in page.markdown]
+    assert any("的任务规约：由既有确认记录只读汇编" in text for text in texts)
+    assert any("不代表模型效果达标" in text for text in texts)
 
 
 @pytest.mark.parametrize("task_kind", ["categorical", "open_text", "iteration"])

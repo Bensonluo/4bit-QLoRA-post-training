@@ -2407,3 +2407,18 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **文档**：agent-setup.md 新章节「## 训练启动前对齐：任务规约投影」（插在「让 Agent 推荐训练方案」与「在同一任务中启动真实训练」之间，与消费位点一致）；设计文档 §8 差距①改写为已实现登记（Phase 1 落地，2026-09-28）、§9 Phase 1 划线收讫、Phase 2 标记为下一轮候选。tech-doc-neutral 禁词 grep 自查通过（无命中）。
 
 **回归与错误修复**：定向 62 项全绿（6 投影 ＋ 50 readme_alignment ＋ 29 CLI 邻域，test_task_spec_projection/test_readme_alignment/test_cli_summaries/test_funnel_report/test_scoring_cli/test_acceptance_cli）；ruff check 全绿；mypy 新模块 0 错（301 项均为既有基线）。首轮全量回归 **1848 passed / 2 failed**：两处 test_acceptance_ui 桩记录形状偏离生产契约——prepare 桩写 `"result": None`（生产恒为 `{"decision": "pending_run"}`），open-final 桩缺 `protocol` 键且 criteria 缺 `metric`（生产 `_criteria` 保证 metric，open_review → manual_acceptance_rate）。按第 55 轮桩形状教训修桩不修生产（投影对形状漂移如实崩溃是文档声明行为，不用 .get 掩盖）。修桩后复跑全量回归 **1850 passed / 0 failed**（1843 基线 ＋ 6 投影 ＋ 1 桩形状修正后回归的既有用例计数，/tmp/round59_regression.log，282 秒）。本轮唯一返工是 UI 测试断言定位（expander label vs markdown）与桩形状对齐，实现代码零返工。
+
+## 第 60 轮 = 规约确认联动切片 A：训练启动位引用任务规约（恢复循环第 41 轮）
+
+**背景**：设计文档 §9 Phase 2「规约确认联动」开工。R59 落地的规约投影只覆盖两处被动阅读位点（task-spec-show 命令 + 预检卡），而旅程里真正的**决策点**是「按当前方案开始训练」按钮与 `train-start`——用户按下按钮那一刻，恰好是五要素（业务目标/答案语义/评分口径/验收标准/时间约束）最该在场却被跳过的位置。北极星开放差距 2 项均依赖外部资源（不动），本轮继续沿设计文档自主路线。执行模式按用户「能用 subagents 鼓励用 subagents 加速开发」的要求改为**三路并行 subagent**（model 走 sonnet tier alias——会话模型带 [1m] 后缀子代理不能继承）：r60-cli（train-start 注入）、r60-page（页面启动位）、r60-docs（文档 + 钉测试），文件所有权不相交，canonical 措辞（折叠区 label「📋 任务规约（启动本轮训练前的口径）」、勾选句「已核对任务规约与预检提示，按当前方案开始训练。」、CLI 短语「`train-start` 在启动时输出同一份规约摘要」、边界「不代表模型效果达标」）由主会话统一钦定下发，代理不 commit，集成核对（grep 措辞落点 + 联合定向测试 + 全量回归 + 提交）由主会话收口。
+
+**实现**：
+- **CLI**（scripts/data_intake.py train-start 启动分支）：lazy import `collect_task_spec, summarize_task_spec`，参数序与 task-spec-show 分派逐字一致，在 `training.start(...)` **之前**向 stderr 打印全部规约行——规约先于运行摘要，启动动作前最后一屏就是口径对齐视图。不新增参数、不改 argparse help、既有 summarize_training_run 尾部不动；stdout 保持纯 JSON。
+- **页面**（ui/pages/07_Data_Intake.py）：模块级 helper `collect_current_task_spec(session_id)` 封装 7 个 PROJECT_ROOT 路由参数（预检卡与新启动位折叠区共享，消除双写路由）；启动按钮旁新增 expander「📋 任务规约（启动本轮训练前的口径）」逐行渲染 `summarize_task_spec`（无 try/except——投影对形状漂移如实崩溃是 R59 文档化行为）；预检警告勾选文案升级为「已核对任务规约与预检提示，按当前方案开始训练。」（迭代启动共用同一勾选，不出现第二份文案）；渲染条件与启动按钮同一分支（prepared 且非恢复轮、非自动执行托管、数据版本当前）。
+- **文档**：agent-setup.md「训练启动前对齐」段补启动决策点小节（折叠区 label 逐字、train-start stderr 位点、勾选文案逐字、收尾边界「勾选仍只表示已核对，不代表模型效果达标」）；设计文档 §9 Phase 2 划线为「已完成（切片 A，2026-09-28）」并如实登记半范围——「验收冻结时引用规约要素未随本切片落地，转入后续候选」，Phase 3（协作轨迹统一）顶上下轮候选；§8 差距 1 同步改为两处消费位点的当前真相。
+
+**测试**：test_workbench_training_cli.py 新增 `test_train_start_prints_task_spec_before_run_summary`——stderr 同时含规约头行（「的任务规约：由既有确认记录只读汇编」）与边界行（「不代表模型效果达标」），**规约行 index < 运行摘要行 index 的顺序契约**，stdout 纯 JSON（status=running）；共享 fixture argv 补四个 tmp `--*-root` 路径保 hermetic（train-start 后构造 Scoring/Acceptance/Iteration 服务，不补就会撞真实仓库 `outputs/workbench/` 默认根——r60-cli 实施中主动拦下）。test_workbench_training_ui.py 旧勾选文案断言同步更新 + 新增 `test_prepared_run_shows_task_spec_before_launch_button`（expander label 逐字 + markdown 含汇编句与边界句）。test_readme_alignment.py 两个既有钉测试扩 8 条断言（页面 label、train-start 摘要句、勾选文案、同源同词汇承诺；设计文档切片 A 登记、`train-start` stderr 注入、折叠区位点、Phase 3 候选），总数保持 50。
+
+**文档**：见实现第三条——agent-setup.md 与设计文档为本轮全部文档改动，无其他文档涉及。
+
+**回归与错误修复**：集成核对 grep 确认 canonical 措辞三面落齐（CLI/页面/文档 11+4 处命中）；联合定向 86 项全绿（test_task_spec_projection 6 + test_readme_alignment 50 + test_workbench_training_cli + test_workbench_training_ui + test_cli_summaries，27.96s）；ruff check 全绿。实施中主动拦下一处隐患：train-start 注入后，既有 CLI 测试会在 train-start 之后构造 Scoring/Acceptance/Iteration 服务，共享 fixture argv 不补四个 tmp `--*-root` 就会撞真实仓库 `outputs/workbench/` 默认根——r60-cli 在实施时发现并修复（hermetic fixture），非事后回归暴露。全量回归 **tests/unit 1852 passed / 0 failed**（1850 基线 + 2 个新测试函数，--no-cov，283.83s，/tmp/round60_regression.log）。实现代码零返工。

@@ -279,6 +279,21 @@ def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = N
         st.info("没有发现值得优先核对的行。")
 
 
+def collect_current_task_spec(session_id: str) -> dict:
+    """两处规约卡共用的只读投影路由参数（ADR-1：单一来源，不新增状态）。"""
+    from src.workbench.task_spec_projection import collect_task_spec
+
+    return collect_task_spec(
+        session_id,
+        PROJECT_ROOT / "outputs/workbench/intake",
+        PROJECT_ROOT / "outputs/workbench/business-scoring",
+        PROJECT_ROOT / "outputs/workbench/acceptance",
+        PROJECT_ROOT / "outputs/workbench/evaluations",
+        PROJECT_ROOT / "outputs/workbench/iterations",
+        PROJECT_ROOT / "outputs/workbench/training",
+    )
+
+
 def scoring_store():
     from src.workbench.business_scoring import ScoringService
 
@@ -2718,17 +2733,9 @@ if dataset is not None:
         st.success("独立数据分区已生成，可继续训练前检查；分区就绪不代表模型效果已验收。")
         with st.expander("📋 任务规约投影（训练启动前对齐「我们在教模型什么」）"):
             # ADR-1 只读投影:由既有确认记录汇编,不新增状态;与 CLI task-spec-show 同源同词汇。
-            from src.workbench.task_spec_projection import collect_task_spec, summarize_task_spec
+            from src.workbench.task_spec_projection import summarize_task_spec
 
-            spec = collect_task_spec(
-                session.session_id,
-                PROJECT_ROOT / "outputs/workbench/intake",
-                PROJECT_ROOT / "outputs/workbench/business-scoring",
-                PROJECT_ROOT / "outputs/workbench/acceptance",
-                PROJECT_ROOT / "outputs/workbench/evaluations",
-                PROJECT_ROOT / "outputs/workbench/iterations",
-                PROJECT_ROOT / "outputs/workbench/training",
-            )
+            spec = collect_current_task_spec(session.session_id)
             for line in summarize_task_spec(spec):
                 st.write(line)
             with st.expander("查看规约原始 JSON"):
@@ -3100,6 +3107,14 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                     and not run_execution_managed
                     and dataset_current
                 ):
+                    with st.expander("📋 任务规约（启动本轮训练前的口径）"):
+                        # 与训练前检查位的规约卡同源同词汇(ADR-1 只读投影):
+                        # 能启动时先对齐「我们在教模型什么」,再决定按当前方案启动。
+                        from src.workbench.task_spec_projection import summarize_task_spec
+
+                        spec = collect_current_task_spec(session.session_id)
+                        for line in summarize_task_spec(spec):
+                            st.write(line)
                     recover_technical = False
                     if not run.get("recovery_parent_run_id"):
                         recover_technical = st.checkbox(
@@ -3115,7 +3130,7 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                     acknowledge = False
                     if preflight.get("status") == "warnings":
                         acknowledge = st.checkbox(
-                            "已核对本轮预检提示，按当前方案开始训练。",
+                            "已核对任务规约与预检提示，按当前方案开始训练。",
                             key=f"train_warnings_{run_id}",
                         )
                     if st.button(

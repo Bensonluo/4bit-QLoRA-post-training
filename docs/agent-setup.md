@@ -266,6 +266,8 @@ python scripts/data_intake.py task-spec-show SESSION_ID
 
 `task-spec-show SESSION_ID` 在 stdout 输出规约 JSON、stderr 逐行追加人话摘要（`summarize_task_spec` 单一来源），页面在「独立数据分区已生成」之后、「训练前检查」之前的「📋 任务规约投影」折叠区渲染同一份内容——页面与 CLI 同源同词汇。数据来自 `--store` 与各 `--*-root` 记录目录（session + analysis + scoring + acceptance + 最新 iteration），读取失败会如实报错而不是返回半份规约。固定收尾句写明：这是训练启动前的对齐视图，只汇编已确认事实，不代表模型效果达标。
 
+训练启动这个用户决策点同样读这份投影。页面在「启动这轮训练」按钮旁提供「📋 任务规约（启动本轮训练前的口径）」折叠区，渲染同一份规约摘要（训练准备完成后、原「📋 任务规约投影」卡不再可见时，规约在决策点仍在场）；`train-start` 在启动时输出同一份规约摘要至 stderr（`summarize_task_spec` 单一来源，位于原有运行摘要之前），页面与 CLI 同源同词汇。预检警告确认勾选文案为「已核对任务规约与预检提示，按当前方案开始训练。」；勾选仍只表示已核对，不代表模型效果达标。
+
 ## 在同一任务中启动真实训练
 
 数据版本生成后，页面「用当前数据微调模型」可填写本地基础模型目录，选择最大 token 长度、训练轮数和 batch size。基础参数还包括学习率、梯度累积、LoRA rank，以及兼容 NVIDIA CUDA 环境下可选的 4-bit 量化。

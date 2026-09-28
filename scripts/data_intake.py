@@ -1147,6 +1147,25 @@ def main() -> int:
                         model_options={"quantization_bits": 4 if args.load_in_4bit else None},
                     )
                 else:
+                    # 任务规约投影(ADR-1 只读投影):启动前先对齐「我们在教模型什么、
+                    # 按什么口径验收」。规约人话先于运行摘要进 stderr,与
+                    # task-spec-show、页面规约卡同源(summarize_task_spec 单一来源)。
+                    from src.workbench.task_spec_projection import (
+                        collect_task_spec,
+                        summarize_task_spec,
+                    )
+
+                    spec = collect_task_spec(
+                        args.session_id,
+                        args.store,
+                        args.scoring_root,
+                        args.acceptance_root,
+                        args.evaluation_root,
+                        args.iteration_root,
+                        args.training_root,
+                    )
+                    for line in summarize_task_spec(spec):
+                        print(line, file=sys.stderr)
                     result = training.start(
                         args.run_id,
                         session,

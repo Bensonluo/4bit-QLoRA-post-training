@@ -58,6 +58,14 @@ def training_cli(tmp_path, monkeypatch):
                 "data_intake.py",
                 "--store",
                 str(service.root),
+                "--scoring-root",
+                str(tmp_path / "scoring"),
+                "--acceptance-root",
+                str(tmp_path / "acceptance"),
+                "--evaluation-root",
+                str(tmp_path / "evaluations"),
+                "--iteration-root",
+                str(tmp_path / "iterations"),
                 "--training-root",
                 str(tmp_path / "training"),
                 *map(str, args),
@@ -159,3 +167,37 @@ def test_train_start_forwards_explicit_technical_recovery_authorization(training
     )
     assert calls[-1][3]["recover_technical_failures"] is True
     assert json.loads(capsys.readouterr().out)["status"] == "running"
+
+
+def test_train_start_prints_task_spec_before_run_summary(training_cli, capsys):
+    """train-start 先把任务规约人话打到 stderr(启动前对齐),再走运行摘要;stdout 仍是纯 JSON。"""
+    run, session, _ = training_cli
+    assert (
+        run(
+            "train-prepare",
+            session.session_id,
+            "--revision",
+            session.revision,
+            "--model-path",
+            "/tmp/base",
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert (
+        run(
+            "train-start",
+            session.session_id,
+            "run-1",
+            "--revision",
+            session.revision,
+            "--acknowledge-warnings",
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "running"
+    assert "的任务规约：由既有确认记录只读汇编" in captured.err
+    assert "不代表模型效果达标" in captured.err
+    # 规约在前、运行摘要在后:同一条 stderr 流内的顺序契约。
+    assert captured.err.index("的任务规约") < captured.err.index("正在训练中")
