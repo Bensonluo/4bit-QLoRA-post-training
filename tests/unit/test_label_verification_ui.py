@@ -459,3 +459,29 @@ def test_stale_warning_renders_after_revision(verify_page):
     fresh.selectbox(key="intake_select").select(session.session_id).run()
     assert not fresh.exception
     assert any("已失效" in w.value for w in fresh.warning)
+
+
+def test_insufficient_verification_page_renders_stored_triage_lines(verify_page):
+    """未通过页渲染记录内三因分辨行(词汇方向+对号修正),与页面通用指引并存。"""
+    service, session, page = verify_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    fields = [t for t in page.text_input if t.key and str(t.key).startswith("lv_")]
+    first_row = str(fields[0].key).rsplit("_", 1)[-1]
+    for field in fields:
+        row_id = str(field.key).rsplit("_", 1)[-1]
+        field.input("明显不同的答案" if row_id == first_row else targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交盲标核验答案").click().run()
+    assert not page.exception
+    assert any("盲标核验未通过" in m.value for m in page.error)
+
+    # 记录里存了三因分辨,页面以 caption 渲染同一份行
+    record = service.load(session.session_id).label_verification
+    assert record["mismatch_triage"]
+    rendered = [c.value for c in page.caption]
+    assert any("全部标签里没有出现过" in text for text in rendered)
+    assert any(text.startswith("对号修正") for text in rendered)
+    # 通用指引保留:三因词汇仍出现在页面,分辨行是补充而不是替换
+    assert any("标签错误、业务歧义或任务定义不清" in text for text in rendered)

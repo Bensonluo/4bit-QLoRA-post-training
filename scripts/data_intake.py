@@ -1668,6 +1668,9 @@ def main() -> int:
                 file=sys.stderr,
             )
             print(verdict_note, file=sys.stderr)
+            # 未通过时按记录内事实逐行输出三因分辨(单一来源);通过态记录没有该键。
+            for triage_line in result.get("mismatch_triage", []):
+                print(triage_line, file=sys.stderr)
             return 0
         elif args.command == "contrast-check":
             pending = service.start_contrast_check(args.session_id, args.revision)

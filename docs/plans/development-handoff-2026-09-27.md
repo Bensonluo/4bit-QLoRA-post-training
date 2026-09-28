@@ -2564,3 +2564,19 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_report_summary.py +3（全技术性零分：定性撤回逐字 pin + 旧句不出现 + 对号行不叠加；混合零分：四映射整行逐字 pin + 补数据优先级句；无诊断零分：格式门槛句 + 对号行不出现），文件 64→67；test_readme_alignment.py +1（57）。联合定向三文件 **125 passed**（report_summary 67 + readme_alignment 57 + journey 1）+ ruff check 五文件过 + format 两代码文件绿 + 单一来源 grep（「失败原因对号处理」生产字面仅 report_summary.py:212）。
 
 **回归与错误修复**：全量回归到期轮已履行（1908 passed / 0 failed，见背景），下次按节奏 R72 左右。主会话零返工、零事故；本轮无子代理参与（429 限额未重置，主会话单通道）。现有零分态旧测试（test_zero_score_with_echo / test_all_zero_plugs / test_zero_scores_without_finetuned / test_all_zero_without_diagnostics）全部原样通过，分支改写未破坏既有钉住。
+
+## 第 70 轮 = 介入点编码切片⑦：盲标核验三因分辨（恢复循环第 51 轮）
+
+**背景**：R69 收掉介入点 2 后轮到第 5 条（盲标核验未通过后的指引「标签错误、业务歧义或任务定义不清都会造成不一致；修正后重新核验。」——三种原因的分辨与修正动作（改数据 or 改方案）能否独立完成？）。缺口：未通过指引只列三种可能原因，不告诉用户从记录内事实能分辨出哪个方向、每边该改什么。可编码的确定性分辨有三种：①答案词汇不在数据标签全集（两套类别词汇——任务定义不清的典型形态）；②同向错位（同一对「数据标签→你的答案」重复、或几处都答了同一个答案——不像随机记错，更像口径/边界没对齐；仅 1 处则先核对输入信息再核边界）；③分散错位（更像逐条问题）。尾行恒为对号修正映射（你的答案对→修正数据标签=改数据；数据标签对→补清类别边界或输入信息=改方案）+ 防背题事实（重新核验换一组题，照抄无效）。诚实边界：分辨方向由记录内事实给出，不认定原因、不替用户决定哪边该改。供应商 429 至 02:24 未重置（R70 开工 01:05），主会话单通道完成（R64/R65/R69 先例）。
+
+**实现**：
+- **单一来源**（src/workbench/intake_service.py，+49）：新函数 `mismatch_triage_lines(items, known_labels=None)` 置于 sample_evidence_note 之后（盲标领域语言模块内）；wilson_lower_bound / agreement_evidence_note / sample_evidence_note 同列。无新 import（set + dict.fromkeys 代替 Counter）。`known_labels=None` 时跳过词汇判断直接进入错位分辨（调用方拿不到标签全集的降级路径）。
+- **落记录架构决策——算一次存记录，不渲染时重算**：`submit_label_verification` 在 result 构造后算 `known_labels = {preview_row.target for preview_row in report.preview.rows}` 并在非空时存 `result["mismatch_triage"]`（duplicate_note/answer_coverage_note 零缺席先例；重算需要 report.preview.rows，只有提交时服务层在手）。通过态与早期存档无该键、如实缺席（plan_trace 先例）；页面 `result_evidence_note` 的 stats-only 现算先例**有意不扩展**到 triage（需要 known_labels，页面拿不到）。
+- **三通道同源挂载**：①服务层结果 dict（json.dumps 落 sqlite，reload 持久）；②CLI `label-verify-submit`（scripts/data_intake.py）在 verdict_note 之后逐行 print 到 stderr；③页面未通过分支（ui/pages/07_Data_Intake.py）在逐条 expander 之后 `verification.get("mismatch_triage", [])` 渲染 caption——通用指引「标签错误、业务歧义或任务定义不清都会造成不一致；修正后重新核验。」保留，分辨行是补充不是替换。verdict_note 服务层原句不动（旅程测试锚点）。
+- **文档**：agent-setup.md「盲标核验的完整 CLI 用法」节 +1 段（submit 段之后：三因分辨词汇、对号修正、防背题、不认定原因、如实缺席、三通道同源）；user-trial-log.md 介入点 5 +1 行「2026-09-29 现状补充」（历史原文不改写）；test_readme_alignment.py +1 pin `test_mismatch_triage_docs_pinned`（57→58）。
+
+**集成收口（主会话）**：开工前 grep 核实三因通用 caption 无任何测试 pin（test_product_journey 只钉 verdict_note 通过态锚点），verdict_note 失败句原样保留，改动安全。既有 pin `test_agent_setup_blind_label_cli_section_pins_full_usage` 与新段共存（58 passed 证实）。
+
+**测试**：test_label_verification.py +8（函数级 7：全一致返回[] / 词汇不在全集含 known_labels=None 降级 / 同向重复对 / 仅 1 处 / 同答案多标签 / 分散错位 / 尾行对号修正恒在三形态；服务级 1：失败落键含词汇行+尾行、reload 持久、通过态无键），文件 30→38；test_label_verify_cli.py +1（未通过 stderr 逐行含词汇行+对号修正+换一组题；通过轮不输出），文件 7→8；test_label_verification_ui.py +1（未通过页 caption 含词汇行+对号修正+通用指引并存），文件 12→13；test_readme_alignment.py +1（58）。联合定向三文件 **51 passed** + 对齐 58 passed + 旅程 1 passed + ruff check/format 七文件双闸绿（format 重排 3 文件后复跑仍 51 passed）+ 单一来源 grep（triage 字面仅 intake_service.py 生产一处）。
+
+**回归与错误修复**：非全量回归到期轮（上次 R69 1908 passed，下次按节奏 R72）。主会话错误如实登记：①CLI pin 起草残留一行死代码（`if False else` 的空操作行），Edit 删除；②ruff format 重排 3 文件（首拍未跑 format），复跑定向 51 passed 证实无破坏。本轮无子代理参与（429 未重置）。介入点清单剩余：3（探针判定模板 vs 定义）、4（探针弱信号候选）、10（需补答案找人）、12（现场）。

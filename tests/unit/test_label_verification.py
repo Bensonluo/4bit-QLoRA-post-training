@@ -549,3 +549,115 @@ def test_shortfall_evidence_note_uses_actual_sample_size(store):
         service.start_label_verification(session.session_id, session.revision, sample_size=0)
     with pytest.raises(ValueError, match="1 到 50"):
         service.start_label_verification(session.session_id, session.revision, sample_size=51)
+
+
+def _triage_items(*pairs, matched=0):
+    """构造 triage 单测数据:pairs 是 (data_label, submitted_answer),前置 matched 条一致。"""
+    items = [{"match": True, "data_label": "x", "submitted_answer": "x"}] * matched
+    return items + [
+        {"match": False, "data_label": label, "submitted_answer": answer} for label, answer in pairs
+    ]
+
+
+def test_mismatch_triage_all_matched_returns_empty():
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    assert mismatch_triage_lines(_triage_items(matched=5)) == []
+
+
+def test_mismatch_triage_unknown_vocabulary_names_two_label_sets():
+    """答案词汇不在标签全集 → 两套类别词汇方向,先对齐类别清单再判断哪边该改。"""
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    lines = mismatch_triage_lines(
+        _triage_items(("yes", "完全不同的答案")), known_labels={"yes", "no"}
+    )
+    assert "「完全不同的答案」" in lines[0]
+    assert "全部标签里没有出现过" in lines[0]
+    assert "同一套类别词汇" in lines[0]
+    # known_labels=None 时(调用方拿不到标签全集)不做词汇判断,直接进入错位分辨
+    assert "没有出现过" not in mismatch_triage_lines(_triage_items(("yes", "zzz")))[0]
+
+
+def test_mismatch_triage_repeated_pair_is_systematic_not_random():
+    """同一对「数据标签→你的答案」重复出现 → 口径/边界没对齐,不像随机记错。"""
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    lines = mismatch_triage_lines(
+        _triage_items(("yes", "no"), ("yes", "no")), known_labels={"yes", "no"}
+    )
+    assert "2 处不一致方向相同" in lines[0]
+    assert "数据标签「yes」→ 你的答案「no」" in lines[0]
+    assert "不像随机记错" in lines[0]
+    assert "口径或边界没对齐" in lines[0]
+
+
+def test_mismatch_triage_single_mismatch_points_to_input_then_boundary():
+    """仅 1 处不一致 → 先核对输入信息是否足以判断,再核对类别边界。"""
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    lines = mismatch_triage_lines(_triage_items(("yes", "no")), known_labels={"yes", "no"})
+    assert "仅 1 处不一致" in lines[0]
+    assert "先展开这条记录核对输入信息" in lines[0]
+
+
+def test_mismatch_triage_same_answer_across_labels_is_systematic():
+    """多个数据标签都答了同一个答案 → 该答案与这些类别的口径/边界没对齐。"""
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    lines = mismatch_triage_lines(_triage_items(("yes", "no"), ("maybe", "no")))
+    assert "都给了同一个答案「no」" in lines[0]
+    assert "「yes」、「maybe」" in lines[0]
+    assert "不像随机记错" in lines[0]
+
+
+def test_mismatch_triage_scattered_mismatches_advise_row_by_row():
+    """分散错位、无共同方向 → 更像逐条问题,逐条展开核对。"""
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    lines = mismatch_triage_lines(_triage_items(("yes", "no"), ("maybe", "yes")))
+    assert "分散在不同类别之间、没有共同方向" in lines[0]
+    assert "逐条" in lines[0]
+
+
+def test_mismatch_triage_tail_line_always_maps_fix_to_data_or_plan():
+    """尾行恒为对号修正映射:答案对→改数据;标签对→改方案;重验换题防背题。"""
+    from src.workbench.intake_service import mismatch_triage_lines
+
+    for items in (
+        _triage_items(("yes", "zzz")),
+        _triage_items(("yes", "no"), ("yes", "no")),
+        _triage_items(("yes", "no"), ("maybe", "yes")),
+    ):
+        tail = mismatch_triage_lines(items)[-1]
+        assert tail.startswith("对号修正")
+        assert "修正数据标签（改数据）" in tail
+        assert "改方案" in tail
+        assert "换一组题" in tail
+
+
+def test_failed_verification_stores_triage_and_verified_does_not(store):
+    """未通过记录落 mismatch_triage(词汇行在前、对号修正在尾),通过态与重读一致。"""
+    service, session = store
+    # 一处错位且答案不在数据标签全集 → 记录内应同时有词汇方向行与尾行
+    pending, answers = _answers_from(service, session)
+    first = pending["items"][0]["row_id"]
+    answers[first] = "明显不同的答案"
+    result = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert result["verdict"] == "insufficient_agreement"
+    triage = result["mismatch_triage"]
+    assert "全部标签里没有出现过" in triage[0]
+    assert triage[-1].startswith("对号修正")
+    # 记录持久化:重读会话仍带同一份行
+    reloaded = service.load(session.session_id)
+    assert reloaded.label_verification["mismatch_triage"] == triage
+
+    # 通过态没有该键(与早期存档一致,如实缺席)
+    pending, answers = _answers_from(service, session)
+    verified = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert verified["verdict"] == "verified"
+    assert "mismatch_triage" not in verified

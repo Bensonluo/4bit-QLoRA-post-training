@@ -1217,3 +1217,35 @@ def test_zero_score_remedy_docs_pinned():
     assert "撤回「学不出这个任务」定性" in item2, "第 2 条补充必须点名定性撤回"
     assert "微调后仍是零分" in item2, "第 2 条历史原文必须保留"
     assert "补数据、改任务定义还是停止" in item2, "第 2 条历史原文必须保留"
+
+
+def test_mismatch_triage_docs_pinned():
+    """盲标核验三因分辨钉死(R70):mismatch_triage_lines 单一来源、三种分辨方向、
+    对号修正与防背题、通过态如实缺席,试用记录第 5 条现状补充在场。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "### 盲标核验的完整 CLI 用法",
+        "## 生成独立数据分区与版本",
+    )
+    assert "src/workbench/intake_service.py" in section, "单一来源模块路径必须写明"
+    assert "`mismatch_triage_lines` 单一来源" in section, "三因分辨单一来源必须点名函数"
+    assert "`mismatch_triage` 键" in section, "记录键名必须写明"
+    assert "同一套类别词汇" in section, "词汇分辨方向必须写明"
+    assert "口径或边界没对齐" in section, "同向错位分辨方向必须写明"
+    assert "不像随机记错" in section, "同向错位的统计性质必须写明"
+    assert "先展开这条记录核对输入信息" in section, "仅 1 处的核查起点必须写明"
+    assert "逐条展开核对" in section, "分散错位方向必须写明"
+    assert "修正数据标签（改数据）" in section and "改方案" in section, "对号修正映射必须写明"
+    assert "换一组题" in section, "防背题事实必须写明"
+    assert "不认定原因" in section, "分辨边界（只给方向）必须写明"
+    assert "如实缺席" in section, "通过态/早期存档无键的边界必须写明"
+    # 试用记录介入点清单第 5 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item5 = _section(trial, "5. - [ ] 盲标核验未通过", "6. - [ ]")
+    assert "2026-09-29 现状补充" in item5, "介入点清单第 5 条缺现状补充"
+    assert "三因分辨" in item5, "第 5 条补充必须点名三因分辨"
+    assert "mismatch_triage_lines" in item5, "第 5 条补充必须点名单一来源函数"
+    assert "对号修正" in item5, "第 5 条补充必须点名对号修正"
+    assert "不认定原因" in item5, "第 5 条补充必须写明分辨边界"
+    assert "三种原因的分辨与修正动作" in item5, "第 5 条历史原文必须保留"
+    assert "改数据 or 改方案" in item5, "第 5 条历史原文必须保留"

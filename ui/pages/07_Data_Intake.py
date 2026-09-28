@@ -2542,6 +2542,10 @@ if session.confirmed_revision is not None or session.full_data is not None:
                                 f"{item['row_id']}：你的答案「{item['submitted_answer']}」 vs 数据标签「{item['data_label']}」"
                             ):
                                 st.code(item["input"], language=None)
+                    # 三因分辨行与服务层同源(记录的 mismatch_triage 键):页面渲染记录内行,
+                    # 不另起一份词汇;早期存档没有该键时如实没有这些行。
+                    for triage_line in verification.get("mismatch_triage", []):
+                        st.caption(triage_line)
                     st.caption("标签错误、业务歧义或任务定义不清都会造成不一致；修正后重新核验。")
                     note = result_evidence_note(verification)
                     if note:

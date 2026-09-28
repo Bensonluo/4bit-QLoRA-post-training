@@ -186,6 +186,67 @@ def sample_evidence_note(sample_size: int) -> str:
     )
 
 
+def mismatch_triage_lines(items: list[dict], known_labels: set[str] | None = None) -> list[str]:
+    """盲标不一致三因分辨（单一来源）：按记录内事实给出核查方向，不认定原因。
+
+    可编码的确定性分辨只有三种：答案词汇不在数据标签全集（两套类别词汇——任务定义
+    不清的典型形态）、同向错位（同一对「数据标签→你的答案」重复，或都答了同一个
+    答案——更像两个类别的口径或边界没对齐）、分散错位（更像逐条的问题）。末行给
+    对号修正映射（改数据 or 改方案），不替用户决定哪边该改。
+    """
+    mismatches = [
+        (item["data_label"], item["submitted_answer"]) for item in items if not item["match"]
+    ]
+    if not mismatches:
+        return []
+    lines: list[str] = []
+    if known_labels is not None:
+        unknown_answers = [answer for _, answer in mismatches if answer not in known_labels]
+        if unknown_answers:
+            vocabulary = "、".join(f"「{answer}」" for answer in dict.fromkeys(unknown_answers))
+            lines.append(
+                f"你的答案 {vocabulary} 在这份数据的全部标签里没有出现过——"
+                "先核对双方是否在用同一套类别词汇（任务定义不清的典型形态），"
+                "对齐类别清单后再判断哪边该改。"
+            )
+    distinct_pairs = set(mismatches)
+    distinct_answers = {answer for _, answer in mismatches}
+    if len(distinct_pairs) == 1:
+        label, answer = next(iter(distinct_pairs))
+        if len(mismatches) >= 2:
+            lines.append(
+                f"{len(mismatches)} 处不一致方向相同（数据标签「{label}」→ 你的答案「{answer}」）——"
+                "同一方向的错位不像随机记错，更像这两个类别的口径或边界没对齐："
+                "先核对这两个类别的业务定义。"
+            )
+        else:
+            lines.append(
+                f"仅 1 处不一致（数据标签「{label}」→ 你的答案「{answer}」）——"
+                "先展开这条记录核对输入信息是否足以判断，再核对这两个类别的边界。"
+            )
+    elif len(distinct_answers) == 1:
+        answer = next(iter(distinct_answers))
+        labels = "、".join(
+            f"「{label}」" for label in dict.fromkeys(label for label, _ in mismatches)
+        )
+        lines.append(
+            f"{len(mismatches)} 处不一致都给了同一个答案「{answer}」（数据标签分别是 {labels}）——"
+            "同一个答案方向不像随机记错，更像这个答案与这些类别的口径或边界没对齐："
+            "先核对这个答案与这些类别的业务定义。"
+        )
+    else:
+        lines.append(
+            f"{len(mismatches)} 处不一致分散在不同类别之间、没有共同方向——"
+            "更像逐条的问题（个别标签错或个别输入信息不足以判断），逐条展开核对。"
+        )
+    lines.append(
+        "对号修正：核对后你的答案对就修正数据标签（改数据）；"
+        "数据标签对就把类别边界或输入信息补清（改方案）；"
+        "修正后重新抽题核验——重新核验会换一组题，照抄上一轮公布的答案无效。"
+    )
+    return lines
+
+
 class IntakeService:
     def __init__(self, root: str | Path):
         self.root = Path(root)
@@ -932,6 +993,11 @@ class IntakeService:
                 else "存在不一致：数据标签与业务理解有分歧，请逐条核对原因（标签错误、歧义或任务定义不清），修正后重新核验。"
             ),
         }
+        # 三因分辨行只在存在不一致时落进记录（通过态与早期存档没有该键,如实缺席）。
+        known_labels = {preview_row.target for preview_row in report.preview.rows}
+        triage = mismatch_triage_lines(items, known_labels=known_labels)
+        if triage:
+            result["mismatch_triage"] = triage
         with sqlite3.connect(self.database) as connection:
             connection.execute(
                 "UPDATE label_verifications SET status='completed', verdict=?, result=? "

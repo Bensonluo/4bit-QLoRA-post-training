@@ -203,3 +203,32 @@ def test_cli_label_verify_export_csv_not_written_when_sampling_rejected(
     _, err = capsys.readouterr()
     assert not csv_path.exists()
     assert "任务已更新" in err
+
+
+def test_cli_label_verify_submit_failure_prints_triage_lines(store, monkeypatch, capsys):
+    """未通过时 stderr 逐行输出三因分辨(记录的 mismatch_triage 键),通过态不输出。"""
+    service, session = store
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+
+    def _submit_with(wrong_answer):
+        pending = service.start_label_verification(session.session_id, session.revision)
+        answers = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+        first = pending["items"][0]["row_id"]
+        answers[first] = wrong_answer
+        assert _run_submit(monkeypatch, service, session, pending["verification_id"], answers) == 0
+        return capsys.readouterr()
+
+    _, err = _submit_with("明显不同的答案")
+    assert "存在不一致" in err
+    assert "全部标签里没有出现过" in err
+    assert any(line.startswith("对号修正") for line in err.splitlines())
+    # 防背题事实随尾行一起到达 CLI 用户
+    assert "换一组题" in err
+
+    # 通过的一轮不输出三因分辨(通过态记录没有该键)
+    pending = service.start_label_verification(session.session_id, session.revision)
+    answers = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}
+    assert _run_submit(monkeypatch, service, session, pending["verification_id"], answers) == 0
+    _, ok_err = capsys.readouterr()
+    assert "对号修正" not in ok_err
+    assert "存在不一致" not in ok_err
