@@ -2160,3 +2160,71 @@ TrainingFixture 丢弃构造参数 root，新折叠区读 `training_service.root
 `self.root = root` 对齐（此前注册块的 try/except 一直在静默吞同一缺失，
 本次连带暴露）。全量回归 **1814 passed / 0 failed**（1802 基线 + 12 新增，
 /tmp/round52_regression.log，272 秒）。
+
+## 第 53 轮 = 训练 loss 曲线与趋势人话（恢复循环第 34 轮）
+
+**背景**：北极星三差距之二「非专家可视化」是最后一个未收口的差距。环节⑤点名
+「实时曲线、对照表、逐条坏例、诊断提示」——grep 核实指令回声/截断/泄漏/输出
+坍缩检测均已在前几轮落地，对照表与逐条坏例亦有（对照区 + 逐样本选择器），
+唯独 loss 曲线完全缺席。根因不是缺渲染，而是数据在捕获时就被销毁：
+`scripts/workbench_train.py` 把 `trainer.trainer.state.log_history` 双层推导式
+压平成单值 dict（后值覆盖前值），序列从未落盘；页面训练记录的「本轮训练指标」
+区只剩 `st.json(run["metrics"])` 裸倾倒原始 JSON——非专家看到的不是可视化，
+是原始数据。`summarize_training_run` 已翻译最终单值 loss，本轮增量精确聚焦
+「序列 + 曲线 + 趋势」三层。
+
+**实现**（垂直切片，复刻 R50-R52 模式）：
+- 新纯函数模块 `src/workbench/training_progress.py`（单一来源，页面与 CLI
+  同源同词汇）：`extract_loss_history` 从 log_history 抽出逐 step 序列（只保留
+  step/loss/learning_rate，丢 eval_loss 行与 train_runtime 汇总行，按 step
+  升序）；`load_loss_history` 稳健读取产物目录（缺失/损坏/坏行过滤→空列表，
+  旧产物如实「没有」）；`loss_trend_lines` 趋势人话——先给首末位置与记录点数
+  （「loss 从第 X 步的 A 走到第 Y 步的 B（共 N 个记录点）」），再按首段/末段
+  均值对比（各约 1/4 记录点，±5% 为界）给三态结论：在下降 / 基本持平
+  （附「loss 没降下来不代表训练失败，先核对配置」）/ 末段反而更高（附
+  「需要核查——常见方向是学习率过大或数据里有异常样本」）；每条以固定边界句
+  「loss 下降只说明模型在逐步记住训练题，不代表业务效果；效果要看同一套开发题
+  上的对照报告」收尾。观察事实与核查方向，不认定原因——与截断/坍缩提示同一
+  纪律。空序列与单点序列各自如实说「看不出」。
+- `scripts/workbench_train.py`：成功路径在 flat metrics 之外追加写
+  `workbench_loss_history.json` 序列并纳入 required/manifest/artifacts（键名
+  loss_history）。flat metrics 格式不动——`evaluation_diagnostics.py` 的
+  manifest 校验按自身 manifest 键迭代（additive 键无害）、e2e 断言为子集
+  断言，均已核实。
+- `ui/pages/07_Data_Intake.py` 训练记录指标区：`st.json` 裸倾倒替换为趋势
+  caption + loss 曲线（复用 `ui/components/charts.py` 的
+  `make_metric_timeseries`，仓库既有 Plotly 惯例），原始 flat JSON 收进
+  「查看原始指标 JSON」折叠区保透明。
+- `scripts/data_intake.py` train-* 共享尾部：记录带 metrics 时 stderr 追加
+  同一份趋势人话（与页面同源）；旧产物没有序列文件时如实说没有。
+
+**测试**（新增 7 个测试函数 + 2 处既有用例扩展）：
+- 新 `tests/unit/test_training_progress.py` 5 函数：extract 过滤（eval 行/
+  汇总行/epoch 键丢弃 + learning_rate 保留 + 按 step 排序）、load 稳健性
+  （missing/corrupt/坏行过滤/None 目录）、趋势四态逐字断言（下降含完整
+  span 句 + 边界句、持平、不降反升、空/单点缺位句）——全部按 smoke 实跑
+  输出逐字钉死。
+- test_cli_summaries.py 一新函数：train-status 真实分派路径，成功记录
+  output_dir 指向带序列文件的临时目录 → stderr 逐字断言下降趋势句 + 边界
+  句；output_dir 换不存在目录 → 「没有留下逐条 loss 记录」缺位句，不崩。
+- test_readme_alignment.py 一新函数：agent-setup 训练段钉死序列文件名、
+  压平背景、单一来源、页面位点、折叠区、三态结论、两个核查方向、观察事实
+  边界、固定边界句、缺位态与同源同词汇承诺。
+- test_workbench_training_ui.py 成功态参数化用例扩展：记录补 metrics +
+  output_dir 指向真实临时目录（含序列文件），钉死 page.caption 趋势句
+  （「整体在下降」+「不代表业务效果」）与「查看原始指标 JSON」expander
+  在场——AppTest 对 st.plotly_chart 兼容（未知元素静默跳过），实跑验证。
+- test_workbench_training_runs.py e2e 真实 worker 用例追加：artifacts
+  loss_history 文件存在且首行含 step/loss 键——真实训练进程的序列落盘
+  由此钉死（e2e 夹具 logging_steps=1，序列保证非空）。
+
+**文档**：agent-setup.md 训练段新增一段（CLI 块之后、train-lineage 段之前）：
+序列落盘背景（压平销毁曲线）、页面位点（曲线 + 趋势 caption + 折叠区）、
+CLI 同源、三态结论与两个核查方向、固定边界句、缺位态口径——全部被
+test_train_loss_trend_docs_pinned 钉死。
+
+**回归与错误修复**：针对性 72 项（training_progress 5 + CLI 摘要 24 + 文档
+钉死 25 + e2e worker 18）+ 爆炸半径 81 项（training UI 17 + data intake UI
+40 + report_summary 24）全绿。开发中修复一处：test_workbench_training_ui.py
+新加的 json import 插在 from copy 之后触发 ruff I001，排序修正。全量回归
+**1821 passed / 0 failed**（1814 基线 + 7 新增，/tmp/round53_regression.log，275 秒）。

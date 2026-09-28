@@ -1160,6 +1160,16 @@ def main() -> int:
 
                 for line in summarize_training_run(result):
                     print(line, file=sys.stderr)
+                if result.get("metrics"):
+                    # 训练带指标时补逐条 loss 趋势人话：与页面曲线同一来源
+                    # (loss_trend_lines 单一来源)，旧产物没有序列时如实说没有。
+                    from src.workbench.training_progress import (
+                        load_loss_history,
+                        loss_trend_lines,
+                    )
+
+                    for line in loss_trend_lines(load_loss_history(result.get("output_dir"))):
+                        print(line, file=sys.stderr)
                 if result.get("preflight"):
                     from src.workbench.report_summary import summarize_preflight
 

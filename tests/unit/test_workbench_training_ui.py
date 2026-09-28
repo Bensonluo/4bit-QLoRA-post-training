@@ -1,5 +1,6 @@
 """Workbench interactions dispatch only explicit training actions to the service."""
 
+import json
 from copy import deepcopy
 
 import pytest
@@ -150,7 +151,7 @@ def test_preflight_warnings_require_review_and_failures_remain_visible(training_
 
 @pytest.mark.parametrize("task_kind", ["categorical", "open_text", "iteration"])
 def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
-    training_page, monkeypatch, task_kind
+    training_page, monkeypatch, tmp_path, task_kind
 ):
     import src.agent.evaluation as evaluation_agent
     import src.workbench.business_evaluation as evaluation
@@ -161,15 +162,23 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
         session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
         session = service.confirm_full_data(session.session_id, session.revision)
         session = service.materialize_dataset(session.session_id, session.revision)
+    # 逐条 loss 序列落在产物目录里：页面趋势人话与 CLI train-status 读同一份文件。
+    adapter_output = tmp_path / "adapter"
+    adapter_output.mkdir()
+    (adapter_output / "workbench_loss_history.json").write_text(
+        json.dumps([{"step": s, "loss": 2.0 - 0.1 * s} for s in range(6)]),
+        encoding="utf-8",
+    )
     records.append(
         {
             "run_id": "fixture-run",
             "session_id": session.session_id,
             "status": "succeeded",
             "model_path": "/tmp/base",
-            "output_dir": "/tmp/adapter",
+            "output_dir": str(adapter_output),
             "dataset_version": session.dataset.version,
             "config": {},
+            "metrics": {"train_loss": 0.5},
             "issues": [],
         }
     )
@@ -333,6 +342,11 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
     assert any(
         block.label == "📦 合并导出：把这次训练的模型带出工作台" for block in page.expander
     )
+    # 环节⑤可视化:训练指标区给逐条 loss 趋势人话(与 train-status 同源),
+    # 原始 flat JSON 收进折叠区,不再裸倾倒。
+    assert any("整体在下降" in block.value for block in page.caption)
+    assert any("不代表业务效果" in block.value for block in page.caption)
+    assert any(block.label == "查看原始指标 JSON" for block in page.expander)
     button(page, "比较基座与本轮微调效果").click().run()
     assert not page.exception
     assert calls[0][1].scorer == (

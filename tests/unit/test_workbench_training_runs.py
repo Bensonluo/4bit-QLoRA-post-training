@@ -205,6 +205,10 @@ def test_real_tiny_sft_worker_writes_traceable_adapter_and_survives_ui_reload(en
     assert result["status"] == "succeeded", service.read_logs(record["run_id"], tail=100)
     assert Path(result["artifacts"]["adapter_weights"]).is_file()
     assert result["metrics"]["train_loss"] >= 0
+    # 逐条 loss 序列随产物落盘(环节⑤曲线与趋势人话的数据来源):flat metrics
+    # 压平后只剩每个键的末值,曲线必须由单独成文件的序列重建。
+    history = json.loads(Path(result["artifacts"]["loss_history"]).read_text())
+    assert history and {"step", "loss"} <= set(history[0])
     manifest = json.loads(Path(result["artifacts"]["manifest"]).read_text())
     assert manifest["dataset_version"] == session.dataset.version
     assert "sha256" in manifest["model_identity"]["weights"][0]

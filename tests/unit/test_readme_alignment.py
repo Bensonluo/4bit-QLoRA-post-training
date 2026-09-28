@@ -824,3 +824,26 @@ def test_train_export_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "--revision" not in help_text, "导出沿用训练记录,不收 --revision"
     assert "--tail" not in help_text, "--tail 是 train-logs 专属"
     assert "合并导出" in help_text, "帮助文本必须说明这是合并导出"
+
+
+def test_train_loss_trend_docs_pinned():
+    """逐条 loss 曲线与趋势人话口径钉死:数据来源、三态判定、边界句与页面/CLI 同源。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 在同一任务中启动真实训练",
+        "## 允许一次显存不足技术恢复",
+    )
+    assert "workbench_loss_history.json" in section, "序列文件名必须写明"
+    assert "只剩每个键的末值，曲线必须由这份序列重建" in section, "压平背景必须写明"
+    assert "`loss_trend_lines` 单一来源" in section, "趋势单一来源必须写明"
+    assert "「本轮训练指标」区" in section, "页面位点必须写明"
+    assert "「查看原始指标 JSON」折叠区" in section, "原始 JSON 折叠区必须写明"
+    assert "整体在下降" in section and "整体基本持平" in section and "末段反而更高" in section, (
+        "三态结论必须写明"
+    )
+    assert "不代表训练失败" in section, "持平核查方向必须写明"
+    assert "学习率过大或数据里有异常样本" in section, "不降反升核查方向必须写明"
+    assert "不认定原因" in section, "观察事实边界必须写明"
+    assert "不代表业务效果；效果要看同一套开发题上的对照报告" in section, "边界句必须写明"
+    assert "没有逐条记录，不编造曲线" in section, "缺位态口径必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"

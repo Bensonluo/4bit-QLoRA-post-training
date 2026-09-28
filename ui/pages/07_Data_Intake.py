@@ -3135,7 +3135,28 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                     st.error(f"{failure.get('stage', '训练')}：{failure.get('message', '')}")
                 if run.get("metrics"):
                     st.write("**本轮训练指标**")
-                    st.json(run["metrics"])
+                    # 环节⑤可视化：逐条 loss 序列 → 趋势人话 + 曲线（单一来源
+                    # loss_trend_lines，与 CLI train-status 同源同词汇）；
+                    # 原始 flat metrics 收进折叠区保透明，不再裸倾倒。
+                    from src.workbench.training_progress import (
+                        load_loss_history,
+                        loss_trend_lines,
+                    )
+
+                    history = load_loss_history(run.get("output_dir"))
+                    for line in loss_trend_lines(history):
+                        st.caption(line)
+                    if len(history) >= 2:
+                        from ui.components.charts import make_metric_timeseries
+
+                        st.plotly_chart(
+                            make_metric_timeseries(
+                                {"loss": [(int(p["step"]), p["loss"]) for p in history]}
+                            ),
+                            width="stretch",
+                        )
+                    with st.expander("查看原始指标 JSON"):
+                        st.json(run["metrics"])
                 if run.get("output_dir"):
                     st.write(f"**产物目录：** `{run['output_dir']}`")
                 if run.get("artifacts"):

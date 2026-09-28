@@ -189,6 +189,38 @@ def test_train_status_without_preflight_does_not_invent_one(train_status_cli, ca
     assert "训练前检查" not in err
 
 
+def test_train_status_appends_loss_trend_when_metrics_present(
+    train_status_cli, tmp_path, capsys
+):
+    """记录带指标时,stderr 在训练摘要之后追加逐条 loss 趋势人话(与页面曲线
+    同一来源);旧产物目录没有序列文件时如实说没有,不崩、不编造。"""
+    invoke, record = train_status_cli
+    output = tmp_path / "run-9-output"
+    output.mkdir()
+    (output / "workbench_loss_history.json").write_text(
+        json.dumps([{"step": s, "loss": 2.0 - 0.1 * s} for s in range(6)]),
+        encoding="utf-8",
+    )
+    record.update(
+        {
+            "status": "succeeded",
+            "config": {"training": {"num_epochs": 1}},
+            "metrics": {"train_loss": 0.5},
+            "output_dir": str(output),
+        }
+    )
+    assert invoke("train-status", "run-9") == 0
+    err = capsys.readouterr().err
+    assert (
+        "loss 从第 0 步的 2.0000 走到第 5 步的 1.5000（共 6 个记录点），整体在下降。" in err
+    )
+    assert "loss 下降只说明模型在逐步记住训练题" in err
+    # 旧产物目录没有序列文件:趋势区如实说没有逐条记录,不让命令崩掉。
+    record["output_dir"] = str(tmp_path / "missing-dir")
+    assert invoke("train-status", "run-9") == 0
+    assert "这次训练没有留下逐条 loss 记录" in capsys.readouterr().err
+
+
 def test_materialize_stderr_carries_dataset_summary(tmp_path, monkeypatch, capsys):
     """materialize stderr 追加分区人话摘要:分组路径此前零人话,现在与页面同口径;
     stdout 仍是纯 JSON 任务记录。"""

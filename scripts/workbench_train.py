@@ -142,6 +142,15 @@ def main():
         }
         write_json(output / "workbench_metrics.json", metrics)
         required["metrics"] = output / "workbench_metrics.json"
+        # 保留逐 step loss 序列：flat metrics 只剩每个键的最后值，曲线在压平
+        # 时就被销毁；序列单独落盘，页面曲线与 train-status 趋势人话由此生成。
+        from src.workbench.training_progress import extract_loss_history
+
+        write_json(
+            output / "workbench_loss_history.json",
+            extract_loss_history(trainer.trainer.state.log_history),
+        )
+        required["loss_history"] = output / "workbench_loss_history.json"
         manifest = {
             "run_id": record["run_id"],
             "dataset_version": record["dataset_version"],
