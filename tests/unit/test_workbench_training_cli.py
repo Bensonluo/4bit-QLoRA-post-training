@@ -129,7 +129,10 @@ def test_status_logs_stop_and_list_share_record_interface(training_cli, capsys):
     assert run("train-stop", "run-1") == 0
     assert json.loads(capsys.readouterr().out)["status"] == "stopped"
     assert run("train-list", session.session_id) == 0
-    assert json.loads(capsys.readouterr().out)[0]["session_id"] == session.session_id
+    listed = capsys.readouterr()
+    assert json.loads(listed.out)[0]["session_id"] == session.session_id
+    # 清单尾行:计数一行(summarize_listing 单一来源),不逐条灌训练人话。
+    assert "共 1 条已保存的训练版本。" in listed.err
 
 
 def test_train_status_prints_plain_language_summary(training_cli, capsys):

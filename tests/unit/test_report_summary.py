@@ -970,3 +970,14 @@ def test_full_report_summary_states_issues_and_boundary():
     assert bare[0] == "这份全量报告没有可读的内容。"
     assert len(bare) == 2
     assert "不代表模型效果或业务达标" in bare[-1]
+
+
+def test_listing_summary_empty_names_entry_non_empty_counts():
+    """清单尾行:空清单点名下一步入口(分不清「还没有」和「查错了任务」),非空只给计数。"""
+    from src.workbench.report_summary import summarize_listing
+
+    empty = summarize_listing("已保存的训练方案", [], "先运行 plan-recommend 让 Agent 推荐方案。")
+    assert empty == ["当前任务还没有已保存的训练方案；先运行 plan-recommend 让 Agent 推荐方案。"]
+
+    counted = summarize_listing("已保存的训练方案", [{}, {}, {}], "先运行 plan-recommend。")
+    assert counted == ["共 3 条已保存的训练方案。"]

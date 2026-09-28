@@ -830,3 +830,14 @@ def summarize_full_report(record: dict) -> list[str]:
         lines.append("全量真实转换：" + "、".join(rendered) + "。")
     lines.append("全量验证只核对数据事实与已确认方案的一致性，不代表模型效果或业务达标。")
     return lines
+
+
+def summarize_listing(label: str, items: list, first_step: str) -> list[str]:
+    """*-list 命令的人话尾行:空清单点名下一步入口,非空给计数。
+
+    空清单静默是最差体验——用户分不清「还没有」和「查错了任务」;
+    每类清单的下一步入口不同,由调用方给出,不在此编造。
+    """
+    if not items:
+        return [f"当前任务还没有{label}；{first_step}"]
+    return [f"共 {len(items)} 条{label}。"]

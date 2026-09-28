@@ -102,6 +102,14 @@ def _verification_questions_to_csv(items: list[dict]) -> bytes:
     return buffer.getvalue().encode("utf-8-sig")
 
 
+def _print_listing(label: str, items: list, first_step: str) -> None:
+    """*-list 尾行:空清单点名下一步入口,非空给计数(summarize_listing 单一来源)。"""
+    from src.workbench.report_summary import summarize_listing
+
+    for line in summarize_listing(label, items, first_step):
+        print(line, file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="业务目标＋样例 → 数据诊断与真实预览")
     parser.add_argument("--store", default="outputs/workbench/intake")
@@ -601,7 +609,14 @@ def main() -> int:
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             # scoring-* 与其他业务子命令同口径：stdout 纯 JSON，stderr 追加人话。
-            # scoring-list 只列清单不追加；confirm 只返回引用，人话从记录本身读取。
+            # scoring-list 只追加一行清单尾行(空态点名入口/计数);confirm 只返回
+            # 引用，人话从记录本身读取。
+            if args.command == "scoring-list":
+                _print_listing(
+                    "已保存的业务评分规则",
+                    result,
+                    "先运行 scoring-propose 让 Agent 拟定并真实验证评分规则。",
+                )
             if args.command != "scoring-list":
                 from src.workbench.report_summary import summarize_scoring
 
@@ -697,6 +712,12 @@ def main() -> int:
                             ],
                         )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.command == "acceptance-list":
+                _print_listing(
+                    "已保存的业务验收记录",
+                    result,
+                    "先运行 acceptance-prepare 冻结验收标准与独立测试题集。",
+                )
             if isinstance(result, dict):
                 from src.workbench.report_summary import summarize_acceptance
 
@@ -741,6 +762,12 @@ def main() -> int:
                         training_root=args.training_root,
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.command == "plan-list":
+                _print_listing(
+                    "已保存的训练方案",
+                    result,
+                    "先运行 plan-recommend 让 Agent 基于本机条件与候选模型推荐。",
+                )
             if isinstance(result, dict):
                 # 方案域两层人话:第一层翻译方案本身(模型/参数/状态/理由),第二层在
                 # 方案带真实预检证据时翻译预检;plan-prepare 结果复用训练记录摘要。
@@ -864,6 +891,12 @@ def main() -> int:
                         args.iteration_id, session, args.evaluation_id
                     )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.command == "iteration-list":
+                _print_listing(
+                    "已保存的改进轮次",
+                    result,
+                    "先在父轮对照评测后运行 iteration-propose 提出改进假设。",
+                )
             if isinstance(result, dict):
                 from src.workbench.report_summary import summarize_iteration
 
@@ -1062,6 +1095,12 @@ def main() -> int:
                 print(training.read_logs(args.run_id, tail=args.tail))
                 return 0
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.command == "train-list":
+                _print_listing(
+                    "已保存的训练版本",
+                    result,
+                    "先运行 plan-recommend 获得推荐方案并确认，或直接 train-prepare 准备。",
+                )
             if isinstance(result, dict):
                 from src.workbench.report_summary import summarize_training_run
 

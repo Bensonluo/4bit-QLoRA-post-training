@@ -136,6 +136,22 @@ def test_next_action_tail_docs_pinned():
         assert f"`{command}`" in section, "尾行命令清单必须列明"
 
 
+def test_listing_tail_docs_pinned():
+    """五个清单命令的清单尾行钉死:空态点名入口、非空计数、summarize_listing 单一来源。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## CLI 配置与检查",
+        "## 从样例继续到全量数据",
+    )
+    assert "`summarize_listing` 单一来源" in section, "清单尾行单一来源必须写明"
+    assert "空清单点名该走的第一步入口" in section, "空态口径必须写明"
+    assert "用户分不清「还没有」和「查错了任务」" in section, "空态动机必须写明"
+    assert "非空给计数" in section, "计数口径必须写明"
+    assert "不逐条灌业务人话" in section, "不灌逐条人话边界必须写明"
+    for command in ("train-list", "plan-list", "iteration-list", "acceptance-list", "scoring-list"):
+        assert f"`{command}`" in section, "清单命令五员必须列明"
+
+
 def test_agent_setup_contrast_check_help_matches_documentation(monkeypatch, capsys, tmp_path):
     """对比核验用法与真实 argparse 同步:--revision 必填;--check-id/--answer 提交参数。"""
     help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "contrast-check")
@@ -550,7 +566,8 @@ def test_scoring_summary_docs_pinned():
         "## 用独立测试题做单模型业务验收",
     )
     assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
-    assert "scoring-list` 只列清单" in section, "list 例外必须写明"
+    assert "scoring-list` 只追加一行清单尾行" in section, "清单尾行口径必须写明"
+    assert "summarize_listing" in section, "清单尾行单一来源必须写明"
     assert "软件不会自动确认评分规则" in section, "草稿态不自动确认边界必须写明"
     assert "绑定当前业务目标与输入/答案语义" in section, "已确认规则的绑定语义必须写明"
     assert "数据修订后兼容规则可继续用" in section, "兼容复用与重新确认的分界必须写明"
@@ -686,7 +703,8 @@ def test_plan_summary_docs_pinned():
         "## 在同一任务中启动真实训练",
     )
     assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
-    assert "plan-list` 只列清单" in section, "list 例外必须写明"
+    assert "plan-list` 只追加一行清单尾行" in section, "清单尾行口径必须写明"
+    assert "summarize_listing" in section, "清单尾行单一来源必须写明"
     assert "方案可供确认" in section, "状态三态(ready)必须写明"
     assert "需要先完善数据" in section, "状态三态(needs_data)必须写明"
     assert "当前条件不支持" in section, "状态三态(unsupported)必须写明"

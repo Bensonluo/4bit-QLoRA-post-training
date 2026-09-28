@@ -60,6 +60,8 @@ python scripts/data_intake.py show SESSION_ID
 
 凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。
 
+五个清单命令（`train-list`、`plan-list`、`iteration-list`、`acceptance-list`、`scoring-list`）同样在 stderr 追加一行清单尾行（`summarize_listing` 单一来源）：空清单点名该走的第一步入口——用户分不清「还没有」和「查错了任务」；非空给计数，不逐条灌业务人话。
+
 `--base-url` 和 `--model` 可临时覆盖分析或连接检查的配置。若已有环境密钥，临时地址与解析后的地址不同，CLI 会拒绝请求。要改用另一个服务，应同时配置该服务的 `TUNESMITH_AGENT_BASE_URL`、`TUNESMITH_AGENT_MODEL` 和配套密钥，再重试，避免旧密钥被带到新服务。
 
 ## 从样例继续到全量数据
@@ -248,7 +250,7 @@ python scripts/data_intake.py train-start SESSION_ID RUN_ID --revision CURRENT_R
 
 省略 `--model-path` 时自动采用发现的完整本地候选；没有完整模型时会提示缺少文件，不会自动下载。`model-list --root LOCAL_DIRECTORY` 可只查看指定目录，`--root` 可重复。`--model-path` 可以重复；本地 Agent 服务不需要 `--allow-remote-data`。方案默认保存在 `outputs/workbench/training-plans`，全局 `--plan-root` 可覆盖目录。`plan-prepare` 表示已经审阅并确认保存的推荐方案，只准备训练，不自动启动。
 
-上述 plan 子命令在 stdout 输出 JSON 的同时向 stderr 追加人话（`plan-list` 只列清单，不追加）：`plan-recommend` 与 `plan-show` 先翻译方案本身——建议的基础模型与关键参数（最大长度、训练轮数、batch size、学习率、LoRA rank、量化位数）、状态三态（方案可供确认／需要先完善数据／当前条件不支持）、推荐理由与尚未验证的限制原文、需要你先回答的业务问题；ready 方案再追加其携带的真实预检证据的人话翻译（预检记录在方案记录的 `probe` 里）。`plan-prepare` 的结果复用训练记录摘要：方案已准备好并通过检查，还没有开始训练。确认这份方案只会准备训练、不会自动启动，方案就绪与推荐理由也不构成训练效果或业务达标的判断。
+上述 plan 子命令在 stdout 输出 JSON 的同时向 stderr 追加人话（`plan-list` 只追加一行清单尾行：`summarize_listing` 单一来源——空清单点名下一步入口，非空给计数）：`plan-recommend` 与 `plan-show` 先翻译方案本身——建议的基础模型与关键参数（最大长度、训练轮数、batch size、学习率、LoRA rank、量化位数）、状态三态（方案可供确认／需要先完善数据／当前条件不支持）、推荐理由与尚未验证的限制原文、需要你先回答的业务问题；ready 方案再追加其携带的真实预检证据的人话翻译（预检记录在方案记录的 `probe` 里）。`plan-prepare` 的结果复用训练记录摘要：方案已准备好并通过检查，还没有开始训练。确认这份方案只会准备训练、不会自动启动，方案就绪与推荐理由也不构成训练效果或业务达标的判断。
 
 ## 在同一任务中启动真实训练
 
@@ -349,7 +351,7 @@ python scripts/data_intake.py acceptance-prepare SESSION_ID RUN_ID --revision CU
 
 最后一条中的通过率和题数仅为参数格式示例，必须替换成真实业务要求。CLI 的自定义验收指标为 `pass_rate`，单题分数门槛来自已确认规则；未确认规则或其他任务的规则会被拒绝。规则默认位于 `outputs/workbench/business-scoring`，可用全局 `--scoring-root` 覆盖。远程 Agent 需要明确允许发送所需开发样例；本地服务不需要远程授权。需要澄清时 `scoring-propose` 返回 `needs_business_input` 和问题，不返回可确认的规则 ID。
 
-上述 scoring 子命令在 stdout 输出 JSON 的同时，会向 stderr 追加人话摘要（`scoring-list` 只列清单，不追加）：草稿复述这套规则要判断的业务标准、单题通过分数（达到才计为通过，均分与通过率分开展示）、业务正例与同题反例条数及真实隔离验证状态，并写明草稿待你核对实际正反例分数与理由后确认、软件不会自动确认评分规则；`scoring-confirm` 的摘要从记录本身读取，已确认规则写明绑定当前业务目标与输入/答案语义——数据修订后兼容规则可继续用，业务目标或含义变更需重新确认；`scoring-propose` 返回 `needs_business_input` 时，摘要点名澄清原因与待补业务问题原文，并写明当前没有可确认的评分方案。已成形规则的摘要都以「业务评分均值与通过率是规则口径的描述，不等于严格准确率，也不构成业务达标的判断」收尾。页面自定义业务评分区在每条规则的验证状态下方渲染同一份摘要（`summarize_scoring`），页面与 CLI 同源同词汇。
+上述 scoring 子命令在 stdout 输出 JSON 的同时，会向 stderr 追加人话摘要（`scoring-list` 只追加一行清单尾行：`summarize_listing` 单一来源——空清单点名下一步入口，非空给计数）：草稿复述这套规则要判断的业务标准、单题通过分数（达到才计为通过，均分与通过率分开展示）、业务正例与同题反例条数及真实隔离验证状态，并写明草稿待你核对实际正反例分数与理由后确认、软件不会自动确认评分规则；`scoring-confirm` 的摘要从记录本身读取，已确认规则写明绑定当前业务目标与输入/答案语义——数据修订后兼容规则可继续用，业务目标或含义变更需重新确认；`scoring-propose` 返回 `needs_business_input` 时，摘要点名澄清原因与待补业务问题原文，并写明当前没有可确认的评分方案。已成形规则的摘要都以「业务评分均值与通过率是规则口径的描述，不等于严格准确率，也不构成业务达标的判断」收尾。页面自定义业务评分区在每条规则的验证状态下方渲染同一份摘要（`summarize_scoring`），页面与 CLI 同源同词汇。
 
 ## 用独立测试题做单模型业务验收
 
@@ -410,7 +412,7 @@ python scripts/data_intake.py iteration-list SESSION_ID
 
 `iteration-propose` 可重复 `--change`，可选 `--epochs`、`--learning-rate`、`--max-length`；不改数据则省略 `--data-change`。`iteration-start` 有预检风险且已核对时加 `--acknowledge-warnings`。`eval-compare --iteration-id` 会自动选择父轮，并绑定三模型结果；已有合格报告也可用 `iteration-bind SESSION_ID ITERATION_ID --revision CURRENT_REVISION --evaluation-id EVALUATION_ID` 关联。全局 `--iteration-root` 可覆盖改进记录目录。
 
-上述轮次子命令（iteration-propose/confirm/prepare/start/bind/revise/decide）与自动执行子命令（iteration-execute/execution-status/execution-stop）在 stdout 输出 JSON 的同时，都会向 stderr 追加人话摘要（iteration-list 只列清单，不追加）。轮次摘要先复述这轮改进的假设，再说明当前停在哪一步：提案已保存尚未确认、已确认尚未准备训练、正在准备、方案已准备尚未启动、训练已启动、三模型同题对照已完成正等待业务决定；已记录决定时回显决定名（「采用本轮结果」「继续改进」「停止本轮路线」「证据不足」）与业务理由，采用补「采用记录不会自动部署模型」、证据不足补证据局限提示，被阻断时如实点名原因。自动执行摘要翻译执行状态机：进行中各态说明后台推进到哪一步，并写明「关闭页面不影响执行」；暂停等待确认时点名需要你在原入口勾选确认继续才会恢复，不会跳过提示自动训练；completed 点名训练与评测记录、轮次停在待业务决定，重复提交不会再次训练、只返回原报告；被阻断或失败时逐条列出问题并指向 worker.log；已停止说明本轮不再推进。每条摘要都以流程状态不代表业务效果达标收尾——以上只是流程状态与已记录的决定，不代表业务效果达标。页面改进轮次区渲染同一对摘要函数（`summarize_iteration`／`summarize_execution`）：待决策轮次在三模型结果下方读到「对照已完成，正等待你的业务决定」与流程边界收尾，已决策轮次回显决定名与业务理由；后台执行进度在刷新按钮上方实时翻译当前状态，训练中写明「关闭页面不影响执行」、暂停等确认写明「在原入口勾选确认继续才会恢复」。页面与 CLI 同源同词汇。
+上述轮次子命令（iteration-propose/confirm/prepare/start/bind/revise/decide）与自动执行子命令（iteration-execute/execution-status/execution-stop）在 stdout 输出 JSON 的同时，都会向 stderr 追加人话摘要（iteration-list 只追加一行清单尾行：`summarize_listing` 单一来源——空清单点名下一步入口，非空给计数）。轮次摘要先复述这轮改进的假设，再说明当前停在哪一步：提案已保存尚未确认、已确认尚未准备训练、正在准备、方案已准备尚未启动、训练已启动、三模型同题对照已完成正等待业务决定；已记录决定时回显决定名（「采用本轮结果」「继续改进」「停止本轮路线」「证据不足」）与业务理由，采用补「采用记录不会自动部署模型」、证据不足补证据局限提示，被阻断时如实点名原因。自动执行摘要翻译执行状态机：进行中各态说明后台推进到哪一步，并写明「关闭页面不影响执行」；暂停等待确认时点名需要你在原入口勾选确认继续才会恢复，不会跳过提示自动训练；completed 点名训练与评测记录、轮次停在待业务决定，重复提交不会再次训练、只返回原报告；被阻断或失败时逐条列出问题并指向 worker.log；已停止说明本轮不再推进。每条摘要都以流程状态不代表业务效果达标收尾——以上只是流程状态与已记录的决定，不代表业务效果达标。页面改进轮次区渲染同一对摘要函数（`summarize_iteration`／`summarize_execution`）：待决策轮次在三模型结果下方读到「对照已完成，正等待你的业务决定」与流程边界收尾，已决策轮次回显决定名与业务理由；后台执行进度在刷新按钮上方实时翻译当前状态，训练中写明「关闭页面不影响执行」、暂停等确认写明「在原入口勾选确认继续才会恢复」。页面与 CLI 同源同词汇。
 
 若只需先固定题集，可点击「固定当前开发与测试题集」，或运行 `suite-freeze SESSION_ID --revision CURRENT_REVISION`；这一步不修改父轮数据版本。`suite-show SUITE_ID` 查看来源与题数，后续 `materialize ... --suite-id SUITE_ID` 显式复用。全局 `--suite-root` 控制独立题集目录；改进提案自带题集引用，使用 `--iteration-id` 时无需手工查找目录。固定题集时，新独立行进入训练，原题保持不变，分区比例及随机种子不再重新分配原题。
 

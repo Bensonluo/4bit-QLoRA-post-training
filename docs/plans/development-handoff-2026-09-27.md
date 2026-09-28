@@ -1819,3 +1819,54 @@ ruff 另报 1 处未用导入（next_action 在测试内联导入但测试文件
 src/workbench/intake_service.py、scripts/data_intake.py、
 tests/unit/test_data_intake.py、tests/unit/test_full_data_cli.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+## 第 47 轮 = 清单命令空态人话（恢复循环第 28 轮）
+
+**背景**：第 46 轮把「下一步状态」人话铺到所有返回任务记录的命令后，
+复盘发现五个会话级 `*-list` 清单命令（train/plan/iteration/acceptance/
+scoring）输出纯 JSON、零 stderr——非空清单尚可（JSON 自带条数），**空清单
+完全静默**：首轮使用者分不清「这个任务还没有方案」和「我查错任务了」。
+这正撞北极星「非专家独立运转」：空态是首次使用的常态，静默是最差体验。
+另发现既有文档钉的是反向契约（「`plan-list` 只列清单，不追加」×3 处、
+对应钉测试 ×2）——本轮是对旧契约的**有意反转**，文档与钉测试同步改写，
+不是漂移。
+
+**实现**：
+- src/workbench/report_summary.py 新增 `summarize_listing(label, items,
+  first_step)`：空 → 「当前任务还没有{label}；{first_step}」（下一步入口
+  由调用方给出——每类清单入口不同，摘要函数不编造）；非空 →
+  「共 N 条{label}。」。只计数、不排序、不逐条——train-list 是 glob 顺序、
+  其余四者是 rowid DESC，顺序口径未核实，诚实红线同样约束自己的文案。
+- scripts/data_intake.py 新增 `_print_listing` 辅助（stderr 打印，
+  summarize_listing 单一来源），五个 list 分支在共用 JSON 输出后各接
+  一行，空态入口各自点名：scoring → scoring-propose；acceptance →
+  acceptance-prepare；plan → plan-recommend；iteration → iteration-propose
+  （父轮对照后）；train → plan-recommend 或 train-prepare。scoring 分支
+  原有「只列清单」注释同步改写。
+
+**测试**（+2 函数）：
+test_listing_summary_empty_names_entry_non_empty_counts（空态入口句
+逐字、非空计数句逐字）；test_listing_tail_docs_pinned（五命令总述段：
+summarize_listing 单一来源、空态点名入口、分不清动机、非空计数、
+不逐条灌人话、五命令逐一在场）。既有断言升级 ×3：train-list 断言
+「共 1 条已保存的训练版本。」、plan-list 断言「共 1 条已保存的训练方案。」
+（保留「这份方案建议用」not in 的负断言）、plan 测试 docstring 同步。
+
+**文档**（agent-setup.md）：三处家族句（plan ~251 / scoring ~352 /
+iteration ~415）从「只列清单，不追加」改为「只追加一行清单尾行：
+`summarize_listing` 单一来源——空清单点名下一步入口，非空给计数」；
+「## CLI 配置与检查」在下一步状态段后新增五命令总述段（补齐 train-list
+与 acceptance-list 此前没有的家族说明）。钉测试 ×2（scoring/plan）
+的「只列清单」断言替换为「只追加一行清单尾行」+ summarize_listing。
+
+**错误与修复**：无运行期错误。一次 Edit old_string 缩进不匹配
+（writer.writerow 行按 8 空格写、实际 4 空格）——重读原文取准确文本后
+命中。ruff check/format 首次即 clean（0 --fix）。
+
+**回归**：定向 4 文件 85 passed（report_summary 36 + plan_cli 5 +
+training_cli 5 + readme_alignment 39）。全量回归 tests/unit 预期
+**1788 passed**（基线 1786 + 2 个新测试函数：纯测试 + 钉测试；既有
+断言升级不增量）。本批只动 src/workbench/report_summary.py、
+scripts/data_intake.py、tests/unit/test_report_summary.py、
+tests/unit/test_training_plan_cli.py、tests/unit/test_workbench_training_cli.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

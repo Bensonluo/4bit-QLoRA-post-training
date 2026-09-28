@@ -165,7 +165,7 @@ def test_model_list_and_implicit_recommendation_use_complete_discovered_candidat
 
 def test_plan_show_and_prepare_stderr_carry_plain_language_summaries(plan_cli, capsys):
     """plan 子命令 stderr 分层人话:方案本身一层,预检证据一层,准备结果复用
-    训练记录摘要;plan-list 只列清单不追加。stdout 均保持纯 JSON。"""
+    训练记录摘要;plan-list 只追加一行清单尾行(计数)。stdout 均保持纯 JSON。"""
     invoke, session, record, _ = plan_cli
     record["proposal"] = {
         "model_path": "/tmp/local-a",
@@ -191,10 +191,11 @@ def test_plan_show_and_prepare_stderr_carry_plain_language_summaries(plan_cli, c
     assert "不会自动启动" in err
     # 第二层:方案附带的预检证据(顶层 preflight 兼容形状)
     assert "训练前检查通过" in err
-    # plan-list 只列清单,不追加方案人话
+    # plan-list 只追加一行清单尾行(计数),不把逐条方案人话灌进 stderr
     assert invoke("plan-list", session.session_id) == 0
     listed = capsys.readouterr()
     assert "这份方案建议用" not in listed.err
+    assert "共 1 条已保存的训练方案。" in listed.err
     # plan-prepare 结果复用训练记录摘要:准备好但未启动
     assert (
         invoke(
