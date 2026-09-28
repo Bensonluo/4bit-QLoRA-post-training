@@ -244,6 +244,16 @@ python scripts/data_intake.py preflight SESSION_ID --revision CURRENT_REVISION \
 
 报告保存为 `training_preflight`，状态包括 `blocked`（存在阻断问题）、`warnings`（需核对风险）、`passed`（当前数据与 token 消费检查通过）。报告列出各分区的截断和答案丢失统计、问题行以及实际 token 消费；答案完全丢失会阻断。tokenizer 无法提供答案边界时明确标记未验证。检查依据当前训练模板、因果位移和 padding 屏蔽方式，不据此声称业务效果已验收或硬件足以训练。
 
+## 准备本地基础模型
+
+上一节的检查只读取 tokenizer，可学性探针与训练需要完整权重；两者都要求模型文件已在本地——工作台不自动下载模型。用 `pip install -e ".[ui]"` 自带的 huggingface_hub `hf` 命令把模型下载到项目下的 `models/` 目录（与 README 快速开始同一命令）：
+
+```sh
+hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B
+```
+
+国内网络先 `export HF_ENDPOINT=https://hf-mirror.com`。下载完成后，页面「用当前数据微调模型」的「本机已准备的候选模型」与 `model-list` 都会自动发现它——发现由 `src/workbench/local_models.py` 的 `discover_local_models` 完成，扫描 HF/ModelScope 缓存目录与项目下的 `models/`，只读文件、不加载权重。文件完整只表示可以进一步检查；模型是否兼容、训练长度和机器是否适合，仍由训练前检查与方案检查判断。模型放在其他位置时，页面「高级：补充本地模型路径与发现详情」与 `model-list --root LOCAL_DIRECTORY` 可指定目录。训练前检查只需要 tokenizer 时，任何已下载模型的目录都可直接填写；探针与训练则需等权重文件下载完整（发现结果会标注文件是否完整）。
+
 ## 让 Agent 推荐训练方案
 
 确认数据并生成分区后，「用当前数据微调模型」会发现本机已准备的模型，列出文件完整的候选供点选。只选择本轮需要比较的模型，避免核查不相关的大型权重；其他位置的已有模型可在「高级：补充本地模型路径与发现详情」中填写，每行一个。发现只检查已知缓存和模型目录的本地文件，不下载、加载或计算权重哈希；文件完整也不等于训练兼容，Agent 后续还会检查候选事实和真实 tokenizer。点击「让 Agent 推荐训练方案」后，Agent 读取业务目标、处理方案、实际数据统计、本机条件及候选模型事实，并对选择的模型执行真实 tokenizer 预检。它不会自动下载模型、加载训练权重或启动训练。

@@ -2628,3 +2628,18 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_data_intake_ui.py +3（35→38）：①`test_demo_task_entry_creates_real_session`——staging 演示文件后入口折叠区在场，点击创建唯一 DEMO_GOAL 会话，digest==sha256(样例字节)、scope=sample、2 行，落在真实任务视图（基础分析折叠区在场）；②`test_demo_full_companion_gated_by_digest_and_validates`——演示会话（服务层建＋基础分析＋confirm 后）见配套按钮，点击 → `next_action=="review_full_data"`、全量来源名/10 行、「确认全量数据含义」仍 disabled（门禁未跳过）；内容不同的真实任务（非夹具会话，见错误登记①）同屏无该按钮；③`test_demo_task_module_degrades_honestly_when_files_absent`——demo_sample/demo_full → None、is_demo_session → False。定向门：UI **38 passed**、对齐＋旅程 **62 passed**、ruff check/format 双闸绿（format 重排 1 文件后复跑 38 passed）、单一来源 grep（入口/按钮文案字面仅 demo_task.py 一处）。
 
 **回归与错误修复**：非全量回归到期轮（上次 R72 边界 1930 passed，下次 R75 到期）。主会话错误如实登记：①`test_demo_full_companion_gated_by_digest_and_validates` 首跑失败——夹具 CSV（tests/unit/test_data_intake.py）与演示样例文件逐字节相同（旅程测试同一份数据），内容摘要一致的来源按设计就算演示来源，不能充当「真实任务看不见按钮」的反例；改用内容不同的内联真实数据后通过（这本身验证了摘要门控的正确语义）；②ruff format 重排 test_data_intake_ui.py 后定向复跑。本轮无子代理参与。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。
+
+## 第 74 轮 = 北极星缺口①使能：快速开始补全演示入口与本地基础模型准备指引
+
+**日期**：2026-09-29（单通道；文档轮，轻路径原则）
+
+**选点**：介入点 1–11 已编码完毕、缺口①②均阻塞外部资源（同 R73 策略线），继续缺口①使能。侦察发现第二个真实试用者可达性缺口：README「### 快速开始」（575 行）到 `打开 http://localhost:8501` 就结束——(a) 完全没有提 R73 的内置演示入口，新用户打开页面后不知道零密钥能走多远；(b) 全仓库没有任何文档讲如何准备一个本地基础模型（旅程 9–11 步需要：训练前检查只需 tokenizer 目录、可学性探针与训练需完整权重），非专家试用者既没有模型也没有指引，训练链路对其实际不可达。所有命令与行为先核实后落笔：`hf` 控制台脚本来自 `pip install -e ".[ui]"` 依赖树中的 huggingface_hub（entry_points.txt 确认 `hf = huggingface_hub.cli.hf:main`，与弃用的 `huggingface-cli` 并存；官方 --help 示例即 `hf download … --local-dir ./models/…`）；`--local-dir models/Qwen3-0.6B` 恰落在 `discover_local_models` 的扫描根 `Path.cwd()/models`（local_models.py:210 `_default_roots()`，另扫 HF/ModelScope 全部缓存路径），下载后页面「本机已准备的候选模型」与 `model-list` 自动发现；本机 venv bin 脚本 shebang 指向旧目录 4bit-QLoRA-post-training（项目改名所致）属本地陈旧状态，新克隆装出的 bin 正常——文档写 `hf download` 成立。
+
+**实现**：
+- **README「### 快速开始」**：bash 块后 +2 段——①演示入口段：进入「🧩 从业务目标和数据开始」→ 展开「第一次使用？用内置演示任务开始」（文案与 demo_task.py 常量逐字一致）一键创建虚构售后工单任务、「全程不需要任何 API 密钥就能走到训练前检查」的诚实承诺；②模型准备段：`hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B` 可照抄命令＋国内镜像提示（`export HF_ENDPOINT=https://hf-mirror.com`）＋「本机已准备的候选模型」自动发现说明＋agent-setup.md 完整说明链接（链接过 lint）。
+- **agent-setup.md 新增「## 准备本地基础模型」**（「## 检查实际 token 与答案保留」与「## 让 Agent 推荐训练方案」之间——上一节末句「先准备对应基础模型的 tokenizer」正指向这里，且无既有 pin 以这两边界取段，插入零破坏）：阶段分界（训练前检查只读取 tokenizer／可学性探针与训练需要完整权重）、不自动下载边界、与 README 同一命令、`discover_local_models` 点名实现（只读文件、不加载权重）、「文件完整只表示可以进一步检查」与 model-list 同口径边界、`--root`/「高级：补充本地模型路径与发现详情」指定他处模型、发现结果标注文件完整性的诚实说明。
+- **Pin**：test_readme_alignment.py +1 `test_quickstart_onboarding_docs_pinned`（61→62）——README 侧钉入口文案/零密钥承诺/命令/镜像/发现位点/链接六锚，agent-setup 侧钉 tokenizer/权重分界/不自动下载/命令同源/实现点名/发现边界/文件完整口径/镜像八锚。
+
+**测试**：对齐＋旅程 **63 passed**（62→63）；ruff check/format 双闸绿（无重排）。README 无新增 markdown 链接（仅既有 agent-setup 链接形式），链接 lint 随套件通过。
+
+**回归与错误修复**：非全量回归到期轮（R75 到期，基线 1930 passed / 205.59s）。本轮无失败、无重排、无子代理参与（文档轮单通道）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $70.00（不计成本授权下继续，逐轮如实上报）。

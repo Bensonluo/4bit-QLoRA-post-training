@@ -1350,3 +1350,32 @@ def test_demo_task_docs_pinned():
     trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
     assert "第一次使用？用内置演示任务开始" in trial, "试用记录缺冷启动入口补充"
     assert "src/workbench/demo_task.py" in trial, "试用记录补充必须点名单一来源模块"
+
+
+def test_quickstart_onboarding_docs_pinned():
+    """快速开始与本地模型准备钉死(R74):演示入口文案与页面一致、零密钥承诺、
+    hf download 可照抄命令、自动发现位点与镜像指引;agent-setup 同源分界钉死。"""
+    quickstart = _section(README.read_text(encoding="utf-8"), "### 快速开始", "### 显存参考")
+    assert "第一次使用？用内置演示任务开始" in quickstart, "演示入口文案必须与页面一致"
+    assert "不需要任何 API 密钥" in quickstart, "零密钥承诺必须写明"
+    assert "hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B" in quickstart, (
+        "下载命令必须可照抄"
+    )
+    assert "HF_ENDPOINT=https://hf-mirror.com" in quickstart, "镜像指引必须在场"
+    assert "本机已准备的候选模型" in quickstart, "自动发现位点必须与页面词汇一致"
+    assert "docs/agent-setup.md" in quickstart, "完整说明链接必须在场"
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 准备本地基础模型",
+        "## 让 Agent 推荐训练方案",
+    )
+    assert "只读取 tokenizer" in section, "阶段分界(tokenizer)必须写明"
+    assert "可学性探针与训练需要完整权重" in section, "阶段分界(完整权重)必须写明"
+    assert "不自动下载模型" in section, "不自动下载边界必须写明"
+    assert "hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B" in section, (
+        "命令必须与 README 快速开始同源"
+    )
+    assert "discover_local_models" in section, "发现机制必须点名实现"
+    assert "只读文件、不加载权重" in section, "发现边界必须写明"
+    assert "文件完整只表示可以进一步检查" in section, "文件完整边界必须与 model-list 同口径"
+    assert "HF_ENDPOINT=https://hf-mirror.com" in section, "镜像指引必须在场"

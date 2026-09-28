@@ -582,6 +582,14 @@ python scripts/launch_dashboard.py
 # 打开 http://localhost:8501
 ```
 
+打开页面后进入「🧩 从业务目标和数据开始」:第一次使用可展开「第一次使用？用内置演示任务开始」一键创建虚构售后工单任务,全程不需要任何 API 密钥就能走到训练前检查。要继续走到微调训练,先准备一个本地基础模型(0.6B 磁盘占用最小):
+
+```bash
+hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B
+```
+
+国内网络先执行 `export HF_ENDPOINT=https://hf-mirror.com`。下载到 `models/` 后,「用当前数据微调模型」区的「本机已准备的候选模型」会自动发现它;准备本地模型的完整说明见 [Agent setup and workflow](docs/agent-setup.md)。
+
 ### 显存参考
 
 | 模型 | NVIDIA 4-bit | Apple Silicon 64GB |
