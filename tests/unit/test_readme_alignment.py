@@ -1292,3 +1292,39 @@ def test_low_baseline_triage_docs_pinned():
     assert "单凭模型不认同不改标签" in item4, "第 4 条补充必须写明门槛"
     assert "原始来源行" in item4, "第 4 条补充必须写明弱信号不冒充溯源"
     assert "弱信号供参考" in item4, "第 4 条历史原文必须保留"
+
+
+def test_answer_sheet_docs_pinned():
+    """待补答案清单钉死(R72):answer_sheet 单一来源、填写表结构、三条规则、
+    诚实降级路径、交接物不是回传文件,试用记录第 10 条现状补充在场。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "缺答案的行不再只是一段页面提示",
+        "### 连续数值答案的如实边界",
+    )
+    assert "src/workbench/answer_sheet.py" in section, "单一来源模块路径必须写明"
+    assert "单一来源" in section, "单一来源必须点名"
+    assert "`answer-sheet SESSION_ID" in section, "CLI 命令名必须写明"
+    assert "导出待补答案清单（交给填写人）" in section, "页面按钮文案必须写明"
+    assert "待填答案" in section, "填写表列结构必须写明"
+    assert "按行ID 对号回填" in section, "回传对号机制必须写明"
+    assert "不要凭猜测填" in section, "防编造门槛必须写明"
+    assert "监督信号" in section, "监督信号后果必须写明"
+    assert "留空" in section and "任务定义问题" in section, "输入不足处置必须写明"
+    assert "比编一个答案更有价值" in section, "留空优于编造必须写明"
+    assert "结构上不可能泄露监督标签" in section, "防泄露边界必须写明"
+    assert "当前没有缺答案的行，无需导出清单" in section, "空态诚实降级必须写明"
+    assert "先运行 analyze" in section, "无预览降级必须写明"
+    assert "交接物不是回传文件" in section, "回传通道边界必须写明"
+    assert "`missing_answer_rows`" in section, "行筛选与判定共用必须写明"
+    assert "既定保留" in section, "未成熟标签不混入必须写明"
+    # 试用记录介入点清单第 10 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item10 = _section(trial, "10. - [ ] 「需补齐", "11. - [ ]")
+    assert "2026-09-29 现状补充" in item10, "介入点清单第 10 条缺现状补充"
+    assert "answer_sheet" in item10, "第 10 条补充必须点名单一来源模块"
+    assert "answer-sheet" in item10, "第 10 条补充必须点名 CLI 命令"
+    assert "行ID 对号回填" in item10, "第 10 条补充必须点名回传对号机制"
+    assert "不要凭猜测" in item10, "第 10 条补充必须写明防编造门槛"
+    assert "未成熟标签行不混入" in item10, "第 10 条补充必须写明筛选边界"
+    assert "能否找到了解业务的人并按指引回传文件" in item10, "第 10 条历史原文必须保留"

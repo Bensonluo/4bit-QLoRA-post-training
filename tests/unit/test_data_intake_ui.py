@@ -145,9 +145,9 @@ def test_iteration_revision_expander_renders_tool_trace_line(data_page):
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert not page.exception
-    assert any(
-        expander.label.startswith("本轮 ") for expander in page.expander
-    ), [item.label for item in page.expander]
+    assert any(expander.label.startswith("本轮 ") for expander in page.expander), [
+        item.label for item in page.expander
+    ]
     assert any(
         "工具核查轨迹：3 次调用，成功 2 次、失败 1 次"
         "——失败的调用没有取到证据，修订只依赖成功的调用。" in m.value
@@ -220,9 +220,9 @@ def test_plan_expander_renders_tool_trace_line(data_page):
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert not page.exception
-    assert any(
-        expander.label.startswith("方案 ") for expander in page.expander
-    ), [item.label for item in page.expander]
+    assert any(expander.label.startswith("方案 ") for expander in page.expander), [
+        item.label for item in page.expander
+    ]
     assert any(
         "工具核查轨迹：2 次调用，成功 1 次、失败 1 次"
         "——失败的调用没有取到证据，方案只依赖成功的调用。" in m.value
@@ -501,9 +501,9 @@ def test_dataset_artifacts_small_test_set_caution(data_page, payload, expect_cau
     counts = service.load(session.session_id).dataset.statistics["row_counts"]
     if expect_caution:
         assert counts["test"] < 30
-        assert any(
-            f"独立测试集共 {counts['test']} 条" in m.value for m in page.markdown
-        ), [m.value for m in page.markdown]
+        assert any(f"独立测试集共 {counts['test']} 条" in m.value for m in page.markdown), [
+            m.value for m in page.markdown
+        ]
         assert any("结论偶然性大" in m.value for m in page.markdown)
         assert not any("独立测试集共" in c.value for c in page.caption)
     else:
@@ -710,6 +710,41 @@ def test_sample_problem_after_twenty_rows_is_visible_and_has_concrete_label_next
     row_labels = [item.label for item in page.expander if item.label.startswith("r000")]
     assert row_labels == ["r000025 · 缺少答案"]
     assert not any(item.label == "确认当前转换含义" for item in page.button)
+
+
+def test_missing_answer_handoff_sheet_renders_rules_and_download(data_page):
+    """缺答案时页面给交接物:下载按钮+三条规则与 CLI answer-sheet 同源。"""
+    service, _, page = data_page
+    session = service.create("判断类别", "sample.csv", _preview_csv(25, missing_from=25))
+    session = service.apply_analysis(session, analysis())
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    # AppTest 没有 download_button 专用访问器(不在 page.button 里),按元素类型
+    # 从消息树取节点、按标签过滤(页面还有分区下载等常驻下载按钮);CSV 内容
+    # 本身由单元/CLI 测试钉住,这里钉住按钮在缺答案时出现。
+    downloads = [node.proto.label for node in page.get("download_button")]
+    assert "导出待补答案清单（交给填写人）" in downloads
+    captions = " ".join(item.value for item in page.caption)
+    assert "只填「待填答案」列" in captions
+    assert "不要凭猜测填" in captions
+    assert "监督信号" in captions
+    assert "比编一个答案更有价值" in captions
+
+
+def test_missing_answer_rules_absent_when_no_missing_rows(data_page):
+    """没有缺答案行:规则与下载按钮都不渲染——不拿空清单冒充交接物。"""
+    service, _, page = data_page
+    session = service.create("判断类别", "sample.csv", _preview_csv(25))
+    session = service.apply_analysis(session, analysis())
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    downloads = [node.proto.label for node in page.get("download_button")]
+    assert "导出待补答案清单（交给填写人）" not in downloads
+    captions = " ".join(item.value for item in page.caption)
+    assert "只填「待填答案」列" not in captions
+    assert "不要凭猜测填" not in captions
 
 
 def test_sample_pagination_confirms_only_visible_rows_and_resets_acknowledgment(data_page):

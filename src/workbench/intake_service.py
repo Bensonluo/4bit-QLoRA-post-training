@@ -13,12 +13,13 @@ from typing import Literal
 from uuid import uuid4
 
 from src.agent.intake import ChatClient, analyze_intake
+from src.workbench.answer_sheet import missing_answer_rows
 from src.workbench.full_data import full_data_is_current, validate_full_source
 from src.workbench.intake_models import BusinessExample, IntakeAnalysis, IntakeSession
 from src.workbench.materialize import dataset_is_current, materialize_dataset
 from src.workbench.recipes import check_examples, preview_recipe, validate_analysis
 from src.workbench.sources import profile_source, read_source
-from src.workbench.temporal_split import is_pending_label, parse_timestamp, temporal_row_times
+from src.workbench.temporal_split import parse_timestamp, temporal_row_times
 
 
 def _mature_ready_ids(preview, recipe) -> set[str]:
@@ -58,10 +59,11 @@ def next_action(session: IntakeSession) -> str:
                 temporal_row_times(row, policy)
         except ValueError:
             return "needs_data_revision"
-    if any(
-        row.status == "needs_label" and not is_pending_label(row, policy)
-        for row in session.preview.rows
-    ) or not _mature_ready_ids(session.preview, recipe):
+    # 缺答案行筛选与页面提示、CLI 待补清单共用单一来源(missing_answer_rows):
+    # needs_labels 判定与「交给填写人的清单」必须是同一份行,不能两处各算各的。
+    if missing_answer_rows(session.preview.rows, policy) or not _mature_ready_ids(
+        session.preview, recipe
+    ):
         return "needs_labels"
     if session.confirmed_revision is None:
         return "review_preview"

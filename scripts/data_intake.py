@@ -318,6 +318,16 @@ def main() -> int:
         required=True,
         help="行ID=候选答案，每条输入一个 --answer",
     )
+    answer_sheet_cmd = sub.add_parser(
+        "answer-sheet",
+        help="导出当前缺答案行的待补清单（交给了解业务的人填写），不调用网络",
+    )
+    answer_sheet_cmd.add_argument("session_id")
+    answer_sheet_cmd.add_argument(
+        "--export-csv",
+        type=Path,
+        help="把填写表导出为 CSV 文件（Excel 直开）；没有缺答案行或答案列待业务确认时不写文件",
+    )
     probe = sub.add_parser(
         "learnability-probe",
         help="可学性探针：基座模型对开发集抽样零样本探测，与多数类基线如实对比（证据，不是判决）",
@@ -1739,6 +1749,56 @@ def main() -> int:
                     file=sys.stderr,
                 )
             print(result["verdict_note"], file=sys.stderr)
+            return 0
+        elif args.command == "answer-sheet":
+            # 介入点 10 编码:把「由了解业务的人填写」变成可交接的文件。行筛选、
+            # 填写表与三条规则与页面下载按钮同一来源(answer_sheet 单一来源)。
+            from src.workbench.answer_sheet import (
+                answer_sheet_csv,
+                answer_sheet_lines,
+                missing_answer_rows,
+            )
+            from src.workbench.full_data import full_data_is_current
+
+            session = service.load(args.session_id)
+            if session.preview is None:
+                raise ValueError("当前任务还没有真实转换预览，先运行 analyze 生成方案。")
+            recipe = session.analysis.recipe if session.analysis else None
+            policy = recipe.temporal_split if recipe else None
+            # 清单口径与页面提示一致:全量预览存在且未失效时按全量清单,否则按样例
+            # 清单——样例有缺答案会拦确认,全量仍存在即说明样例当时是干净的。
+            use_full = (
+                session.full_data is not None
+                and session.full_data.preview is not None
+                and full_data_is_current(session)
+            )
+            scope = "full" if use_full else "sample"
+            preview = session.full_data.preview if use_full else session.preview
+            missing = missing_answer_rows(preview.rows, policy)
+            field_names = (
+                [field.column for field in recipe.targets] if recipe and recipe.targets else []
+            )
+            scope_label = "全量真实转换预览" if scope == "full" else "样例转换预览"
+            print(f"清单口径：{scope_label}，待补 {len(missing)} 行。", file=sys.stderr)
+            if missing:
+                for line in answer_sheet_lines(len(missing)):
+                    print(line, file=sys.stderr)
+            else:
+                print("当前没有缺答案的行，无需导出清单。", file=sys.stderr)
+            if args.export_csv is not None:
+                if missing and field_names:
+                    args.export_csv.parent.mkdir(parents=True, exist_ok=True)
+                    args.export_csv.write_bytes(answer_sheet_csv(missing, field_names))
+                    print(f"待补答案清单已导出：{args.export_csv}", file=sys.stderr)
+                else:
+                    print("没有待补行或答案列待业务确认，未生成清单 CSV。", file=sys.stderr)
+            result = {
+                "scope": scope,
+                "missing_count": len(missing),
+                "row_ids": [row.row_id for row in missing],
+                "answer_fields": field_names,
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         else:
             session = service.load(args.session_id)

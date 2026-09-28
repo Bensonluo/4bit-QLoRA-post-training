@@ -130,20 +130,21 @@ def select_preview_rows(rows, *, key: str, label: str, issue_ids=None):
 
 
 def show_missing_label_next_step(rows, *, full=False) -> None:
-    from src.workbench.temporal_split import is_pending_label
+    from src.workbench.answer_sheet import (
+        answer_sheet_csv,
+        answer_sheet_lines,
+        missing_answer_rows,
+    )
 
     recipe = session.analysis.recipe if session.analysis else None
     policy = recipe.temporal_split if recipe else None
-    missing = [
-        row for row in rows if row.status == "needs_label" and not is_pending_label(row, policy)
-    ]
+    # 缺答案行筛选单一来源(missing_answer_rows):页面清单、页面提示背后的
+    # needs_labels 判定与 CLI answer-sheet 命令必须是同一份行。
+    missing = missing_answer_rows(rows, policy)
     if not missing:
         return
-    columns = (
-        "、".join(field.column for field in recipe.targets)
-        if recipe and recipe.targets
-        else "待业务确认的答案列"
-    )
+    field_names = [field.column for field in recipe.targets] if recipe and recipe.targets else []
+    columns = "、".join(field_names) if field_names else "待业务确认的答案列"
     upload_step = (
         "在「全量数据验证」重新上传补齐后的对应全量文件。"
         if full
@@ -155,6 +156,18 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
         + upload_step
         + "不确定答案含义时，先在「回答问题或修正理解」补充说明。"
     )
+    # 介入点 10 编码:填写人拿到的是只含待补行的填写表(行ID+题目输入+待填列),
+    # 而不是一段口头指引;交接三条规则(answer_sheet_lines 单一来源)与 CLI 同源。
+    if field_names:
+        st.download_button(
+            "导出待补答案清单（交给填写人）",
+            data=answer_sheet_csv(missing, field_names),
+            file_name=f"待补答案清单-{'全量' if full else '样例'}.csv",
+            mime="text/csv",
+            key=f"answer_sheet_{'full' if full else 'sample'}",
+        )
+    for line in answer_sheet_lines(len(missing)):
+        st.caption(line)
 
 
 def show_temporal_exclusions(rows: list[dict], *, title: str) -> None:

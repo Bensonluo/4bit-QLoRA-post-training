@@ -2596,3 +2596,19 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_learnability_probe.py +3（`_triage_result` 构造器；方向分流：≥0/None/无观察→[]、词表外→模板行+尾行、同答在词表内→两方向行、任务词汇按输入→任务定义行 len==2；截断优先+全截断只有截断行+尾行、旧记录无 label_vocabulary 降级；label_vocabulary 存记录+弱证据带门槛+三处同源），文件 13→16；test_probe_cli.py +2（`_factory_truncated` 变体：词表外低于基线 stderr 词汇行+对号处理+门槛，show 回读同一份行；全截断→先加长度重测且无任务定义定性），文件 8→10；test_learnability_probe_ui.py +1（低于基线 caption 渲染词汇行+对号处理，monkeypatch 对齐既有 probe_module 模式），文件 6→7。探针三件套 27→**33 passed**（首跑全绿）+ 对齐 **59 passed** + 旅程 1 passed + ruff check/format 双闸绿（import 排序 1 次修正：low_ 排 load_ 之后；format 重排 test_probe_cli.py 1 文件后 92 passed 复证）+ 单一来源 grep（分辨行与门槛字面仅 learnability_probe.py 一处）。
 
 **回归与错误修复**：非全量回归到期轮（上次 R69 1908 passed，下次 R72 到期）。主会话错误如实登记：①UI pin 初稿用了错误 monkeypatch 写法（"ui.pages.07_Data_Intake.probe_module" 字符串路径 + page.get_by_label），既有测试用 `import src.workbench.learnability_probe as probe_module` + next(page.button)——按既有模式重写后通过；②ruff I001 import 排序。本轮无子代理参与（429 未重置）。介入点清单剩余：10（需补答案找人）、12（现场）。
+
+## 第 72 轮 = 介入点编码切片⑨：待补答案清单交接物＋防编造门槛（介入点 10）
+
+**日期**：2026-09-29（单通道；429 限制 02:24 重置前不开子代理）
+
+**选点**：介入点清单第 10 条（「需补齐 N 条记录的答案（字段：…）请保留原编号，由了解业务的人填写后…」——能否找到了解业务的人并按指引回传文件）。缺口：缺答案行只有一段屏幕提示，没有可交接的文件；「找人填」没有防编造门槛。编码为：缺答案行 → 只含待补行的填写表 CSV（行ID＋题目输入＋每字段一个待填列，utf-8-sig BOM、Excel 直开，结构上不含任何答案——与盲标题目清单同一防泄露原则）＋三条交接规则（只填「待填答案」列、按行ID 对号回填；依据业务事实不凭猜测——答案直接成为监督信号错一条教错一条；输入不足以判断时留空并说明——任务定义问题比编答案更有价值）。介入点 1–11 全部编码完毕，仅剩 12（现场发现）。
+
+**实现**：
+- **单一来源**（src/workbench/answer_sheet.py，新模块）：`missing_answer_rows(rows, policy)`（needs_label 且非时间方案未成熟行——函数体内 call-time import `is_pending_label`，顶层 from-import 会把旧引用绑进本模块、破坏测试的模块属性替换）、`answer_sheet_csv(rows, field_names)`（BOM＋行ID/题目输入原样＋待填列全空）、`answer_sheet_lines(count)`（三条规则）。
+- **三消费方同源**：①`next_action` 的 needs_labels 判定（intake_service.py，替换原内联筛选——判定与清单必须是同一份行）；②页面 `show_missing_label_next_step`（07_Data_Intake.py）在既有 st.info（文案不动，UI/trial pin 在场）下方渲染下载按钮＋逐条 caption；③CLI `answer-sheet SESSION_ID [--export-csv]` 子命令。CLI 口径规则：全量预览存在且 `full_data_is_current` → 按全量行；否则按样例（样例缺答案会拦确认，全量报告存在即说明样例当时干净）。诚实降级：无预览 → ValueError exit 2（先运行 analyze）；无缺答案行 → 「当前没有缺答案的行，无需导出清单。」不写文件；field_names 空（答案列待业务确认）→ 不生成 CSV 并明说。
+- **架构决策——填写表是交接物不是回传文件**：不做填写表上传自动回填通道（回传仍按原提示替换原始文件后重新分析，对号核对由行ID 保证）；跨版本回传（清单导出后数据又变）的对号核对 deliberately out of scope——如实边界。
+- **文档**：agent-setup.md「单份资料」节 +1 段（full-validate 段之后、连续数值边界之前）；user-trial-log.md 介入点 10 +1 行「2026-09-29 现状补充」（历史原文不改写）；test_readme_alignment.py +1 pin `test_answer_sheet_docs_pinned`（59→60）。
+
+**测试**：test_answer_sheet.py +4（status 筛选＋pending 排除＋policy 透传；无 policy 默认；CSV BOM/表头/多字段空列；lines 三规则逐字）；test_answer_sheet_cli.py +4（样例导出 JSON+stderr+CSV；无缺答案不写文件；无预览 exit 2；全量口径切换），文件级 subprocess 先例；test_data_intake_ui.py +2（缺答案时下载按钮+规则 caption 在场；无缺答案时均不渲染——不拿空清单冒充交接物）；test_readme_alignment.py +1（60）。定向门：answer_sheet+CLI+intake **35 passed**、UI **35 passed**、对齐＋旅程 **61 passed**、ruff check/format 双闸绿、单一来源 grep（三条规则字面仅 answer_sheet.py 一处）。
+
+**回归与错误修复**：全量回归到期轮已履行（开工时 R72 边界 1930 passed / 205.59s，新基线；下次按节奏 R75）。主会话错误如实登记：①UI pin 两次失败探明 AppTest 1.57 无 download_button 专用访问器（不在 page.button）——通用 `page.get("download_button")` 的节点 `.proto` 即 DownloadButton 消息、按 `proto.label` 过滤（proto 无 file_name 字段）；页面另有 8 个常驻 download_button 调用点，断言必须按标签过滤、不能断言整表为空（`assert not page.get(...)` 会撞上 `[UnknownElement()]`）；②BOM 字面量从零宽字符改 `b"\xef\xbb\xbf"`；③对齐 pin 初稿断言 `` `answer-sheet` `` 与文档实际写法 `` `answer-sheet SESSION_ID` `` 不匹配，改按实际命令串断言；④ruff format 重排 3 文件后定向复跑仍绿。本轮无子代理参与（429 未重置）。介入点清单剩余：12（现场发现）。
