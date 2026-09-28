@@ -207,7 +207,8 @@ def summarize_dataset(statistics: dict) -> list[str]:
     """把数据集分区统计翻译成人话：怎么分的、各多少、排除了什么、边界声明在哪。
 
     只复述统计里的事实：时间方案明确说出排除与不随机补数；分组方案如实说明
-    实际比例受分组大小影响。不宣称训练效果，也不替用户判断业务达标。
+    实际比例受分组大小影响；独立测试集过小时附上每题权重与偶然性提醒（单一来源）。
+    不宣称训练效果，也不替用户判断业务达标。
     """
     counts = statistics.get("row_counts") or {}
     train = counts.get("train", 0)
@@ -247,6 +248,13 @@ def summarize_dataset(statistics: dict) -> list[str]:
             f"独立测试 {test} 条，共 {total} 条、{groups} 个独立分组；"
             "同一对象的记录保持在同一分区，实际比例受分组大小影响。"
         )
+    # 独立测试集过小时的诚实算术提醒(1/N 确定性算术 + 30 条经验阈值):紧跟各方案
+    # 的条数行,单一来源 training_guidance,页面产物区与 CLI materialize 同源同词汇。
+    from src.workbench.training_guidance import small_test_set_line
+
+    caution = small_test_set_line(test)
+    if caution:
+        lines.append(caution)
     coverage_note = statistics.get("answer_coverage_note")
     if coverage_note:
         lines.append(coverage_note)

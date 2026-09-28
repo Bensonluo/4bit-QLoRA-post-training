@@ -21,6 +21,9 @@ NORTH_STAR_FILE = ROOT / NORTH_STAR
 # 架构权威版:north-star 管目标,本文管协作机制(三层边界/任务规约/多轮状态机)。
 TASK_SPEC_DESIGN = ROOT / "docs" / "plans" / "task-spec-and-agent-adaptation-design.md"
 
+# 试用记录:专家介入点清单的现状补充按条钉死,历史原文不改写。
+USER_TRIAL_LOG = ROOT / "docs" / "validation" / "user-trial-log.md"
+
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 IMG_PATTERN = re.compile(r'<img\s+src="([^"]+)"')
 
@@ -1057,3 +1060,45 @@ def test_acceptance_spec_citation_docs_pinned():
         "冻结表单旁折叠区 label 必须逐字写明"
     )
     assert "如实没有该段" in section, "旧记录缺位态必须写明"
+
+
+def test_training_guidance_docs_pinned():
+    """训练参数/分区设置引导单一来源钉死(R65 切片①):三函数、同源同词汇、非本产品实测边界。"""
+    text = AGENT_SETUP.read_text(encoding="utf-8")
+    assert "src/workbench/training_guidance.py" in text, "单一来源模块路径必须写明"
+    assert text.count("src/workbench/training_guidance.py") >= 2, "分区段与训练段各点名单一来源"
+    for func in (
+        "manual_training_parameter_lines",
+        "split_settings_guidance_lines",
+        "small_test_set_line",
+    ):
+        assert func in text, f"引导函数缺少说明: {func}"
+    assert "同源同词汇" in text, "页面与 CLI 同口径承诺必须写明"
+    assert "非本产品实测" in text, "推荐值与学习率分档的诚实边界必须写明"
+    # 分区段:「何时该改」引导与 <30 条条数提醒(1/N 算术,不是统计保证,不替用户决定比例)。
+    split_section = _section(
+        text, "## 生成独立数据分区与版本", "## 时间预测任务：先核对来源与标签窗口"
+    )
+    assert "split_settings_guidance_lines" in split_section, "分区引导函数必须在分区段落位"
+    assert "small_test_set_line" in split_section, "条数提醒函数必须在分区段落位"
+    assert "何时该改" in split_section, "分区引导主题必须写明"
+    assert "少于 30 条" in split_section, "条数提醒阈值必须写明"
+    assert "不是统计保证" in split_section, "阈值诚实边界必须写明"
+    # 训练段:逐参数大白话与推荐起步值,诚实边界照抄模块 docstring 口径。
+    train_section = _section(
+        text, "## 在同一任务中启动真实训练", "## 允许一次显存不足技术恢复"
+    )
+    assert "manual_training_parameter_lines" in train_section, "手工参数函数必须在训练段落位"
+    assert "参数大白话" in train_section and "推荐起步值" in train_section, (
+        "大白话与起步值主题必须写明"
+    )
+    assert "外部指南的汇总启发" in train_section, "诚实边界措辞必须照抄模块口径"
+    # 试用记录介入点清单第 6/7 条:现状补充逐条在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item6 = _section(trial, "6. - [ ] 零密钥路径", "7. - [ ]")
+    item7 = _section(trial, "7. - [ ] 「分区设置」", "8. - [ ]")
+    assert "2026-09-28 现状补充" in item6, "介入点清单第 6 条缺现状补充"
+    assert "2026-09-28 现状补充" in item7, "介入点清单第 7 条缺现状补充"
+    assert "逐参数大白话与推荐起步值" in item6, "第 6 条补充必须点名大白话与起步值"
+    assert "src/workbench/training_guidance.py 单一来源" in item6, "第 6 条补充必须点名单一来源"
+    assert "何时该改" in item7 and "少于 30 条" in item7, "第 7 条补充必须点名引导与条数提醒"

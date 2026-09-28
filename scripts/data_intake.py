@@ -250,16 +250,21 @@ def main() -> int:
         "--validation-fraction",
         type=float,
         default=0.1,
-        help="普通分组分区的验证比例；时间方案与固定题集不使用",
+        help="普通分组分区的验证比例；时间方案与固定题集不使用；"
+        "记录只有几百条时可提到 0.15–0.2，代价是训练数据变少",
     )
     materialize.add_argument(
         "--test-fraction",
         type=float,
         default=0.1,
-        help="普通分组分区的测试比例；时间方案与固定题集不使用",
+        help="普通分组分区的测试比例；时间方案与固定题集不使用；"
+        "记录只有几百条时可提到 0.15–0.2，代价是训练数据变少",
     )
     materialize.add_argument(
-        "--seed", type=int, default=42, help="普通分组分区种子；时间方案不随机划分"
+        "--seed",
+        type=int,
+        default=42,
+        help="普通分组分区种子；时间方案不随机划分；只想换一种切分时才改",
     )
     materialize.add_argument("--suite-id", help="继承已冻结开发/测试题集，新增独立资料进入训练集")
     materialize.add_argument("--iteration-id", help="自动使用已确认改进轮次的固定题集")
@@ -343,12 +348,39 @@ def main() -> int:
     train_prepare.add_argument("session_id")
     train_prepare.add_argument("--revision", type=int, required=True)
     train_prepare.add_argument("--model-path", type=Path, required=True)
-    train_prepare.add_argument("--max-length", type=int, default=1024)
-    train_prepare.add_argument("--epochs", type=int, default=1)
-    train_prepare.add_argument("--batch-size", type=int, default=1)
-    train_prepare.add_argument("--learning-rate", type=float, default=2e-4)
-    train_prepare.add_argument("--gradient-accumulation", type=int, default=4)
-    train_prepare.add_argument("--lora-rank", type=int, default=8)
+    train_prepare.add_argument(
+        "--max-length",
+        type=int,
+        default=1024,
+        help="每条样本最多装多少内容，按训练前检查的建议填",
+    )
+    train_prepare.add_argument(
+        "--epochs",
+        type=int,
+        default=1,
+        help="全部数据过几遍，少了学不会、多了把题背死；小数据 1–2 起步",
+    )
+    train_prepare.add_argument(
+        "--batch-size", type=int, default=1, help="每一步一起看几条数据，显存不够就保持 1"
+    )
+    train_prepare.add_argument(
+        "--learning-rate",
+        type=float,
+        default=2e-4,
+        help="每一步改动多大，太大训练发飘、太小学得慢；默认 2e-4",
+    )
+    train_prepare.add_argument(
+        "--gradient-accumulation",
+        type=int,
+        default=4,
+        help="攒几步再更新一次，相当于变相加大 batch",
+    )
+    train_prepare.add_argument(
+        "--lora-rank",
+        type=int,
+        default=8,
+        help="适配器记多大本事的容量，小任务 8 够用，越大越占显存",
+    )
     train_prepare.add_argument(
         "--load-in-4bit", action="store_true", help="只在兼容的 NVIDIA CUDA 环境启用"
     )
@@ -1154,6 +1186,26 @@ def main() -> int:
                 if session.revision != args.revision:
                     raise ValueError("任务已更新，请读取最新 revision 后重试。")
                 if args.command == "train-prepare":
+                    # 手工训练参数大白话（CLI 平权）：与页面高级配置同源同词汇
+                    # （training_guidance 单一来源），落配置前先看口径；stdout 仍是纯 JSON。
+                    from src.workbench.training_guidance import (
+                        LR_TIER_DISCLAIMER,
+                        learning_rate_suggestion,
+                        manual_training_parameter_lines,
+                    )
+
+                    for line in manual_training_parameter_lines():
+                        print(line, file=sys.stderr)
+                    # 已有分区时补学习率分档建议；dataset 缺失时如实不打这一行。
+                    row_counts = (
+                        session.dataset.statistics.get("row_counts")
+                        if session.dataset is not None
+                        else None
+                    )
+                    if row_counts:
+                        total = sum(int(count) for count in row_counts.values())
+                        _, reason = learning_rate_suggestion(total)
+                        print(f"学习率分档建议：{reason}{LR_TIER_DISCLAIMER}", file=sys.stderr)
                     result = training.prepare(
                         session,
                         str(args.model_path),
@@ -1427,6 +1479,12 @@ def main() -> int:
                 if args.suite_id and args.suite_id != iteration["evaluation_suite"]["suite_id"]:
                     raise ValueError("指定题集与已确认轮次不一致。")
                 suite_options = {"evaluation_suite": iteration["evaluation_suite"]}
+            # 分区设置「何时该改」引导（CLI 平权）：与页面分区设置区同源同词汇
+            # （training_guidance 单一来源），落分区前先看口径；stdout 仍是纯 JSON。
+            from src.workbench.training_guidance import split_settings_guidance_lines
+
+            for line in split_settings_guidance_lines():
+                print(line, file=sys.stderr)
             session = service.materialize_dataset(
                 args.session_id,
                 args.revision,

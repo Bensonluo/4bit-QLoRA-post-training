@@ -11,6 +11,7 @@ from streamlit.testing.v1 import AppTest
 
 from src.workbench.intake_service import IntakeService, next_action
 from tests.unit.test_data_intake import CSV, analysis, model_for
+from tests.unit.test_full_data import FULL
 
 PAGE = Path(__file__).resolve().parents[2] / "ui/pages/07_Data_Intake.py"
 
@@ -448,6 +449,66 @@ def test_materialize_actual_partitions_after_full_confirmation(data_page, groups
     assert any("从未出现在训练集" in item.value for item in page.markdown), [
         item.value for item in page.markdown
     ]
+
+
+def test_split_settings_guidance_renders_when_ratios_apply(data_page):
+    """分区设置 expander:比例输入真正生效的分支渲染「何时该改」引导行(单一来源)。"""
+    from tests.unit.test_full_data import FULL, approved
+
+    service, _, page = data_page
+    session = approved(service, group_columns=["编号"])
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any(expander.label == "分区设置" for expander in page.expander)
+    captions = "\n".join(caption.value for caption in page.caption)
+    assert "验证集比例＝" in captions
+    assert "独立测试集比例＝" in captions
+    assert "可复现分区种子＝" in captions
+    # 引导行挂在比例真正生效的分支上:三个输入框与引导同时在场
+    for label in ("验证集比例", "独立测试集比例", "可复现分区种子"):
+        next(field for field in page.number_input if field.label == label)
+
+
+SUFFICIENT_FULL = (
+    "编号,客户描述,类别,处理结果\n".encode()
+    + "".join(
+        f"{index},客户描述{index},{'质量' if index % 2 else '物流'},补发\n" for index in range(400)
+    ).encode()
+)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expect_caution"),
+    [(FULL, True), (SUFFICIENT_FULL, False)],
+    ids=["small-test-set", "sufficient-test-set"],
+)
+def test_dataset_artifacts_small_test_set_caution(data_page, payload, expect_caution):
+    """分区产物区:独立测试集 <30 条时给出每题权重与偶然性提醒;条数够时不制造噪音。"""
+    from tests.unit.test_full_data import approved
+
+    service, _, page = data_page
+    session = approved(service, group_columns=["编号"])
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", payload)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    button(page, "生成数据集版本").click().run()
+    assert not page.exception
+    counts = service.load(session.session_id).dataset.statistics["row_counts"]
+    if expect_caution:
+        assert counts["test"] < 30
+        assert any(
+            f"独立测试集共 {counts['test']} 条" in m.value for m in page.markdown
+        ), [m.value for m in page.markdown]
+        assert any("结论偶然性大" in m.value for m in page.markdown)
+        assert not any("独立测试集共" in c.value for c in page.caption)
+    else:
+        assert counts["test"] >= 30
+        assert not any("独立测试集共" in m.value for m in page.markdown)
+        assert not any("结论偶然性大" in m.value for m in page.markdown)
 
 
 def test_add_original_source_preserves_business_description(data_page, monkeypatch):

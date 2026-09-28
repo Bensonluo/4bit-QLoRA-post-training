@@ -638,6 +638,12 @@ def test_manual_training_parameters_have_plain_language_guidance(training_page):
     assert "推荐起步值（小数据）" in captions
     assert "0.0002" in captions and "2e-4" in captions
     assert "LoRA rank 8" in captions
+    # 单一来源逐行渲染：每条大白话是独立 caption，词形与 src.workbench.training_guidance
+    # 同源（参数名无加粗标记），页面不再自带一份内联文案
+    assert any(caption.value.startswith("参数大白话：") for caption in page.caption)
+    assert any("LoRA rank＝适配器" in caption.value for caption in page.caption)
+    assert any("4-bit 量化＝" in caption.value for caption in page.caption)
+    assert any(caption.value.startswith("推荐起步值（小数据）：") for caption in page.caption)
     # 指引与表单同时在场:默认值即推荐起步值,用户可以直接准备训练
     next(t for t in page.text_input if t.label == "本地基础模型目录")
     next(b for b in page.button if b.label == "准备本轮训练方案")

@@ -7,7 +7,11 @@ import pytest
 
 from scripts import data_intake
 from src.workbench.intake_service import IntakeService
-from tests.unit.test_data_intake import CSV
+from tests.unit.test_data_intake import CSV, analysis
+
+_FULL_CSV = (
+    "编号,客户描述,类别,处理结果\n" + "".join(f"{i:03d},描述{i},质量,补发\n" for i in range(1, 11))
+).encode()
 
 
 @pytest.fixture()
@@ -16,6 +20,15 @@ def training_cli(tmp_path, monkeypatch):
 
     service = IntakeService(tmp_path / "intake")
     session = service.create("分类", "sample.csv", CSV)
+    # 生产形状的已确认数据集：train-prepare 的学习率分档建议行按 dataset.statistics
+    # .row_counts 如实读取（真实服务流产出，不造桩字段）。
+    session = service.apply_analysis(session, analysis())
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(
+        session.session_id, session.revision, "full.csv", _FULL_CSV
+    )
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
     calls = []
 
     class TrainingFixture:
@@ -96,7 +109,13 @@ def test_training_prepare_and_start_preserve_bound_session_and_options(training_
         )
         == 0
     )
-    result = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    # 手工参数大白话与学习率分档建议先进 stderr（training_guidance 单一来源，
+    # 与页面高级配置同词汇）；stdout 仍是纯 JSON。
+    assert "参数大白话：训练轮数＝" in captured.err
+    assert "推荐起步值（小数据）：" in captured.err
+    assert "学习率分档建议：" in captured.err
     assert result["status"] == "prepared"
     options = calls[-1][3]
     assert options["training_options"]["num_epochs"] == 2

@@ -163,6 +163,50 @@ def test_analyze_cli_appends_analysis_summary_to_stderr(
     assert "不代表业务效果达标。" in captured.err
 
 
+def test_materialize_cli_prints_split_guidance_and_small_test_caution(
+    monkeypatch, capsys, tmp_path, service, session
+):
+    """materialize 双流契约:分区设置引导先于落盘,小测试集提醒由 summarize_dataset
+    单一来源产出;stdout 仍是纯 JSON。"""
+    import sys
+
+    from scripts import data_intake
+
+    prepared = service.apply_analysis(session, analysis())
+    prepared = service.confirm(prepared.session_id, prepared.revision)
+    full_csv = (
+        "编号,客户描述,类别,处理结果\n"
+        + "".join(f"{i:03d},描述{i},质量,补发\n" for i in range(1, 11))
+    ).encode()
+    prepared = service.validate_full_data(
+        prepared.session_id, prepared.revision, "full.csv", full_csv
+    )
+    prepared = service.confirm_full_data(prepared.session_id, prepared.revision)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(service.root),
+            "materialize",
+            prepared.session_id,
+            "--revision",
+            str(prepared.revision),
+            "--registry-root",
+            str(tmp_path / "registry"),
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    json.loads(captured.out)  # stdout 仍是纯 JSON,人话只走 stderr
+    # 分区设置「何时该改」引导:与页面分区设置区同源(split_settings_guidance_lines)。
+    assert "验证集比例＝" in captured.err
+    # 夹具 10 个独立分组按默认比例切出独立测试集 1 条(<30):小测试集提醒行如实出现。
+    assert "独立测试集共 1 条" in captured.err
+    assert "少于 30 条时结论偶然性大" in captured.err
+
+
 def test_csv_preserves_codes_whitespace_null_strings_and_multiline():
     source = read_source("s.csv", '编号;描述;答案\n001;" 首行\n第二行 ";NULL\n002;;0\n'.encode())
     assert source.delimiter == ";"

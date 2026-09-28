@@ -20,6 +20,7 @@ from src.workbench.intake_service import (
     wilson_lower_bound,
 )
 from src.workbench.iterations import IterationService
+from src.workbench.training_guidance import LR_TIER_DISCLAIMER, learning_rate_suggestion
 from src.workbench.training_runs import TrainingRunService
 from ui.components.agent_settings import render_agent_settings
 from ui.config import PROJECT_ROOT
@@ -714,22 +715,6 @@ def show_final_acceptance(run: dict) -> None:
                 mime="application/json",
                 key=f"download_acceptance_{identity}",
             )
-
-
-LR_TIER_DISCLAIMER = (
-    "该分档是 2026 年外部指南的汇总启发（Unsloth 指南、Raschka 实践笔记等），"
-    "非本产品实测，以你自己的同题对照结果为准。"
-)
-
-
-def learning_rate_suggestion(total_rows: int) -> tuple[float, str]:
-    """按 QUICKSTART 第 4 步的外部分档给学习率起步档：<2,000 条 5e-5~1e-4，≥2,000 条 2e-4。"""
-    if total_rows < 2000:
-        return 0.0001, (
-            f"全量 {total_rows} 条（< 2,000），建议学习率起步 5e-5~1e-4——"
-            "小数据集用大学习率易过拟合、训练不稳，业界指南一致建议降档。"
-        )
-    return 0.0002, f"全量 {total_rows} 条（≥ 2,000），建议学习率起步 2e-4——通用可靠默认。"
 
 
 def show_training_recommendations() -> None:
@@ -2657,6 +2642,10 @@ if session.confirmed_revision is not None or session.full_data is not None:
                 if temporal_policy:
                     st.info("本方案按已确认时间边界划分训练、验证与测试；随机比例与种子不生效。")
                 elif not selected_suite:
+                    from src.workbench.training_guidance import split_settings_guidance_lines
+
+                    for line in split_settings_guidance_lines():
+                        st.caption(line)
                     validation_fraction = st.number_input(
                         "验证集比例", min_value=0.01, max_value=0.49, value=0.1, step=0.01
                     )
@@ -2693,6 +2682,8 @@ if dataset is not None:
         f"训练 {counts['train']} 条 · 验证 {counts['validation']} 条 · 独立测试 {counts['test']} 条"
     )
     # 分区统计大白话摘要：非专家读句子核对「怎么分的、排除了什么」，不读 JSON。
+    # 独立测试集过小的提醒由 summarize_dataset 内部统一带出——页面与 CLI
+    # 同走这一条渲染路径，不另设直渲染位（避免同一行出现两次）。
     from src.workbench.report_summary import summarize_dataset
 
     for line in summarize_dataset(dataset.statistics):
@@ -2890,19 +2881,10 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
     if next_action(session) == "ready_for_training_preflight":
         show_training_recommendations()
         with st.expander("高级：手工配置训练参数"):
-            st.caption(
-                "参数大白话：**训练轮数**＝全部数据过几遍，少了学不会、多了把题背死；"
-                "**每设备 batch size**＝每一步一起看几条数据，显存不够就保持 1；"
-                "**梯度累积步数**＝攒几步再更新一次，相当于变相加大 batch；"
-                "**学习率**＝每一步改动多大，太大训练发飘、太小学得慢；"
-                "**LoRA rank**＝适配器记多大本事的容量，小任务 8 够用，越大越占显存；"
-                "**4-bit 量化**＝显存放不下完整模型才开（仅限兼容的 NVIDIA 显卡）；"
-                "**最大 token 长度**＝每条样本最多装多少内容，按训练前检查的建议填。"
-            )
-            st.caption(
-                "推荐起步值（小数据）：训练轮数 1–2、每设备 batch size 1、梯度累积步数 4、"
-                "学习率 0.0002（即 2e-4）、LoRA rank 8——与下方表单默认值一致；先跑通再调。"
-            )
+            from src.workbench.training_guidance import manual_training_parameter_lines
+
+            for line in manual_training_parameter_lines():
+                st.caption(line)
             row_counts = (
                 (session.dataset.statistics or {}).get("row_counts") or {}
                 if session.dataset

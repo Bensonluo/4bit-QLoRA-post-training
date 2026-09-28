@@ -481,6 +481,51 @@ def test_summarize_dataset_renders_duplicate_note_after_coverage_note():
     assert not any("渲染后完全相同" in line for line in quiet)
 
 
+def test_summarize_dataset_appends_small_test_set_caution_after_count_line():
+    """独立测试集少于 30 条时,摘要紧随条数行给出每题权重与偶然性提醒(单一来源)。"""
+    from src.workbench.report_summary import summarize_dataset
+
+    statistics = {
+        "total_rows": 9,
+        "row_counts": {"train": 5, "validation": 1, "test": 3},
+        "independent_groups": 9,
+    }
+    lines = summarize_dataset(statistics)
+    caution = next(line for line in lines if "独立测试集共" in line)
+    assert "独立测试集共 3 条" in caution
+    assert "每条约占最终通过率 33" in caution  # 1/N 确定性算术:100/3≈33 个百分点
+    assert "结论偶然性大（粗略经验，不是统计保证）" in caution
+    count_line_index = next(i for i, line in enumerate(lines) if "独立测试 3 条" in line)
+    assert lines.index(caution) > count_line_index
+
+
+def test_summarize_dataset_omits_small_test_set_caution_at_or_above_thirty():
+    """独立测试集 ≥30 条时提醒静默:条数够大不制造噪音。"""
+    from src.workbench.report_summary import summarize_dataset
+
+    statistics = {
+        "total_rows": 60,
+        "row_counts": {"train": 40, "validation": 10, "test": 30},
+    }
+    joined = "\n".join(summarize_dataset(statistics))
+    assert "独立测试集共" not in joined
+
+
+def test_summarize_dataset_omits_small_test_set_caution_without_row_counts_or_test_key():
+    """缺 row_counts 或缺 test 键时不渲染提醒,也不崩(防御式取值与函数既有风格一致)。"""
+    from src.workbench.report_summary import summarize_dataset
+
+    assert not any(
+        "独立测试集共" in line for line in summarize_dataset({"total_rows": 5})
+    )
+    assert not any(
+        "独立测试集共" in line
+        for line in summarize_dataset(
+            {"total_rows": 5, "row_counts": {"train": 3, "validation": 2}}
+        )
+    )
+
+
 def test_comparison_names_weakest_field_for_json_tasks():
     """JSON 任务逐字段准确率进人话摘要:点名最弱字段与诚实口径;非 JSON 任务沉默。"""
     base = _model("基座", 10, 0.3)

@@ -179,6 +179,8 @@ python scripts/data_intake.py materialize SESSION_ID --revision CURRENT_REVISION
 
 CLI `materialize` 在 stdout 输出 JSON 任务记录的同时，向 stderr 追加与页面数据集版本区同一口径的分区人话摘要（`summarize_dataset`，三种切分方式统一）：分法句（按业务对象隔离划分／按已确认的时间边界划分／沿用固定开发/测试题集）、各分区计数与独立分组数、比例受分组大小影响的如实说明、答案覆盖与完全相同例题披露，并以边界句「分区就绪只说明数据已按规则隔离、可以进入训练前检查；不代表模型效果或业务达标」收尾。此前分组与固定题集路径在 CLI 上零人话，时间路径则是 CLI 自造句式、与页面词汇不一致。时间方案在摘要之外仅补一行逐原因排除计数（`exclusion_counts`）与 `dataset.paths.manifest` 的 `metadata.excluded_rows` 原行明细指引——摘要句说明总数与成因，逐条计数与原行入口由补充行承载。
 
+分区设置的「何时该改」引导与独立测试集条数提醒同样统一出自 `src/workbench/training_guidance.py`（`split_settings_guidance_lines` / `small_test_set_line` 单一来源）：页面「分区设置」折叠区与「数据集版本与分区产物」区、CLI `materialize` 决策点 stderr 与 argparse help 输出同一份行——页面与 CLI 同源同词汇。独立测试集少于 30 条时按 1/N 诚实算术点名每题约占的百分点，30 条是粗略经验阈值、不是统计保证；比例与种子何时该改（几百条记录时比例可提到 0.15–0.2、种子只在想换一种切分时改）由同一来源给出，不替用户决定比例。
+
 物化后状态为 `ready_for_training_preflight`，表示继续训练前检查，模型还未训练。输出的 `dataset.data_config` 是完整训练配置中 `data` 部分：使用固定的 `train_file` 和 `validation_file`，`validation_split: 0` 防止再次随机切分，`dataset_loader: alpaca` 明确采用已生成的数据格式，避免由文件路径猜测领域并再次过滤记录。独立测试文件单独用于最终评测。单独把训练路径交给会重新切分的旧入口不能替代这套配置。
 
 ## 时间预测任务：先核对来源与标签窗口
@@ -292,6 +294,8 @@ python scripts/data_intake.py train-cost RUN_ID
 ```
 
 `RUN_ID` 来自准备结果；有预检风险且已完成核对时，启动命令增加 `--acknowledge-warnings`。`train-prepare` 另支持 `--learning-rate`、`--gradient-accumulation`、`--lora-rank` 和 `--load-in-4bit`。这里需要已准备好的本地基础模型目录，工作台不会悄悄更换底座或下载另一个模型。
+
+手工配置训练参数的判断辅助统一出自 `src/workbench/training_guidance.py` 单一来源：参数大白话与推荐起步值由 `manual_training_parameter_lines` 给出，页面「高级：手工配置训练参数」表单的逐参数说明、CLI `train-prepare` 的 argparse help 与决策点 stderr 先看的引导输出同一份行——页面与 CLI 同源同词汇。推荐起步值（小数据：训练轮数 1–2、每设备 batch size 1、梯度累积步数 4、学习率 2e-4、LoRA rank 8）与学习率分档（<2,000 条 5e-5~1e-4、≥2,000 条 2e-4）是外部指南的汇总启发（Unsloth 指南、Raschka 实践笔记等），非本产品实测，以你自己的同题对照结果为准。
 
 返回训练记录的命令（`train-prepare`、`train-start`、`train-status`，以及方案入口 `plan-prepare`）在 stderr 追加同一份运行摘要（`summarize_training_run` 单一来源）。运行摘要现以评测解读同一格式渲染方案阶段的工具核查轨迹：经方案准备时，方案执行把方案 trace 快照进运行记录（`plan_trace` 键），轨迹行「工具核查轨迹：N 次调用，成功 X 次、失败 Y 次——失败的调用没有取到证据，训练方案只依赖成功的调用」由 `summarize_tool_trace` 单一来源产出；不经方案、直接 `train-prepare` 准备的运行没有这一行——如实缺席，不编造轨迹。
 
