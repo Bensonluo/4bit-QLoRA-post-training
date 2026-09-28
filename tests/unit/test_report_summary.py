@@ -1636,3 +1636,65 @@ def test_acceptance_summary_cites_frozen_task_spec_elements():
     # 冻结时未带规约(空 dict):同样不渲染
     record["task_spec"] = {}
     assert not any(header in line for line in summarize_acceptance(record))
+
+
+def test_acceptance_gate_lines_translate_threshold_into_required_and_tolerance():
+    """门槛算术:通过率门槛换算成需通过/容错题数与单题分辨率;零容错单列警示。"""
+    from src.workbench.report_summary import acceptance_gate_lines
+
+    lines = acceptance_gate_lines(0.9, 5, 10)
+    assert lines[0] == (
+        "按 90% 通过率门槛与 10 道最终测试题算：需通过 9 道、最多容错 1 道未通过"
+        "（每题占通过率 10 个百分点）。"
+    )
+    assert len(lines) == 1  # 容错 1 道不触发零容错句;最低题数 5 ≤ 10 不触发预警
+
+    zero = acceptance_gate_lines(0.9, 5, 5)
+    assert zero[0].endswith("需通过 5 道、最多容错 0 道未通过（每题占通过率 20 个百分点）。")
+    assert zero[1].startswith("容错为 0 道：任何一题未通过")
+    assert "单题偶然误差会直接决定结论" in zero[1]
+
+    # 与服务同一式的浮点除法:0.7 门槛下 7/10 即达标,不因二进制漂移错算成 8 道
+    exact = acceptance_gate_lines(0.7, 5, 10)
+    assert "需通过 7 道、最多容错 3 道未通过" in exact[0]
+
+
+def test_acceptance_gate_lines_warn_when_minimum_cases_exceed_suite_size():
+    """最低题数超过题集实际题数:预告执行必判证据不足,给两条出路。"""
+    from src.workbench.report_summary import acceptance_gate_lines
+
+    lines = acceptance_gate_lines(0.9, 20, 10)
+    assert lines[-1] == (
+        "最低测试题数 20 道超过这套固定测试题的实际 10 道——"
+        "按此条款执行验收必判「证据不足」，需先固定题数更多的测试题或调低最低题数。"
+    )
+
+
+def test_acceptance_gate_lines_silent_without_usable_inputs():
+    """不可算术的形态如实静默:缺任一输入、题数为 0、门槛超出 0-100%。"""
+    from src.workbench.report_summary import acceptance_gate_lines
+
+    assert acceptance_gate_lines(None, 5, 10) == []
+    assert acceptance_gate_lines(0.9, None, 10) == []
+    assert acceptance_gate_lines(0.9, 5, None) == []
+    assert acceptance_gate_lines(0.9, 5, 0) == []
+    assert acceptance_gate_lines(1.2, 5, 10) == []
+
+
+def test_acceptance_summary_renders_gate_lines_from_frozen_suite():
+    """验收摘要挂载:冻结记录带题集题数时给出门槛算术,紧跟标准行;缺题集静默。"""
+    from src.workbench.report_summary import summarize_acceptance
+
+    record = _acceptance_record({"decision": "pending_run"}, status="prepared")
+    record["evaluation_suite"] = {
+        "suite_id": "a" * 64,
+        "case_counts": {"validation": 12, "test": 5},
+        "cases_digest": "b" * 64,
+    }
+    lines = summarize_acceptance(record)
+    gate_index = next(i for i, line in enumerate(lines) if line.startswith("按 90% 通过率门槛"))
+    assert lines[gate_index + 1].startswith("容错为 0 道")  # 0.9×5 → 需 5 道,容错 0
+    assert lines[gate_index + 2].startswith("条款已冻结、验收尚未执行")
+    # 旧记录缺题集引用:算术静默
+    del record["evaluation_suite"]
+    assert not any(line.startswith("按 ") for line in summarize_acceptance(record))

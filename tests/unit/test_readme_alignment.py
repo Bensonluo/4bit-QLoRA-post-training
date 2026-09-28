@@ -1165,3 +1165,29 @@ def test_three_model_delta_docs_pinned():
     assert "three_model_delta_lines" in item11, "第 11 条补充必须点名单一来源函数"
     assert "题数差" in item11 and "单题分辨率" in item11, "第 11 条补充必须点名换算与分辨率"
     assert "能否看懂" in item11, "第 11 条历史原文必须保留"
+
+
+def test_acceptance_gate_docs_pinned():
+    """验收门槛分辨率算术单一来源钉死(R68):acceptance_gate_lines、通过率换算需通过/容错、
+    每题分辨率与不作统计结论边界,试用记录第 9 条现状补充在场。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 用独立测试题做单模型业务验收",
+        "## 从评测结果进入下一轮改进",
+    )
+    assert "src/workbench/report_summary.py" in section, "单一来源模块路径必须写明"
+    assert "`acceptance_gate_lines` 单一来源" in section, "门槛算术单一来源必须点名函数"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    assert "需通过" in section and "容错" in section, "通过率换算需通过/容错题数必须写明"
+    assert "每题占通过率" in section, "每题分辨率措辞必须写明"
+    assert "证据不足" in section, "最低题数超标的预告口径必须写明"
+    assert "不作统计结论" in section, "统计边界必须写明"
+    # 试用记录介入点清单第 9 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item9 = _section(trial, "9. - [ ] 最终验收门槛", "10. - [ ]")
+    assert "2026-09-28 现状补充" in item9, "介入点清单第 9 条缺现状补充"
+    assert "acceptance_gate_lines" in item9, "第 9 条补充必须点名单一来源函数"
+    assert "需通过" in item9 and "容错" in item9, "第 9 条补充必须点名换算口径"
+    assert "同一式" in item9, "第 9 条补充必须点名算术与执行判定同一式"
+    assert "软件不替你设定业务门槛" in item9, "第 9 条历史原文必须保留"
+    assert "数值本身是否需要专家意见" in item9, "第 9 条历史原文必须保留"

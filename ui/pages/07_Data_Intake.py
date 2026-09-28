@@ -440,6 +440,7 @@ def show_final_acceptance(run: dict) -> None:
     """Keep frozen single-model final evidence separate from development and Agent tools."""
     from src.workbench.acceptance import AcceptanceService
     from src.workbench.business_evaluation import EvaluationModel, EvaluationProtocol
+    from src.workbench.report_summary import acceptance_gate_lines
 
     acceptance = AcceptanceService(
         PROJECT_ROOT / "outputs/workbench/acceptance",
@@ -511,6 +512,20 @@ def show_final_acceptance(run: dict) -> None:
                 strip_whitespace = st.checkbox(
                     "验收严格匹配时忽略首尾空白", value=True, key=f"acceptance_whitespace_{run_id}"
                 )
+                # 冻结前算术提示：与验收摘要同源（acceptance_gate_lines 单一来源）；
+                # 表单内数值只在提交触发重跑时刷新，冻结后由记录渲染完整算术。
+                suite_reference = getattr(session.dataset, "evaluation_suite", None)
+                suite_test_count = (
+                    (suite_reference.get("case_counts") or {}).get("test")
+                    if isinstance(suite_reference, dict)
+                    else None
+                )
+                for gate_line in acceptance_gate_lines(
+                    minimum_score / 100 if minimum_score is not None else None,
+                    int(minimum_cases) if minimum_cases is not None else None,
+                    suite_test_count,
+                ):
+                    st.caption(gate_line)
                 prepare = st.form_submit_button("冻结此模型与业务验收标准")
             if prepare:
                 if not standard.strip() or minimum_score is None or minimum_cases is None:

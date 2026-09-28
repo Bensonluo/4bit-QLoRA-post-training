@@ -264,3 +264,23 @@ def test_prepare_prints_task_spec_before_freeze_and_show_cites_frozen_spec(accep
     shown = capsys.readouterr()
     assert "冻结时引用的任务规约口径：" in shown.err
     assert "业务目标：根据业务文本分类" in shown.err
+
+
+def test_acceptance_show_prints_gate_arithmetic_to_stderr_and_keeps_stdout_json(
+    acceptance_cli, capsys
+):
+    """acceptance-show 的 stderr 追加门槛分辨率算术(容错 0 道分支),stdout 仍是纯 JSON。"""
+    invoke, session, record, calls = acceptance_cli
+    record["criteria"]["minimum_cases"] = 5
+    record["evaluation_suite"] = {
+        "suite_id": "fixed-suite",
+        "case_counts": {"validation": 4, "test": 5},
+    }
+    assert invoke("acceptance-show", record["acceptance_id"]) == 0
+    shown = capsys.readouterr()
+    assert json.loads(shown.out)["acceptance_id"] == "acceptance-fixture"
+    assert "按 90% 通过率门槛与 5 道最终测试题算：需通过 5 道、最多容错 0 道未通过" in shown.err
+    assert "容错为 0 道" in shown.err
+    assert "按 90% 通过率门槛" not in shown.out
+    assert "容错为 0 道" not in shown.out
+    assert calls == []

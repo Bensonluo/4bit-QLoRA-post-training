@@ -217,3 +217,39 @@ def test_freeze_area_shows_task_spec_before_freezing_and_records_it(acceptance_p
     assert not page.exception
     assert len(calls) == 1 and calls[0][0] == "prepare"
     assert records[0]["task_spec"]["goal"]["goal"] == "根据客户首次描述判断问题类型"
+
+
+def test_frozen_acceptance_card_renders_gate_arithmetic_line(acceptance_page):
+    """冻结验收卡按题集实际题数渲染门槛分辨率算术行(需通过 9 道、容错 1 道),
+    与 CLI stderr 同一来源(acceptance_gate_lines 单一来源)。"""
+    session, page, records, calls = acceptance_page
+    records.append(
+        {
+            "acceptance_id": "gate-fixture",
+            "session_id": session.session_id,
+            "status": "prepared",
+            "model": {"adapter_path": "/tmp/adapter", "label": "待验收模型"},
+            "protocol": {"scorer": "classification_exact"},
+            "criteria": {
+                "metric": "exact_match",
+                "business_standard": "分类必须严格正确",
+                "minimum_score": 0.9,
+                "minimum_cases": 5,
+            },
+            "evaluation_suite": {
+                "suite_id": "fixed-suite",
+                "case_counts": {"validation": 6, "test": 10},
+            },
+            "blind_test": True,
+            "report": None,
+            "result": {"decision": "pending_run"},
+        }
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    gate_line = (
+        "按 90% 通过率门槛与 10 道最终测试题算：需通过 9 道、最多容错 1 道未通过"
+        "（每题占通过率 10 个百分点）。"
+    )
+    assert any(gate_line in item.value for item in page.markdown)

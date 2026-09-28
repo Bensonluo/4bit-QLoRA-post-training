@@ -451,6 +451,51 @@ _ACCEPTANCE_METRIC_NAMES = {
 }
 
 
+def acceptance_gate_lines(
+    minimum_score: float | None,
+    minimum_cases: int | None,
+    test_count: int | None,
+) -> list[str]:
+    """验收门槛分辨率算术（单一来源，页面冻结表单与验收摘要同词汇）。
+
+    「最低通过率 90%」配不同题数含义完全不同：10 道题容错 1 道、5 道题容错 0 道。
+    只做确定性算术：把通过率门槛换算成需通过题数与容错题数，并给出每题占多少
+    个百分点；最低题数超过固定测试题实际题数时预告执行必判证据不足。门槛数值
+    本身仍由用户设定，软件不代设、也不作统计结论。
+    """
+    if (
+        not isinstance(minimum_score, (int, float))
+        or isinstance(minimum_score, bool)
+        or not 0 <= minimum_score <= 1
+        or not isinstance(minimum_cases, int)
+        or isinstance(minimum_cases, bool)
+        or not isinstance(test_count, int)
+        or isinstance(test_count, bool)
+        or test_count <= 0
+    ):
+        return []
+    # 用与服务判定同一式的浮点除法（k/N >= 门槛）找最小通过题数：
+    # 验收执行按 accepted/total 的浮点商与门槛比较，这里逐位同式，算术才与判定一致。
+    required = next(k for k in range(test_count + 1) if k / test_count >= minimum_score)
+    tolerance = test_count - required
+    lines = [
+        f"按 {minimum_score:.0%} 通过率门槛与 {test_count} 道最终测试题算："
+        f"需通过 {required} 道、最多容错 {tolerance} 道未通过"
+        f"（每题占通过率 {100 / test_count:.5g} 个百分点）。"
+    ]
+    if tolerance <= 0:
+        lines.append(
+            "容错为 0 道：任何一题未通过（生成失败与截断都按未通过计）都会判未达标——"
+            "小题集配高门槛时，单题偶然误差会直接决定结论。"
+        )
+    if minimum_cases > test_count:
+        lines.append(
+            f"最低测试题数 {minimum_cases} 道超过这套固定测试题的实际 {test_count} 道——"
+            "按此条款执行验收必判「证据不足」，需先固定题数更多的测试题或调低最低题数。"
+        )
+    return lines
+
+
 def summarize_acceptance(record: dict) -> list[str]:
     """把一次最终验收翻译成人话：冻结了什么条款、结论是哪一态、哪些数字不作数。
 
@@ -472,6 +517,10 @@ def summarize_acceptance(record: dict) -> list[str]:
         metric_name = _ACCEPTANCE_METRIC_NAMES.get(metric, metric or "评分")
         head += f"，运行前冻结的标准是：{metric_name}至少 {minimum_score:.0%}，且至少 {minimum_cases} 道独立测试题"
     lines = [head + "。"]
+    # 门槛分辨率算术与页面冻结表单同源（acceptance_gate_lines 单一来源）。
+    suite = record.get("evaluation_suite")
+    test_count = (suite.get("case_counts") or {}).get("test") if isinstance(suite, dict) else None
+    lines.extend(acceptance_gate_lines(minimum_score, minimum_cases, test_count))
 
     if decision == "pending_run":
         lines.append(
