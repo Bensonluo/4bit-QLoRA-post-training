@@ -26,6 +26,7 @@ def _pick_counterpart(
 
 def summarize_comparison(report: Any) -> list[str]:
     """Turn a comparison report into a few honest sentences for a non-expert."""
+    # 回声分流引导与页面警告同源（echo_triage_lines 单一来源）
     models = report.models
     if not models:
         return ["该报告没有模型结果。"]
@@ -36,6 +37,7 @@ def summarize_comparison(report: Any) -> list[str]:
     from src.workbench.evaluation_diagnostics import (
         count_instruction_echo,
         dominant_output_models,
+        echo_triage_lines,
         high_truncation_models,
         output_echoes_prompt,
     )
@@ -130,6 +132,15 @@ def summarize_comparison(report: Any) -> list[str]:
             + "）：该模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时,"
             "模型可能只是复述多数类,不一定是学坏了;分布不集中时,逐题查看完整输出确认"
             "每题是否本该有不同答案。这是观察事实,不认定原因。"
+        )
+
+    for model in models:
+        lines.extend(
+            echo_triage_lines(
+                model["label"],
+                model["rows"],
+                protocol=(getattr(report, "protocol", None) or {}),
+            )
         )
 
     base_stats = _pick_counterpart(stats, "基座")

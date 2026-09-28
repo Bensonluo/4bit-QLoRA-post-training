@@ -114,6 +114,74 @@ def dominant_output_models(
     return collapsed
 
 
+# 回声分流长度比：回声题输入平均长度达到其余题 1.5 倍时，才提示「过长内容
+# 淹没答案信号」方向——比例是粗略启发，行文同时给出两个平均值供人自行核对。
+ECHO_TRIAGE_LENGTH_RATIO = 1.5
+
+
+def echo_triage_lines(
+    label: str, rows: list[dict[str, Any]], protocol: dict[str, Any] | None = None
+) -> list[str]:
+    """回声预警的观察事实分流（单一来源，页面警告与对照摘要同词汇）。
+
+    三个核查方向里，「max_new_tokens 过小」与「过长内容淹没答案信号」能用
+    报告内可观察事实分流：回声题是否同时截断、回声题输入是否更长。「模板
+    不匹配」依赖基座是否对话型，报告内没有该证据，只陈述已知模板事实。
+    只给观察与核查顺序，不认定原因；改一项后须同题复测。
+    """
+    flags = [output_echoes_prompt(row.get("output"), row.get("prompt")) for row in rows]
+    echo_rows = [row for row, flag in zip(rows, flags) if flag]
+    if not echo_rows:
+        return []
+    protocol = protocol or {}
+    limit = protocol.get("max_new_tokens")
+    limit_note = f"（当前 max_new_tokens={limit}）" if limit is not None else ""
+    overlap = sum(row.get("status") == "truncated" for row in echo_rows)
+    lines: list[str] = []
+    if overlap:
+        lines.append(
+            f"检测到指令回声——{label} 有 {len(echo_rows)} 题输出在复述提示而非作答，"
+            f"其中 {overlap} 题同时触及生成长度上限{limit_note}：优先核查 max_new_tokens "
+            "是否小于最短合法答案——模型可能把生成额度先花在了复述指令上，加长后同题复测。"
+        )
+    else:
+        lines.append(
+            f"检测到指令回声——{label} 有 {len(echo_rows)} 题输出在复述提示而非作答，"
+            f"且没有一题触及生成长度上限{limit_note}：长度上限不是第一嫌疑，"
+            "优先核查输入长度与提示模板两个方向。"
+        )
+    rest_rows = [row for row, flag in zip(rows, flags) if not flag]
+    if rest_rows:
+        echo_mean = sum(len(row.get("prompt") or "") for row in echo_rows) / len(echo_rows)
+        rest_mean = sum(len(row.get("prompt") or "") for row in rest_rows) / len(rest_rows)
+        if echo_mean >= rest_mean * ECHO_TRIAGE_LENGTH_RATIO:
+            lines.append(
+                f"回声题的模型输入平均 {echo_mean:.0f} 字符，其余题平均 {rest_mean:.0f} 字符——"
+                "输入更长的题更易回声，支持「过长内容淹没答案信号」方向："
+                "压缩指令或精简字段呈现后同题复测。"
+            )
+        else:
+            lines.append(
+                f"回声题与其余题的输入长度相近（平均 {echo_mean:.0f} vs {rest_mean:.0f} 字符）——"
+                "「内容过长」方向证据不足，不作为优先核查项。"
+            )
+    renderer = protocol.get("prompt_renderer")
+    if renderer == "render_alpaca_prompt_without_answer":
+        lines.append(
+            "本次评测使用补全式（Alpaca）提示模板；对话型基座（Instruct/Chat 类）与补全模板"
+            "不匹配是回声的已知形态——若基座为对话型，改用 messages 对话格式后同题复测。"
+        )
+    else:
+        lines.append(
+            "「提示模板与基座不匹配」方向仍需人工核查：报告未记录本次模板类型，"
+            "无法用报告内事实分流。"
+        )
+    lines.append(
+        "以上是按报告内事实排出的核查顺序，不认定原因；每改一项后用同一题集复测一次。"
+    )
+    return lines
+
+
 class EvaluationDiagnostics:
     def __init__(self, report: EvaluationReport, session: IntakeSession):
         if not dataset_is_current(session):

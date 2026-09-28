@@ -946,10 +946,10 @@ def show_business_comparison(report, *, key: str) -> None:
     for note in report.notes:
         st.caption(note)
     summaries = []
-    echo_models = []
     from src.workbench.evaluation_diagnostics import (
         count_instruction_echo,
         dominant_output_models,
+        echo_triage_lines,
         high_truncation_models,
     )
 
@@ -960,8 +960,6 @@ def show_business_comparison(report, *, key: str) -> None:
         rows = model_result["rows"]
         # 指令回声：输出复述提示文本（含改述式长片段共享），诊断口径与服务层一致。
         echo_count = count_instruction_echo(rows)
-        if echo_count:
-            echo_models.append((model_result["label"], echo_count))
         summaries.append(
             {
                 "模型": model_result["label"],
@@ -986,14 +984,12 @@ def show_business_comparison(report, *, key: str) -> None:
             st.json(metrics["field_accuracy"])
         for error in model_result.get("errors", []):
             st.error(f"{model_result['label']}：{error}")
-    if echo_models:
-        st.warning(
-            "检测到指令回声（"
-            + "、".join(f"{label} {count} 题" for label, count in echo_models)
-            + "）：输出在复述提示文本而非作答。可核查：指令是否过长淹没答案信号、"
-            "补全式提示与对话型基座的模板是否匹配（考虑 messages 格式）、"
-            "max_new_tokens 是否小于最短合法答案。这是观察事实，原因仍需核查。"
-        )
+    # 回声分流引导与 CLI 对照摘要同源（echo_triage_lines 单一来源）。
+    for model_result in report.models:
+        for line in echo_triage_lines(
+            model_result["label"], model_result["rows"], protocol=report.protocol
+        ):
+            st.warning(line)
     if truncation_models:
         limit = report.protocol.get("max_new_tokens")
         st.warning(

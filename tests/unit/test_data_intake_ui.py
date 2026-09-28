@@ -9,6 +9,7 @@ import pytest
 pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
+from src.workbench.business_evaluation import EvaluationReport
 from src.workbench.intake_service import IntakeService, next_action
 from tests.unit.test_data_intake import CSV, analysis, model_for
 from tests.unit.test_full_data import FULL
@@ -1065,3 +1066,93 @@ def test_composed_full_sources_form_reads_designated_excel_sheets(data_page, mon
     assert current.full_data.sources["main"].sheet == "工单表"
     assert current.full_data.sources["labels"].sheet == "类别表"
     assert current.full_data.preview.counts["ready"] == 3
+
+
+def _comparison_row(index: int, output: str, *, correct: bool) -> dict:
+    prompt = "指" * 100
+    return {
+        "index": index,
+        "source": {"source_row_id": f"r{index}"},
+        "prompt": prompt,
+        "expected": "甲",
+        "output": output,
+        "status": "ok",
+        "correct": correct,
+    }
+
+
+def _comparison_report(outputs: list[str]) -> EvaluationReport:
+    rows = [
+        _comparison_row(index, output, correct=output.startswith("甲"))
+        for index, output in enumerate(outputs)
+    ]
+    return EvaluationReport(
+        evaluation_id="eval-echo-0001",
+        created_at="2026-09-28T00:00:00+00:00",
+        dataset={"purpose": "development_only"},
+        protocol={"scorer": "classification_exact", "max_new_tokens": 256},
+        comparison_key="",
+        status="completed",
+        models=[
+            {
+                "label": "本轮微调",
+                "requested_model": {"base_model": "demo", "adapter_path": None},
+                "metrics": {"total": len(rows), "scored": len(rows), "exact_match": 0.5},
+                "rows": rows,
+            }
+        ],
+    )
+
+
+def _render_business_comparison(data_page, report) -> AppTest:
+    """单函数渲染面：真实页面模块加载后直接调 show_business_comparison。
+
+    页面模块名以数字开头无法常规 import；from_function 的脚本体须自包含，
+    故在体内按文件加载页面模块（session_id / report / PAGE 经 args 传入），
+    让函数引用到真实的模块级全局（session、agent 设置、PROJECT_ROOT）。
+    """
+    _, session, _ = data_page
+
+    def render(session_id, report, page_path):
+        import importlib.util
+
+        import streamlit as st
+
+        st.session_state["intake_id"] = session_id
+        spec = importlib.util.spec_from_file_location("data_intake_page_render", page_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.show_business_comparison(report, key="echo_triage")
+
+    page = AppTest.from_function(
+        render, default_timeout=20, args=(session.session_id, report, PAGE)
+    )
+    page.run()
+    return page
+
+
+def test_business_comparison_renders_echo_triage_warnings(data_page):
+    """带回声模型的对照按 echo_triage_lines 分流渲染，替换旧的一条静态警告。"""
+    prompt = "指" * 100
+    page = _render_business_comparison(
+        data_page,
+        _comparison_report(
+            [prompt[:24] + "，所以答案是甲。", "乙类问题应先转人工处理并附上说明。"]
+        ),
+    )
+    assert not page.exception
+    warnings_text = "\n".join(warning.value for warning in page.warning)
+    assert "检测到指令回声——" in warnings_text
+    assert "长度上限不是第一嫌疑" in warnings_text
+    # 旧的静态一条式警告（全角括号拼 echo_models）不应再出现。
+    assert "检测到指令回声（" not in warnings_text
+
+
+def test_business_comparison_without_echo_renders_no_echo_warning(data_page):
+    """无回声模型的对照不渲染任何指令回声警告。"""
+    page = _render_business_comparison(
+        data_page,
+        _comparison_report(["甲类问题应转质量组处理。", "乙类问题应先转人工处理并附上说明。"]),
+    )
+    assert not page.exception
+    assert not any("检测到指令回声" in warning.value for warning in page.warning)

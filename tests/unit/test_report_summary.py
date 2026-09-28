@@ -359,6 +359,49 @@ def test_low_truncation_ratio_does_not_hint_max_new_tokens():
     assert "max_new_tokens" not in joined
 
 
+def test_comparison_echo_triage_lines_follow_no_truncation_branch():
+    """回声分流引导进对照摘要:与页面警告同源(echo_triage_lines 单一来源),按模型分别给行。"""
+    prompt = "指" * 100
+    echo_output = "指" * 24 + "尾部复述"  # 与提示共享 24 个连续字符,超过 12 字判定阈值
+    report = _report(
+        [
+            _model("基座", 2, 0.0, outputs=["错", "错"], prompt=prompt),
+            _model("本轮微调", 2, 0.0, outputs=[echo_output, echo_output], prompt=prompt),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "检测到指令回声——" in joined
+    assert "本轮微调 有 2 题输出在复述提示而非作答" in joined
+    # 回声题均未截断:走「长度上限不是第一嫌疑」分流句
+    assert "长度上限不是第一嫌疑" in joined
+    assert "当前 max_new_tokens" not in joined  # 报告未带协议时不编造当前值
+    assert "基座 有" not in joined  # 无回声的基座不被点名
+
+
+def test_comparison_without_echo_has_no_triage_lines():
+    """无回声的对照摘要不加回声分流行:页面警告与摘要同阈值同沉默。"""
+    report = _report([_model("基座", 3, 0.5)])
+    joined = "\n".join(summarize_comparison(report))
+    assert "检测到指令回声" not in joined
+    assert "长度上限不是第一嫌疑" not in joined
+
+
+def test_comparison_echo_triage_names_current_max_new_tokens_from_protocol():
+    """协议带 max_new_tokens 时回声分流行如实复述当前值;回声与截断并存走优先核查方向。"""
+    prompt = "指" * 100
+    echo_output = "指" * 24 + "尾部复述"
+    report = SimpleNamespace(
+        models=[
+            _model("本轮微调", 1, 0.0, statuses=["truncated"], outputs=[echo_output], prompt=prompt)
+        ],
+        protocol={"max_new_tokens": 64},
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "检测到指令回声——" in joined
+    assert "其中 1 题同时触及生成长度上限（当前 max_new_tokens=64）" in joined
+    assert "优先核查 max_new_tokens" in joined
+
+
 def test_summarize_dataset_temporal_states_inclusion_and_exclusion_honestly():
     """时间方案摘要:分法、纳入/排除数量、不随机补数,一句不漏也不夸大。"""
     from src.workbench.report_summary import summarize_dataset

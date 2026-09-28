@@ -2501,3 +2501,19 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_training_guidance.py 新增 5（单一来源口径：逐参数行、分档两分支、分区引导、1/N 算术整句、静默分支）；test_report_summary.py +3（小测试集渲染+位置在条数行后+33 个百分点算术锚定；恰好 30 条静默；缺 row_counts/缺 test 键不渲染不崩）；test_readme_alignment.py +1 新 pin `test_training_guidance_docs_pinned`（18 条 assert：模块路径出现 ≥2、三函数名、「同源同词汇」「非本产品实测」「何时该改」「少于 30 条」「不是统计保证」、试用记录第 6/7 条现状补充），总数 53；test_workbench_training_cli.py 扩 train-prepare stderr 断言（夹具走真实服务流到物化，row_counts 8/1/1 生产形状，未造桩字段）；test_data_intake.py 新增 materialize CLI 测试（断言 stderr 引导行与经 summarize_dataset 流出的「独立测试集共 1 条」）；test_data_intake_ui.py +2 函数（分区引导渲染、小测试集 caution 参数化 <30 渲染 / ≥30 静默）；test_workbench_training_ui.py 既有 pin 零调整仅追加 4 断言。
 
 **回归与错误修复**：联合定向十文件 **198 passed**（40.03s，含涟漪面 test_full_data_cli / test_temporal_intake_entrypoints）；ruff 13 文件全绿；单一来源 grep 确认（4 个函数定义与两处 canonical 字面量「参数大白话：训练轮数」「少于 30 条时结论偶然性大」仅在 training_guidance.py；`learning_rate_suggestion`/`LR_TIER_DISCLAIMER` 全仓引用均指向 workbench 模块，页面本地定义已删）。子代理偏差如实登记：r65-dataset 为对比 mypy 用过一次 git stash/pop（瞬时 stash 全工作区，已用 git diff 核对恢复完整，登记不再用）；r65-page 首跑一次 traceback 帧错乱失败、后续 4 次运行确定性通过（疑似 stale bytecode，未通过弱化代码解决）；r65-cli 如实报告 materialize 既有 CLI 测试在 test_full_data_cli.py 非其所有权、按 in-process 模式新增。全量回归本轮到期已履行（见背景），下次按 2-3 轮节奏安排 R67 左右。实现代码零返工（收口修复属跨代理缝合并，非实现错误）。
+
+## 第 66 轮 = 介入点编码切片②：指令回声三向证据分流（恢复循环第 47 轮）
+
+**背景**：R65 收口后，专家介入点清单剩余高价值项按「产品内是否已有可观察事实可分流」排序：第 1 条（指令回声预警）最优——产品已能检测回声（R58 `output_echoes_prompt`，≥12 字连续共享判定），但三向核查（max_new_tokens 过小 / 过长内容淹没答案信号 / 模板不匹配）只以静态清单形式平铺，两向可用报告内事实分流（回声题是否同时截断、回声题输入是否更长），第三向可陈述已记录的模板事实。北极星「判断编码飞轮」正是把专家式的「先查哪个」判断编码进产品。第 2/8/9 条需统计编码（未来候选），第 11 条 R57 已部分覆盖。
+
+**实现**：主会话钦定单一来源与 canonical 措辞 + 三路并行子代理（r66-docs / r66-summary / r66-page，model 走 sonnet tier alias，文件所有权互斥，代理不 commit）：
+- **单一来源**（src/workbench/evaluation_diagnostics.py，+66）：新公开函数 `echo_triage_lines(label, rows, protocol=None)`——回声预警的观察事实分流。分流逻辑：①回声题与截断题重叠 → 优先核查 max_new_tokens（附当前值）；无一重叠 → 「长度上限不是第一嫌疑」，转查输入长度与模板两向。②回声题与其余题的输入平均长度比 ≥1.5（`ECHO_TRIAGE_LENGTH_RATIO` 粗略启发）→ 支持「过长内容淹没答案信号」方向（两平均值同屏供人核对）；否则「内容过长方向证据不足」。③协议记录 `prompt_renderer=render_alpaca_prompt_without_answer` → 陈述补全式模板与对话型基座不匹配的已知形态；未记录 → 如实说「仍需人工核查，无法用报告内事实分流」。全部回声无比对集时不编造长度结论。每行收尾「按报告内事实排出的核查顺序，不认定原因；每改一项后用同一题集复测一次」——诚实引导纪律（观察→核查顺序→复测，不认定原因）与回声/截断/坍缩三类提示同构。
+- **摘要挂载**（src/workbench/report_summary.py，+11）：`summarize_comparison` 在坍缩警告块之后、`_pick_counterpart` 之前逐模型接 `echo_triage_lines`（带 `report.protocol`）——CLI eval-compare/eval-show 打印该摘要到 stderr，CLI 侧零改动自动获得分流（R57 平权红利）。
+- **页面**（ui/pages/07_Data_Intake.py，+8/-21）：删除 `echo_models` 累计器与静态三向 st.warning（旧 989-996），换逐模型 `echo_triage_lines` 渲染循环（`st.warning` 逐行）；「复述指令」汇总表列、截断/坍缩警告全部不动。
+- **文档**（agent-setup.md 对照基座段补单一来源条款；user-trial-log.md 介入点 1 追加「2026-09-28 现状补充」——历史原文不改写）。
+
+**集成收口（主会话）**：r66-page 交付后审阅两 diff 确认精确符合规约（页面三处预定 hunk、测试用 `AppTest.from_function`+importlib 按文件加载真实页面模块——数字开头模块名无法常规 import 的解法）。联合定向四文件 **174 passed**（23.91s：evaluation_diagnostics 60 + report_summary 56 + data_intake_ui 33 + readme_alignment 54... 对账：53+1=54）+ ruff 七文件全绿 + 单一来源 grep 确认（「检测到指令回声」生产字面仅 evaluation_diagnostics.py，旧静态三向文案「指令是否过长淹没答案信号」src/ui/scripts 0 处残留）。涟漪面穷尽：`summarize_comparison` 其余消费方仅 CLI（stderr 打印）与页面，均已覆盖。无跨代理缝缺陷，本轮无需收口修复。
+
+**测试**：test_evaluation_diagnostics.py +5（`_echo_row` 夹具——回声输出真正共享提示 ≥12 字连续片段，首版夹具因零共享字符未命中判定的坑已修）；test_report_summary.py +3（分流行走无截断分支、无回声静默、protocol 带出当前 max_new_tokens）；test_data_intake_ui.py +2（带回声对照渲染新分流警告且旧静态措辞不再出现、无回声零警告）；test_readme_alignment.py +1 新 pin `test_echo_triage_docs_pinned`。
+
+**回归与错误修复**：本轮未跑全量回归（2-3 轮节奏，上次全量 = 第 65 轮 1870 passed / 0 failed），**下次全量 R67 到期**。子代理偏差如实登记：r66-summary 四项（注释位按规约字面执行于 docstring 后、测试聚簇于相关区、ruff format 既有代码本不通过故只守住新增行、venv/bin/mypy shebang 失效改用 `venv/bin/python -m mypy`——6 个既有错误零新增）；r66-docs 零偏差。实现代码零返工。

@@ -1102,3 +1102,34 @@ def test_training_guidance_docs_pinned():
     assert "逐参数大白话与推荐起步值" in item6, "第 6 条补充必须点名大白话与起步值"
     assert "src/workbench/training_guidance.py 单一来源" in item6, "第 6 条补充必须点名单一来源"
     assert "何时该改" in item7 and "少于 30 条" in item7, "第 7 条补充必须点名引导与条数提醒"
+
+
+def test_echo_triage_docs_pinned():
+    """回声预警事实分流单一来源钉死(R66):echo_triage_lines、按报告内事实分流、
+    不认定原因边界与试用记录第 1 条现状补充。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 比较基座与本轮微调效果",
+        "## 让 Agent 解读结果与下一步",
+    )
+    assert "src/workbench/evaluation_diagnostics.py" in section, "单一来源模块路径必须写明"
+    assert "`echo_triage_lines` 单一来源" in section, "回声分流单一来源必须点名函数"
+    assert "`summarize_comparison`" in section, "CLI 摘要取词位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    assert "按报告内事实分流" in section, "分流主题必须写明"
+    assert "回声题是否同时触及生成长度上限" in section, "截断分流方向必须写明"
+    assert "1.5 倍" in section, "输入长度分流阈值必须写明"
+    assert "两个平均值同时给出供人自行核对" in section, "核对口径必须写明"
+    assert "补全式（Alpaca）" in section, "模板方向只陈述已记录事实必须写明"
+    assert "无法用报告内事实分流" in section, "模板缺位态口径必须写明"
+    assert "以上是按报告内事实排出的核查顺序，不认定原因" in section, "固定收尾句必须写明"
+    assert "每改一项后用同一题集复测一次" in section, "复测口径必须写明"
+    assert "不认定原因" in section, "观察事实边界必须写明"
+    # 试用记录介入点清单第 1 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item1 = _section(trial, "1. - [ ] 对照预警", "2. - [ ]")
+    assert "2026-09-28 现状补充" in item1, "介入点清单第 1 条缺现状补充"
+    for phrase in ("核查顺序", "同源", "evaluation_diagnostics"):
+        assert phrase in item1, f"第 1 条补充必须点名 {phrase}"
+    assert "echo_triage_lines" in item1, "第 1 条补充必须点名单一来源函数"
+    assert "能否独立选出正确的核查方向" in item1, "第 1 条历史原文必须保留"

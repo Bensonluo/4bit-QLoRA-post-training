@@ -448,3 +448,74 @@ def test_dominant_output_models_flags_repeat_dominant_outputs():
     assert dominant_output_models([model("甲", ["同一答案"] * 3)]) == []
     assert dominant_output_models([model("甲", [f"答案{i}" for i in range(10)])]) == []
     assert dominant_output_models([{"label": "空", "rows": []}]) == []
+
+
+def _echo_row(index: int, *, prompt_len: int, truncated: bool, echoes: bool) -> dict:
+    prompt = "指" * prompt_len
+    # 回声输出必须真正共享提示的连续片段（≥12 字）才命中判定；非回声输出不含提示字符。
+    output = (prompt[:24] + "然后才是尝试作答的内容") if echoes else "一个完全不同的正常答案"
+    return {
+        "index": index,
+        "prompt": prompt,
+        "output": output,
+        "status": "truncated" if truncated else "scored",
+        "truncated": truncated,
+    }
+
+
+def test_echo_triage_prioritizes_max_new_tokens_when_truncation_overlaps() -> None:
+    from src.workbench.evaluation_diagnostics import echo_triage_lines
+
+    rows = [
+        _echo_row(0, prompt_len=100, truncated=True, echoes=True),
+        _echo_row(1, prompt_len=100, truncated=True, echoes=True),
+        _echo_row(2, prompt_len=100, truncated=False, echoes=False),
+    ]
+    lines = echo_triage_lines("基座", rows, protocol={"max_new_tokens": 32})
+    assert lines[0].startswith("检测到指令回声——基座 有 2 题")
+    assert "其中 2 题同时触及生成长度上限（当前 max_new_tokens=32）" in lines[0]
+    assert "优先核查 max_new_tokens" in lines[0]
+    assert any("输入长度相近" in line for line in lines)  # 100 vs 100：不过长方向
+
+
+def test_echo_triage_rules_out_length_limit_without_overlap() -> None:
+    from src.workbench.evaluation_diagnostics import echo_triage_lines
+
+    rows = [_echo_row(i, prompt_len=100, truncated=False, echoes=True) for i in range(3)]
+    lines = echo_triage_lines("本轮微调", rows, protocol={"max_new_tokens": 256})
+    assert "没有一题触及生成长度上限" in lines[0]
+    assert "长度上限不是第一嫌疑" in lines[0]
+    assert not any("max_new_tokens 是否小于最短合法答案" in line for line in lines)
+    assert not any("字符" in line for line in lines)  # 全部回声：无比对集，不编造长度结论
+
+
+def test_echo_triage_supports_long_input_direction_by_observed_average() -> None:
+    from src.workbench.evaluation_diagnostics import echo_triage_lines
+
+    rows = [
+        _echo_row(0, prompt_len=600, truncated=False, echoes=True),
+        _echo_row(1, prompt_len=100, truncated=False, echoes=False),
+    ]
+    lines = echo_triage_lines("基座", rows, protocol={"prompt_renderer": "unknown"})
+    assert any("平均 600 字符" in line for line in lines)
+    assert any("支持「过长内容淹没答案信号」方向" in line for line in lines)
+    assert any("报告未记录本次模板类型" in line for line in lines)
+
+
+def test_echo_triage_states_alpaca_template_fact_when_recorded() -> None:
+    from src.workbench.evaluation_diagnostics import echo_triage_lines
+
+    rows = [_echo_row(0, prompt_len=100, truncated=False, echoes=True)]
+    lines = echo_triage_lines(
+        "基座", rows, protocol={"prompt_renderer": "render_alpaca_prompt_without_answer"}
+    )
+    assert any("补全式（Alpaca）提示模板" in line for line in lines)
+    assert any("messages 对话格式" in line for line in lines)
+    assert lines[-1].startswith("以上是按报告内事实排出的核查顺序")
+
+
+def test_echo_triage_silent_without_echo_rows() -> None:
+    from src.workbench.evaluation_diagnostics import echo_triage_lines
+
+    assert echo_triage_lines("基座", [_echo_row(0, prompt_len=100, truncated=False, echoes=False)]) == []
+    assert echo_triage_lines("基座", []) == []
