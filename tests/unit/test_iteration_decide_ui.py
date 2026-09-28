@@ -99,6 +99,24 @@ def test_evaluated_iteration_shows_results_and_records_decision(decide_page):
     assert any("证据不足" in message.value for message in page.success)
 
 
+def test_evaluated_iteration_shows_three_model_delta_in_question_counts(decide_page):
+    _, session, page, _, _ = decide_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    # 三模型分数差换算成题数差：本轮微调 1/2，父轮与基座各 0/2，各多答对 1 题。
+    assert any(
+        "父轮对照：本轮微调比父轮多答对 1 题（1/2 vs 0/2）。" in block.value
+        for block in page.markdown
+    )
+    assert any(
+        "基座对照：本轮微调比基座多答对 1 题（1/2 vs 0/2）。" in block.value
+        for block in page.markdown
+    )
+    # 开发集只有 2 道题，每题占 50 个百分点，提示 1 题差距的解释边界。
+    assert any("每题约占 50 个百分点" in block.value for block in page.markdown)
+
+
 def test_decided_iteration_shows_recorded_decision_without_new_controls(decide_page):
     _, session, page, decisions, iteration = decide_page
     iteration.update(status="decided", decision="stop", decision_reason="试点完成，停止迭代。")

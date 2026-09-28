@@ -558,9 +558,7 @@ def test_summarize_dataset_omits_small_test_set_caution_without_row_counts_or_te
     """缺 row_counts 或缺 test 键时不渲染提醒,也不崩(防御式取值与函数既有风格一致)。"""
     from src.workbench.report_summary import summarize_dataset
 
-    assert not any(
-        "独立测试集共" in line for line in summarize_dataset({"total_rows": 5})
-    )
+    assert not any("独立测试集共" in line for line in summarize_dataset({"total_rows": 5}))
     assert not any(
         "独立测试集共" in line
         for line in summarize_dataset(
@@ -825,6 +823,116 @@ def test_iteration_summary_states_and_decision_echo():
     assert "不代表业务效果达标" in joined
 
 
+def _delta_result(label, total, score, metric="exact_match"):
+    return {"label": label, "metrics": {"total": total, metric: score}}
+
+
+def test_three_model_delta_lines_translate_scores_to_question_counts():
+    """题数差算术:分数差换算成题数差,父轮在前基座在后,收尾给单题分辨率与边界。"""
+    from src.workbench.report_summary import three_model_delta_lines
+
+    lines = three_model_delta_lines(
+        [
+            _delta_result("基座", 8, 0.0),
+            _delta_result("父轮模型", 8, 0.25),
+            _delta_result("本轮微调", 8, 0.75),
+        ]
+    )
+    assert lines[0] == "父轮对照：本轮微调比父轮多答对 4 题（6/8 vs 2/8）。"
+    assert lines[1] == "基座对照：本轮微调比基座多答对 6 题（6/8 vs 0/8）。"
+    assert lines[-1].startswith("开发集共 8 道题，每题约占 12.5 个百分点——")
+    assert "方向参考价值有限" in lines[-1]
+    assert "不是统计结论" in lines[-1]
+
+
+def test_three_model_delta_lines_cover_equal_fewer_and_pass_rate_wording():
+    """持平/退步分支与自定义通过率措辞:答对换通过,负差如实说少。"""
+    from src.workbench.report_summary import three_model_delta_lines
+
+    lines = three_model_delta_lines(
+        [
+            _delta_result("基座", 6, 0.5),
+            _delta_result("父轮模型", 6, 0.5),
+            _delta_result("本轮微调", 6, 0.5),
+        ]
+    )
+    assert lines[0] == "父轮对照：本轮微调与父轮答对题数相同（3/6 vs 3/6）。"
+    assert lines[1] == "基座对照：本轮微调与基座答对题数相同（3/6 vs 3/6）。"
+
+    passed = three_model_delta_lines(
+        [
+            _delta_result("基座", 4, 0.75, metric="pass_rate"),
+            _delta_result("父轮模型", 4, 1.0, metric="pass_rate"),
+            _delta_result("本轮微调", 4, 0.75, metric="pass_rate"),
+        ],
+        decision_metric="pass_rate",
+    )
+    assert passed[0] == "父轮对照：本轮微调比父轮少通过 1 题（3/4 vs 4/4）。"
+    assert passed[1] == "基座对照：本轮微调与基座通过题数相同（3/4 vs 3/4）。"
+
+
+def test_three_model_delta_lines_silent_without_usable_pairs():
+    """不可算术的形态如实静默:空结果、无本轮、开放任务无分数、题数不一致。"""
+    from src.workbench.report_summary import three_model_delta_lines
+
+    assert three_model_delta_lines(None) == []
+    assert three_model_delta_lines([]) == []
+    # 只有基座与父轮,缺本轮微调——没有比较主体,静默。
+    assert (
+        three_model_delta_lines([_delta_result("基座", 4, 0.5), _delta_result("父轮模型", 4, 0.5)])
+        == []
+    )
+    # 开放任务没有 exact_match 分数——answered 返回 None,静默。
+    assert (
+        three_model_delta_lines(
+            [
+                _delta_result("基座", 4, 0.5),
+                _delta_result("父轮模型", 4, 0.5),
+                {"label": "本轮微调", "metrics": {"total": 4}},
+            ]
+        )
+        == []
+    )
+    # 两模型 total 不一致(异常形态)——不做跨分母算术,静默。
+    assert (
+        three_model_delta_lines(
+            [_delta_result("父轮模型", 4, 0.5), _delta_result("本轮微调", 8, 0.5)]
+        )
+        == []
+    )
+
+
+def test_iteration_summary_renders_delta_lines_only_when_evaluated_with_results():
+    """轮次摘要挂载:evaluated 且带 results 时出现题数差行,其他状态与无结果记录不出现。"""
+    from src.workbench.report_summary import summarize_iteration
+
+    evaluated = summarize_iteration(
+        {
+            "status": "evaluated",
+            "decision_metric": "exact_match",
+            "results": [
+                _delta_result("基座", 2, 0.0),
+                _delta_result("父轮模型", 2, 0.0),
+                _delta_result("本轮微调", 2, 0.5),
+            ],
+        }
+    )
+    joined = "\n".join(evaluated)
+    assert "父轮对照：本轮微调比父轮多答对 1 题（1/2 vs 0/2）。" in joined
+    assert "基座对照：本轮微调比基座多答对 1 题（1/2 vs 0/2）。" in joined
+    assert "每题约占 50 个百分点" in joined
+    assert (
+        joined.index("三模型同题对照已完成")
+        < joined.index("父轮对照")
+        < joined.index("以上只是流程状态与已记录的决定")
+    )
+
+    running = summarize_iteration({"status": "running"})
+    assert "父轮对照" not in "\n".join(running)
+    evaluated_bare = summarize_iteration({"status": "evaluated"})
+    assert "父轮对照" not in "\n".join(evaluated_bare)
+
+
 def test_execution_summary_state_machine_translates_user_action_states():
     """自动执行摘要:进行中/暂停等确认/完成待决定/终态各如实;等确认必须点名用户动作。"""
     from src.workbench.report_summary import summarize_execution
@@ -955,7 +1063,9 @@ def test_plan_summary_renders_shared_tool_trace_lines():
         "工具核查轨迹：2 次调用，成功 1 次、失败 1 次——"
         "失败的调用没有取到证据，方案只依赖成功的调用。" in joined
     )
-    boundary_index = next(i for i, line in enumerate(lines) if line.startswith("方案就绪与推荐理由"))
+    boundary_index = next(
+        i for i, line in enumerate(lines) if line.startswith("方案就绪与推荐理由")
+    )
     trace_index = next(i for i, line in enumerate(lines) if line.startswith("工具核查轨迹"))
     assert trace_index < boundary_index, "轨迹行必须在收尾边界句之前"
 
@@ -1286,8 +1396,7 @@ def test_analysis_summary_translates_findings_questions_and_gaps():
     assert lines[4] == "暂定微调思路：确认标签后可考虑 SFT，规模等待全量检查。"
     assert lines[5] == "下一步：核对样例转换，随后提供全量数据。"
     assert (
-        lines[-1]
-        == "以上发现中「已观察」是数据里的事实，其余是待确认的推断或业务解释；"
+        lines[-1] == "以上发现中「已观察」是数据里的事实，其余是待确认的推断或业务解释；"
         "分析待你确认并经真实预览核对，不代表业务效果达标。"
     )
 
@@ -1398,7 +1507,9 @@ def test_registration_summary_covers_all_states():
     assert summarize_registration(unavailable) == ["未安装 mlflow,无法查询模型库。"]
     # 失败态没有 message 时不编造,只如实点名状态;裸记录给缺位句。
     bare_failed = {"run_id": "wb-1", "status": "lookup_failed"}
-    assert summarize_registration(bare_failed) == ["模型库查询返回状态 lookup_failed，没有更多说明。"]
+    assert summarize_registration(bare_failed) == [
+        "模型库查询返回状态 lookup_failed，没有更多说明。"
+    ]
     assert summarize_registration({}) == ["这份注册状态没有可读的内容。"]
 
 
@@ -1480,7 +1591,10 @@ def test_export_summary_covers_all_states():
     assert ready[-1].startswith("导出只产出")
 
     blocked = summarize_export(
-        {"status": "adapter_missing", "reasons": ["训练记录为成功，但产物目录缺少完整的 adapter 文件：/x"]}
+        {
+            "status": "adapter_missing",
+            "reasons": ["训练记录为成功，但产物目录缺少完整的 adapter 文件：/x"],
+        }
     )
     assert blocked[0].startswith("训练记录为成功，但产物目录缺少")
     assert blocked[-1].startswith("导出只产出")

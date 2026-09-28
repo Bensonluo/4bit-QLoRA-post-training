@@ -184,7 +184,8 @@ def summarize_comparison(report: Any) -> list[str]:
             )
         else:
             lines.append(
-                zero_head + "本次没有观察到截断、生成失败、复述或重复输出,零分更可能来自答案格式不匹配;"
+                zero_head
+                + "本次没有观察到截断、生成失败、复述或重复输出,零分更可能来自答案格式不匹配;"
                 "继续加数据之前,先核对输出格式与期望答案是否对得上。"
             )
     elif best_score == 1.0:
@@ -553,6 +554,69 @@ _ITERATION_DECISION_NAMES = {
 }
 
 
+def three_model_delta_lines(
+    results: list[dict] | None, decision_metric: str = "exact_match"
+) -> list[str]:
+    """三模型对照分数差的题数换算（单一来源，页面决策卡与 CLI 状态摘要同词汇）。
+
+    分数差不直观——0.625 对 0.750 是差 1 题还是差 5 题，没有统计背景难以分辨。
+    只做确定性算术：把分数差换算成题数差，并给出每题占多少个百分点的分辨率；
+    差距是否值得再投一轮，仍由用户结合失败形态与逐题核对判断。
+    """
+    if not results:
+        return []
+    verb = "通过" if decision_metric == "pass_rate" else "答对"
+
+    def answered(item: dict) -> tuple[int, int] | None:
+        metrics = item.get("metrics") or {}
+        score, total = metrics.get(decision_metric), metrics.get("total")
+        if (
+            not isinstance(score, (int, float))
+            or isinstance(score, bool)
+            or not isinstance(total, int)
+            or isinstance(total, bool)
+            or total <= 0
+        ):
+            return None
+        return round(score * total), total
+
+    lines: list[str] = []
+    total_seen = 0
+    own = next((item for item in results if item.get("label") == "本轮微调"), None)
+    if own is None:
+        return []
+    for other_label, other_name in (("父轮模型", "父轮"), ("基座", "基座")):
+        other = next((item for item in results if item.get("label") == other_label), None)
+        if other is None:
+            continue
+        own_counts, other_counts = answered(own), answered(other)
+        if own_counts is None or other_counts is None:
+            continue
+        own_count, total = own_counts
+        other_count, other_total = other_counts
+        if total != other_total:
+            continue
+        total_seen = total
+        delta = own_count - other_count
+        if delta > 0:
+            changed = f"比{other_name}多{verb} {delta} 题"
+        elif delta < 0:
+            changed = f"比{other_name}少{verb} {-delta} 题"
+        else:
+            changed = f"与{other_name}{verb}题数相同"
+        lines.append(
+            f"{other_name}对照：本轮微调{changed}（{own_count}/{total} vs {other_count}/{total}）。"
+        )
+    if not lines:
+        return []
+    lines.append(
+        f"开发集共 {total_seen} 道题，每题约占 {100 / total_seen:.5g} 个百分点——"
+        "差距在 1 题量级时方向参考价值有限，是否值得再投一轮还要结合失败形态"
+        "（截断/生成失败/复述指令）与逐题核对判断；以上是题数算术，不是统计结论。"
+    )
+    return lines
+
+
 def summarize_iteration(record: dict) -> list[str]:
     """把一个改进轮次记录翻译成人话：当前停在哪一步、业务决定是否已记录。
 
@@ -576,6 +640,12 @@ def summarize_iteration(record: dict) -> list[str]:
         lines.append(
             "基座、父轮与本轮的三模型同题对照已完成，正等待你的业务决定："
             "采用、继续、停止或证据不足。"
+        )
+        # 题数差算术与页面决策卡同源（three_model_delta_lines 单一来源）。
+        lines.extend(
+            three_model_delta_lines(
+                record.get("results"), record.get("decision_metric") or "exact_match"
+            )
         )
     elif status == "running":
         lines.append("本轮训练已启动；训练完成只说明产出模型，效果要看三模型同题对照。")

@@ -330,3 +330,34 @@ def test_iteration_compare_accepts_only_bidirectionally_linked_recovery_child(
     assert invoke(*args) == 2
     assert "不是本轮获准" in capsys.readouterr().err
     assert len(calls) == before
+
+
+def test_iteration_confirm_evaluated_prints_delta_summary_to_stderr_only(iteration_cli, capsys):
+    invoke, _, session, record, _ = iteration_cli
+    # 按该文件既有构造方式，把 record 就地改成 evaluated + 三模型结果形态。
+    record.update(
+        status="evaluated",
+        results=[
+            {"label": "基座", "metrics": {"total": 2, "exact_match": 0.0}},
+            {"label": "父轮模型", "metrics": {"total": 2, "exact_match": 0.0}},
+            {"label": "本轮微调", "metrics": {"total": 2, "exact_match": 0.5}},
+        ],
+    )
+    assert (
+        invoke(
+            "iteration-confirm",
+            session.session_id,
+            record["iteration_id"],
+            "--revision",
+            session.revision,
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    # 三模型题数差人话只进 stderr，与页面决策卡同源同措辞。
+    assert "父轮对照：本轮微调比父轮多答对 1 题（1/2 vs 0/2）。" in captured.err
+    assert "每题约占 50 个百分点" in captured.err
+    # stdout 保持纯 JSON 供脚本消费，不夹带中文人话行。
+    assert json.loads(captured.out)["iteration_id"] == record["iteration_id"]
+    assert "父轮对照" not in captured.out
+    assert "每题约占" not in captured.out

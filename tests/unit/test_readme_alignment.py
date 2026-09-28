@@ -627,7 +627,9 @@ def test_scoring_summary_docs_pinned():
     assert "summarize_scoring" in section, "页面渲染位点必须点名摘要函数"
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
     # 评分摘要工具核查轨迹行(R62):与评测解读同格式(summarize_tool_trace 单一来源),由摘要函数自动带上。
-    assert "评分摘要现以评测解读同一格式渲染工具核查轨迹" in section, "评分轨迹行必须写明(与评测解读同格式)"
+    assert "评分摘要现以评测解读同一格式渲染工具核查轨迹" in section, (
+        "评分轨迹行必须写明(与评测解读同格式)"
+    )
 
 
 def test_suite_summary_docs_pinned():
@@ -944,8 +946,12 @@ def test_task_spec_show_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "不代表模型效果达标" in section, "边界句必须写明"
     # 规约确认联动(R60 切片 A):启动决策点同读这份投影,折叠区 label、train-start stderr 与勾选文案同段钉死。
     assert "「📋 任务规约（启动本轮训练前的口径）」" in section, "启动位折叠区 label 必须逐字写明"
-    assert "`train-start` 在启动时输出同一份规约摘要" in section, "train-start 启动时输出规约摘要必须写明"
-    assert "已核对任务规约与预检提示，按当前方案开始训练。" in section, "预检警告勾选文案必须逐字写明"
+    assert "`train-start` 在启动时输出同一份规约摘要" in section, (
+        "train-start 启动时输出规约摘要必须写明"
+    )
+    assert "已核对任务规约与预检提示，按当前方案开始训练。" in section, (
+        "预检警告勾选文案必须逐字写明"
+    )
     assert "页面与 CLI 同源同词汇" in section, "启动决策点页面与 CLI 同口径承诺必须写明"
     # 帮助文本与命令面同步:收 SESSION_ID,只读投影不收 --revision/--tail。
     help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "task-spec-show")
@@ -1009,16 +1015,18 @@ def test_task_spec_design_doc_pinned():
         "CLI 实现位点必须点名"
     )
     assert "「📋 任务规约（启动本轮训练前的口径）」折叠区" in doc, "页面实现位点必须点名"
-    assert "协作轨迹统一**~~ **已完成（2026-09-28）**" in doc, "Phase 3 协作轨迹统一落地必须如实登记"
+    assert "协作轨迹统一**~~ **已完成（2026-09-28）**" in doc, (
+        "Phase 3 协作轨迹统一落地必须如实登记"
+    )
     assert "`summarize_tool_trace` 单一来源、页面与 CLI 同源同词汇" in doc, (
         "轨迹摘要单一来源与同口径承诺必须写明"
     )
     assert "本轮补齐的是呈现统一，不是补落盘" in doc, "侦察纠正必须如实登记"
     assert "协作轨迹呈现已统一" in doc, "差距 3 呈现统一登记必须写明"
     # R63:训练运行记录补齐 plan_trace 快照与同格式轨迹行,差距 3 完全收口。
-    assert "训练运行记录也已补齐（R63 落地，2026-09-28）：方案执行时把方案 trace 快照进运行记录" in doc, (
-        "训练运行记录轨迹补齐必须如实登记"
-    )
+    assert (
+        "训练运行记录也已补齐（R63 落地，2026-09-28）：方案执行时把方案 trace 快照进运行记录" in doc
+    ), "训练运行记录轨迹补齐必须如实登记"
     assert "差距 3 完全收口" in doc, "差距收口结论必须写明"
 
 
@@ -1085,9 +1093,7 @@ def test_training_guidance_docs_pinned():
     assert "少于 30 条" in split_section, "条数提醒阈值必须写明"
     assert "不是统计保证" in split_section, "阈值诚实边界必须写明"
     # 训练段:逐参数大白话与推荐起步值,诚实边界照抄模块 docstring 口径。
-    train_section = _section(
-        text, "## 在同一任务中启动真实训练", "## 允许一次显存不足技术恢复"
-    )
+    train_section = _section(text, "## 在同一任务中启动真实训练", "## 允许一次显存不足技术恢复")
     assert "manual_training_parameter_lines" in train_section, "手工参数函数必须在训练段落位"
     assert "参数大白话" in train_section and "推荐起步值" in train_section, (
         "大白话与起步值主题必须写明"
@@ -1133,3 +1139,29 @@ def test_echo_triage_docs_pinned():
         assert phrase in item1, f"第 1 条补充必须点名 {phrase}"
     assert "echo_triage_lines" in item1, "第 1 条补充必须点名单一来源函数"
     assert "能否独立选出正确的核查方向" in item1, "第 1 条历史原文必须保留"
+
+
+def test_three_model_delta_docs_pinned():
+    """三模型对照题数差单一来源钉死(R67):three_model_delta_lines、分数差换算题数差、
+    单题分辨率与不作统计结论边界,试用记录第 11 条现状补充在场。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 从评测结果进入下一轮改进",
+        "## 配置文件与优先级",
+    )
+    assert "src/workbench/report_summary.py" in section, "单一来源模块路径必须写明"
+    assert "`three_model_delta_lines` 单一来源" in section, "题数差单一来源必须点名函数"
+    assert "`summarize_iteration`" in section, "轮次摘要取词位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    assert "题数差" in section, "分数差换算题数差主题必须写明"
+    assert "每题约占" in section, "单题分辨率措辞必须写明"
+    assert "1 题量级" in section, "1 题量级参考价值边界必须写明"
+    assert "不作统计结论" in section, "统计边界必须写明"
+    assert "对应行不出现" in section, "缺位态口径必须写明"
+    # 试用记录介入点清单第 11 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item11 = _section(trial, "11. - [ ] 三模型对照表", "12. - [ ]")
+    assert "2026-09-28 现状补充" in item11, "介入点清单第 11 条缺现状补充"
+    assert "three_model_delta_lines" in item11, "第 11 条补充必须点名单一来源函数"
+    assert "题数差" in item11 and "单题分辨率" in item11, "第 11 条补充必须点名换算与分辨率"
+    assert "能否看懂" in item11, "第 11 条历史原文必须保留"
