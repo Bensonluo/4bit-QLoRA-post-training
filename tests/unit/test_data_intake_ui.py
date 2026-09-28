@@ -1,7 +1,9 @@
 """UI flows run without GPU/MLflow and use the same production intake service."""
 
+import hashlib
 import io
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -10,11 +12,31 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
 from src.workbench.business_evaluation import EvaluationReport
+from src.workbench.demo_task import (
+    DEMO_FULL_BUTTON,
+    DEMO_FULL_NAME,
+    DEMO_GOAL,
+    DEMO_SAMPLE_BUTTON,
+    DEMO_SAMPLE_ENTRY_LABEL,
+    DEMO_SAMPLE_NAME,
+    demo_full,
+    demo_sample,
+    is_demo_session,
+)
 from src.workbench.intake_service import IntakeService, next_action
 from tests.unit.test_data_intake import CSV, analysis, model_for
 from tests.unit.test_full_data import FULL
 
 PAGE = Path(__file__).resolve().parents[2] / "ui/pages/07_Data_Intake.py"
+REPO_EXAMPLES = Path(__file__).resolve().parents[2] / "data" / "custom" / "examples"
+
+
+def stage_demo_files(project_root: Path) -> None:
+    """把仓库自带的演示文件复制到该 PROJECT_ROOT，模拟文件在场的完整安装。"""
+    target = project_root / "data" / "custom" / "examples"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in (DEMO_SAMPLE_NAME, DEMO_FULL_NAME):
+        shutil.copy(REPO_EXAMPLES / name, target / name)
 
 
 @pytest.fixture()
@@ -1191,3 +1213,85 @@ def test_business_comparison_without_echo_renders_no_echo_warning(data_page):
     )
     assert not page.exception
     assert not any("检测到指令回声" in warning.value for warning in page.warning)
+
+
+def test_demo_task_entry_creates_real_session(data_page):
+    """一键演示入口只代劳找文件+填表:创建的是真实任务,落在与真实任务相同的视图。"""
+    import ui.config
+
+    service, _session, page = data_page
+    stage_demo_files(ui.config.PROJECT_ROOT)
+    page.run()
+    assert not page.exception
+    assert any(expander.label == DEMO_SAMPLE_ENTRY_LABEL for expander in page.expander)
+    button(page, DEMO_SAMPLE_BUTTON).click().run()
+    assert not page.exception
+    demo_sessions = [s for s in service.list_sessions() if s.goal == DEMO_GOAL]
+    assert len(demo_sessions) == 1
+    loaded = service.load(demo_sessions[0].session_id)
+    sample_bytes = (
+        ui.config.PROJECT_ROOT / "data" / "custom" / "examples" / DEMO_SAMPLE_NAME
+    ).read_bytes()
+    assert loaded.source.digest == hashlib.sha256(sample_bytes).hexdigest()
+    assert loaded.source.scope == "sample"
+    assert len(loaded.source.rows) == 2
+    # 一键之后落在真实任务视图:后续每一步(基础分析、预览核对……)与真实任务完全相同
+    assert any(
+        expander.label == "没有 Agent 服务？用基础分析开始（产品内置判断，无需任何密钥）"
+        for expander in page.expander
+    )
+
+
+def test_demo_full_companion_gated_by_digest_and_validates(data_page):
+    """配套演示全量按钮按内容摘要门控:演示任务可见可验证,同摘要环境下的真实任务不可见。"""
+    import ui.config
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    service, session, page = data_page
+    stage_demo_files(ui.config.PROJECT_ROOT)
+    sample = demo_sample(ui.config.PROJECT_ROOT)
+    assert sample is not None
+    assert is_demo_session(hashlib.sha256(sample[1]).hexdigest(), ui.config.PROJECT_ROOT)
+
+    def confirmed(source_session):
+        updated = service.apply_analysis(
+            source_session,
+            propose_baseline_analysis(
+                source_session,
+                target_column="类别",
+                group_columns=["编号"],
+                excluded_columns=["处理结果"],
+            ),
+            model="baseline-deterministic",
+        )
+        return service.confirm(updated.session_id, updated.revision)
+
+    demo = confirmed(service.create(DEMO_GOAL, sample[0], sample[1], data_description="演示数据"))
+    # 真实任务用内容不同的数据:夹具 CSV 与演示文件逐字节相同(旅程测试同一份数据),
+    # 内容摘要一致的来源本来就算演示来源,不能充当「真实任务看不见按钮」的反例。
+    real_bytes = (
+        "编号,客户描述,类别,处理结果\n101,把手松动,质量,维修\n102,配送延迟,物流,补偿\n"
+    ).encode()
+    real = confirmed(service.create("真实售后分类目标", "真实工单.csv", real_bytes))
+
+    page.run()
+    page.selectbox(key="intake_select").select(real.session_id).run()
+    assert not page.exception
+    assert all(item.label != DEMO_FULL_BUTTON for item in page.button)
+
+    page.selectbox(key="intake_select").select(demo.session_id).run()
+    assert not page.exception
+    button(page, DEMO_FULL_BUTTON).click().run()
+    assert not page.exception
+    loaded = service.load(demo.session_id)
+    assert next_action(loaded) == "review_full_data"
+    assert loaded.full_data.source.name == DEMO_FULL_NAME
+    assert len(loaded.full_data.source.rows) == 10
+    assert button(page, "确认全量数据含义").disabled  # 仍需逐行核对后勾选,门禁未被跳过
+
+
+def test_demo_task_module_degrades_honestly_when_files_absent(tmp_path):
+    """演示文件不在场时如实返回 None/False:入口隐藏,不编造演示数据。"""
+    assert demo_sample(tmp_path) is None
+    assert demo_full(tmp_path) is None
+    assert not is_demo_session("0" * 64, tmp_path)

@@ -1328,3 +1328,25 @@ def test_answer_sheet_docs_pinned():
     assert "不要凭猜测" in item10, "第 10 条补充必须写明防编造门槛"
     assert "未成熟标签行不混入" in item10, "第 10 条补充必须写明筛选边界"
     assert "能否找到了解业务的人并按指引回传文件" in item10, "第 10 条历史原文必须保留"
+
+
+def test_demo_task_docs_pinned():
+    """内置演示任务文档锚点:入口边界/摘要门控/诚实降级必须与产品原文一致。"""
+    text = AGENT_SETUP.read_text(encoding="utf-8")
+    section = _section(text, "### 内置演示任务", "### 多份资料一起分析")
+    assert "第一次使用？用内置演示任务开始" in section, "入口文案必须与页面一致"
+    assert "src/workbench/demo_task.py" in section, "单一来源模块必须点名"
+    assert "虚构" in section, "数据虚构属性必须写明"
+    assert "与真实任务完全相同" in section, "关卡一致性必须写明"
+    assert "没有预设结论" in section, "无预设结论必须写明"
+    assert "不跳过任何门禁" in section, "不跳门禁必须写明"
+    assert "按文件内容摘要比对" in section, "摘要门控机制必须写明"
+    assert "同名不同内容不算" in section, "摘要与文件名区分必须写明"
+    assert "不会混进任何真实任务" in section, "隔离边界必须写明"
+    assert "如实隐藏" in section, "诚实降级必须写明"
+    assert "demo_sample" in section, "降级机制必须点名单一来源函数"
+    assert "不编造演示数据" in section, "不编造门槛必须写明"
+    # 试用记录冷启动补充在场,历史结构未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    assert "第一次使用？用内置演示任务开始" in trial, "试用记录缺冷启动入口补充"
+    assert "src/workbench/demo_task.py" in trial, "试用记录补充必须点名单一来源模块"

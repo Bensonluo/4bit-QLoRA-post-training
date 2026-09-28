@@ -12,6 +12,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import streamlit as st
 
 from src.agent.intake import CompatibleChatClient, is_local_endpoint
+from src.workbench.demo_task import (
+    DEMO_DESCRIPTION,
+    DEMO_FULL_BUTTON,
+    DEMO_GOAL,
+    DEMO_SAMPLE_BUTTON,
+    DEMO_SAMPLE_ENTRY_LABEL,
+    demo_full,
+    demo_sample,
+    is_demo_session,
+)
 from src.workbench.evaluation_suites import EvalSuiteService
 from src.workbench.intake_service import (
     IntakeService,
@@ -1364,6 +1374,30 @@ if "intake_id" not in st.session_state:
                 st.rerun()
             except (ValueError, OSError) as exc:
                 st.error(str(exc))
+    # 内置演示任务:只代替「找文件 + 填表」的冷启动;创建后的每一道关卡
+    # 与真实任务完全相同(单一来源 src/workbench/demo_task.py)。
+    demo_pair = demo_sample(PROJECT_ROOT)
+    if demo_pair is not None:
+        with st.expander(DEMO_SAMPLE_ENTRY_LABEL):
+            st.caption(
+                "演示数据是虚构的售后工单（样例 2 条、配套全量 10 条），"
+                "与《用户试用记录》的试点任务同一份文件。创建后的每一步"
+                "（分析、预览核对、对比核验、盲标核验）与真实任务完全相同，"
+                "没有预设结论。"
+            )
+            if st.button(DEMO_SAMPLE_BUTTON):
+                try:
+                    demo_session = service.create(
+                        DEMO_GOAL,
+                        demo_pair[0],
+                        demo_pair[1],
+                        data_description=DEMO_DESCRIPTION,
+                        scope="sample",
+                    )
+                    st.session_state["intake_id"] = demo_session.session_id
+                    st.rerun()
+                except (ValueError, OSError) as exc:
+                    st.error(str(exc))
     st.stop()
 
 session = service.load(st.session_state["intake_id"])
@@ -2365,6 +2399,24 @@ if session.confirmed_revision is not None or session.full_data is not None:
             if session.source.scope == "full" and st.button("验证首次上传的全量文件"):
                 try:
                     service.validate_full_data(session.session_id, session.revision)
+                    st.rerun()
+                except (ValueError, OSError) as exc:
+                    st.error(str(exc))
+            # 配套演示全量:只对「来源就是演示样例」的任务开放(内容摘要比对,
+            # 同名不同内容不算)——演示数据不会混进任何真实任务。
+            demo_full_pair = (
+                demo_full(PROJECT_ROOT)
+                if is_demo_session(session.source.digest, PROJECT_ROOT)
+                else None
+            )
+            if demo_full_pair is not None and st.button(DEMO_FULL_BUTTON):
+                try:
+                    service.validate_full_data(
+                        session.session_id,
+                        session.revision,
+                        demo_full_pair[0],
+                        demo_full_pair[1],
+                    )
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))

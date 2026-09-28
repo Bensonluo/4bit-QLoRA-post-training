@@ -2612,3 +2612,19 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_answer_sheet.py +4（status 筛选＋pending 排除＋policy 透传；无 policy 默认；CSV BOM/表头/多字段空列；lines 三规则逐字）；test_answer_sheet_cli.py +4（样例导出 JSON+stderr+CSV；无缺答案不写文件；无预览 exit 2；全量口径切换），文件级 subprocess 先例；test_data_intake_ui.py +2（缺答案时下载按钮+规则 caption 在场；无缺答案时均不渲染——不拿空清单冒充交接物）；test_readme_alignment.py +1（60）。定向门：answer_sheet+CLI+intake **35 passed**、UI **35 passed**、对齐＋旅程 **61 passed**、ruff check/format 双闸绿、单一来源 grep（三条规则字面仅 answer_sheet.py 一处）。
 
 **回归与错误修复**：全量回归到期轮已履行（开工时 R72 边界 1930 passed / 205.59s，新基线；下次按节奏 R75）。主会话错误如实登记：①UI pin 两次失败探明 AppTest 1.57 无 download_button 专用访问器（不在 page.button）——通用 `page.get("download_button")` 的节点 `.proto` 即 DownloadButton 消息、按 `proto.label` 过滤（proto 无 file_name 字段）；页面另有 8 个常驻 download_button 调用点，断言必须按标签过滤、不能断言整表为空（`assert not page.get(...)` 会撞上 `[UnknownElement()]`）；②BOM 字面量从零宽字符改 `b"\xef\xbb\xbf"`；③对齐 pin 初稿断言 `` `answer-sheet` `` 与文档实际写法 `` `answer-sheet SESSION_ID` `` 不匹配，改按实际命令串断言；④ruff format 重排 3 文件后定向复跑仍绿。本轮无子代理参与（429 未重置）。介入点清单剩余：12（现场发现）。
+
+## 第 73 轮 = 北极星缺口①使能：内置演示任务一键开始（真实试用者冷启动）
+
+**日期**：2026-09-29（单通道；429 限制 02:24 重置后本轮仍单通道收口）
+
+**选点**：介入点 1–11 已全部编码（R61–R72），仅剩 12（现场发现，不可预编码）。北极星两大开放缺口（north-star.md 69–73 行）都阻塞在外部资源：①北极星指标从未被测过（需要真实外部非专家试用者；试用模板就绪未回收）；②Agent 判断真实性证据不足（需要真实密钥）。两者都无法由开发侧诚实自造，本轮选择缺口①的使能项——降低真实试用者的冷启动摩擦：试点任务要求试用者先找到 `data/custom/examples/` 下的 CSV 再手工填目标/说明，这是模板回收前最能自主打磨的一环。设计红线：入口只代替「找文件＋填表」；创建后的每一道关卡与真实任务完全相同（没有预设结论、不跳过任何门禁、不自动运行分析、不预选字段——否则污染试用测量本身）；配套演示全量按钮按内容摘要门控（sha256 原始字节比对，同名不同内容不算），演示数据不可能混进真实任务；演示文件不在场时如实隐藏入口，不编造演示数据。
+
+**实现**：
+- **单一来源**（src/workbench/demo_task.py，新模块）：常量（DEMO_GOAL/DEMO_DESCRIPTION/文件名/三个按钮与入口文案）＋ `demo_sample(root)`/`demo_full(root)`（读 `data/custom/examples/` 下文件，OSError → None）＋ `is_demo_session(source_digest, root)`（sha256 与 sources.py 同式比对）。页面与测试只 import 该模块，文案不落第二处。
+- **页面挂载**（07_Data_Intake.py 两处）：①新建任务屏 `st.stop()` 前——折叠区「第一次使用？用内置演示任务开始」（说明虚构属性、2/10 条、同一份文件、每一步与真实任务相同）＋按钮「创建演示任务（售后工单分类）」→ `service.create(DEMO_GOAL, name, bytes, data_description=DEMO_DESCRIPTION, scope="sample")`（与手工上传完全同一 API，goal 非空由服务校验）；②全量验证 else 分支（单文件路径）——`is_demo_session(session.source.digest, PROJECT_ROOT)` 为真才计算 `demo_full_pair`，按钮「使用配套演示全量数据（虚构，10 条）」→ `validate_full_data(session_id, revision, name, bytes)`（与手工上传全量同一 API）。摘要门控语义诚实：内容逐字节相同的来源本来就算演示来源（测试夹具 CSV 与演示文件逐字节相同正是同一份数据的印证）。
+- **文档**：agent-setup.md 新增「### 内置演示任务」小节（「从样例继续到全量数据」下、多份资料节前）；user-trial-log.md 试用信息 +1 行冷启动补充（非 pin 区，结构不改写）；test_readme_alignment.py +1 pin `test_demo_task_docs_pinned`（60→61）。
+- **未动 north-star.md**：缺口①仍开放，本轮是使能不是闭环，其短语受 pin 保护不碰。
+
+**测试**：test_data_intake_ui.py +3（35→38）：①`test_demo_task_entry_creates_real_session`——staging 演示文件后入口折叠区在场，点击创建唯一 DEMO_GOAL 会话，digest==sha256(样例字节)、scope=sample、2 行，落在真实任务视图（基础分析折叠区在场）；②`test_demo_full_companion_gated_by_digest_and_validates`——演示会话（服务层建＋基础分析＋confirm 后）见配套按钮，点击 → `next_action=="review_full_data"`、全量来源名/10 行、「确认全量数据含义」仍 disabled（门禁未跳过）；内容不同的真实任务（非夹具会话，见错误登记①）同屏无该按钮；③`test_demo_task_module_degrades_honestly_when_files_absent`——demo_sample/demo_full → None、is_demo_session → False。定向门：UI **38 passed**、对齐＋旅程 **62 passed**、ruff check/format 双闸绿（format 重排 1 文件后复跑 38 passed）、单一来源 grep（入口/按钮文案字面仅 demo_task.py 一处）。
+
+**回归与错误修复**：非全量回归到期轮（上次 R72 边界 1930 passed，下次 R75 到期）。主会话错误如实登记：①`test_demo_full_companion_gated_by_digest_and_validates` 首跑失败——夹具 CSV（tests/unit/test_data_intake.py）与演示样例文件逐字节相同（旅程测试同一份数据），内容摘要一致的来源按设计就算演示来源，不能充当「真实任务看不见按钮」的反例；改用内容不同的内联真实数据后通过（这本身验证了摘要门控的正确语义）；②ruff format 重排 test_data_intake_ui.py 后定向复跑。本轮无子代理参与。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。
