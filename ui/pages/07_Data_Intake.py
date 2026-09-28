@@ -475,6 +475,13 @@ def show_final_acceptance(run: dict) -> None:
                     "custom_rules": "已确认自定义业务评分规则",
                 }[scorer]
             )
+            with st.expander("📋 任务规约（冻结验收条款前的口径）"):
+                # 与 task-spec-show、训练启动前折叠区同源(summarize_task_spec 单一来源)。
+                from src.workbench.task_spec_projection import summarize_task_spec
+
+                spec = collect_current_task_spec(session.session_id)
+                for line in summarize_task_spec(spec):
+                    st.write(line)
             with st.form(f"acceptance_prepare_{run_id}"):
                 standard = st.text_area(
                     "最终业务验收标准", placeholder="说明什么样的回答可交付，以及哪些错误不能接受。"
@@ -533,6 +540,7 @@ def show_final_acceptance(run: dict) -> None:
                                 "minimum_cases": int(minimum_cases),
                                 "business_standard": standard.strip(),
                             },
+                            task_spec=spec,
                         )
                         st.rerun()
                     except (ValueError, RuntimeError, OSError, ImportError) as exc:

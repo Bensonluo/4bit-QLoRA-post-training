@@ -24,15 +24,28 @@ def acceptance_cli(tmp_path, monkeypatch):
         "acceptance_id": "acceptance-fixture",
         "session_id": session.session_id,
         "status": "prepared",
+        "protocol": {},
+        "criteria": {
+            "metric": "exact_match",
+            "minimum_score": 0.9,
+            "minimum_cases": 20,
+            "business_standard": "分类必须严格正确",
+        },
+        "result": {"decision": "pending_run"},
     }
 
     class Acceptance:
         def __init__(self, *args):
             pass
 
-        def prepare(self, current, model, protocol, criteria):
-            calls.append(("prepare", current.revision, model, protocol, criteria))
-            record.update(model=asdict(model), protocol=asdict(protocol), criteria=criteria)
+        def prepare(self, current, model, protocol, criteria, task_spec=None):
+            calls.append(("prepare", current.revision, model, protocol, criteria, task_spec))
+            record.update(
+                model=asdict(model),
+                protocol=asdict(protocol),
+                criteria=criteria,
+                task_spec=task_spec,
+            )
             return record
 
         def run(self, identity, current):
@@ -75,8 +88,16 @@ def acceptance_cli(tmp_path, monkeypatch):
                 "data_intake.py",
                 "--store",
                 str(intake.root),
+                "--scoring-root",
+                str(tmp_path / "scoring"),
                 "--acceptance-root",
                 str(tmp_path / "acceptance"),
+                "--evaluation-root",
+                str(tmp_path / "evaluations"),
+                "--iteration-root",
+                str(tmp_path / "iterations"),
+                "--training-root",
+                str(tmp_path / "training"),
                 *map(str, args),
             ],
         )
@@ -210,3 +231,36 @@ def test_acceptance_commands_print_plain_language_summary_to_stderr(acceptance_c
     assert json.loads(run_out.out)["result"]["decision"] == "insufficient_evidence"
     assert "当前结论：证据不足，不能确认可交付。" in run_out.err
     assert "不会自动部署模型" in run_out.err
+
+
+def test_prepare_prints_task_spec_before_freeze_and_show_cites_frozen_spec(acceptance_cli, capsys):
+    """acceptance-prepare 规约人话先于冻结动作进 stderr;冻结记录携带四要素快照,
+    acceptance-show 摘要引用「冻结时引用的任务规约口径」与规约卡同源同词汇。"""
+    invoke, session, record, calls = acceptance_cli
+    assert (
+        invoke(
+            "acceptance-prepare",
+            session.session_id,
+            "run-fixture",
+            "--revision",
+            session.revision,
+            "--business-standard",
+            "分类必须严格正确",
+            "--minimum-score",
+            0.9,
+            "--minimum-cases",
+            20,
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "prepared"
+    assert "的任务规约：由既有确认记录只读汇编" in captured.err
+    assert "业务目标：根据业务文本分类" in captured.err
+    # 冻结调用带上四要素快照(goal/answer_semantics/scoring/temporal_split 子集语义
+    # 由真实服务保证;这里核对 CLI 传的是投影原样、口径与 stderr 同一来源)。
+    assert calls[0][5]["goal"]["goal"] == "根据业务文本分类"
+    assert invoke("acceptance-show", record["acceptance_id"]) == 0
+    shown = capsys.readouterr()
+    assert "冻结时引用的任务规约口径：" in shown.err
+    assert "业务目标：根据业务文本分类" in shown.err

@@ -319,3 +319,32 @@ def test_ui_task_spec_card_matches_cli_wording(tmp_path, monkeypatch):
         "以上是训练启动前的对齐视图：只汇编已确认事实，不代表模型效果达标。" in text
         for text in texts
     )
+
+
+def test_spec_anchor_lines_match_the_element_slice_of_summarize(task, tmp_path, patched_lists):
+    """spec_anchor_lines 单一来源:四要素行与 summarize 输出中段逐行相等;空输入为空。"""
+    from src.workbench.business_scoring import ScoringService
+    from src.workbench.task_spec_projection import spec_anchor_lines
+    from tests.unit.test_business_scoring import recipe_for
+
+    _, session = task
+    roots = _roots(tmp_path)
+    scoring = ScoringService(roots["scoring"])
+    context = scoring.context(session, "完整答案必须与标准答案精确相同")
+    record = scoring.draft(session, recipe_for(context["development_cases"][0]))
+    scoring.confirm(record["scoring_id"], session)
+    spec = collect_task_spec(
+        session.session_id,
+        roots["intake"],
+        roots["scoring"],
+        roots["acceptance"],
+        roots["evaluations"],
+        roots["iterations"],
+        roots["training"],
+    )
+    # summarize 输出 = 头行 + 四要素行 + 验收行 + 改进轮行 + 收尾行;
+    # 四要素行与单一来源逐行相等(spec_anchor_lines 与 summarize 共用同一段渲染)。
+    assert spec_anchor_lines(spec) == summarize_task_spec(spec)[1:-3]
+    # 空输入(旧验收记录缺 task_spec 键时读到的空 dict / None):如实返回空清单。
+    assert spec_anchor_lines({}) == []
+    assert spec_anchor_lines(None) == []

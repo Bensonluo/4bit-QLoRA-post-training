@@ -707,6 +707,26 @@ def main() -> int:
                     )
                     if custom_scoring:
                         scorer = "custom_rules"
+                    # 任务规约投影(ADR-1 只读投影):冻结验收条款前先对齐「我们在教
+                    # 模型什么、按什么口径验收」。规约人话先于冻结动作进 stderr,
+                    # 冻结时快照四要素;与 task-spec-show、页面规约卡同源
+                    # (summarize_task_spec 单一来源)。
+                    from src.workbench.task_spec_projection import (
+                        collect_task_spec,
+                        summarize_task_spec,
+                    )
+
+                    spec = collect_task_spec(
+                        args.session_id,
+                        args.store,
+                        args.scoring_root,
+                        args.acceptance_root,
+                        args.evaluation_root,
+                        args.iteration_root,
+                        args.training_root,
+                    )
+                    for line in summarize_task_spec(spec):
+                        print(line, file=sys.stderr)
                     result = acceptance.prepare(
                         session,
                         EvaluationModel(
@@ -731,6 +751,7 @@ def main() -> int:
                             "minimum_cases": args.minimum_cases,
                             "business_standard": args.business_standard,
                         },
+                        task_spec=spec,
                     )
                 else:
                     record = acceptance.get(args.acceptance_id)

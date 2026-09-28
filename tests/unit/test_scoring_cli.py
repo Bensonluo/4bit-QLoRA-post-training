@@ -87,7 +87,10 @@ def scoring_cli(tmp_path, monkeypatch):
         def __init__(self, *args):
             pass
 
-        def prepare(self, current, model, protocol, criteria):
+        def list_acceptances(self, session_id=None):
+            return []
+
+        def prepare(self, current, model, protocol, criteria, task_spec=None):
             calls.append(("acceptance", protocol, criteria))
             return {"status": "prepared"}
 
@@ -114,6 +117,14 @@ def scoring_cli(tmp_path, monkeypatch):
                 str(service.root),
                 "--scoring-root",
                 str(root),
+                "--acceptance-root",
+                str(tmp_path / "acceptance"),
+                "--evaluation-root",
+                str(tmp_path / "evaluations"),
+                "--iteration-root",
+                str(tmp_path / "iterations"),
+                "--training-root",
+                str(tmp_path / "training"),
                 *map(str, args),
             ],
         )

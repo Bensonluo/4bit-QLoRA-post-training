@@ -1031,3 +1031,29 @@ def test_train_run_summary_trace_docs_pinned():
     assert "`summarize_tool_trace` 单一来源" in section, "轨迹行单一来源必须写明"
     assert "训练方案只依赖成功的调用" in section, "轨迹行句式必须在场"
     assert "如实缺席，不编造轨迹" in section, "直接启动缺位态口径必须写明"
+
+
+def test_acceptance_spec_citation_docs_pinned():
+    """验收冻结引用任务规约钉死(R64 切片 B):四要素快照、规约摘要先行与旧记录缺位态。"""
+    design = TASK_SPEC_DESIGN.read_text(encoding="utf-8")
+    # 设计文档 Phase 2:切片 B 如实登记,「转入后续候选」欠账句随之撤下。
+    assert "（切片 B，2026-09-28）" in design, "切片 B 落地必须如实登记"
+    assert "冻结时引用的任务规约口径" in design, "规约口径段名必须点名"
+    assert "`spec_anchor_lines` 单一来源" in design, "段渲染单一来源必须写明"
+    assert "转入后续候选" not in design, "欠账句必须随切片 B 落地撤下"
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 用独立测试题做单模型业务验收",
+        "## 从评测结果进入下一轮改进",
+    )
+    assert "任务规约四要素" in section and "`task_spec` 键" in section, (
+        "冻结时四要素快照进验收记录必须写明"
+    )
+    assert "冻结前先向 stderr 打印同一份规约摘要" in section, (
+        "acceptance-prepare 冻结前摘要先行必须写明"
+    )
+    assert "冻结时引用的任务规约口径" in section, "摘要规约口径段必须写明"
+    assert "「📋 任务规约（冻结验收条款前的口径）」" in section, (
+        "冻结表单旁折叠区 label 必须逐字写明"
+    )
+    assert "如实没有该段" in section, "旧记录缺位态必须写明"

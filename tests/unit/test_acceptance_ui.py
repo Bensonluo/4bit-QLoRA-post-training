@@ -34,7 +34,7 @@ def acceptance_page(training_page, monkeypatch):  # noqa: F811
         def list_acceptances(self, session_id=None):
             return deepcopy(records)
 
-        def prepare(self, current, model, protocol, criteria):
+        def prepare(self, current, model, protocol, criteria, task_spec=None):
             calls.append(("prepare", model, protocol, criteria))
             records.append(
                 {
@@ -48,6 +48,7 @@ def acceptance_page(training_page, monkeypatch):  # noqa: F811
                     "blind_test": True,
                     "report": None,
                     "result": {"decision": "pending_run"},
+                    "task_spec": task_spec,
                 }
             )
             return records[-1]
@@ -193,3 +194,26 @@ def test_open_final_review_requires_reason_and_forbids_accepting_truncated_outpu
     assert "不通过" in selector.options
     assert any("不能人工标记通过" in item.value for item in page.warning)
     assert not any(item.label == "让 Agent 分析结果与下一步" for item in page.button)
+
+
+def test_freeze_area_shows_task_spec_before_freezing_and_records_it(acceptance_page):
+    """冻结表单前可见任务规约折叠区(与训练启动前折叠区同源同词汇),
+    冻结动作把四要素快照随条款一起写进验收记录。"""
+    session, page, records, calls = acceptance_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    labels = [expander.label for expander in page.expander]
+    assert any(label == "📋 任务规约（冻结验收条款前的口径）" for label in labels)
+    texts = [block.value for block in page.markdown]
+    assert any("的任务规约：由既有确认记录只读汇编" in text for text in texts)
+    assert any("业务目标：根据客户首次描述判断问题类型" in text for text in texts)
+    next(item for item in page.text_area if item.label == "最终业务验收标准").input(
+        "至少九成分类严格正确"
+    )
+    page.number_input(key="acceptance_min_score_successful-run").set_value(90.0)
+    page.number_input(key="acceptance_min_cases_successful-run").set_value(20)
+    button(page, "冻结此模型与业务验收标准").click().run()
+    assert not page.exception
+    assert len(calls) == 1 and calls[0][0] == "prepare"
+    assert records[0]["task_spec"]["goal"]["goal"] == "根据客户首次描述判断问题类型"

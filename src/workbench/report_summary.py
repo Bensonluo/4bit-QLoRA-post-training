@@ -512,6 +512,13 @@ def summarize_acceptance(record: dict) -> list[str]:
                 f"业务评分均值 {business_score:.2f}，仅作描述；"
                 "验收结论按冻结的逐题通过门槛与整体通过率计算。"
             )
+    spec = record.get("task_spec") or {}
+    if spec:
+        # 冻结时点引用的规约四要素:与任务规约投影同源同词汇(spec_anchor_lines 单一来源)。
+        from src.workbench.task_spec_projection import spec_anchor_lines
+
+        lines.append("冻结时引用的任务规约口径：")
+        lines.extend(spec_anchor_lines(spec))
     lines.append(
         "以上结论只对这次冻结的条款与固定测试题负责；达到标准也不会自动部署模型，"
         "是否交付由你按业务决定。"

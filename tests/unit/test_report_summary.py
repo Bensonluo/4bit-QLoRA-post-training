@@ -1400,3 +1400,37 @@ def test_export_summary_covers_all_states():
     # 无 reasons 的未知态只显状态,不编造原因。
     assert summarize_export({"status": "weird"}) == ["导出盘点返回状态 weird，没有更多说明。"]
     assert summarize_export({}) == ["这份导出记录没有可读的内容。"]
+
+
+def test_acceptance_summary_cites_frozen_task_spec_elements():
+    """冻结时引用的规约四要素:与任务规约投影同源同词汇;旧记录与空快照不渲染该段。"""
+    from src.workbench.report_summary import summarize_acceptance
+
+    record = _acceptance_record({"decision": "pending_run"}, status="prepared")
+    record["task_spec"] = {
+        "goal": {"goal": "根据客户首次描述判断问题类型", "training_approach": None},
+        "answer_semantics": {
+            "output_format": "text",
+            "instruction": "判断问题类别",
+            "targets": [{"label": "类别", "column": "类别", "value_kind": "categorical"}],
+            "supervision_source": "人工标注",
+            "label_verification": None,
+        },
+        "scoring": {"confirmed": [], "draft_count": 0},
+        "temporal_split": None,
+    }
+    lines = summarize_acceptance(record)
+    header = "冻结时引用的任务规约口径："
+    assert header in lines
+    # 引用段紧跟头部之后逐行渲染四要素(单一来源行),业务目标行原文入句。
+    assert lines[lines.index(header) + 1] == "业务目标：根据客户首次描述判断问题类型"
+    # 引用段在收尾边界句之前,由时间约束行收底。
+    assert lines[-2] == "时间约束：无（非时间预测任务）。"
+    assert lines[-1].startswith("以上结论只对这次冻结的条款")
+
+    # 旧记录缺 task_spec 键:不渲染引用段
+    del record["task_spec"]
+    assert not any(header in line for line in summarize_acceptance(record))
+    # 冻结时未带规约(空 dict):同样不渲染
+    record["task_spec"] = {}
+    assert not any(header in line for line in summarize_acceptance(record))

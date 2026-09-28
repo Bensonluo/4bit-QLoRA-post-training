@@ -74,6 +74,9 @@ def _criteria(value, protocol):
     return {**value, "business_standard": value["business_standard"].strip()}
 
 
+_SPEC_ELEMENT_KEYS = ("goal", "answer_semantics", "scoring", "temporal_split")
+
+
 class AcceptanceService:
     def __init__(self, root, evaluation_root):
         self.root = Path(root).resolve()
@@ -213,7 +216,15 @@ class AcceptanceService:
             for key in keys
         )
 
-    def prepare(self, session, model: EvaluationModel, protocol: EvaluationProtocol, criteria):
+    def prepare(
+        self,
+        session,
+        model: EvaluationModel,
+        protocol: EvaluationProtocol,
+        criteria,
+        *,
+        task_spec: dict | None = None,
+    ):
         if not dataset_is_current(session):
             raise ValueError("请先确认全量资料并物化独立数据分区。")
         if not isinstance(model, EvaluationModel) or not model.label.strip():
@@ -254,6 +265,12 @@ class AcceptanceService:
             "protocol": protocol_settings(protocol),
             "criteria": criteria,
             "criteria_digest": content_digest(criteria),
+            # 规约要素快照(R63 plan_trace 同例):冻结时点四要素的信息性视图,不进
+            # frozen_digest——session.json 快照与 snapshot_digest 已使 goal/recipe
+            # 可防篡改;旧记录无该键,摘要如实不渲染该段。
+            "task_spec": {
+                key: task_spec[key] for key in _SPEC_ELEMENT_KEYS if key in (task_spec or {})
+            },
             "evaluation_suite": reference,
             "exposure_keys": self._exposure_keys(session, cases),
             "case_count": len(cases),

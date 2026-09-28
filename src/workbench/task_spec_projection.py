@@ -114,56 +114,79 @@ def collect_task_spec(
     }
 
 
+def spec_anchor_lines(elements: dict) -> list[str]:
+    """任务规约四要素的人话行(单一来源):summarize_task_spec 与验收记录的冻结时
+    口径引用共用;空输入返回空列表,旧记录如实没有该段。"""
+    if not elements:
+        return []
+    lines: list[str] = []
+    goal = elements.get("goal")
+    if goal:
+        lines.append(f"业务目标：{goal['goal']}")
+        if goal["training_approach"]:
+            lines.append(f"训练路径：{goal['training_approach']}")
+
+    semantics = elements.get("answer_semantics")
+    if semantics:
+        if semantics["instruction"]:
+            names = (
+                "、".join(target["label"] for target in semantics["targets"])
+                or "（未定义答案字段）"
+            )
+            lines.append(
+                f"答案语义：{semantics['output_format']} 输出「{names}」，"
+                f"监督来自{semantics['supervision_source']}。"
+            )
+        else:
+            lines.append("答案语义：业务方案尚未生成，规约暂缺这一段。")
+        verification = semantics["label_verification"]
+        if verification is None:
+            lines.append("盲标核验：尚未做过。")
+        elif verification.get("stale"):
+            lines.append(
+                f"盲标核验：已失效（此前结论 {verification.get('previous_verdict', '未知')}），"
+                "数据或方案更新后需重新核验。"
+            )
+        else:
+            lines.append(
+                f"盲标核验：{verification.get('verdict', '未知')}"
+                f"（{verification.get('status', '未知状态')}）。"
+            )
+
+    scoring = elements.get("scoring")
+    if scoring:
+        if scoring["confirmed"]:
+            first = scoring["confirmed"][0]
+            extra = f"等共 {len(scoring['confirmed'])} 份" if len(scoring["confirmed"]) > 1 else ""
+            lines.append(
+                f"评分口径：已确认自定义规则（{first['business_standard']}，"
+                f"通过阈值 {first['pass_threshold']}）{extra}。"
+            )
+        else:
+            lines.append("评分口径：默认严格匹配（暂无已确认的自定义规则）。")
+        if scoring["draft_count"]:
+            lines.append(
+                f"另有 {scoring['draft_count']} 份草稿评分规则未纳入——投影只反映已确认的事实。"
+            )
+
+    if elements.get("temporal_split"):
+        split = elements["temporal_split"]
+        lines.append(
+            f"时间约束：时间预测任务；信息可用字段 {split['available_at_column']}、"
+            f"预测时点 {split['prediction_at_column']}、标签成熟 {split['label_end_at_column']}。"
+        )
+    else:
+        lines.append("时间约束：无（非时间预测任务）。")
+    return lines
+
+
 def summarize_task_spec(spec: dict) -> list[str]:
-    """人话摘要：与页面规约卡同源同词汇（本函数是单一来源）。"""
+    """人话摘要：与页面规约卡同源同词汇（spec_anchor_lines 是四要素的单一来源）。"""
     lines = [
         f"任务 {spec['session_id'][:12]}（revision {spec['revision']}）的任务规约："
         "由既有确认记录只读汇编，不新增状态。"
     ]
-    goal = spec["goal"]
-    lines.append(f"业务目标：{goal['goal']}")
-    if goal["training_approach"]:
-        lines.append(f"训练路径：{goal['training_approach']}")
-
-    semantics = spec["answer_semantics"]
-    if semantics["instruction"]:
-        names = (
-            "、".join(target["label"] for target in semantics["targets"]) or "（未定义答案字段）"
-        )
-        lines.append(
-            f"答案语义：{semantics['output_format']} 输出「{names}」，"
-            f"监督来自{semantics['supervision_source']}。"
-        )
-    else:
-        lines.append("答案语义：业务方案尚未生成，规约暂缺这一段。")
-    verification = semantics["label_verification"]
-    if verification is None:
-        lines.append("盲标核验：尚未做过。")
-    elif verification.get("stale"):
-        lines.append(
-            f"盲标核验：已失效（此前结论 {verification.get('previous_verdict', '未知')}），"
-            "数据或方案更新后需重新核验。"
-        )
-    else:
-        lines.append(
-            f"盲标核验：{verification.get('verdict', '未知')}"
-            f"（{verification.get('status', '未知状态')}）。"
-        )
-
-    scoring = spec["scoring"]
-    if scoring["confirmed"]:
-        first = scoring["confirmed"][0]
-        extra = f"等共 {len(scoring['confirmed'])} 份" if len(scoring["confirmed"]) > 1 else ""
-        lines.append(
-            f"评分口径：已确认自定义规则（{first['business_standard']}，"
-            f"通过阈值 {first['pass_threshold']}）{extra}。"
-        )
-    else:
-        lines.append("评分口径：默认严格匹配（暂无已确认的自定义规则）。")
-    if scoring["draft_count"]:
-        lines.append(
-            f"另有 {scoring['draft_count']} 份草稿评分规则未纳入——投影只反映已确认的事实。"
-        )
+    lines.extend(spec_anchor_lines(spec))
 
     acceptance = spec["acceptance"]
     if acceptance["records"]:
@@ -175,15 +198,6 @@ def summarize_task_spec(spec: dict) -> list[str]:
         )
     else:
         lines.append("验收标准：未冻结——当前没有可对照的独立验收条款。")
-
-    if spec["temporal_split"]:
-        split = spec["temporal_split"]
-        lines.append(
-            f"时间约束：时间预测任务；信息可用字段 {split['available_at_column']}、"
-            f"预测时点 {split['prediction_at_column']}、标签成熟 {split['label_end_at_column']}。"
-        )
-    else:
-        lines.append("时间约束：无（非时间预测任务）。")
 
     if spec["latest_iteration"]:
         iteration = spec["latest_iteration"]

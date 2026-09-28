@@ -2467,3 +2467,20 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **文档**：见实现第三条——设计文档两处收口 + agent-setup 一段为本轮全部文档改动，与钉死测试同 commit。
 
 **回归与错误修复**：集成核对：grep 单一来源确认（summarize_tool_trace 7 个呈现位全在 report_summary.py；plan_trace 落盘 3 个调用方齐备；「训练方案只依赖成功的调用」3 个测试文件钉死）；六文件联合定向 **166 passed**（41.64s）；恢复链路定向 **24 passed**；ruff 十文件全过。全量回归按节奏到期执行，过程如实记录：首次全量 **1859 passed / 5 failed**（376.66s）——5 个失败全部是 UI 测试（test_data_intake_ui / test_iteration_decide_ui / test_label_verification_ui×2 / test_learnability_probe_ui），根因是主会话在后台全量运行期间并行跑了联合定向测试，两个 pytest 会话并发争抢资源所致（这 5 个文件本轮与 R62 均未改动）；逐个隔离复跑 **5/5 passed**（7.79s）确认非真实回归；随后干净串行复跑全量 **tests/unit 1864 passed / 0 failed**（190.68s，/tmp/round63_regression.log；1855 基线 + R62 新增 6 + R63 新增 3 = 1864，逐项对账吻合）。教训登记：后台全量回归期间不再并行任何 pytest 会话。实现代码零返工。
+
+## 第 64 轮 = 验收冻结引用任务规约要素（恢复循环第 45 轮）
+
+**背景**：R60 切片 A 收口训练启动位后，设计文档 §9 Phase 2 的遗留半范围「验收冻结时引用规约要素」是本轮北极星目标。验收冻结是任务规约五要素的第三个决策位（R59 被动阅读投影 → R60 训练启动位 → 本轮验收冻结位）：用户冻结验收条款那一刻按什么标准判，此前无处在案——冻结记录里只有评分口径与门槛，业务目标/答案语义/时间约束的口径视图不随记录保存，事后回看 acceptance-show 只见条款不见依据。执行模式延续三路并行 subagent（r64-core / r64-docs / r64-surface，model 走 sonnet tier alias，文件所有权互斥，canonical 措辞由主会话钦定下发，代理不 commit）。
+
+**实现**：
+- **快照落盘**（src/workbench/acceptance.py，+6）：`prepare()` 新增 keyword-only `task_spec: dict | None = None`，记录新增 `"task_spec"` 键——按 `_SPEC_ELEMENT_KEYS = ("goal", "answer_semantics", "scoring", "temporal_split")` 过滤的四要素快照（调用方传完整投影，prepare 只取四键）。**信息性快照不进 frozen_digest**：session.json 快照与 snapshot_digest 已使 goal/recipe 可防篡改，把投影塞进 digest 会破坏每条既有记录的 `_verify` 校验（R63 plan_trace 同例）。旧记录无该键，摘要如实不渲染该段，不回填。
+- **单一来源抽取**（src/workbench/task_spec_projection.py，+65）：新公开函数 `spec_anchor_lines(elements)`（117-180）——四要素人话行的单一来源，`summarize_task_spec` 与 `summarize_acceptance` 共用；空/None 输入返回空列表。**已知偏差（接受并钉死）**：原 summarize_task_spec 把验收要素插在评分与时间约束两块之间，抽取为连续四要素后时间约束与验收标准行序互换、措辞逐字不变——由切片恒等测试 `spec_anchor_lines(spec) == summarize_task_spec(spec)[1:-3]` 钉死，差分核对确认其余内容逐行相同。
+- **人话引用**（src/workbench/report_summary.py，+7）：`summarize_acceptance` 在最终边界句之前渲染「冻结时引用的任务规约口径：」+ `spec_anchor_lines(record.get("task_spec"))`（局部 import）；CLI acceptance-show/run/review 与页面验收记录自动带出。
+- **CLI 冻结前先看规约**（scripts/data_intake.py，+7）：acceptance-prepare 分支冻结动作前 `collect_task_spec`（参数序与 task-spec-show 分派逐字一致）→ 规约行全部打 stderr（规约先于冻结，启动前最后一屏就是口径对齐视图）→ `prepare(..., task_spec=spec)`。
+- **页面冻结表单旁同源**（ui/pages/07_Data_Intake.py，+8）：冻结区在冻结表单之前渲染 expander「📋 任务规约（冻结验收条款前的口径）」（summarize_task_spec 逐行）；prepare 调用带 task_spec=spec。页面与 CLI 同源同词汇。
+
+**测试**：core 波 131 项——test_acceptance.py +36（四键子集精确存储、默认 → `{}`、get() 回读）；test_task_spec_projection.py +29（切片恒等、`{}`/None → []）；test_report_summary.py +34（标题+邻接、时间约束是倒数第二行、缺键与 `{}` 均不出标题）。surface 波 7 项——test_acceptance_cli.py +1（acceptance-prepare 冻结前 stderr 规约 + acceptance-show 引用段；fixture invoke 升级五 root 模式）；test_acceptance_ui.py +1（冻结区 expander label + 快照入记录；UI 桩 prepare 补 task_spec kwarg）。docs 波 52 项——test_readme_alignment.py +26 新钉测试 `test_acceptance_spec_citation_docs_pinned`（切片 B 登记、段名、`spec_anchor_lines` 单一来源、折叠区名、旧记录如实没有），总数 52。
+
+**文档**：设计文档 §9 Phase 2 行补切片 B 完成登记（四要素快照、信息性不进 digest、单一来源、CLI/页面位点、旧记录边界）；agent-setup.md 验收段补决策点读投影段（冻结前打印同一份摘要、`task_spec` 键、`spec_anchor_lines` 渲染、页面折叠区、同源同词汇、不回填）。口径由 test_readme_alignment 钉死，文档与钉死同 commit。
+
+**回归与错误修复**：集成核对 grep 确认单一来源（spec_anchor_lines 定义 1 处、消费 2 处；「冻结时引用的任务规约口径」src 字面仅 report_summary.py:520；「冻结验收条款前的口径」页面 1 + 测试 2 + 文档 2）；联合定向 7 文件 **142 passed**（8.73s：acceptance 21 + task_spec_projection + report_summary + readme_alignment 52 + acceptance_cli + acceptance_ui + scoring_cli 4）；ruff 12 文件全绿。**涟漪一处由主会话收口**（R55/R59 fix-the-stub 先例）：acceptance-prepare 新增的 collect_task_spec 调用击穿 test_scoring_cli.py 既有夹具——Acceptance 桩缺 `list_acceptances`（AttributeError）与 prepare 缺 task_spec 形参（TypeError）、invoke argv 缺四个 root（collect_task_spec 会构造真实仓库 `outputs/workbench/` 默认根服务）；两处修正均落在桩与夹具（桩的职责是镜像生产签名，不改生产吞错）。修正过程中一次 Edit old_string 缩进不匹配（转录 25 空格、实际 16 空格）——重读现场原文后命中（教训两次确认：摘要转录的 old_string 不可作编辑锚点）。**本轮未跑全量回归（2-3 轮节奏），上次全量 = 第 63 轮 1864 passed / 0 failed**；下次全量安排 R65。实现代码零返工（行序偏差为已知设计，切片恒等测试钉死）。

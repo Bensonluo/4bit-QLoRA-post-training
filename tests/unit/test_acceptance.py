@@ -360,3 +360,39 @@ def test_model_changed_during_generation_keeps_report_but_cannot_pass(task, mode
     assert result["result"]["decision"] == "insufficient_evidence"
     assert result["evaluation_id"]
     assert result["report"]["models"][0]["metrics"]["exact_match"] == 1
+
+
+def test_prepare_snapshots_only_the_four_task_spec_elements(task, model_paths, tmp_path):
+    service = AcceptanceService(tmp_path / "acceptance", tmp_path / "eval")
+    session = task[1]
+    projection = {
+        "session_id": session.session_id,
+        "revision": session.revision,
+        "goal": {"goal": "根据客户首次描述判断问题类型", "training_approach": None},
+        "answer_semantics": {"instruction": "判断问题类别"},
+        "scoring": {"confirmed": [], "draft_count": 0},
+        "temporal_split": None,
+        "acceptance": {"state": "未冻结", "records": []},
+        "latest_iteration": None,
+    }
+    record = service.prepare(
+        session,
+        model_paths[0],
+        EvaluationProtocol("classification_exact"),
+        criteria(),
+        task_spec=projection,
+    )
+    # 只快照四要素:session_id/acceptance/latest_iteration 等投影外壳不进记录。
+    assert record["task_spec"] == {
+        "goal": projection["goal"],
+        "answer_semantics": projection["answer_semantics"],
+        "scoring": projection["scoring"],
+        "temporal_split": None,
+    }
+    # 快照信息性存储,不进 frozen_digest:读回核验照常通过且内容一致。
+    assert service.get(record["acceptance_id"])["task_spec"] == record["task_spec"]
+    # 不传 task_spec(旧调用方式):快照为空 dict,摘要如实不渲染该段。
+    plain = service.prepare(
+        session, model_paths[1], EvaluationProtocol("classification_exact"), criteria()
+    )
+    assert plain["task_spec"] == {}
