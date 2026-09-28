@@ -767,3 +767,31 @@ def test_analysis_summary_docs_pinned():
     assert "暂定微调思路" in section, "暂定微调思路行必须写明"
     assert "「数据判断与待确认问题」区同词汇" in section, "与页面同词汇必须写明"
     assert "不代表业务效果达标" in section, "固定边界句必须写明"
+
+
+def test_train_lineage_docs_pinned(monkeypatch, capsys, tmp_path):
+    """train-lineage 与 registry_cli lineage 的人话口径钉死:双流契约、单一来源、边界句与同源同词汇。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 在同一任务中启动真实训练",
+        "## 允许一次显存不足技术恢复",
+    )
+    assert "train-lineage RUN_ID" in section, "CLI 块必须列 train-lineage"
+    assert "stderr" in section, "位点必须写明:stdout 纯 JSON、stderr 追加人话"
+    assert "`summarize_registration` 单一来源" in section, "正向摘要单一来源必须写明"
+    assert "点名全部版本与别名" in section, "已注册口径必须写明"
+    assert "可照抄的合并与注册命令" in section, "未注册指引必须写明"
+    assert "查询失败如实报告原因，不编造状态" in section, "失败态口径必须写明"
+    assert (
+        "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标" in section
+    ), "注册边界句必须写明"
+    assert "registry_cli.py lineage" in section, "反向血缘入口必须写明"
+    assert "`summarize_lineage` 单一来源" in section, "反向摘要单一来源必须写明"
+    assert "缺项如实显示「-」" in section, "缺项回退口径必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    # 帮助文本与命令面同步:收 RUN_ID,不收 train-logs 的 --tail 与准备类 --revision
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "train-lineage")
+    assert "run_id" in help_text, "train-lineage 收位置参数 RUN_ID"
+    assert "--tail" not in help_text, "--tail 是 train-logs 专属"
+    assert "--revision" not in help_text, "血缘是只读查询,不收 --revision"
+    assert "注册状态" in help_text, "帮助文本必须说明这是注册状态查询"

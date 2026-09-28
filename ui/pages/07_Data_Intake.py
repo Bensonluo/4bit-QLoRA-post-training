@@ -3148,20 +3148,19 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                         registration = run_registration_status(
                             run_id, f"sqlite:///{Path(training_service.root) / 'mlflow.db'}"
                         )
-                        if registration["status"] == "registered":
-                            shown = "、".join(
-                                f"{v['name']} v{v['version']}"
-                                + (f"（{','.join(v['aliases'])}）" if v["aliases"] else "")
-                                for v in registration["versions"]
-                            )
-                            st.caption(f"模型库：{shown}")
-                        elif registration["status"] == "not_registered":
+                        # 注册状态人话与 CLI train-lineage 同一份摘要
+                        # (summarize_registration 单一来源),页面与 CLI 同源同词汇;
+                        # 未注册时命令原文收进折叠区,已注册/失败态直接平铺。
+                        from src.workbench.report_summary import summarize_registration
+
+                        lines = summarize_registration(registration)
+                        if registration["status"] == "not_registered":
                             with st.expander("把这次训练的模型注册进模型库（可选）"):
-                                st.caption(registration["how_to_register"])
+                                for line in lines:
+                                    st.caption(line)
                         else:
-                            st.caption(
-                                f"模型库查询：{registration.get('message', registration['status'])}"
-                            )
+                            for line in lines:
+                                st.caption(line)
                     except Exception as exc:  # 血缘查询失败不阻塞训练信息展示
                         st.caption(f"模型库查询失败：{exc}")
                     with st.expander("这次训练花了多少成本（如实估算）"):

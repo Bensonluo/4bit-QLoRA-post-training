@@ -233,3 +233,51 @@ def test_materialize_stderr_carries_dataset_summary(tmp_path, monkeypatch, capsy
     assert "从未出现在训练集" in err
     # 固定边界句收尾
     assert "分区就绪只说明" in err
+
+
+def test_train_lineage_cli_prints_json_and_registration_summary(tmp_path, monkeypatch, capsys):
+    """train-lineage 双流契约:stdout 纯 JSON,stderr 给注册状态人话(summarize_registration 单一来源)。"""
+    from types import SimpleNamespace
+
+    import mlflow.tracking
+
+    client = SimpleNamespace()
+    client.search_registered_models = lambda max_results=None: [
+        SimpleNamespace(name="工单分类")
+    ]
+    client.search_model_versions = lambda query: [
+        SimpleNamespace(
+            name="工单分类",
+            version=3,
+            aliases=["champion"],
+            current_stage="Production",
+            run_id="mfr-1",
+        )
+    ]
+    client.get_run = lambda run_id: SimpleNamespace(
+        data=SimpleNamespace(tags={"workbench.run_id": "wb-1"}, params={}, metrics={})
+    )
+    # registry_link 在函数内 from mlflow.tracking import MlflowClient,
+    # 打模块属性即可拦截;lambda 吃掉任意签名,不真连 sqlite。
+    monkeypatch.setattr(mlflow.tracking, "MlflowClient", lambda *args, **kwargs: client)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "--training-root",
+            str(tmp_path / "training"),
+            "train-lineage",
+            "wb-1",
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "registered"
+    assert payload["versions"][0]["aliases"] == ["champion"]
+    # stderr 人话与页面训练记录区同一份摘要:点名版本与别名 + 注册边界句
+    assert "这次训练已注册到模型库：工单分类 v3（champion）。" in captured.err
+    assert "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标。" in captured.err

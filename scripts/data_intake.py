@@ -366,8 +366,11 @@ def main() -> int:
         ("train-status", "查看训练状态与产物"),
         ("train-stop", "停止当前训练进程"),
         ("train-logs", "读取最近训练日志"),
+        ("train-lineage", "查看训练运行在模型库的注册状态（正向血缘）"),
     ):
-        command = sub.add_parser(name, help=help_text)
+        # help 进父命令清单,description 让子命令自己的 --help 也说明用途
+        # (argparse 默认不在子命令 --help 里复述 help 文本)。
+        command = sub.add_parser(name, help=help_text, description=help_text)
         command.add_argument("run_id")
         if name == "train-logs":
             command.add_argument("--tail", type=int, default=100)
@@ -1098,6 +1101,18 @@ def main() -> int:
                 result = training.stop(args.run_id)
             elif args.command == "train-list":
                 result = training.list_runs(session_id=args.session_id)
+            elif args.command == "train-lineage":
+                from src.workbench.registry_link import run_registration_status
+
+                result = run_registration_status(
+                    args.run_id, f"sqlite:///{training.root / 'mlflow.db'}"
+                )
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                from src.workbench.report_summary import summarize_registration
+
+                for line in summarize_registration(result):
+                    print(line, file=sys.stderr)
+                return 0
             else:
                 print(training.read_logs(args.run_id, tail=args.tail))
                 return 0

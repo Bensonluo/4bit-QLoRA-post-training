@@ -287,22 +287,13 @@ def lineage(
     if not Path(uri.removeprefix("sqlite:///")).exists() and tracking_uri is None:
         uri = str(Path("outputs/mlruns"))
     result = version_lineage(model_name, version, uri if "sqlite" in uri else f"sqlite:///{uri}")
-    if result.get("status") == "workbench":
-        console.print(
-            Panel(
-                f"模型: {result['model']}\n"
-                f"训练运行: {result['workbench_run_id']}\n"
-                f"数据版本: {result['dataset_version']}\n"
-                f"训练数据: {result.get('training_dataset', '-')}\n"
-                f"配置摘要: {result.get('config_digest', '-')[:12]}…",
-                title="三角血缘(workbench)",
-            )
-        )
-    else:
-        console.print(
-            f"[yellow]{result.get('model', '')} — {result.get('status')}[/yellow]"
-            f" {result.get('message', '')}"
-        )
+    # 反向血缘人话与 CLI train-lineage 同词汇(summarize_lineage 单一来源):五要素
+    # 缺项显「-」不显 None,外部来源/无来源/查询失败如实说明——旧面板只覆盖
+    # workbench 态且缺 config_digest 时会崩(None[:12]),统一后全态都有人话。
+    from src.workbench.report_summary import summarize_lineage
+
+    for line in summarize_lineage(result):
+        console.print(line)
 
 
 if __name__ == "__main__":

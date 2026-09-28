@@ -928,3 +928,77 @@ def summarize_analysis(analysis: dict) -> list[str]:
         lines.append(f"下一步：{'；'.join(next_steps)}")
     lines.append(boundary)
     return lines
+
+
+def summarize_registration(status: dict) -> list[str]:
+    """train-lineage 尾行:训练运行在模型库的注册状态(正向血缘)人话翻译。
+
+    registered 点名全部版本与别名;not_registered 复述服务给出的注册命令原文;
+    查询失败如实报错不编造。页面训练记录区渲染同一份摘要,页面与 CLI 同源同词汇。
+    """
+    if not isinstance(status, dict) or not status.get("status"):
+        return ["这份注册状态没有可读的内容。"]
+    boundary = "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标。"
+    state = status["status"]
+    if state == "registered":
+        parts = []
+        for version in status.get("versions") or []:
+            entry = f"{version.get('name', '?')} v{version.get('version', '?')}"
+            aliases = version.get("aliases") or []
+            if aliases:
+                entry += f"（{','.join(aliases)}）"
+            parts.append(entry)
+        head = (
+            f"这次训练已注册到模型库：{'、'.join(parts)}。"
+            if parts
+            else "这次训练已注册到模型库，但没有返回版本清单。"
+        )
+        return [head, boundary]
+    if state == "not_registered":
+        lines = [status.get("message") or "这次训练尚未注册到模型库。"]
+        how_to = status.get("how_to_register")
+        if how_to:
+            lines.extend(how_to.splitlines())
+        lines.append(boundary)
+        return lines
+    if state in {"mlflow_unavailable", "lookup_failed"}:
+        message = status.get("message")
+        return [message] if message else [f"模型库查询返回状态 {state}，没有更多说明。"]
+    return [f"模型库查询返回未知状态 {state}。"]
+
+
+def summarize_lineage(result: dict) -> list[str]:
+    """registry_cli lineage 的反向血缘人话翻译:模型版本 → 训练运行 → 数据版本。
+
+    workbench 态逐行给出五个要素,缺项如实显示「-」(不显示 None);外部来源、
+    无来源与查询失败如实说明;mlflow 未安装时该状态本身不携带 message,不编造。
+    """
+    if not isinstance(result, dict) or not result.get("status"):
+        return ["这份血缘记录没有可读的内容。"]
+    state = result["status"]
+    model = result.get("model") or "-"
+    if state == "workbench":
+        digest = result.get("config_digest")
+        digest_text = f"{digest[:12]}…" if digest else "-"
+        return [
+            f"模型：{model}",
+            f"训练运行：{result.get('workbench_run_id') or '-'}",
+            f"数据版本：{result.get('dataset_version') or '-'}",
+            f"训练数据：{result.get('training_dataset') or '-'}",
+            f"配置摘要：{digest_text}",
+            "以上血缘把模型、训练运行与数据版本关联起来，只保证可追溯，不代表业务效果达标。",
+        ]
+    if state == "external":
+        lines = [f"模型：{model}", f"基座模型：{result.get('base_model') or '-'}"]
+    elif state == "no_source_run":
+        lines = [f"模型：{model}"]
+    elif state == "mlflow_unavailable":
+        return [f"模型：{model}", "未安装 mlflow，无法查询这份血缘。"]
+    elif state == "lookup_failed":
+        lines = [f"模型：{model}"]
+    else:
+        return [f"模型：{model}", f"血缘查询返回未知状态 {state}。"]
+    message = result.get("message")
+    if message:
+        lines.append(message)
+    return lines

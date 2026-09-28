@@ -2018,3 +2018,71 @@ tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
 src/workbench/report_summary.py、ui/pages/07_Data_Intake.py、
 tests/unit/test_evaluation_diagnostics.py、tests/unit/test_report_summary.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+## 第 51 轮 = 血缘人话上 CLI（恢复循环第 32 轮）
+
+**背景**：北极星 2026-09-27 快照三差距之一「模型-实验-数据三角血缘打通」：
+服务层自 M3 起已完备（`run_registration_status` 正向：训练运行 → 模型库版本；
+`version_lineage` 反向：版本 → 训练运行/数据版本/配置摘要，均带五态契约与
+LAZY mlflow 导入，test_registry_link + test_lineage_triangle_integration
+钉死），但两条边的**消费面人话参差**：正向边只有 UI 07 成功训练区一段内联
+渲染（CLI 完全没有入口），反向边只有 registry_cli lineage 的 Rich Panel
+（仅覆盖 workbench 态；且 `config_digest` 缺失时 `None[:12]` 是潜在 TypeError，
+`dataset_version` 缺失渲染字面 "None"）。本轮不重建服务层，做 exposure 平权：
+CLI 入口 + 词汇单一来源，双向血缘在 CLI 与页面同源同词汇。
+
+**实现**：
+- `src/workbench/report_summary.py` +2 函数（#17/#18）：
+  - `summarize_registration(status)`——五态：registered 点名全部版本与别名
+    （与 UI 原句式同格式）、空清单给缺位句；not_registered 复述服务给的
+    message + how_to_register 命令原文逐行；mlflow_unavailable/lookup_failed
+    只回 message（无 message 如实点名状态，不编造）；裸记录缺位句。
+    registered/not_registered 以「注册只说明模型库记录了这次训练的产物与
+    血缘，不代表业务效果达标」收尾（失败态无结论，不加边界句）。
+  - `summarize_lineage(result)`——workbench 态五要素逐行（模型/训练运行/
+    数据版本/训练数据/配置摘要[:12]+…），缺项显「-」不显 None（修掉旧
+    Panel 的两个渲染缺陷）；external 附基座模型；no_source_run/lookup_failed
+    回 message；mlflow_unavailable 态服务端不带 message，如实点名状态含义
+    不 .get 编造；workbench 态以「只保证可追溯，不代表业务效果达标」收尾。
+- `scripts/data_intake.py`：train-* 子命令 tuple 增 `train-lineage`（收
+  位置参数 RUN_ID，无 --tail/--revision）；分派里独立分支——stdout 纯
+  JSON（run_registration_status 原样）+ stderr summarize_registration，
+  提前 return 不落入共享的 summarize_training_run 尾部。tuple 循环改
+  `add_parser(name, help=help_text, description=help_text)`——argparse
+  默认不在子命令自己的 --help 里复述 help 文本，四个只读 train-* 命令
+  的 --help 从此自解释。
+- `scripts/registry_cli.py` lineage：Panel + yellow 兜底两分支整体替换为
+  `for line in summarize_lineage(result): console.print(line)`——五态全
+  覆盖，词汇与正向边/页面同源。Panel import 仍被 info 命令使用，保留。
+- `ui/pages/07_Data_Intake.py` 成功训练区注册状态块：手拼版本串三分支
+  替换为 summarize_registration 渲染（not_registered 仍收折叠区），页面
+  与 CLI train-lineage 从此同一份摘要。
+
+**测试**（+4 函数）：
+- test_report_summary.py 两新函数：registration 五态逐字断言（双版本含
+  别名句、not_registered 命令原文进摘要、两种失败态、无 message 失败态
+  不编造、裸记录）；lineage 的 workbench 缺项「-」回退逐行断言、external/
+  no_source_run/mlflow_unavailable/裸记录。
+- test_cli_summaries.py::test_train_lineage_cli_prints_json_and_registration_summary
+  ——进程内 argv 注入走真实分派；monkeypatch `mlflow.tracking.MlflowClient`
+  （registry_link 函数内 import，打模块属性即可拦截）；fake client 返回
+  registered 版本；断言 stdout JSON registered + stderr 逐字句 + 边界句。
+- test_readme_alignment.py::test_train_lineage_docs_pinned——文档段钉死
+  （双流位点、两个单一来源、已注册/未注册/失败三态口径、注册边界句、
+  反向入口、「-」回退、同源同词汇）+ `_cli_help_text("train-lineage")`
+  帮助同步（收 run_id、不收 --tail/--revision、说明注册状态）。
+
+**文档**（agent-setup.md「在同一任务中启动真实训练」段）：CLI 块增
+train-lineage 一行；段末新增血缘人话说明段（正向摘要三态口径 + 反向
+registry_cli.py lineage 入口与 summarize_lineage 单一来源 + 缺项「-」
+口径 + 页面同源同词汇承诺）。
+
+**错误与修复**：一处——帮助同步断言初版假设 argparse 子命令 --help 会
+复述 `help=` 文本，实际只显示 usage+run_id；修法是 tuple 循环补
+`description=help_text`（argparse 原生语义），不放松断言。ruff 全绿。
+
+**回归**：全量 tests/unit 预期 **1802 passed**（R50 基线 1798 + 4 个新
+测试函数）。本批只动 src/workbench/report_summary.py、
+scripts/data_intake.py、scripts/registry_cli.py、ui/pages/07_Data_Intake.py、
+tests/unit/test_report_summary.py、tests/unit/test_cli_summaries.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

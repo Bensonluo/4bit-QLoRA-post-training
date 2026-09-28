@@ -272,9 +272,12 @@ python scripts/data_intake.py train-status RUN_ID
 python scripts/data_intake.py train-logs RUN_ID --tail 100
 python scripts/data_intake.py train-stop RUN_ID
 python scripts/data_intake.py train-list SESSION_ID
+python scripts/data_intake.py train-lineage RUN_ID
 ```
 
 `RUN_ID` 来自准备结果；有预检风险且已完成核对时，启动命令增加 `--acknowledge-warnings`。`train-prepare` 另支持 `--learning-rate`、`--gradient-accumulation`、`--lora-rank` 和 `--load-in-4bit`。这里需要已准备好的本地基础模型目录，工作台不会悄悄更换底座或下载另一个模型。
+
+`train-lineage RUN_ID` 在 stdout 输出 JSON 的同时向 stderr 追加这次训练在模型库的注册状态人话摘要（`summarize_registration` 单一来源）：已注册时点名全部版本与别名（如 champion）；尚未注册时如实说明，并给出可照抄的合并与注册命令（带血缘旗标，注册后可反查本轮训练与数据版本）；查询失败如实报告原因，不编造状态。已注册与未注册两种状态都以「注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标」收尾。页面训练记录区渲染同一份摘要，页面与 CLI 同源同词汇。反方向用 `python scripts/registry_cli.py lineage --model-name NAME --version N` 从模型库版本查回训练运行、数据版本与配置摘要（`summarize_lineage` 单一来源，缺项如实显示「-」，不显示 None）——模型、实验与数据三点由此可以互相追溯。
 
 ## 允许一次显存不足技术恢复
 

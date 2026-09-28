@@ -1106,3 +1106,99 @@ def test_analysis_summary_translates_findings_questions_and_gaps():
     assert len(bare) == 2
     assert bare[0] == "这份分析没有可读的内容。"
     assert bare[1] == lines[-1]
+
+
+def test_registration_summary_covers_all_states():
+    """注册状态摘要:已注册点名版本与别名、未注册复述命令原文、失败如实、裸记录缺位。"""
+    from src.workbench.report_summary import summarize_registration
+
+    registered = {
+        "run_id": "wb-1",
+        "status": "registered",
+        "versions": [
+            {
+                "name": "工单分类",
+                "version": 3,
+                "aliases": ["champion"],
+                "current_stage": "Production",
+            },
+            {"name": "工单分类", "version": 2, "aliases": [], "current_stage": "None"},
+        ],
+    }
+    lines = summarize_registration(registered)
+    assert lines[0] == "这次训练已注册到模型库：工单分类 v3（champion）、工单分类 v2。"
+    assert lines[1] == "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标。"
+
+    not_registered = {
+        "run_id": "wb-1",
+        "status": "not_registered",
+        "message": "这次训练尚未注册到模型库。",
+        "how_to_register": "先合并导出为独立模型,再注册(带血缘旗标):\npython scripts/merge_adapter.py",
+    }
+    lines = summarize_registration(not_registered)
+    assert lines[0] == "这次训练尚未注册到模型库。"
+    assert "python scripts/merge_adapter.py" in lines
+    assert lines[-1] == "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标。"
+
+    failed = {"run_id": "wb-1", "status": "lookup_failed", "message": "模型库查询失败:连不上"}
+    assert summarize_registration(failed) == ["模型库查询失败:连不上"]
+    unavailable = {
+        "run_id": "wb-1",
+        "status": "mlflow_unavailable",
+        "message": "未安装 mlflow,无法查询模型库。",
+    }
+    assert summarize_registration(unavailable) == ["未安装 mlflow,无法查询模型库。"]
+    # 失败态没有 message 时不编造,只如实点名状态;裸记录给缺位句。
+    bare_failed = {"run_id": "wb-1", "status": "lookup_failed"}
+    assert summarize_registration(bare_failed) == ["模型库查询返回状态 lookup_failed，没有更多说明。"]
+    assert summarize_registration({}) == ["这份注册状态没有可读的内容。"]
+
+
+def test_lineage_summary_dash_fallbacks_and_external_states():
+    """反向血缘摘要:workbench 五要素缺项显「-」不显 None、外部/无来源如实、mlflow 缺位不编造。"""
+    from src.workbench.report_summary import summarize_lineage
+
+    workbench = {
+        "model": "工单分类 v3",
+        "status": "workbench",
+        "workbench_run_id": "wb-9",
+        "dataset_version": None,
+        "config_digest": "abcdef1234567890",
+        "training_dataset": None,
+        "metrics": {},
+    }
+    lines = summarize_lineage(workbench)
+    assert lines[0] == "模型：工单分类 v3"
+    assert lines[1] == "训练运行：wb-9"
+    assert lines[2] == "数据版本：-"
+    assert lines[3] == "训练数据：-"
+    assert lines[4] == "配置摘要：abcdef123456…"
+    assert (
+        lines[5] == "以上血缘把模型、训练运行与数据版本关联起来，只保证可追溯，不代表业务效果达标。"
+    )
+
+    external = {
+        "model": "旧模型 v1",
+        "status": "external",
+        "mlflow_run_id": "mfr-1",
+        "base_model": "Qwen/Qwen3-1.7B",
+        "message": "该版本来自旧体系或其他训练入口;血缘以 MLflow 参数为准。",
+    }
+    lines = summarize_lineage(external)
+    assert lines[0] == "模型：旧模型 v1"
+    assert lines[1] == "基座模型：Qwen/Qwen3-1.7B"
+    assert lines[-1] == "该版本来自旧体系或其他训练入口;血缘以 MLflow 参数为准。"
+
+    no_run = {
+        "model": "手工 v1",
+        "status": "no_source_run",
+        "message": "该版本没有关联的训练运行记录（可能是手工注册的目录）。",
+    }
+    assert summarize_lineage(no_run) == [
+        "模型：手工 v1",
+        "该版本没有关联的训练运行记录（可能是手工注册的目录）。",
+    ]
+    # mlflow_unavailable 态服务端不带 message:如实点名状态含义,不 .get 编造。
+    unavailable = {"model": "X v1", "status": "mlflow_unavailable"}
+    assert summarize_lineage(unavailable) == ["模型：X v1", "未安装 mlflow，无法查询这份血缘。"]
+    assert summarize_lineage({}) == ["这份血缘记录没有可读的内容。"]
