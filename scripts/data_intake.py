@@ -581,7 +581,14 @@ def main() -> int:
         if args.command == "model-list":
             from src.workbench.local_models import discover_local_models
 
-            print(json.dumps(discover_local_models(roots=args.root), ensure_ascii=False, indent=2))
+            result = discover_local_models(roots=args.root)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            # 与其他清单命令同口径:stdout 纯 JSON,stderr 追加发现尾行
+            # (空态点名准备入口/分档计数+文件完整边界,与页面候选模型区同词汇)。
+            from src.workbench.report_summary import summarize_model_discovery
+
+            for line in summarize_model_discovery(result):
+                print(line, file=sys.stderr)
             return 0
         service = IntakeService(args.store)
         if args.command.startswith("scoring-"):

@@ -1870,3 +1870,52 @@ training_cli 5 + readme_alignment 39）。全量回归 tests/unit 预期
 scripts/data_intake.py、tests/unit/test_report_summary.py、
 tests/unit/test_training_plan_cli.py、tests/unit/test_workbench_training_cli.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+## 第 48 轮 = 模型发现清单人话（恢复循环第 29 轮）
+
+**背景**：第 47 轮收尾后复盘 data_intake.py 全部子命令的 stderr 覆盖，
+发现 `model-list` 是最后一个静默清单命令（全局发现，不属于五个会话级
+list）：空发现输出空数组零提示——首次使用者没有任何本地模型时会以为
+命令坏了；非空输出一串 JSON，「文件不完整」的 status 枚举非专家读不出
+「缺什么、能不能用」。而页面候选模型区已有成熟词汇：「文件完整／文件
+不完整」状态词、「文件完整只表示可以进一步检查；模型是否兼容、训练长度
+和机器是否适合，仍由方案检查判断」边界句——CLI 照搬即可同源。
+
+**实现**：
+- src/workbench/report_summary.py 新增 `summarize_model_discovery(items)`：
+  空 → 「暂未发现本地候选模型。先把完整的基础模型放进本机目录（如
+  models/），或用 --root 指定已有目录，再运行 model-list 核对。」；非空 →
+  「发现 N 个本地模型：X 个文件完整、Y 个文件不完整（缺什么看 JSON 里的
+  issues 字段）。」+ 页面边界句逐字复述（不完整为 0 时省略 issues 括注）。
+  空态措辞刻意不照抄页面的「暂未发现文件完整的本地模型」——页面那句在
+  `not available` 时触发（含「全都不完整」），CLI 空列表语义是「一个候选
+  都没有」，照抄会把两种状态混为一谈；分档计数与边界句才是页面同源锚点。
+- scripts/data_intake.py 的 model-list 分支从内联 print 重构为先存 result
+  再输出 JSON，随后 stderr 追加发现尾行（summarize_model_discovery
+  单一来源）。
+
+**测试**（+2 函数）：
+test_model_discovery_summary_empty_guidance_and_breakdown（空态入口句
+前缀与 --root、混合分档计数句逐字、边界句与页面逐字同源、全完整态
+「0 个文件不完整」无 issues 括注）；test_model_list_tail_docs_pinned
+（summarize_model_discovery 单一来源、分档计数口径、issues 指引、
+文件完整边界、与页面候选模型区同词汇）。既有测试扩展 ×2：
+test_model_list_and_implicit_recommendation… 断言 stderr 分档计数与
+边界句；test_implicit_recommendation_explains_missing_local_models 的
+monkeypatch lambda 从 `lambda: []` 改签名 `lambda roots=None: []`
+（model-list 以 roots= 关键字调用，旧签名会 TypeError）并补空态断言。
+
+**文档**（agent-setup.md plan 段 ~251）：「`--root` 可重复」后插入
+model-list 发现尾行说明句（单一来源、空态入口、分档计数、issues 指引、
+页面同词汇）。
+
+**错误与修复**：无运行期错误；ruff format 重排 1 个测试文件的长断言行
+（纯格式）。monkeypatch 签名问题在写测试时预先识别（model-list 现在带
+roots= 调用），未触发实际失败。
+
+**回归**：定向 4 文件 87 passed（report_summary 37 + plan_cli 5 +
+readme_alignment 40 + training_cli 5）。全量回归 tests/unit 预期
+**1790 passed**（基线 1788 + 2 个新测试函数；既有断言扩展不增量）。
+本批只动 src/workbench/report_summary.py、scripts/data_intake.py、
+tests/unit/test_report_summary.py、tests/unit/test_training_plan_cli.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

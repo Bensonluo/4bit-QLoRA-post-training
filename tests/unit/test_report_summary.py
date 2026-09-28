@@ -981,3 +981,33 @@ def test_listing_summary_empty_names_entry_non_empty_counts():
 
     counted = summarize_listing("已保存的训练方案", [{}, {}, {}], "先运行 plan-recommend。")
     assert counted == ["共 3 条已保存的训练方案。"]
+
+
+def test_model_discovery_summary_empty_guidance_and_breakdown():
+    """model-list 尾行:空态点名准备入口,非空分档计数+页面同源边界句。"""
+    from src.workbench.report_summary import summarize_model_discovery
+
+    empty = summarize_model_discovery([])
+    assert len(empty) == 1
+    assert empty[0].startswith("暂未发现本地候选模型。")
+    assert "--root" in empty[0]
+
+    mixed = summarize_model_discovery(
+        [
+            {"status": "available"},
+            {"status": "incomplete", "issues": ["a.safetensors: 文件缺失、下载未完成或内容为空。"]},
+        ]
+    )
+    assert (
+        mixed[0]
+        == "发现 2 个本地模型：1 个文件完整、1 个文件不完整（缺什么看 JSON 里的 issues 字段）。"
+    )
+    # 边界句与页面候选模型区逐字同源(文件完整≠兼容或能训练)
+    assert (
+        mixed[1]
+        == "文件完整只表示可以进一步检查；模型是否兼容、训练长度和机器是否适合，仍由方案检查判断。"
+    )
+
+    complete = summarize_model_discovery([{"status": "available"}, {"status": "available"}])
+    assert complete[0] == "发现 2 个本地模型：2 个文件完整、0 个文件不完整。"
+    assert complete[1] == mixed[1]

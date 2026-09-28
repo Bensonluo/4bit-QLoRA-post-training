@@ -248,7 +248,7 @@ python scripts/data_intake.py plan-prepare SESSION_ID PLAN_ID --revision CURRENT
 python scripts/data_intake.py train-start SESSION_ID RUN_ID --revision CURRENT_REVISION
 ```
 
-省略 `--model-path` 时自动采用发现的完整本地候选；没有完整模型时会提示缺少文件，不会自动下载。`model-list --root LOCAL_DIRECTORY` 可只查看指定目录，`--root` 可重复。`--model-path` 可以重复；本地 Agent 服务不需要 `--allow-remote-data`。方案默认保存在 `outputs/workbench/training-plans`，全局 `--plan-root` 可覆盖目录。`plan-prepare` 表示已经审阅并确认保存的推荐方案，只准备训练，不自动启动。
+省略 `--model-path` 时自动采用发现的完整本地候选；没有完整模型时会提示缺少文件，不会自动下载。`model-list --root LOCAL_DIRECTORY` 可只查看指定目录，`--root` 可重复。`model-list` 同时在 stderr 追加发现尾行（`summarize_model_discovery` 单一来源）：空态点名先准备本地候选模型或用 `--root` 指定目录；非空给文件完整/不完整分档计数（缺什么看 JSON 的 issues 字段），并复述「文件完整只表示可以进一步检查」的边界——与页面候选模型区同词汇。`--model-path` 可以重复；本地 Agent 服务不需要 `--allow-remote-data`。方案默认保存在 `outputs/workbench/training-plans`，全局 `--plan-root` 可覆盖目录。`plan-prepare` 表示已经审阅并确认保存的推荐方案，只准备训练，不自动启动。
 
 上述 plan 子命令在 stdout 输出 JSON 的同时向 stderr 追加人话（`plan-list` 只追加一行清单尾行：`summarize_listing` 单一来源——空清单点名下一步入口，非空给计数）：`plan-recommend` 与 `plan-show` 先翻译方案本身——建议的基础模型与关键参数（最大长度、训练轮数、batch size、学习率、LoRA rank、量化位数）、状态三态（方案可供确认／需要先完善数据／当前条件不支持）、推荐理由与尚未验证的限制原文、需要你先回答的业务问题；ready 方案再追加其携带的真实预检证据的人话翻译（预检记录在方案记录的 `probe` 里）。`plan-prepare` 的结果复用训练记录摘要：方案已准备好并通过检查，还没有开始训练。确认这份方案只会准备训练、不会自动启动，方案就绪与推荐理由也不构成训练效果或业务达标的判断。
 

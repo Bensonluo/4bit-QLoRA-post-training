@@ -841,3 +841,25 @@ def summarize_listing(label: str, items: list, first_step: str) -> list[str]:
     if not items:
         return [f"当前任务还没有{label}；{first_step}"]
     return [f"共 {len(items)} 条{label}。"]
+
+
+def summarize_model_discovery(items: list) -> list[str]:
+    """model-list 尾行:与页面候选模型区同词汇的发现计数与文件完整边界。
+
+    空态点名准备入口;非空给文件完整/不完整分档计数,并复述页面的边界句——
+    重量文件只 stat 未加载,文件完整不等于兼容或能训练,适配由方案检查判断。
+    """
+    if not items:
+        return [
+            "暂未发现本地候选模型。先把完整的基础模型放进本机目录（如 models/），"
+            "或用 --root 指定已有目录，再运行 model-list 核对。"
+        ]
+    complete = sum(1 for item in items if item.get("status") == "available")
+    incomplete = len(items) - complete
+    count_line = f"发现 {len(items)} 个本地模型：{complete} 个文件完整、{incomplete} 个文件不完整"
+    if incomplete:
+        count_line += "（缺什么看 JSON 里的 issues 字段）"
+    return [
+        count_line + "。",
+        "文件完整只表示可以进一步检查；模型是否兼容、训练长度和机器是否适合，仍由方案检查判断。",
+    ]

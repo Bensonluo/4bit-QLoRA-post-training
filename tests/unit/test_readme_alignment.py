@@ -714,3 +714,17 @@ def test_plan_summary_docs_pinned():
     assert "probe" in section, "预检证据的真实存放位点必须写明"
     assert "不会自动启动" in section, "确认准备的不启动边界必须写明"
     assert "不构成训练效果或业务达标的判断" in section, "固定边界句必须写明"
+
+
+def test_model_list_tail_docs_pinned():
+    """model-list 发现尾行钉死:单一来源、分档计数、issues 指引与页面同词汇。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 让 Agent 推荐训练方案",
+        "## 在同一任务中启动真实训练",
+    )
+    assert "`summarize_model_discovery` 单一来源" in section, "发现尾行单一来源必须写明"
+    assert "文件完整/不完整分档计数" in section, "分档计数口径必须写明"
+    assert "issues 字段" in section, "缺文件明细指引必须写明"
+    assert "文件完整只表示可以进一步检查" in section, "文件完整边界必须写明"
+    assert "与页面候选模型区同词汇" in section, "页面与 CLI 同源必须写明"

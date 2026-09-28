@@ -148,7 +148,11 @@ def test_model_list_and_implicit_recommendation_use_complete_discovered_candidat
     ]
     monkeypatch.setattr(local_models, "discover_local_models", lambda roots=None: candidates)
     assert invoke("model-list") == 0
-    assert json.loads(capsys.readouterr().out) == candidates
+    output = capsys.readouterr()
+    assert json.loads(output.out) == candidates
+    # 发现尾行:分档计数+文件完整边界(与页面候选模型区同词汇),不只丢一串 JSON
+    assert "发现 2 个本地模型：1 个文件完整、1 个文件不完整" in output.err
+    assert "文件完整只表示可以进一步检查" in output.err
     assert calls == []
     assert (
         invoke(
@@ -213,7 +217,12 @@ def test_implicit_recommendation_explains_missing_local_models(plan_cli, monkeyp
     import src.workbench.local_models as local_models
 
     invoke, session, _, calls = plan_cli
-    monkeypatch.setattr(local_models, "discover_local_models", lambda: [])
+    monkeypatch.setattr(local_models, "discover_local_models", lambda roots=None: [])
+    # 空发现也不静默:发现尾行点名准备入口,JSON 仍是空数组
+    assert invoke("model-list") == 0
+    listed = capsys.readouterr()
+    assert json.loads(listed.out) == []
+    assert "暂未发现本地候选模型" in listed.err
     assert (
         invoke(
             "plan-recommend",
