@@ -320,6 +320,7 @@ def summarize_plan(record: dict) -> list[str]:
         lines.append("先完善数据或回答业务问题，再让 Agent 重新生成方案。")
     elif status == "unsupported":
         lines.append("换用支持的模型或机器后重新生成方案。")
+    lines.extend(summarize_tool_trace(record.get("trace"), "方案"))
     lines.append("方案就绪与推荐理由不构成训练效果或业务达标的判断，是否采用由你按业务决定。")
     return lines
 
@@ -638,6 +639,7 @@ def summarize_scoring(record: dict) -> list[str]:
         questions = [str(item) for item in (record.get("questions") or []) if str(item).strip()]
         if questions:
             lines.append("需要你先补充的业务问题：" + "；".join(questions))
+        lines.extend(summarize_tool_trace(record.get("trace"), "评分"))
         lines.append("请补充业务标准后重新拟定规则；当前没有可确认的评分方案。")
         return lines
     recipe = record.get("recipe") or {}
@@ -666,6 +668,7 @@ def summarize_scoring(record: dict) -> list[str]:
         )
     else:
         lines.append("草稿待你核对实际正反例分数与理由后确认；软件不会自动确认评分规则。")
+    lines.extend(summarize_tool_trace(record.get("trace"), "评分"))
     lines.append("业务评分均值与通过率是规则口径的描述，不等于严格准确率，也不构成业务达标的判断。")
     return lines
 

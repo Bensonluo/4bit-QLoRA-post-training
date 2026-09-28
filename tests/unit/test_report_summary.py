@@ -811,6 +811,39 @@ def test_plan_summary_needs_data_questions_and_bare_records_do_not_invent():
     assert "不构成训练效果或业务达标的判断" in bare[-1]
 
 
+def test_plan_summary_renders_shared_tool_trace_lines():
+    """plan-* 尾行:记录带 trace 时以统一格式渲染工具核查轨迹,空/缺省不加轨迹行。"""
+    from src.workbench.report_summary import summarize_plan
+
+    record = {
+        "status": "ready",
+        "proposal": {
+            "model_path": "/models/qwen-base",
+            "rationale": ["样例结构稳定"],
+            "limitations": ["未在业务留出题上验证"],
+        },
+        "trace": [
+            {"tool": "discover_local_models", "ok": True},
+            {"tool": "probe_model", "ok": False, "error": "缺 tokenizer 文件"},
+        ],
+    }
+    lines = summarize_plan(record)
+    joined = "\n".join(lines)
+    assert (
+        "工具核查轨迹：2 次调用，成功 1 次、失败 1 次——"
+        "失败的调用没有取到证据，方案只依赖成功的调用。" in joined
+    )
+    boundary_index = next(i for i, line in enumerate(lines) if line.startswith("方案就绪与推荐理由"))
+    trace_index = next(i for i, line in enumerate(lines) if line.startswith("工具核查轨迹"))
+    assert trace_index < boundary_index, "轨迹行必须在收尾边界句之前"
+
+    # 空 trace / 缺省:默认行为不变,无轨迹行
+    record["trace"] = []
+    assert not any("工具核查轨迹" in line for line in summarize_plan(record))
+    del record["trace"]
+    assert not any("工具核查轨迹" in line for line in summarize_plan(record))
+
+
 def test_scoring_summary_draft_and_confirmed_states_with_boundaries():
     """评分规则摘要:标准+通过线+正反例验证+确认/待确认边界+不构成达标判断。"""
     from src.workbench.report_summary import summarize_scoring
@@ -866,6 +899,47 @@ def test_scoring_summary_needs_business_input_and_bare_records_do_not_invent():
     assert bare[0] == "这套规则没有写明业务标准。"
     assert "软件不会自动确认评分规则" in "\n".join(bare)
     assert "不等于严格准确率" in bare[-1]
+
+
+def test_scoring_summary_renders_shared_tool_trace_lines():
+    """scoring-* 尾行:记录带 trace 时以统一格式渲染工具核查轨迹,空/缺省不加轨迹行。"""
+    from src.workbench.report_summary import summarize_scoring
+
+    record = {
+        "status": "draft",
+        "recipe": {"business_standard": "须含全部处理步骤", "pass_threshold": 0.8},
+        "trace": [
+            {"tool": "profile_data", "ok": True},
+            {"tool": "inspect_rows", "ok": True},
+            {"tool": "read_cell_content", "ok": False, "error": "行不存在"},
+        ],
+    }
+    lines = summarize_scoring(record)
+    joined = "\n".join(lines)
+    assert (
+        "工具核查轨迹：3 次调用，成功 2 次、失败 1 次——"
+        "失败的调用没有取到证据，评分只依赖成功的调用。" in joined
+    )
+    boundary_index = next(i for i, line in enumerate(lines) if line.startswith("业务评分均值"))
+    trace_index = next(i for i, line in enumerate(lines) if line.startswith("工具核查轨迹"))
+    assert trace_index < boundary_index, "轨迹行必须在收尾边界句之前"
+
+    # needs_business_input 记录同样落盘 trace(src/agent/scoring.py),澄清态也带轨迹行
+    clarifying = summarize_scoring(
+        {
+            "status": "needs_business_input",
+            "reason": "标准不可判定",
+            "trace": [{"tool": "profile_data", "ok": True}, {"tool": "read_cell", "ok": False}],
+        }
+    )
+    assert "工具核查轨迹：2 次调用，成功 1 次、失败 1 次" in "\n".join(clarifying)
+    assert "评分只依赖成功的调用" in "\n".join(clarifying)
+
+    # 空 trace / 缺省:默认行为不变,无轨迹行
+    record["trace"] = []
+    assert not any("工具核查轨迹" in line for line in summarize_scoring(record))
+    del record["trace"]
+    assert not any("工具核查轨迹" in line for line in summarize_scoring(record))
 
 
 def test_suite_summary_counts_lock_scope_and_boundary():

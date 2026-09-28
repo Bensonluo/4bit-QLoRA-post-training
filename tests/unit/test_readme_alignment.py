@@ -623,6 +623,8 @@ def test_scoring_summary_docs_pinned():
     assert "不构成业务达标的判断" in section, "固定边界句必须写明"
     assert "summarize_scoring" in section, "页面渲染位点必须点名摘要函数"
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    # 评分摘要工具核查轨迹行(R62):与评测解读同格式(summarize_tool_trace 单一来源),由摘要函数自动带上。
+    assert "评分摘要现以评测解读同一格式渲染工具核查轨迹" in section, "评分轨迹行必须写明(与评测解读同格式)"
 
 
 def test_suite_summary_docs_pinned():
@@ -1010,3 +1012,5 @@ def test_task_spec_design_doc_pinned():
     )
     assert "本轮补齐的是呈现统一，不是补落盘" in doc, "侦察纠正必须如实登记"
     assert "协作轨迹呈现已统一" in doc, "差距 3 呈现统一登记必须写明"
+    # R62:修订/评分/方案三处已上同格式轨迹行,剩余候选如实限定为训练运行记录落盘。
+    assert "训练运行记录本身不落 trace" in doc, "剩余候选必须如实限定为训练运行记录落盘"

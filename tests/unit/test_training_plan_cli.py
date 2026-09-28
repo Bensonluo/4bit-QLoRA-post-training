@@ -213,6 +213,30 @@ def test_plan_show_and_prepare_stderr_carry_plain_language_summaries(plan_cli, c
     assert "方案已准备好并通过检查，还没有开始训练" in prepared.err
 
 
+def test_plan_show_stderr_renders_shared_tool_trace_line(plan_cli, capsys):
+    """plan stderr 追加统一工具核查轨迹行;记录无 trace 时不出轨迹行。"""
+    invoke, session, record, _ = plan_cli
+    record["proposal"] = {
+        "model_path": "/tmp/local-a",
+        "rationale": ["样例结构稳定"],
+        "limitations": ["未在业务留出题上验证"],
+        "business_questions": [],
+    }
+    record["trace"] = [
+        {"tool": "discover_local_models", "ok": True},
+        {"tool": "probe_model", "ok": False, "error": "缺 tokenizer 文件"},
+    ]
+    assert invoke("plan-show", record["plan_id"]) == 0
+    err = capsys.readouterr().err
+    assert (
+        "工具核查轨迹：2 次调用，成功 1 次、失败 1 次——"
+        "失败的调用没有取到证据，方案只依赖成功的调用。" in err
+    )
+    del record["trace"]
+    assert invoke("plan-show", record["plan_id"]) == 0
+    assert "工具核查轨迹" not in capsys.readouterr().err
+
+
 def test_implicit_recommendation_explains_missing_local_models(plan_cli, monkeypatch, capsys):
     import src.workbench.local_models as local_models
 

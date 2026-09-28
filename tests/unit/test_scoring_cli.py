@@ -163,6 +163,25 @@ def test_scoring_proposal_requires_remote_consent_and_separate_confirmation(scor
     assert "这套规则" not in capsys.readouterr().err, "scoring-list 只列清单，不追加人话"
 
 
+def test_scoring_show_stderr_renders_shared_tool_trace_line(scoring_cli, capsys):
+    """scoring stderr 追加统一工具核查轨迹行;记录无 trace 时不出轨迹行。"""
+    invoke, session, record, _ = scoring_cli
+    record["trace"] = [
+        {"tool": "profile_data", "ok": True},
+        {"tool": "inspect_rows", "ok": True},
+        {"tool": "read_cell_content", "ok": False, "error": "行不存在"},
+    ]
+    assert invoke("scoring-show", record["scoring_id"]) == 0
+    err = capsys.readouterr().err
+    assert (
+        "工具核查轨迹：3 次调用，成功 2 次、失败 1 次——"
+        "失败的调用没有取到证据，评分只依赖成功的调用。" in err
+    )
+    del record["trace"]
+    assert invoke("scoring-show", record["scoring_id"]) == 0
+    assert "工具核查轨迹" not in capsys.readouterr().err
+
+
 def test_confirmed_rules_drive_business_metrics_and_acceptance_pass_rate(scoring_cli, capsys):
     invoke, session, record, calls = scoring_cli
     compare = (

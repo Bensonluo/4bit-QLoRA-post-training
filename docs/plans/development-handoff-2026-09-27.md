@@ -2437,3 +2437,18 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **文档**：agent-setup.md analyze 段（67 行）镜像 353 行 eval-analyze 句式补尾行轨迹条款（`summarize_tool_trace` 单一来源、与 eval-analyze 共用、裁定措辞原文、页面同位渲染、CLI 与页面同源同词汇）；设计文档 §9 Phase 3 划线完成登记（逐字镜像 Phase 1/2 格式，含侦察纠正条款：落盘早已覆盖五入口，本轮补的是呈现统一不是补落盘）+ §8 差距 3 重写为「协作轨迹呈现已统一」中性事实登记（如实保留「修订/训练/评分记录的轨迹渲染仍为原始 JSON，未上人话行——登记为后续候选」）；口径全部由 test_readme_alignment 钉死，文档与钉死同 commit。
 
 **回归与错误修复**：集成核对 grep「工具核查轨迹」src 3 + docs 5 + tests 13 处命中、「summarize_tool_trace」17 处，四呈现位（评测解读 783 / 数据分析 906+938 / CLI 1314 / 页面 2263）单一来源确认；联合定向 148 项全绿（test_report_summary 46 + test_data_intake + test_data_intake_ui 26 + test_readme_alignment 50，21.87s）；ruff check 九文件全过；评测侧逐字节不变由既有 pin 948 仍绿背书。r61-code 报备一处清单外编辑（test_data_intake.py CLI 断言扩展），系规格明确指示的 hermetic 夹具复用，集成核对认可。全量回归 **tests/unit 1855 passed / 0 failed**（1852 基线 + 3 个新测试函数，--no-cov，265.08s，/tmp/round61_regression.log）。实现代码零返工。
+
+## 第 62 轮 = 协作轨迹统一续：修订/评分/方案记录轨迹行上摘要（恢复循环第 43 轮）
+
+**背景**：R61 收口 Phase 3 时 r61-audit 审计出三个「有落盘、有裸 JSON、无人话行」的留痕面：修订记录（iterations 记录 `data_revision.tool_trace`，页面 1722 裸 JSON）、训练方案（plans 表 `trace`，页面 871 裸 JSON；CLI plan 分支已调 summarize_plan）、业务评分（spec `trace`，CLI scoring 分支已调 summarize_scoring、页面 404 已渲染其全文）。本轮把 R61 的 `summarize_tool_trace` 单一来源接进这三处，吃掉审计候选 ①+②；候选 ③（训练运行记录本身不落 trace，需 plan→run 链路新数据流）留待后续。用户本轮加两条节奏指示：循环间隔固定 2 分钟（此前误放宽到 270s 已纠正）；**全量回归改为 2-3 个大轮次一次**（R61 刚全绿 1855，本轮首次适用新节奏）。
+
+**实现**：三路并行子代理（r62-summarizers / r62-page / r62-docs，文件所有权互斥，措辞中心裁定：subject 统一为 修订/评分/方案，句式与 R61 逐字同构）：
+- **摘要函数**（src/workbench/report_summary.py，+3）：summarize_plan 在边界句前接 `summarize_tool_trace(record.get("trace"), "方案")`；summarize_scoring 主路径（subject「评分」）与 `needs_business_input` 早退分支都接（该分支真实记录也落 trace，scoring.py:162 `"trace": [*trace, entry]`，与 R61 双路径先例一致）。CLI 侧 scoring（~665）/plan（~824）分支本就调用这两个摘要函数，零改动自动跟上——单一来源的红利。
+- **页面两处**（ui/pages/07_Data_Intake.py，+8）：方案 expander（871-874）与修订 expander（1726-1729）照 2261 惯例局部 import + 渲染循环，裸 JSON 保留在下方。评分页面位（404 已渲染 summarize_scoring 全文）自动出现新行，无需改动。
+- **文档**：agent-setup.md 方案/评分/修订三段照 R61 句式各补一句（折叠区名核对自 UI 实际 expander 标题）；设计文档 §8 差距 3 改写——三处已上同格式人话行（R62 落地），唯一剩余候选如实限定为「训练运行记录本身不落 trace（需 plan→run 启动链路先落盘）」；§9 Phase 3 行末追加「（修订/评分/方案记录轨迹行 R62 补齐）」。
+
+**测试**：test_report_summary.py 新增 2 函数（plan/scoring 各覆盖 成功+失败整句断言、轨迹行在边界句前的位置契约、空/缺省 trace 无轨迹行）；test_scoring_cli.py / test_training_plan_cli.py 各加 1 条最小 CLI 用例（夹具记录补 trace 走 scoring-show/plan-show，stderr 含轨迹行；del trace 后无）；test_data_intake_ui.py 新增 2 个页面测试——修订链无需 UI 前置（页面无条件 list_iterations，按生产形状经 `IterationService._save` 直插 confirmed+data_change 记录），方案链走 approved→validate_full_data→confirm_full_data→materialize_dataset 既有链后直插 needs_data 方案（免真实模型预检）；断言人话行在 page.markdown。test_readme_alignment.py +2 断言（agent-setup 评分段轨迹行、§8 训练运行记录剩余候选），侦察确认旧措辞无既有 pin、既有 Phase 3/analyze 段断言全部原样通过。
+
+**文档**：见实现第三条——agent-setup.md 与设计文档为本轮全部文档改动。
+
+**回归与错误修复**：集成核对：六文件联合定向 **162 passed**（18.94s：test_report_summary 48 + test_scoring_cli/test_training_plan_cli 10 + test_readme_alignment 50 + test_data_intake_ui 28 + test_data_intake）+ ruff 九文件全过 + 单一来源确认（「只依赖成功的调用」在 report_summary.py 仅 1 处字面，各 subject 运行时拼出）；mypy 自查与 HEAD 错误集完全相同（摘要切片零新增）。**本轮按用户指示未跑全量回归（2-3 大轮次节奏首次适用），上次全量 = 第 61 轮 1855 passed / 0 failed**；下次全量安排在 R63 或 R64。实现代码零返工。

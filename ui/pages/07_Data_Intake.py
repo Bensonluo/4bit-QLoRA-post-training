@@ -868,6 +868,10 @@ def show_training_recommendations() -> None:
                 st.json(plan.get("probe") or {})
                 st.json(proposal)
                 st.json(plan.get("context", {}))
+                from src.workbench.report_summary import summarize_tool_trace
+
+                for line in summarize_tool_trace(plan.get("trace", []), "方案"):
+                    st.write(line)
                 st.json(plan.get("trace", []))
             if plan.get("run_id"):
                 st.info(f"已准备训练 {plan['run_id']}，请在下方记录核对预检后启动。")
@@ -1719,6 +1723,10 @@ if iterations:
                     st.json(revision.get("before", {}))
                     st.write("修改后")
                     st.json(revision.get("after", {}))
+                    from src.workbench.report_summary import summarize_tool_trace
+
+                    for line in summarize_tool_trace(revision.get("tool_trace", []), "修订"):
+                        st.write(line)
                     st.json(revision.get("tool_trace", []))
             if iteration.get("failure"):
                 st.error(str(iteration["failure"]))

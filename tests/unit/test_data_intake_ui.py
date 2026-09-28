@@ -75,6 +75,159 @@ def test_recipe_expander_renders_shared_tool_trace_line(data_page, monkeypatch):
     assert any("工具核查轨迹：4 次调用，成功 4 次。" in m.value for m in page.markdown)
 
 
+def test_iteration_revision_expander_renders_tool_trace_line(data_page):
+    """修订记录 expander:tool_trace 的 JSON 之外还有同一格式的人话行（含失败计数）。"""
+    import ui.config
+    from src.workbench.iterations import IterationService
+
+    service, session, page = data_page
+    # 页面只读改进轮次记录；这里按 propose()+confirm()+revise_data_for_iteration()
+    # 落盘的生产形状 (src/workbench/iterations.py:179-202、src/agent/revisions.py:42-53)
+    # 直接写一条 confirmed 且带 data_revision 的记录，免拉起父轮训练链。
+    iteration_service = IterationService(
+        ui.config.PROJECT_ROOT / "outputs/workbench/iterations",
+        ui.config.PROJECT_ROOT / "outputs/workbench/training",
+        ui.config.PROJECT_ROOT / "outputs/workbench/evaluations",
+    )
+    suite_id = "es-" + "5c9d" * 8
+    suite_root = ui.config.PROJECT_ROOT / "outputs/workbench/iterations/suites"
+    iteration_service._save(
+        {
+            "iteration_id": "it-" + "3f1c" * 8,
+            "session_id": session.session_id,
+            "goal": session.goal,
+            "parent_run_id": "tr-" + "0d2a" * 8,
+            "parent_evaluation_id": "ev-" + "7b4e" * 8,
+            "parent_report_digest": "digest",
+            "evaluation_protocol": {"name": "fixed_suite"},
+            "parent_evidence_binding": "content_verified",
+            "evaluation_suite": {
+                "suite_id": suite_id,
+                "root": str(suite_root),
+                "manifest_path": str(suite_root / f"{suite_id}.json"),
+                "case_counts": {"validation": 1, "test": 1},
+                "cases_digest": "digest",
+            },
+            "hypothesis": "补充坏例提升同题对照",
+            "expected_outcome": "同题对照分数提高",
+            "changes": "重新生成数据处理规则",
+            "data_change": True,
+            "training_start": "base",
+            "model_path": str(ui.config.PROJECT_ROOT / "models/base"),
+            "options": {},
+            "parent_dataset": {},
+            "proposal_dataset_digest": "digest",
+            "new_run_id": None,
+            "evaluation_id": None,
+            "status": "confirmed",
+            "created_at": "2026-09-28T00:00:00+00:00",
+            "confirmed_session_revision": session.revision,
+            "data_revision": {
+                "from_revision": session.revision,
+                "to_revision": session.revision + 1,
+                "analysis_digest": "digest",
+                "changed_components": ["recipe"],
+                "before": {"recipe": None},
+                "after": {"recipe": {"targets": []}},
+                "next_action": "review_preview",
+                "model": "stub-model",
+                "tool_trace": [
+                    {"tool": "profile_data", "ok": True},
+                    {"tool": "inspect_rows", "ok": True},
+                    {"tool": "preview_recipe", "ok": False, "error": "样例行不足"},
+                ],
+                "scope": "executed_preview_requires_business_confirmation",
+            },
+        }
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any(
+        expander.label.startswith("本轮 ") for expander in page.expander
+    ), [item.label for item in page.expander]
+    assert any(
+        "工具核查轨迹：3 次调用，成功 2 次、失败 1 次"
+        "——失败的调用没有取到证据，修订只依赖成功的调用。" in m.value
+        for m in page.markdown
+    ), [m.value for m in page.markdown if "工具核查轨迹" in m.value]
+
+
+def test_plan_expander_renders_tool_trace_line(data_page):
+    """训练方案 expander:trace 的 JSON 之外还有同一格式的人话行（含失败计数）。"""
+    import sqlite3
+    from datetime import datetime, timezone
+
+    import ui.config
+    from src.workbench.sources import canonical
+    from src.workbench.training_plans import SCOPE, TrainingPlanService
+    from tests.unit.test_full_data import FULL, approved
+
+    service, _, page = data_page
+    # 方案区只在 ready_for_training_preflight 渲染：走既有夹具链
+    # 分析→确认→全量校验→确认全量→物化 (同 test_preflight_only_loads_tokenizer…)。
+    session = approved(service)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
+    assert next_action(session) == "ready_for_training_preflight"
+
+    plans = TrainingPlanService(
+        ui.config.PROJECT_ROOT / "outputs/workbench/training-plans",
+        ui.config.PROJECT_ROOT / "outputs/workbench/training",
+    )
+    # 按 save() 落盘的生产记录形状 (src/workbench/training_plans.py:423-437) 直插一条
+    # needs_data 方案：save() 的 ready 分支需要真实本地模型与 tokenizer 预检。
+    plan_id = "tp-" + "9d61" * 8
+    record = {
+        "plan_id": plan_id,
+        "session_id": session.session_id,
+        "session_revision": session.revision,
+        "dataset": session.dataset.model_dump(),
+        "model_identity": None,
+        "proposal": {
+            "model_path": "",
+            "max_length": 512,
+            "rationale": ["样例里目标列缺唯一监督来源，先补数据再训练。"],
+            "limitations": ["尚未在全量数据上验证该方案。"],
+            "business_questions": [],
+            "status": "needs_data",
+            "training_options": {
+                "num_epochs": 3,
+                "batch_size": 1,
+                "gradient_accumulation_steps": 8,
+                "learning_rate": 0.0002,
+            },
+            "lora_options": {"r": 8},
+            "model_options": {"quantization_bits": 4},
+        },
+        "status": "needs_data",
+        "context": {"session_id": session.session_id},
+        "trace": [
+            {"tool": "inspect_context", "ok": True},
+            {"tool": "probe", "ok": False, "error": "tokenizer 文件缺失"},
+        ],
+        "probe": None,
+        "run_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "scope_note": SCOPE,
+    }
+    with sqlite3.connect(plans.database) as connection:
+        connection.execute("INSERT INTO plans VALUES (?, ?)", (plan_id, canonical(record)))
+
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any(
+        expander.label.startswith("方案 ") for expander in page.expander
+    ), [item.label for item in page.expander]
+    assert any(
+        "工具核查轨迹：2 次调用，成功 1 次、失败 1 次"
+        "——失败的调用没有取到证据，方案只依赖成功的调用。" in m.value
+        for m in page.markdown
+    ), [m.value for m in page.markdown if "工具核查轨迹" in m.value]
+
+
 def test_business_question_answer_survives_analysis_and_clears_widget(data_page, monkeypatch):
     import src.agent.intake
 
