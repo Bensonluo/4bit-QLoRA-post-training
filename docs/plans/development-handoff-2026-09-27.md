@@ -2686,3 +2686,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：旅程文件 2 passed（首次即绿）；ruff check/format 双闸绿。全量回归（R77/R78 边界到期）**1949 passed / 324.97s**——较 R75 基线 1946 +3（R75 自身 pin 测试在基线跑完后才加 +1、R76 英文 pin +1、本轮 +1，算术闭环）；时长增加系与审查子代理并发运行所致负载。
 
 **回归与错误修复**：无失败。独立审查：r77-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**：正确性（演示文件 git 追踪、CI 同样拿到；服务层零 demo 特判——「门禁对演示静默放行」在服务层结构上不可能；盲标/对比答案从 row_id 键控真值映射派生，任何抽样子集确定性通过，非 flaky）、pin 强度（行数口径与 agent-setup「2 条/10 条」逐字对齐；文档 pin ← 文件字节 ← 门禁穿越三层闭环）、诚实性（docstring 明确服务级定位、不冒充 UI 测试、如实归属 R73 三测试的覆盖范围）、一致性（中文 docstring/①–⑧ 编号/解释性断言消息/延迟重导入风格）、非冗余（内联 fixture 的姊妹测试对演示文件漂移保持绿——本测试是唯一绑定真实文件的保护；内联副本合理保留，钉的是与文件无关的服务行为）。3 条非阻塞 nit 全部接受不改（带引号换行的 CSV 行数口径边界——门禁链独立解析真实记录双重兜底；一处断言消息的括注属解释性上下文；ruff 格式化带来的 diff 膨胀——canonical 化本身是改善）。下一全量回归 R80/R81 边界到期（新基线 1949）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $83.33（不计成本授权下继续，逐轮如实上报）。
+
+## 第 78 轮 = 在线仪表盘链接如实定界（零安装通道诚实红线）
+
+**日期**：2026-09-29（子代理 r78-reviewer 独立审查通过）
+
+**选点**：R78 侦察转向零安装通道——README Option 2 与页头徽章指向的 https://benluo.art/qlora-dashboard/ 。无头浏览器（Playwright headless）实测：HTTP 200、页面标题与当前 ui/app.py 一致（无时效信号），但侧栏导航只有 7 项（Home / Training Lab / Experiments / Evaluation / Model Comparison / Model Registry / Data Wizard），**没有**当前仓库的 07_Data_Intake（🧩 目标与数据，产品主入口页）与 06_Chat；页面全文搜不到「第一次使用」演示入口；`/_stcore/health` 404。结论：托管实例是早于目标与数据工作流的旧部署。而 Option 1 刚在 R74–R77 铺完零密钥演示承诺，Option 2「Try the dashboard online」紧随其后——外部访客顺着点进去会看到一个不含旗舰工作流的面板，构成过度承诺，触碰北极星「诚实红线」；这也是缺口①（试用者可达性）漏斗的最顶层。部署刷新属重大操作需用户明确授权（本轮仅在轮报告提交授权请求）；本轮做仓库侧可提交的如实定界。
+
+**实现**：
+- **README.md** Option 2 链接下方 +3 行定界：托管实例覆盖训练实验类页面（training / experiments / evaluation / comparison / registry / data wizard——与实测侧栏 6 个功能页一一对应，亦与 ui/pages/ 00–05 对应）；🧩 **Goal & Data** 工作流（含零密钥内置演示任务）不在托管实例上，走 Option 1 本地运行。纯现在时陈述，不隐含对未来部署的承诺；🧩 取 UI 页面 page_icon 同款。
+- **Pin**：test_readme_alignment.py +1 `test_live_dashboard_link_honestly_scoped`（64→65）——`_section("### Option 2: Try the Live Dashboard", "### Option 3: CLI training")` 切片内钉 URL 在场 + 三条定界短语（Goal & Data / zero-key built-in demo task / run it locally with Option 1）；删链接或删定界句（回归过度承诺）均转红。
+
+**测试**：对齐套件 **65 passed**（64→65，首次即绿）；ruff check/format 双闸绿（README.md 的 format --check 报 experimental 属 ruff 对 .md 的工具能力边界，基线同样如此，非格式回归）。
+
+**回归与错误修复**：无失败。独立审查：r78-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**：意图交付一致（diff 仅 2 文件 +18 行，未动部署——符合重大操作授权边界）、定界逐句事实核对（covers 清单与实测侧栏一一对应；「is not on」纯现在时无未来承诺；Option 1 指路准确——本地路径与演示入口实在场；全仓 grep 无口径矛盾，中文段/agent-setup/north-star 均无托管实例声明）、pin 锚点稳定（两标题字符串在 README 各唯一，index() 缺锚即炸红）、副作用检查（全 tests/ 引用该文本段者仅新测试自身）、独立复跑 65 passed 与主会话一致，并独立 curl 复核托管实例 200。3 条非阻塞 nit 全部接受不改并登记：①页头徽章同样直达旧面板——徽章文案只声明 "LIVE DASHBOARD" 为真，承诺性文本只在 Option 2；部署侧/徽章补定界待授权；②🧩 与 README 既有 🎯 装饰不一致——保留 🧩（与 UI 页面图标一致更准）；③正向 covers 清单未 pin、外部状态漂移测试天然测不到——**登记为部署刷新时的人工复核项**：获授权刷新部署后需人工复核「is not on the hosted instance」定界句并撤下（pin 测试届时应同步更新）。非全量回归到期轮（下次 R80/R81 边界到期，新基线 1949 passed / 324.97s）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权**：刷新线上部署（使含目标与数据主线与演示任务）后可撤定界句并同步 pin。成本钩子读数 $91.03（不计成本授权下继续，逐轮如实上报）。

@@ -1412,3 +1412,17 @@ def test_english_quickstart_onboarding_parity_pinned():
         "英文侧镜像指引必须与中文同场"
     )
     assert "for the full local-model guide" in quickstart, "完整说明链接必须绑住新段"
+
+
+def test_live_dashboard_link_honestly_scoped():
+    """在线仪表盘链接如实定界(R78):托管实例不含目标与数据主线与零密钥演示任务,
+    Option 2 必须在链接旁如实说明——零安装通道不得过度承诺(诚实红线)。"""
+    option2 = _section(
+        README.read_text(encoding="utf-8"),
+        "### Option 2: Try the Live Dashboard",
+        "### Option 3: CLI training",
+    )
+    assert "https://benluo.art/qlora-dashboard/" in option2, "在线链接必须在场"
+    assert "Goal & Data" in option2, "定界必须点名缺失的主线工作流"
+    assert "zero-key built-in demo task" in option2, "定界必须点名零密钥演示任务不在托管实例"
+    assert "run it locally with Option 1" in option2, "主线必须如实指向本地安装路径"

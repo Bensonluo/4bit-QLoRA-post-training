@@ -205,6 +205,10 @@ remain open. Existing Training Lab presets are also available for prepared datas
 
 Don't want to install? **[Try the dashboard online →](https://benluo.art/qlora-dashboard/)**
 
+The hosted instance covers the training-lab pages (training, experiments, evaluation,
+comparison, registry, data wizard). The 🧩 **Goal & Data** workflow — including the
+zero-key built-in demo task — is not on the hosted instance; run it locally with Option 1.
+
 ### Option 3: CLI training
 
 ```bash
