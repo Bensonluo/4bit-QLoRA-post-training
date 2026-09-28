@@ -2672,3 +2672,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：对齐＋旅程 **64 passed**（63→64）；ruff check/format 双闸绿（reviewer nit 修复——弱锚换强锚——后复跑仍绿）。
 
 **回归与错误修复**：无失败。独立审查：r76-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**（diff 范围/诚实性逐句/pin 质量与冗余/自跑 64/64 全绿/nit），自核证据含：英文四步名与 agent-setup 门禁名 1:1、零密钥承诺边界两侧一致、hf 命令三处闭环、「本机已准备的候选模型」标签在 07_Data_Intake.py 真实存在、六断言中五条在该切片唯一（删段必挂，真 pin）。5 条非阻塞 nit 中 2 条已修（弱链 pin 换「for the full local-model guide」强锚——裸链接在既有段落已出现；英文侧镜像句补钉「In China, run \`export HF_ENDPOINT=…\` first」新段独有措辞——裸命令在既有 Option 3 块已出现），3 条接受不改（步骤名意译可接受、保守省略诚实安全、auto-discovered 单词 pin 脆性偏严方向）。非全量回归到期轮（R75 新基线 1946 passed / 205.85s，下次 R77/R78 边界到期）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $82.35（不计成本授权下继续，逐轮如实上报）。
+
+## 第 77 轮 = 内置演示任务零密钥旅程行为级钉死（全量回归到期轮，新基线 1949）
+
+**日期**：2026-09-29（全量回归到期轮：R75 基线后第三轮；子代理 r77-reviewer 独立审查通过）
+
+**选点**：README（英文 Quick Start + 中文快速开始）与 agent-setup 双语钉死的零密钥演示承诺——「每一步与真实任务完全相同…全程不需要任何 API 密钥就能走到训练前检查」——此前只有**文本级** pin（R74/R76 对齐测试）；行为层是空的：旅程测试 `test_zero_agent_journey_from_goal_to_trained_adapter` 证明零密钥服务链路通，但用的是**内联 fixture**（`tests/unit/test_data_intake.py` 的 CSV 与 FULL_TICKETS 内联字节，恰好与演示文件同形而非同源）；R73 的三个演示测试只钉创建/配套门控/缺文件降级。演示文件自身若被改到走不完门禁链，没有任何测试会红——承诺主体缺行为级保护。
+
+**实现**：
+- **tests/unit/test_product_journey.py** +1 `test_demo_task_zero_key_journey_to_preflight`（复用既有 `journey` fixture）：经 `demo_sample(root)` / `demo_full(root)`（`src/workbench/demo_task.py` 单一来源）读**仓库自带演示文件**（不造内联副本），先钉文档口径 2 条样例/10 条全量，再走真实服务 API 全链：`create(DEMO_GOAL, …)`（目标亦单一来源）→ 基础分析（类别/编号/处理结果）→ 对比核验 verified → 样例确认 → 演示全量验证/确认 → 盲标核验 verified → 物化分区 → `preflight_training`（真实 tokenizer、max_length=32）→ 断言 `training_preflight["status"] == "passed"`——零密钥承诺的终点（止于训练前检查，与 README「prepare a local base model first」边界一致）。
+- 附带：`ruff format` 顺带把该文件既有 8 行超长行整理为规范折行（纯格式、零语义变化，文件首次达 format-canonical）。
+
+**测试**：旅程文件 2 passed（首次即绿）；ruff check/format 双闸绿。全量回归（R77/R78 边界到期）**1949 passed / 324.97s**——较 R75 基线 1946 +3（R75 自身 pin 测试在基线跑完后才加 +1、R76 英文 pin +1、本轮 +1，算术闭环）；时长增加系与审查子代理并发运行所致负载。
+
+**回归与错误修复**：无失败。独立审查：r77-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**：正确性（演示文件 git 追踪、CI 同样拿到；服务层零 demo 特判——「门禁对演示静默放行」在服务层结构上不可能；盲标/对比答案从 row_id 键控真值映射派生，任何抽样子集确定性通过，非 flaky）、pin 强度（行数口径与 agent-setup「2 条/10 条」逐字对齐；文档 pin ← 文件字节 ← 门禁穿越三层闭环）、诚实性（docstring 明确服务级定位、不冒充 UI 测试、如实归属 R73 三测试的覆盖范围）、一致性（中文 docstring/①–⑧ 编号/解释性断言消息/延迟重导入风格）、非冗余（内联 fixture 的姊妹测试对演示文件漂移保持绿——本测试是唯一绑定真实文件的保护；内联副本合理保留，钉的是与文件无关的服务行为）。3 条非阻塞 nit 全部接受不改（带引号换行的 CSV 行数口径边界——门禁链独立解析真实记录双重兜底；一处断言消息的括注属解释性上下文；ruff 格式化带来的 diff 膨胀——canonical 化本身是改善）。下一全量回归 R80/R81 边界到期（新基线 1949）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $83.33（不计成本授权下继续，逐轮如实上报）。
