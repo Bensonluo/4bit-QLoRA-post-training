@@ -2383,3 +2383,15 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **文档**：agent-setup.md「在同一任务中启动真实训练」节——CLI 块加 `train-cost RUN_ID` 行；train-export 段后新增 train-cost 段（口径与页面一致：时长实测、功耗电费估计值非电表读数、API 对比口径不同仅量级比较）。north-star.md 差距对照：第 67 段追加第 57 轮收口第④项的证据句（保留「CLI 平权」字样，R56 钉测试依赖），差距清单删第④项，开放差距收敛为 1-3。
 
 **回归与错误修复**：定向 61 项全绿（cli_summaries 13 + readme_alignment 48 + cost_summary 3）；ruff check 通过，format 一处换行修正。首轮定向 1 败：新 CLI 测试的两条 stderr 断言用了全角逗号，而 cost_lines 输出是半角（探针摘要转写引入的偏差）——按失败输出逐字修正断言后全绿，生产行为零改动。全量回归 **1842 passed / 0 failed**（1840 基线 + 2 新测试，/tmp/round57_regression.log，280 秒）。
+
+## 第 58 轮 = Agent 全流程协作架构文档（恢复循环第 39 轮）
+
+**背景**：R57 收口后北极星差距清单只剩 3 项开放，其中第③项「Agent 全流程协作架构未设计」是唯一不依赖外部资源（真实用户/API 密钥）且可独立完成的差距——协作方式此前一轮一议，每个新环节都要重新论证「Agent 能不能碰、碰了谁兜底」。落笔前先核实项目现状：盘点 src/agent 6 个模块（evaluation/intake/providers/revisions/scoring/training，五个入口全部 Contract 解析）与 src/workbench 30 余个服务模块的真实清单，文档全部结论以在场代码为据，不凭印象书写。
+
+**实现**：新文档 docs/plans/task-spec-and-agent-adaptation-design.md（101 行 9 节，写作轮，零代码改动）——§1 第一性问题定为「语义判断如何安全地传递」（不是「Agent 还能做什么」）；§2 三层架构（确定性内核=唯一事实来源 / Agent 建议层=起草-验证-待确认 / 用户决策层=状态转移只能由显式动作触发）与边界红线；§3 任务规约定义与**架构决策（ADR-1）：规约是只读投影，不是新实体**——由既有记录汇编生成，不新增存储、不引入第二事实来源，双写不一致恰是要消灭的形态；§4 九环节协作协议表（③④⑧三个环节刻意无 Agent，Agent 介入是设计选择不是默认）；§5 多轮适配状态机（decided ∈ {adopt, continue, stop, insufficient_evidence}，证据不足是合法决定）；§6 状态绑定与版本纪律（revision 乐观锁全链）；§7 人话与证据纪律跨层横切；§8 与现状对照点名 4 缺口（①任务规约投影未实现 ②Agent 真实性证据 ③协作轨迹留痕不均 ④BYOK 仅探针）；§9 分阶段路线（Phase 1 task-spec-show 为下一轮候选；外部依赖项不纳入自主迭代）。
+
+**测试**：test_readme_alignment 48→49——新增 test_task_spec_design_doc_pinned（10 断言：标题、ADR-1 双句「只读投影，不是新实体」/「不引入第二事实来源」、三层边界三句「单一事实来源」/「产物一律停在待确认」/「状态转移只能由用户显式动作触发」、环节原则「Agent 介入是设计选择，不是默认」、状态机「insufficient_evidence」、缺口如实「任务规约投影未实现」、外部边界「不纳入自主迭代」）；文件头新增 TASK_SPEC_DESIGN 常量与注释（north-star 管目标、本文管协作机制）。
+
+**文档**：north-star.md 第 67 段追加第 58 轮收口第③项的证据句（保留 R56 钉测试依赖的 "task-spec-and-agent-adaptation-design.md" 文件名字符串），差距清单删第③项、开放差距收敛为 2 项（均依赖外部资源）；新文档本体即交付物；agent-setup.md 无涉（不改产品行为）。tech-doc-neutral 禁词 grep 自查通过（exit 1，无命中）。
+
+**回归与错误修复**：定向 readme_alignment 49 项全绿（0.56s）；ruff check 通过。全量回归 **1843 passed / 0 failed**（1842 基线 + 1 钉测试，/tmp/round58_regression.log，277 秒）。本轮零生产代码改动，无运行期错误。

@@ -18,6 +18,9 @@ AGENT_SETUP = ROOT / "docs" / "agent-setup.md"
 NORTH_STAR = "docs/plans/north-star.md"
 NORTH_STAR_FILE = ROOT / NORTH_STAR
 
+# 架构权威版:north-star 管目标,本文管协作机制(三层边界/任务规约/多轮状态机)。
+TASK_SPEC_DESIGN = ROOT / "docs" / "plans" / "task-spec-and-agent-adaptation-design.md"
+
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 IMG_PATTERN = re.compile(r'<img\s+src="([^"]+)"')
 
@@ -937,3 +940,22 @@ def test_train_cost_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "--tail" not in help_text, "--tail 是 train-logs 专属"
     assert "--output-dir" not in help_text, "--output-dir 是 train-export 专属"
     assert "成本账" in help_text, "帮助文本必须说明这是成本账查询"
+
+
+def test_task_spec_design_doc_pinned():
+    """任务规约与 Agent 协作架构文档钉死:三层边界、规约只读投影决策、环节协议与路线。"""
+    doc = TASK_SPEC_DESIGN.read_text(encoding="utf-8")
+    assert "# 任务规约与 Agent 全流程协作架构" in doc, "标题必须在场"
+    # ADR-1:规约是只读投影,不引入第二事实来源(双写不一致是要消灭的形态)。
+    assert "只读投影，不是新实体" in doc, "核心架构决策必须写明"
+    assert "不引入第二事实来源" in doc, "决策理由必须写明"
+    # 三层边界:内核唯一事实、Agent 产物待确认、状态转移用户专属。
+    assert "单一事实来源" in doc, "内核定位必须写明"
+    assert "产物一律停在待确认" in doc, "Agent 层边界必须写明"
+    assert "状态转移只能由用户显式动作触发" in doc, "用户决策层边界必须写明"
+    # 环节协议与多轮状态机的关键口径。
+    assert "Agent 介入是设计选择，不是默认" in doc, "环节介入原则必须写明"
+    assert "insufficient_evidence" in doc, "证据不足作为合法决定必须写明"
+    # 差距与路线如实:投影未实现点名,外部依赖不纳入自主迭代。
+    assert "任务规约投影未实现" in doc, "缺口必须如实点名"
+    assert "不纳入自主迭代" in doc, "外部依赖边界必须写明"
