@@ -1311,7 +1311,7 @@ def main() -> int:
             if session.analysis:
                 from src.workbench.report_summary import summarize_analysis
 
-                for line in summarize_analysis(session.analysis.model_dump()):
+                for line in summarize_analysis(session.analysis.model_dump(), session.tool_trace):
                     print(line, file=sys.stderr)
         elif args.command == "confirm":
             session = service.confirm(args.session_id, args.revision)

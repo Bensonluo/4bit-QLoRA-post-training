@@ -158,6 +158,8 @@ def test_analyze_cli_appends_analysis_summary_to_stderr(
     assert "这份分析给出数据判断与待确认问题：发现 1 条、待确认问题 0 个。" in captured.err
     assert "已观察：不同问题可能都通过补发处理，处理结果不是问题类别。" in captured.err
     assert "暂定微调思路：确认标签后可考虑 SFT，规模等待全量检查。" in captured.err
+    # 工具核查轨迹与评测解读同格式渲染(夹具 4 次调用全部成功,无失败子句)
+    assert "工具核查轨迹：4 次调用，成功 4 次。" in captured.err
     assert "不代表业务效果达标。" in captured.err
 
 

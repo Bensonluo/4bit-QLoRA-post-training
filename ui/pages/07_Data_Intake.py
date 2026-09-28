@@ -2258,6 +2258,10 @@ if session.preview:
             if session.analysis and session.analysis.recipe
             else {}
         )
+        from src.workbench.report_summary import summarize_tool_trace
+
+        for line in summarize_tool_trace(session.tool_trace, "分析"):
+            st.write(line)
         st.json(session.tool_trace)
 
 if session.confirmed_revision is not None or session.full_data is not None:

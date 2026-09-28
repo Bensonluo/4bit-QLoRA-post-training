@@ -1108,6 +1108,58 @@ def test_analysis_summary_translates_findings_questions_and_gaps():
     assert bare[1] == lines[-1]
 
 
+def test_analysis_summary_renders_shared_tool_trace_lines():
+    """analyze 尾行:传入 tool_trace 时以评测解读同一格式渲染,空/None 不加轨迹行。"""
+    from src.workbench.report_summary import summarize_analysis
+
+    record = {"findings": [{"kind": "observed", "message": "类别分布不均衡。"}]}
+    trace = [
+        {"tool": "profile_data", "ok": True},
+        {"tool": "inspect_rows", "ok": True},
+        {"tool": "read_cell_content", "ok": False, "error": "行不存在"},
+    ]
+    lines = summarize_analysis(record, trace)
+    joined = "\n".join(lines)
+    assert (
+        "工具核查轨迹：3 次调用，成功 2 次、失败 1 次——"
+        "失败的调用没有取到证据，分析只依赖成功的调用。" in joined
+    )
+    boundary_index = next(i for i, line in enumerate(lines) if line.startswith("以上发现中"))
+    trace_index = next(i for i, line in enumerate(lines) if line.startswith("工具核查轨迹"))
+    assert trace_index < boundary_index, "轨迹行必须在边界句之前"
+
+    # 全成功:只计数,不渲染失败子句
+    all_ok = summarize_analysis(
+        record, [{"tool": "profile_data", "ok": True}, {"tool": "inspect_rows", "ok": True}]
+    )
+    assert "工具核查轨迹：2 次调用，成功 2 次。" in all_ok
+    assert not any("失败" in line for line in all_ok if line.startswith("工具核查轨迹"))
+
+    # 空 trace / None:默认行为不变,无轨迹行
+    assert not any("工具核查轨迹" in line for line in summarize_analysis(record, []))
+    assert not any("工具核查轨迹" in line for line in summarize_analysis(record))
+
+
+def test_tool_trace_summary_subject_names_the_reader():
+    """单一来源轨迹行:subject 点名当前读者(解读/分析),空轨迹返回空清单。"""
+    from src.workbench.report_summary import summarize_tool_trace
+
+    trace = [
+        {"tool": "profile_data", "ok": True},
+        {"tool": "inspect_rows", "ok": False, "error": "行不存在"},
+    ]
+    assert summarize_tool_trace(trace, "解读") == [
+        "工具核查轨迹：2 次调用，成功 1 次、失败 1 次——"
+        "失败的调用没有取到证据，解读只依赖成功的调用。"
+    ]
+    assert summarize_tool_trace(trace, "分析") == [
+        "工具核查轨迹：2 次调用，成功 1 次、失败 1 次——"
+        "失败的调用没有取到证据，分析只依赖成功的调用。"
+    ]
+    assert summarize_tool_trace(None) == []
+    assert summarize_tool_trace([]) == []
+
+
 def test_registration_summary_covers_all_states():
     """注册状态摘要:已注册点名版本与别名、未注册复述命令原文、失败如实、裸记录缺位。"""
     from src.workbench.report_summary import summarize_registration

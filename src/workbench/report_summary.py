@@ -709,6 +709,19 @@ def summarize_suite(record: dict) -> list[str]:
     return lines
 
 
+def summarize_tool_trace(trace: list[dict] | None, subject: str = "解读") -> list[str]:
+    """工具核查轨迹的统一人话行：评测解读与数据分析共用同一格式（单一来源）。"""
+    entries = [item for item in (trace or []) if isinstance(item, dict)]
+    if not entries:
+        return []
+    ok_count = sum(1 for item in entries if item.get("ok"))
+    failed = len(entries) - ok_count
+    text = f"工具核查轨迹：{len(entries)} 次调用，成功 {ok_count} 次"
+    if failed:
+        text += f"、失败 {failed} 次——失败的调用没有取到证据，{subject}只依赖成功的调用"
+    return [text + "。"]
+
+
 def summarize_assessment(record: dict) -> list[str]:
     """把 Agent 评测解读翻译成人话：证据事实、待核查假设、建议与不自动执行的边界。
 
@@ -767,14 +780,7 @@ def summarize_assessment(record: dict) -> list[str]:
     ]
     if questions:
         lines.append("需要你先回答的业务问题：" + "；".join(questions))
-    trace = [item for item in (record.get("tool_trace") or []) if isinstance(item, dict)]
-    if trace:
-        ok_count = sum(1 for item in trace if item.get("ok"))
-        failed = len(trace) - ok_count
-        trace_text = f"工具核查轨迹：{len(trace)} 次调用，成功 {ok_count} 次"
-        if failed:
-            trace_text += f"、失败 {failed} 次——失败的调用没有取到证据，解读只依赖成功的调用"
-        lines.append(trace_text + "。")
+    lines.extend(summarize_tool_trace(record.get("tool_trace"), "解读"))
     lines.append(
         "以上是开发集诊断建议：软件不会据此自动改标签、删除坏例或采纳方案变更，"
         "也不会自动启动下一轮训练；是否有效仍需你的业务判断，不代表业务效果达标。"
@@ -882,8 +888,11 @@ def summarize_model_discovery(items: list) -> list[str]:
     ]
 
 
-def summarize_analysis(analysis: dict) -> list[str]:
-    """analyze 尾行:与页面「数据判断与待确认问题」区同词汇的发现与待确认问题翻译。"""
+def summarize_analysis(analysis: dict, tool_trace: list[dict] | None = None) -> list[str]:
+    """analyze 尾行:与页面「数据判断与待确认问题」区同词汇的发现与待确认问题翻译。
+
+    传入 tool_trace 时以评测解读同一格式渲染工具核查轨迹。
+    """
     findings = analysis.get("findings") or []
     questions = analysis.get("questions") or []
     gaps = analysis.get("capability_gaps") or []
@@ -894,7 +903,7 @@ def summarize_analysis(analysis: dict) -> list[str]:
         "分析待你确认并经真实预览核对，不代表业务效果达标。"
     )
     if not findings and not questions and not approach and not next_steps:
-        return ["这份分析没有可读的内容。", boundary]
+        return ["这份分析没有可读的内容。", *summarize_tool_trace(tool_trace, "分析"), boundary]
     lines = [
         f"这份分析给出数据判断与待确认问题：发现 {len(findings)} 条、待确认问题 {len(questions)} 个。"
     ]
@@ -926,6 +935,7 @@ def summarize_analysis(analysis: dict) -> list[str]:
         lines.append(f"暂定微调思路：{approach}")
     if next_steps:
         lines.append(f"下一步：{'；'.join(next_steps)}")
+    lines.extend(summarize_tool_trace(tool_trace, "分析"))
     lines.append(boundary)
     return lines
 

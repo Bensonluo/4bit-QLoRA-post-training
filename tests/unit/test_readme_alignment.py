@@ -778,7 +778,7 @@ def test_model_list_tail_docs_pinned():
 
 
 def test_analysis_summary_docs_pinned():
-    """analyze stderr 发现与待确认问题摘要钉死:单一来源、kind 四译名、证据行引用与边界句。"""
+    """analyze stderr 发现与待确认问题摘要钉死:单一来源、kind 四译名、证据行引用、工具核查轨迹行与边界句。"""
     section = _section(
         AGENT_SETUP.read_text(encoding="utf-8"),
         "## CLI 配置与检查",
@@ -795,6 +795,12 @@ def test_analysis_summary_docs_pinned():
     assert "暂定微调思路" in section, "暂定微调思路行必须写明"
     assert "「数据判断与待确认问题」区同词汇" in section, "与页面同词汇必须写明"
     assert "不代表业务效果达标" in section, "固定边界句必须写明"
+    # 工具核查轨迹行与评测解读同格式(summarize_tool_trace 单一来源),页面同位渲染。
+    assert "工具核查轨迹" in section, "轨迹行必须写明(与评测解读同格式)"
+    assert "`summarize_tool_trace` 单一来源" in section, "轨迹行单一来源必须点名"
+    assert "分析只依赖成功的调用" in section, "轨迹失败计数口径必须写明"
+    assert "「处理规则与工具记录」区在同一位置渲染同一行" in section, "页面轨迹行位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
 
 
 def test_train_lineage_docs_pinned(monkeypatch, capsys, tmp_path):
@@ -991,10 +997,16 @@ def test_task_spec_design_doc_pinned():
     assert "task-spec-show SESSION" in doc, "落地入口必须点名"
     assert "src/workbench/task_spec_projection.py" in doc, "实现位点必须可追溯"
     assert "不纳入自主迭代" in doc, "外部依赖边界必须写明"
-    # Phase 2 切片 A(规约确认联动:训练启动决策点引用规约)按同一格式登记,Phase 3 顶上下一轮候选。
+    # Phase 2 切片 A 与 Phase 3(协作轨迹统一)按同一格式登记完成;
+    # Phase 3 如实登记侦察纠正:留痕落盘早已覆盖五入口,本轮补的是呈现统一,不是补落盘。
     assert "已完成（切片 A，2026-09-28）" in doc, "Phase 2 切片 A 落地必须如实登记"
     assert "`train-start` 启动时向 stderr 注入 `summarize_task_spec` 规约摘要" in doc, (
         "CLI 实现位点必须点名"
     )
     assert "「📋 任务规约（启动本轮训练前的口径）」折叠区" in doc, "页面实现位点必须点名"
-    assert "Phase 3（下一轮候选）——协作轨迹统一" in doc, "Phase 3 必须顶上下一轮候选"
+    assert "协作轨迹统一**~~ **已完成（2026-09-28）**" in doc, "Phase 3 协作轨迹统一落地必须如实登记"
+    assert "`summarize_tool_trace` 单一来源、页面与 CLI 同源同词汇" in doc, (
+        "轨迹摘要单一来源与同口径承诺必须写明"
+    )
+    assert "本轮补齐的是呈现统一，不是补落盘" in doc, "侦察纠正必须如实登记"
+    assert "协作轨迹呈现已统一" in doc, "差距 3 呈现统一登记必须写明"

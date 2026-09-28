@@ -58,6 +58,23 @@ def test_open_task_analyze_confirm_and_return_to_new(data_page, monkeypatch):
     assert any(area.label == "希望模型完成什么业务工作？" for area in page.text_area)
 
 
+def test_recipe_expander_renders_shared_tool_trace_line(data_page, monkeypatch):
+    """处理规则与工具记录 expander:JSON 轨迹之外还有与评测解读同格式的人话行。"""
+    import src.agent.intake
+
+    service, session, page = data_page
+    monkeypatch.setattr(
+        src.agent.intake, "CompatibleChatClient", lambda *a, **kw: model_for(analysis())
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    button(page, "联合分析目标与数据").click().run()
+    assert not page.exception
+    assert any(expander.label == "处理规则与工具记录" for expander in page.expander)
+    # model_for 夹具走 profile_data/inspect_rows/preview_recipe/submit_analysis 共 4 次成功调用
+    assert any("工具核查轨迹：4 次调用，成功 4 次。" in m.value for m in page.markdown)
+
+
 def test_business_question_answer_survives_analysis_and_clears_widget(data_page, monkeypatch):
     import src.agent.intake
 
