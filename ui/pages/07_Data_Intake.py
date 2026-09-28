@@ -937,6 +937,7 @@ def show_business_comparison(report, *, key: str) -> None:
     echo_models = []
     from src.workbench.evaluation_diagnostics import (
         count_instruction_echo,
+        dominant_output_models,
         high_truncation_models,
     )
 
@@ -990,6 +991,19 @@ def show_business_comparison(report, *, key: str) -> None:
             + (f"（当前 {limit}）" if limit is not None else "")
             + "是否小于最短合法答案；输出是否在重复生成或缺少停止标记。"
             "触及上限不等于只需增加长度，这是观察事实，原因仍需核查。"
+        )
+    dominant_models = dominant_output_models(report.models)
+    if dominant_models:
+        dominant_parts = []
+        for label, count, generated, top_output in dominant_models:
+            clipped = top_output if len(top_output) <= 24 else top_output[:24] + "…"
+            dominant_parts.append(f"{label} 有 {count}/{generated} 条输出完全相同（{clipped}）")
+        st.warning(
+            "观察到输出高度重复（"
+            + "、".join(dominant_parts)
+            + "）：模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时，"
+            "模型可能只是复述多数类，不一定是学坏了；分布不集中时，逐题查看完整输出。"
+            "这是观察事实，原因仍需核查。"
         )
     st.dataframe(summaries, hide_index=True, width="stretch")
     from src.workbench.report_summary import summarize_comparison

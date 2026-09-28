@@ -544,6 +544,25 @@ def test_field_accuracy_disclosure_docs_pinned():
     assert "大白话解读" in section  # 页面位点
 
 
+def test_dominant_output_disclosure_docs_pinned():
+    """输出坍缩披露文档:判定口径/核查方向/复述多数类边界/零分归因关键句钉死。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 比较基座与本轮微调效果",
+        "## 让 Agent 解读结果与下一步",
+    )
+    assert "输出高度重复" in section
+    assert "`dominant_output_models` 单一来源" in section
+    assert "80%" in section and "至少 4 条" in section, "判定口径必须写明"
+    assert "对照开发集答案分布" in section, "核查方向必须写明"
+    assert "复述多数类" in section, "答案分布集中的假阳性边界必须写明"
+    assert "不认定原因" in section, "观察事实边界必须写明"
+    assert "反复输出同一答案" in section, "零分归因点名必须写明"
+    assert "没有观察到截断、生成失败、复述或重复输出" in section, "缺位句口径必须写明"
+    assert "不计入占比分母" in section, "None 输出口径必须写明"
+    assert "对照区警告" in section, "位点必须写明"
+
+
 def test_custom_scoring_summary_docs_pinned():
     """自定义/开放任务对照的人话摘要口径钉死:不把通过数写成答对,开放任务只报生成事实。"""
     section = _section(

@@ -196,8 +196,47 @@ def test_all_zero_without_diagnostics_points_to_format_mismatch():
     )
     joined = "\n".join(summarize_comparison(report))
     assert "微调后仍是零分" in joined
-    assert "没有观察到截断、生成失败或复述" in joined
+    assert "没有观察到截断、生成失败、复述或重复输出" in joined
     assert "答案格式不匹配" in joined
+    assert "观察到输出高度重复" not in joined  # 3 行低于最小判定数(4),披露不触发
+
+
+def test_dominant_output_disclosure_names_model_counts_and_check_direction():
+    diverse = [f"答案{i}" for i in range(10)]
+    report = _report(
+        [
+            _model("基座", 10, 0.2, outputs=diverse),
+            _model("本轮微调", 10, 0.0, outputs=["无法分类：缺少信息"] * 10),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "观察到输出高度重复" in joined
+    assert "本轮微调 有 10/10 条输出完全相同（无法分类：缺少信息）" in joined
+    assert "对照开发集答案分布" in joined
+    assert "复述多数类" in joined
+    assert "不认定原因" in joined
+    assert joined.count("条输出完全相同") == 1  # 输出各不相同的基座不被点名
+
+
+def test_all_zero_with_dominant_output_adds_repeat_cause():
+    report = _report(
+        [
+            _model("基座", 5, 0.0, outputs=[f"不同答案{i}" for i in range(5)]),
+            _model("本轮微调", 5, 0.0, outputs=["同一答案"] * 5),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "微调后仍是零分" in joined
+    assert "有模型在反复输出同一答案" in joined
+    assert "零分更可能来自答案格式不匹配" not in joined  # 已观察到重复输出,不归因格式
+
+
+def test_dominant_output_disclosed_for_open_tasks_too():
+    report = _report([_model("本轮微调", 6, None, outputs=["同一句回答"] * 6)])
+    joined = "\n".join(summarize_comparison(report))
+    assert "观察到输出高度重复" in joined
+    assert "本轮微调 有 6/6 条输出完全相同（同一句回答）" in joined
+    assert "生成了 6/6 条回答" in joined
 
 
 def test_clear_finetune_gain_states_counts_with_sample_caveat():

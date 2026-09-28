@@ -1968,3 +1968,53 @@ analyze stderr 摘要说明段（计数行、四译名、证据引用、问题�
 src/workbench/report_summary.py、scripts/data_intake.py、
 tests/unit/test_report_summary.py、tests/unit/test_data_intake.py、
 tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
+
+## 第 50 轮 = 输出坍缩检测（恢复循环第 31 轮）
+
+**背景**：北极星差距「非专家看不懂评测输出」的最后一个检测盲区。指令回声
+（count_instruction_echo）与高比例截断（high_truncation_models）都已有检测器
+与双侧消费（页面警告 + 语言化摘要），但两条截断提示里「输出是否在重复生成」
+的提醒没有任何检测器支撑；小规模微调最常见的失败形态——模型在所有题上输出
+同一答案（输出坍缩）——发生时零分用户只看到「没有观察到截断、生成失败或
+复述，零分更可能来自答案格式不匹配」，恰好指错核查方向。
+
+**实现**：
+- src/workbench/evaluation_diagnostics.py 新增 `dominant_output_models(models)`
+  → [(label, 该内容条数, 非空输出条数, 重复内容)]：单模型非空输出（str）中
+  同一内容 Counter 占比 ≥ DOMINANT_OUTPUT_RATIO(0.8) 且非空输出数 ≥
+  DOMINANT_MIN_OUTPUTS(4) 才点名；None/非字符串（生成失败）不计入分母。
+  与回声/截断提示同构：观察事实 + 核查方向，不认定原因。
+- src/workbench/report_summary.py summarize_comparison：截断提示之后新增
+  披露块——「观察到输出高度重复（本轮微调 有 10/10 条输出完全相同（片段…））：
+  该模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时，模型可能
+  只是复述多数类…」；零分 cause_parts 追加「有模型在反复输出同一答案」，
+  缺位句改为「本次没有观察到截断、生成失败、复述或重复输出」。披露块位于
+  评分家族分支之前，严格/自定义/开放三家族都生效。
+- ui/pages/07_Data_Intake.py 对照区：截断警告之后同源 st.warning（同一
+  dominant_output_models 单一来源，页面与 CLI 不各说各话）。
+
+**测试**（+5 函数）：
+- test_evaluation_diagnostics.py::test_dominant_output_models_flags_repeat_dominant_outputs
+  —— 80% 边界（8/10 命中、70% 不命中）、None 不入分母（5/6 命中）、
+  <4 条非空输出不判、输出各不相同不判、空 rows 不判。
+- test_report_summary.py 三新函数：披露句逐字（模型名+条数+片段截断≤24、
+  对照答案分布、复述多数类、不认定原因、基座输出多样不被点名
+  count==1）；全零分+坍缩走 cause_parts 分支且不再归因格式不匹配；
+  开放任务（accuracy=None）披露同样生效。
+- test_all_zero_without_diagnostics 断言更新为「复述或重复输出」缺位句
+  + 「3 行低于最小判定数(4)披露不触发」。
+- test_readme_alignment.py::test_dominant_output_disclosure_docs_pinned ——
+  文档钉死：判定口径（80%/至少 4 条）、核查方向、复述多数类假阳性边界、
+  不认定原因、零分归因点名、缺位句、None 分母口径、对照区警告位点。
+
+**文档**（agent-setup.md「比较基座与本轮微调效果」段）：输出坍缩披露
+说明段（单一来源、双消费端、判定阈值、核查方向、零分归因联动、None 口径）。
+
+**错误与修复**：无运行期错误；一次成型。定向 3 文件 109 passed、
+页面/CLI 消费端 30 passed 后才启动全量回归。ruff 全绿。
+
+**回归**：全量 tests/unit 预期 **1798 passed**（R49 基线 1793 + 5 个新
+测试函数）。本批只动 src/workbench/evaluation_diagnostics.py、
+src/workbench/report_summary.py、ui/pages/07_Data_Intake.py、
+tests/unit/test_evaluation_diagnostics.py、tests/unit/test_report_summary.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。

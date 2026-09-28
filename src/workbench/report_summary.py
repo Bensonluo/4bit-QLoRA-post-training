@@ -35,6 +35,7 @@ def summarize_comparison(report: Any) -> list[str]:
 
     from src.workbench.evaluation_diagnostics import (
         count_instruction_echo,
+        dominant_output_models,
         high_truncation_models,
         output_echoes_prompt,
     )
@@ -117,6 +118,20 @@ def summarize_comparison(report: Any) -> list[str]:
             "再决定是否加长——触及上限不等于只需增加长度。"
         )
 
+    dominant_models = dominant_output_models(models)
+    if dominant_models:
+        dominant_parts = []
+        for label, count, generated, top_output in dominant_models:
+            clipped = top_output if len(top_output) <= 24 else top_output[:24] + "…"
+            dominant_parts.append(f"{label} 有 {count}/{generated} 条输出完全相同（{clipped}）")
+        lines.append(
+            "观察到输出高度重复（"
+            + "、".join(dominant_parts)
+            + "）：该模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时,"
+            "模型可能只是复述多数类,不一定是学坏了;分布不集中时,逐题查看完整输出确认"
+            "每题是否本该有不同答案。这是观察事实,不认定原因。"
+        )
+
     base_stats = _pick_counterpart(stats, "基座")
     tuned_stats = _pick_counterpart(stats, "本轮微调", "微调")
 
@@ -142,6 +157,8 @@ def summarize_comparison(report: Any) -> list[str]:
             cause_parts.append(f"{len(truncated_questions)} 题没写完被截断")
         if failed_questions:
             cause_parts.append(f"{len(failed_questions)} 题生成失败")
+        if dominant_models:
+            cause_parts.append("有模型在反复输出同一答案")
         zero_head = (
             "微调后仍是零分,说明按当前数据量和任务定义学不出这个任务;"
             if tuned_stats
@@ -156,7 +173,7 @@ def summarize_comparison(report: Any) -> list[str]:
             )
         else:
             lines.append(
-                zero_head + "本次没有观察到截断、生成失败或复述,零分更可能来自答案格式不匹配;"
+                zero_head + "本次没有观察到截断、生成失败、复述或重复输出,零分更可能来自答案格式不匹配;"
                 "继续加数据之前,先核对输出格式与期望答案是否对得上。"
             )
     elif best_score == 1.0:

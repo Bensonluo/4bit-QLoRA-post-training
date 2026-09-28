@@ -424,3 +424,27 @@ def test_high_truncation_models_uses_shared_ratio_threshold():
     # 无截断、空行列表都不产生提示。
     assert high_truncation_models([model("甲", 4, 0)]) == []
     assert high_truncation_models([{"label": "空", "rows": []}]) == []
+
+
+def test_dominant_output_models_flags_repeat_dominant_outputs():
+    """输出坍缩提示按占比判定：非空输出同一内容 ≥80% 且至少 4 条才点名，None 不计入分母。"""
+    from src.workbench.evaluation_diagnostics import dominant_output_models
+
+    def model(label, outputs):
+        rows = [{"output": output, "status": "scored"} for output in outputs]
+        return {"label": label, "rows": rows}
+
+    repeated = ["无法分类：缺少信息"] * 8 + ["答案甲", "答案乙"]
+    assert dominant_output_models([model("本轮微调", repeated)]) == [
+        ("本轮微调", 8, 10, "无法分类：缺少信息")
+    ]
+    # 70% 占比低于阈值 → 不点名。
+    assert dominant_output_models([model("甲", ["同一答案"] * 7 + ["其他答案"] * 3)]) == []
+    # None（生成失败）不计入占比分母。
+    assert dominant_output_models([model("甲", ["同一答案"] * 5 + ["不同答案", None])]) == [
+        ("甲", 5, 6, "同一答案")
+    ]
+    # 少于 4 条非空输出、输出各不相同、空行列表都不点名。
+    assert dominant_output_models([model("甲", ["同一答案"] * 3)]) == []
+    assert dominant_output_models([model("甲", [f"答案{i}" for i in range(10)])]) == []
+    assert dominant_output_models([{"label": "空", "rows": []}]) == []

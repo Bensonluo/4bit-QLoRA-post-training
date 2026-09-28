@@ -87,6 +87,33 @@ def high_truncation_models(models: list[dict[str, Any]]) -> list[tuple[str, int]
     return hints
 
 
+# 输出坍缩提示阈值：单个模型的非空输出中，同一内容占比 ≥80% 且非空输出至少 4 条才提示。
+# 与回声/截断提示同构——只陈述观察事实与核查方向，不认定原因：答案分布本身集中的任务
+# （如恒定目标或严重不均衡）里，模型复述多数类也会呈现同一形态，提示须指向对照答案分布。
+DOMINANT_OUTPUT_RATIO = 0.8
+DOMINANT_MIN_OUTPUTS = 4
+
+
+def dominant_output_models(
+    models: list[dict[str, Any]],
+) -> list[tuple[str, int, int, str]]:
+    """输出高度重复的（模型标签, 该内容条数, 非空输出条数, 重复内容）列表。
+
+    None/非字符串输出不计入分母（生成失败没有输出，不参与占比）；供对照区
+    警告与语言化摘要共用口径。
+    """
+    collapsed = []
+    for model in models:
+        rows = model.get("rows") or []
+        outputs = [row.get("output") for row in rows if isinstance(row.get("output"), str)]
+        if len(outputs) < DOMINANT_MIN_OUTPUTS:
+            continue
+        top_output, top_count = Counter(outputs).most_common(1)[0]
+        if top_count / len(outputs) >= DOMINANT_OUTPUT_RATIO:
+            collapsed.append((model["label"], top_count, len(outputs), top_output))
+    return collapsed
+
+
 class EvaluationDiagnostics:
     def __init__(self, report: EvaluationReport, session: IntakeSession):
         if not dataset_is_current(session):
