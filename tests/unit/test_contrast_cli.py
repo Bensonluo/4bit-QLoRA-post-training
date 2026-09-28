@@ -78,11 +78,11 @@ def test_contrast_cli_mismatch_is_reported_and_confirm_hint_is_honest(tmp_path):
 
 
 def test_contrast_cli_two_verified_rounds_reach_second_round_standard(tmp_path):
-    """连胜口径如实:一轮对还差一轮、二连对达标,confirm 提示同步变化。"""
+    """连胜口径如实:一轮对还差一轮、二连对达标、三轮起附连胜句,confirm 同步。"""
     service, session = _store(tmp_path)
     targets = _targets(service, session.session_id)
     outputs = []
-    for _ in range(2):
+    for _ in range(3):
         started = invoke(
             service, "contrast-check", session.session_id, "--revision", session.revision
         )
@@ -93,17 +93,22 @@ def test_contrast_cli_two_verified_rounds_reach_second_round_standard(tmp_path):
         for answer in answers:
             args += ["--answer", answer]
         outputs.append(invoke(service, *args))
-    first, second = outputs
+    first, second, third = outputs
     assert first.returncode == 0 and second.returncode == 0, second.stderr
     assert json.loads(first.stdout)["verdict"] == "verified"
     assert json.loads(second.stdout)["verdict"] == "verified"
+    assert json.loads(third.stdout)["verdict"] == "verified"
     assert "已连续 1 轮" in first.stderr
     assert "还需再连续配对正确一轮（二连对）才算真正看清" in first.stderr
     assert "二连对达标" in second.stderr
+    # 三档连胜:三轮起在达标句后追加与页面同源的连胜句,不止塌缩成「二连对达标」
+    assert "已连续 3 轮配对正确（二连对达标）" in third.stderr
+    assert "对比核验3轮连胜：转换的业务含义经多组不同题目反复配对核对" in third.stderr
 
     confirmed = invoke(service, "confirm", session.session_id, "--revision", session.revision)
     assert confirmed.returncode == 0, confirmed.stderr
-    assert "对比核验：已连续 2 轮配对正确（二连对达标）" in confirmed.stderr
+    assert "对比核验：已连续 3 轮配对正确（二连对达标）" in confirmed.stderr
+    assert "对比核验3轮连胜" in confirmed.stderr
 
 
 def test_contrast_cli_confirm_without_check_suggests_contrast_check_first(tmp_path):

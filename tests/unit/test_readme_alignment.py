@@ -111,6 +111,9 @@ def test_contrast_cli_docs_pinned():
     assert "stdout 为纯 JSON" in section, "位点必须写明:stdout 纯 JSON、stderr 人读"
     assert "还需再连续配对正确一轮（二连对）才算真正看清" in section, "二连对口径必须写明"
     assert "防瞎蒙靠的是连胜不是单轮" in section, "连胜语义必须写明"
+    assert "轮连胜：转换的业务含义经多组不同题目反复配对核对" in section, "三档连胜词汇必须写明"
+    assert "`contrast_streak_banner` 单一来源" in section, "连胜词汇单一来源必须写明"
+    assert "页面横幅与 CLI 不各说各话" in section, "页面与 CLI 同源必须写明"
     assert "此前的确认可能是盲点头" in section, "配错提示必须写明"
     assert "尚未核验" in section and "建议先运行 `contrast-check`" in section
     assert "软门禁" in section and "不阻断确认" in section, "软门禁边界必须写明"

@@ -2164,17 +2164,18 @@ if session.preview:
         verified_streak = (
             contrast.get("streak", 0) if contrast and contrast.get("verdict") == "verified" else 0
         )
-        if verified_streak >= 3:
-            st.success(
-                f"对比核验{verified_streak}轮连胜：转换的业务含义经多组不同题目反复配对核对。"
-            )
-        elif verified_streak == 2:
-            st.success("对比核验二连对：转换的业务含义经两组不同题目配对核对。")
-        else:
-            if contrast and contrast.get("verdict") == "verified":
-                st.info("第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。")
-            if contrast and contrast.get("verdict") == "mismatch":
-                st.error("上次配对有误——此前的确认可能是盲点头；请重新查看预览。")
+        # 连胜三档词汇与 CLI 同源(contrast_streak_banner):还差一轮/二连对/N 轮连胜,
+        # 页面横幅与 CLI stderr 不各说各话。
+        from src.workbench.intake_service import contrast_streak_banner
+
+        banner = contrast_streak_banner(contrast)
+        if banner:
+            if verified_streak >= 2:
+                st.success(banner)
+            elif contrast and contrast.get("verdict") == "mismatch":
+                st.error(banner)
+            else:
+                st.info(banner)
         render_contrast_history()
         if verified_streak < 2:
             render_contrast_round()

@@ -139,7 +139,7 @@ python scripts/data_intake.py full-confirm SESSION_ID --revision FULL_REPORT_REV
 
 这三道关卡都不使用 LLM 判断、不消耗模型服务额度，判定全部确定性可复现。
 
-对比核验的 CLI 用法与 `confirm` 的如实提示：`contrast-check SESSION_ID --revision CURRENT_REVISION` 抽出两条答案不同的输入与打乱后的两个候选答案——stderr 逐条列出「[行ID] 题目输入」与候选清单，stdout 为纯 JSON（`check_id`、`items`、`options` 与可照抄的 `submit_hint`）；`contrast-check-submit SESSION_ID --check-id CHECK_ID --answer 行ID=候选答案 --answer 行ID=候选答案` 提交配对，需恰好覆盖两条输入、答案来自候选。判定行如实亮出配对计数与连胜口径：verified 但连胜只有一轮时明确提示「还需再连续配对正确一轮（二连对）才算真正看清」，二连对及以上提示达标——防瞎蒙靠的是连胜不是单轮；配错判定行报 mismatch 配对计数并提示此前的确认可能是盲点头。`confirm` 在 stderr 如实报告当前配对状态：尚未核验（建议先运行 `contrast-check`）、已连续 N 轮配对正确（达标或还差一轮）、或最近一次配对错误——对比核验是软门禁，配错留档但不阻断确认，去留由你决定。核验与预览及方案绑定：提交不收 `--revision`，预览或方案变化后原核验自动失效。
+对比核验的 CLI 用法与 `confirm` 的如实提示：`contrast-check SESSION_ID --revision CURRENT_REVISION` 抽出两条答案不同的输入与打乱后的两个候选答案——stderr 逐条列出「[行ID] 题目输入」与候选清单，stdout 为纯 JSON（`check_id`、`items`、`options` 与可照抄的 `submit_hint`）；`contrast-check-submit SESSION_ID --check-id CHECK_ID --answer 行ID=候选答案 --answer 行ID=候选答案` 提交配对，需恰好覆盖两条输入、答案来自候选。判定行如实亮出配对计数与连胜口径：verified 但连胜只有一轮时明确提示「还需再连续配对正确一轮（二连对）才算真正看清」，二连对及以上提示达标——防瞎蒙靠的是连胜不是单轮；三轮及以上的连胜在达标句后追加「对比核验N轮连胜：转换的业务含义经多组不同题目反复配对核对」（`contrast-check-submit` 判定行与 `confirm` 提示同样追加，由 `contrast_streak_banner` 单一来源输出，页面横幅与 CLI 不各说各话）；配错判定行报 mismatch 配对计数并提示此前的确认可能是盲点头。`confirm` 在 stderr 如实报告当前配对状态：尚未核验（建议先运行 `contrast-check`）、已连续 N 轮配对正确（达标或还差一轮）、或最近一次配对错误——对比核验是软门禁，配错留档但不阻断确认，去留由你决定。核验与预览及方案绑定：提交不收 `--revision`，预览或方案变化后原核验自动失效。
 
 ### 盲标核验的完整 CLI 用法
 

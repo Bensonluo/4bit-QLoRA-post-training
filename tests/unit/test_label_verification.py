@@ -212,6 +212,32 @@ def test_contrast_check_third_round_streak_keeps_counting(tmp_path):
     assert status["needs_second_round"] is True
 
 
+def test_contrast_streak_banner_is_single_source_for_three_tiers():
+    """连胜三档词汇单一来源:还差一轮/二连对/N 轮连胜,页面横幅与 CLI 同句。"""
+    from src.workbench.intake_service import contrast_streak_banner
+
+    assert contrast_streak_banner(None) == ""
+    assert contrast_streak_banner({"verdict": "verified", "streak": 0}) == "", (
+        "verified 但连胜计数缺失:不编造档位"
+    )
+    assert (
+        contrast_streak_banner({"verdict": "verified", "streak": 1})
+        == "第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。"
+    )
+    assert (
+        contrast_streak_banner({"verdict": "verified", "streak": 2})
+        == "对比核验二连对：转换的业务含义经两组不同题目配对核对。"
+    )
+    assert (
+        contrast_streak_banner({"verdict": "verified", "streak": 5})
+        == "对比核验5轮连胜：转换的业务含义经多组不同题目反复配对核对。"
+    )
+    assert (
+        contrast_streak_banner({"verdict": "mismatch", "streak": 2})
+        == "上次配对有误——此前的确认可能是盲点头；请重新查看预览。"
+    )
+
+
 def test_contrast_check_status_records_every_round_history(tmp_path):
     """状态带逐轮历史:每轮的题目、选择与对错可回查,二连对有据可查。"""
     service, session = _contrast_store(tmp_path)

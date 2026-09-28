@@ -1098,3 +1098,24 @@ class IntakeService:
             raise ValueError("数据或方案已更新，请读取最新版本后再检查。")
         session.training_preflight = preflight_dataset(session, tokenizer, max_length)
         return self._save(session, session.revision)
+
+
+def contrast_streak_banner(status: dict | None) -> str:
+    """对比核验连胜档位句:页面横幅与 CLI 提示同源同词汇的唯一出处。
+
+    三档如实分述:一轮对还差一轮(二连对才算真正看清,防瞎蒙)、二连对达标、
+    三轮及以上连胜(经多组不同题目反复配对核对);最近配错点名盲点头风险。
+    尚未核验返回空串,由调用方给各自的入口语,不在此编造档位。
+    """
+    if status is None or status.get("verdict") not in ("verified", "mismatch"):
+        return ""
+    if status["verdict"] == "mismatch":
+        return "上次配对有误——此前的确认可能是盲点头；请重新查看预览。"
+    streak = status.get("streak", 0)
+    if streak < 1:
+        return ""  # verified 但连胜计数缺失:不编造档位
+    if streak >= 3:
+        return f"对比核验{streak}轮连胜：转换的业务含义经多组不同题目反复配对核对。"
+    if streak == 2:
+        return "对比核验二连对：转换的业务含义经两组不同题目配对核对。"
+    return "第一轮配对正确。再配一组不同的题(二连对)完成对比核验——防止碰巧蒙对。"

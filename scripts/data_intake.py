@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.agent.intake import CompatibleChatClient
 from src.agent.providers import PROVIDERS, AgentSettings, check_connection, load_settings
-from src.workbench.intake_service import IntakeService, next_action
+from src.workbench.intake_service import IntakeService, contrast_streak_banner, next_action
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -1119,10 +1119,11 @@ def main() -> int:
                     file=sys.stderr,
                 )
             elif status["verdict"] == "verified":
-                print(
-                    f"对比核验：已连续 {status['streak']} 轮配对正确（二连对达标）。",
-                    file=sys.stderr,
-                )
+                # 三档连胜与页面同源:三轮及以上在达标句后追加连胜句(contrast_streak_banner)。
+                line = f"对比核验：已连续 {status['streak']} 轮配对正确（二连对达标）。"
+                if status["streak"] >= 3:
+                    line += contrast_streak_banner(status)
+                print(line, file=sys.stderr)
             else:
                 print(
                     "对比核验：最近一次配对错误——此前的确认可能是盲点头；请重新查看预览后再确认。",
@@ -1418,11 +1419,14 @@ def main() -> int:
                         file=sys.stderr,
                     )
                 else:
-                    print(
+                    # 三档连胜与页面同源:三轮及以上在达标句后追加连胜句(contrast_streak_banner)。
+                    line = (
                         f"\n判定：verified（{result['matched']}/{result['total']} 配对正确）；"
-                        f"已连续 {status.get('streak', 2)} 轮配对正确（二连对达标）。",
-                        file=sys.stderr,
+                        f"已连续 {status.get('streak', 2)} 轮配对正确（二连对达标）。"
                     )
+                    if status.get("streak", 2) >= 3:
+                        line += contrast_streak_banner(status)
+                    print(line, file=sys.stderr)
             else:
                 print(
                     f"\n判定：mismatch（{result['matched']}/{result['total']} 配对正确）。",

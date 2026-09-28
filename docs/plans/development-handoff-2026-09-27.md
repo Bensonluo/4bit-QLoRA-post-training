@@ -1724,3 +1724,52 @@ src/workbench/learnability_probe.py、
 scripts/data_intake.py、ui/pages/07_Data_Intake.py、
 tests/unit/test_learnability_probe.py、tests/unit/test_readme_alignment.py、
 docs/agent-setup.md 与本记录。
+
+---
+
+## 第 45 轮 = 连胜口径三档 CLI 对齐（恢复循环第 26 轮）
+
+**问题**（第 44 轮侦察发现的残余缺口）：页面横幅把对比核验连胜如实分三档
+（1 轮还差一轮 / 2 轮二连对达标 / 3+ 轮 N 轮连胜），但 CLI 两处
+（contrast-check-submit 判定行与 confirm 提示）在连胜 ≥ 2 时一律塌缩成
+「已连续 N 轮配对正确（二连对达标）」——3+ 轮的连胜强化词汇 CLI 读不到，
+同一事实两个入口词汇不一致。
+
+**设计**（沿第 44 轮 probe_verdict_phrase 先例，词汇单一来源）：
+- 新增模块级纯函数 `contrast_streak_banner(status)`（intake_service.py 文件
+  尾，类外）：三档如实分述 + mismatch 档；尚未核验（None 或 verdict 非
+  verified/mismatch）返回空串，由调用方给各自的入口语，不在此编造档位；
+  verified 但 streak 缺失（<1）同样返回空串不编造。
+- 页面（07_Data_Intake.py 横幅块）：内联三档条件替换为
+  `contrast_streak_banner(contrast)` 调用（lazy import 沿页面既有模式）；
+  severity 分派不变（streak ≥ 2 success / mismatch error / 其余 info），
+  渲染输出字节等价——页面 banner 测试 0 改动全过。
+- CLI（data_intake.py）：import 加 contrast_streak_banner；confirm 达标臂
+  与 contrast-check-submit 达标臂在 streak ≥ 3 时在达标句后追加连胜句。
+  既有 streak-2 钉死子串（「已连续 N 轮配对正确（二连对达标）」）不变，
+  mismatch/未核验/连胜不足三臂原样。
+
+**错误与修复**：contrast_streak_banner 首次插入位置在类中间
+（contrast_check_status 方法与 confirm 方法之间）——模块级 def 出现在类
+体内会终止类作用域，后续缩进方法 def confirm 直接 IndentationError。回退后
+改放文件尾（类最后一个方法之后）。教训：模块级 helper 只能放类定义之前
+或整个类结束之后，绝不插在类方法之间。
+
+**测试**（+1 函数）：test_contrast_streak_banner_is_single_source_for_three_tiers
+（None/缺计数空串 + 三档 + mismatch 档六断言）；CLI 两连胜测试扩展为三轮
+（range(3)，断言第三轮 submit 与 confirm 均含「已连续 3 轮配对正确（二连对
+达标）」与「对比核验3轮连胜：转换的业务含义经多组不同题目反复配对核对」）。
+钉测试扩展 +3 断言（三档连胜词汇、contrast_streak_banner 单一来源、页面与
+CLI 不各说各话）。
+
+**文档**（agent-setup.md 对比核验段扩写一句）：三轮及以上连胜在达标句后
+追加「对比核验N轮连胜……」（contrast-check-submit 判定行与 confirm 提示
+同样追加，contrast_streak_banner 单一来源，页面横幅与 CLI 不各说各话）。
+
+**回归**：ruff check/format clean（1 处格式重排）。定向 4 文件
+75 passed。全量回归 tests/unit **1784 passed / 0 failed**（--no-cov，
+基线 1783 + 1 个新 banner 测试函数；CLI 测试扩展与钉测试扩展是既有测试
+加断言，不增量）。本批只动 src/workbench/intake_service.py、
+scripts/data_intake.py、ui/pages/07_Data_Intake.py、
+tests/unit/test_label_verification.py、tests/unit/test_contrast_cli.py、
+tests/unit/test_readme_alignment.py、docs/agent-setup.md 与本记录。
