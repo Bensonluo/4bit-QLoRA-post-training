@@ -181,6 +181,21 @@ and actual transformed examples, then provide full data and confirm the training
 partitions. The same page supports local model training, baseline/adapter
 comparison, and evidence-based next-step advice. See [Agent setup and workflow](docs/agent-setup.md).
 
+**First time / no API key?** Expand 「第一次使用？用内置演示任务开始」 on the
+new-task screen — one click creates a fictional after-sales-ticket task whose
+every step (basic analysis, preview confirmation, contrast check, blind label
+verification) is identical to a real task, reaching the pre-training checks with
+no API key at all. To continue to actual fine-tuning, prepare a local base model
+first (0.6B has the smallest disk footprint):
+
+```bash
+hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B
+```
+
+In China, run `export HF_ENDPOINT=https://hf-mirror.com` first. Models downloaded
+to `models/` are auto-discovered in the 「本机已准备的候选模型」 list — see
+[Agent setup and workflow](docs/agent-setup.md) for the full local-model guide.
+
 This workflow is under active development. Local execution has been verified on
 fictional data, including a second improvement round and a separate final
 acceptance workflow. Real customer acceptance and demonstrated business benefit

@@ -2658,3 +2658,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：对齐＋旅程 **63 passed**（62→63）；ruff check/format 双闸绿（reviewer nit 修复——pin 内三次 read_text 合并为一次——后复跑仍绿）。全量回归到期已履行：**1946 passed / 205.85s**（新基线；R72 边界 1930 passed / 205.59s，+16 = R73 演示任务 14 项 + R74/R75 pin 各 1；下次按节奏 R77/R78 边界）。
 
 **回归与错误修复**：无失败。独立审查：r75-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**（自跑 63/63 全绿；pin 双侧硬钉有效、表数字同源无新造、镜像注释可照抄合法 bash、diff 纯增量不断既有 pin、R74 的 0.6B 点名由其命令 pin 覆盖），唯一 nit（新 pin 三次 read_text）已当场修复并复跑门禁。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $77.51（不计成本授权下继续，逐轮如实上报）。
+
+## 第 76 轮 = 英文 Quick Start 对齐演示入口与零密钥路径
+
+**日期**：2026-09-29（非全量回归到期轮；子代理 r76-reviewer 独立审查通过）
+
+**选点**：R73–R75 三轮缺口①使能（演示入口、本地模型准备、显存表/pip 镜像一致性）全部只落在中文「### 快速开始」段，而作品集评审者最先读的英文 `## 🚀 Quick Start` Option 1 在「Configure the analysis Agent」后就结束——没有演示入口、没有零密钥承诺、没有本地模型准备，英文主路径对真实外部试用者的可达性承诺与中文不对等。本轮把 R73–R75 已核实的同一组承诺以英文对照落进 Option 1，所有措辞与已钉死的中文口径逐句对齐、零新承诺。
+
+**实现**：
+- **README 英文 Quick Start Option 1**：在既有工作流段落（"See [Agent setup and workflow]…"）与诚实声明（"This workflow is under active development"）之间 +1 段——**First time / no API key?** 展开页面原词「第一次使用？用内置演示任务开始」（UI 常量逐字，`st.expander` 入口）、虚构售后工单任务四步与真实任务一致（basic analysis / preview confirmation / contrast check / blind label verification，与 agent-setup「基础分析、预览核对、对比核验、盲标核验」1:1）、「reaching the pre-training checks with no API key at all」零密钥承诺（与中文「全程不需要任何 API 密钥就能走到训练前检查」同边界，止于训练前检查）；随后本地模型准备——`hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B`（三处逐字同源：英文/中文/agent-setup）、国内镜像提示、`models/` 下载即入「本机已准备的候选模型」自动发现（UI 标签逐字）、agent-setup 完整指南链接。
+- **Pin**：test_readme_alignment.py +1 `test_english_quickstart_onboarding_parity_pinned`（63→64）——`_section("## 🚀 Quick Start", "## 🧙")` 切片内钉演示入口 UI 原词/零密钥英文句/下载命令/镜像句/发现词汇/auto-discovered/链接强锚七断言。
+
+**测试**：对齐＋旅程 **64 passed**（63→64）；ruff check/format 双闸绿（reviewer nit 修复——弱锚换强锚——后复跑仍绿）。
+
+**回归与错误修复**：无失败。独立审查：r76-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**（diff 范围/诚实性逐句/pin 质量与冗余/自跑 64/64 全绿/nit），自核证据含：英文四步名与 agent-setup 门禁名 1:1、零密钥承诺边界两侧一致、hf 命令三处闭环、「本机已准备的候选模型」标签在 07_Data_Intake.py 真实存在、六断言中五条在该切片唯一（删段必挂，真 pin）。5 条非阻塞 nit 中 2 条已修（弱链 pin 换「for the full local-model guide」强锚——裸链接在既有段落已出现；英文侧镜像句补钉「In China, run \`export HF_ENDPOINT=…\` first」新段独有措辞——裸命令在既有 Option 3 块已出现），3 条接受不改（步骤名意译可接受、保守省略诚实安全、auto-discovered 单词 pin 脆性偏严方向）。非全量回归到期轮（R75 新基线 1946 passed / 205.85s，下次 R77/R78 边界到期）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $82.35（不计成本授权下继续，逐轮如实上报）。

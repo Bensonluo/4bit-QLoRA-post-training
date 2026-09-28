@@ -1393,3 +1393,22 @@ def test_quickstart_model_and_install_guidance_consistent():
     # 数字与英文 Model Compatibility 表同源:两表不各说各话。
     assert "| Qwen3 0.6B | ~1.2 GB | ~1 GB |" in text, "英文表 0.6B 行必须在场"
     assert "| Qwen3 1.7B | ~2.0 GB | ~2 GB |" in text, "英文表 1.7B 行必须在场"
+
+
+def test_english_quickstart_onboarding_parity_pinned():
+    """英文 Quick Start 对齐钉死(R76):演示入口、零密钥承诺、本地模型准备与
+    自动发现词汇与中文快速开始同一承诺;命令逐字同源。"""
+    text = README.read_text(encoding="utf-8")
+    quickstart = _section(text, "## 🚀 Quick Start", "## 🧙")
+    assert "「第一次使用？用内置演示任务开始」" in quickstart, "英文版演示入口文案必须与页面一致"
+    assert "no API key at all" in quickstart, "零密钥承诺必须有英文对照"
+    assert "hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B" in quickstart, (
+        "下载命令必须与中文快速开始逐字同源"
+    )
+    assert "「本机已准备的候选模型」" in quickstart, "自动发现词汇必须与页面一致"
+    assert "auto-discovered" in quickstart, "自动发现行为必须有英文说明"
+    # 强锚:镜像句与链接句钉新段独有措辞——裸命令/裸链接在既有 Option 3 块中已出现,弱 pin 挡不住删段漂移。
+    assert "In China, run `export HF_ENDPOINT=https://hf-mirror.com` first" in quickstart, (
+        "英文侧镜像指引必须与中文同场"
+    )
+    assert "for the full local-model guide" in quickstart, "完整说明链接必须绑住新段"
