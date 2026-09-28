@@ -43,9 +43,8 @@ def _local_targets(text):
         yield target
 
 
-# README 录制指南明确声明 dashboard.gif 为待录制的占位资源(保存路径已写死)。
-# 除该显式占位外,任何仓库内引用都必须真实存在。
-DOCUMENTED_PENDING_ASSETS = {"docs/assets/dashboard.gif"}
+# hero GIF 曾被列为待录制占位;R79 实物落地后不再有任何豁免——仓库内引用必须真实存在。
+DOCUMENTED_PENDING_ASSETS: set[str] = set()
 
 
 def test_all_local_links_resolve_to_existing_files():
@@ -1426,3 +1425,33 @@ def test_live_dashboard_link_honestly_scoped():
     assert "Goal & Data" in option2, "定界必须点名缺失的主线工作流"
     assert "zero-key built-in demo task" in option2, "定界必须点名零密钥演示任务不在托管实例"
     assert "run it locally with Option 1" in option2, "主线必须如实指向本地安装路径"
+
+
+def test_hero_gif_is_real_recorded_asset():
+    """hero GIF 实物钉死(R79):真实 UI 录制的零密钥演示旅程替换裂图占位。
+
+    README hero 原引用不存在的 dashboard.gif(裂图),此前以 DOCUMENTED_PENDING_ASSETS
+    显式豁免;R79 用本地 Streamlit + Playwright 逐门禁截图组装成实物。本测试钉死:
+    文件真实存在、体积守住录制指南的 5MB 约束、占位说明句与 TODO 注释随之撤下、
+    hero 说明如实标注零密钥与虚构数据(诚实红线)。
+    """
+    gif = ROOT / "docs" / "assets" / "dashboard.gif"
+    assert gif.exists(), "hero GIF 必须真实存在(待录制豁免已随实物落地撤销)"
+    assert gif.stat().st_size < 5 * 1024 * 1024, "GIF 体积必须小于 5MB(录制指南约束)"
+
+    text = README.read_text(encoding="utf-8")
+    assert "Replace this with a 30s GIF" not in text, "占位说明句必须随实物落地撤下"
+    assert "RECORDING_TODO" not in text, "录制 TODO 注释必须随实物落地清理"
+    hero = _section(text, "# TuneSmith", "## 📌")
+    assert "docs/assets/dashboard.gif" in hero, "hero 必须引用实物 GIF"
+    assert "no API key" in hero, "hero 说明必须如实标注零密钥旅程"
+    assert "fictional" in hero, "hero 说明必须如实标注演示数据为虚构"
+    # 锚点必须真实解析:GitHub 只给标题(h1–h6)生成锚 id,<summary> 不生成——
+    # hero 链接必须指向 details 内真标题的锚(em dash 删除后双空格→双连字符,
+    # 与目录 #-distributed-training-fsdp--deepspeed 同规则;summary 无锚,勿再钉死锚)。
+    assert "[Recording Guide](#how-the-hero-gif-was-captured--and-how-to-regenerate-it)" in hero, (
+        "hero 的指南锚点必须指向 details 内真标题锚"
+    )
+    assert "### How the hero GIF was captured — and how to regenerate it" in text, (
+        "锚点目标标题必须在场"
+    )

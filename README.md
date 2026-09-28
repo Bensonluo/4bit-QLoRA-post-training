@@ -18,10 +18,9 @@ The goal-and-data workflow is under active development. Sample analysis, real co
 [![Qwen3](https://img.shields.io/badge/Qwen3-0.6B--14B-6D4AAE)](https://github.com/QwenLM/Qwen)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B)](https://streamlit.io/)
 
-<!-- 🎬 录制说明:用 kap/licecap 录 30 秒 dashboard 操作流程,存到 docs/assets/dashboard.gif -->
-<img src="docs/assets/dashboard.gif" alt="QLoRA Dashboard Demo" width="80%">
+<img src="docs/assets/dashboard.gif" alt="Zero-key demo journey in the real UI: built-in demo task → basic analysis → contrast pairing check → sample confirm → full-data validation → blind label verification → train/val/test partitions → tokenizer preflight passed" width="80%">
 
-*🎬 Replace this with a 30s GIF of the dashboard — see [Recording Guide](#-demo-recording-guide) below*
+*Zero-key demo journey, auto-recorded from the real dashboard — the built-in **fictional** after-sales-ticket task passing every semantic-safety gate with **no API key**. [Recording Guide](#how-the-hero-gif-was-captured--and-how-to-regenerate-it) explains how it was captured and how to regenerate.*
 
 </div>
 
@@ -628,22 +627,10 @@ hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B
 <details>
 <summary>🎬 Demo Recording Guide (for maintainers)</summary>
 
-### How to record the hero GIF
+### How the hero GIF was captured — and how to regenerate it
 
-1. **Tool**: [Kap](https://getkap.co/) (Mac) or [licecap](https://www.cockos.com/licecap/) (cross-platform)
-2. **Content**: Show the actual business workflow; label any skipped execution time.
-   - Describe a business goal and upload a small source sample in 目标与数据.
-   - Show the Agent's diagnosis and the real input/answer transformation preview.
-   - Validate full data and show the confirmed partitions passed to training.
-   - Compare complete baseline/adapter answers, including failed cases and the Agent's next-step advice.
-3. **Save to**: `docs/assets/dashboard.gif` (keep under 5MB)
-4. **Update**: Replace the placeholder `<img>` in the hero section
+The current `docs/assets/dashboard.gif` was **auto-recorded from the real UI** (nothing staged): launch the dashboard locally, expand 「第一次使用？用内置演示任务开始」, create the built-in demo task, then drive the whole zero-key journey — basic analysis, contrast pairing check (two consecutive correct rounds), sample confirm, built-in demo full-data validation, blind label verification (5/5), partition materialization (train 8 / val 1 / test 1), and the tokenizer preflight with a locally cached model. One viewport screenshot per step is kept in `docs/assets/frames/` (01-entry … 11-preflight-passed); Pillow re-assembles them into the GIF.
+
+To regenerate after UI changes: re-capture the frames, re-run the assembly, and keep two invariants — the result stays **under 5MB**, and the hero caption stays honest about what the clip actually shows (fictional data, zero key).
 
 </details>
-
-<!--
-RECORDING_TODO:
-1. Record dashboard.gif → docs/assets/dashboard.gif
-2. Replace placeholder img tag in hero section
-3. Verify Live Dashboard URL (benluo.art/qlora-dashboard/) returns 200
--->

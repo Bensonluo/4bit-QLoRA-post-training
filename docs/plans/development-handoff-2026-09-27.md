@@ -2700,3 +2700,22 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：对齐套件 **65 passed**（64→65，首次即绿）；ruff check/format 双闸绿（README.md 的 format --check 报 experimental 属 ruff 对 .md 的工具能力边界，基线同样如此，非格式回归）。
 
 **回归与错误修复**：无失败。独立审查：r78-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**：意图交付一致（diff 仅 2 文件 +18 行，未动部署——符合重大操作授权边界）、定界逐句事实核对（covers 清单与实测侧栏一一对应；「is not on」纯现在时无未来承诺；Option 1 指路准确——本地路径与演示入口实在场；全仓 grep 无口径矛盾，中文段/agent-setup/north-star 均无托管实例声明）、pin 锚点稳定（两标题字符串在 README 各唯一，index() 缺锚即炸红）、副作用检查（全 tests/ 引用该文本段者仅新测试自身）、独立复跑 65 passed 与主会话一致，并独立 curl 复核托管实例 200。3 条非阻塞 nit 全部接受不改并登记：①页头徽章同样直达旧面板——徽章文案只声明 "LIVE DASHBOARD" 为真，承诺性文本只在 Option 2；部署侧/徽章补定界待授权；②🧩 与 README 既有 🎯 装饰不一致——保留 🧩（与 UI 页面图标一致更准）；③正向 covers 清单未 pin、外部状态漂移测试天然测不到——**登记为部署刷新时的人工复核项**：获授权刷新部署后需人工复核「is not on the hosted instance」定界句并撤下（pin 测试届时应同步更新）。非全量回归到期轮（下次 R80/R81 边界到期，新基线 1949 passed / 324.97s）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权**：刷新线上部署（使含目标与数据主线与演示任务）后可撤定界句并同步 pin。成本钩子读数 $91.03（不计成本授权下继续，逐轮如实上报）。
+
+## 第 79 轮 = hero 裂图换真实 UI 录制 GIF（漏斗顶部实物落地）
+
+**日期**：2026-09-29（子代理 r79-reviewer 独立审查：首轮 FAIL 必修 1 项 → 修复 → 复核 PASS）
+
+**选点**：README hero `<img src="docs/assets/dashboard.gif">` 指向不存在的文件——每个 GitHub 访客第一屏看到裂图，缺口①（试用者可达性）漏斗的最顶部，先于 R74–R78 铺好的全部零密钥承诺生效。此前仅以 `DOCUMENTED_PENDING_ASSETS` 豁免链接检查 + Kap/licecap 手动录制的 TODO 注释占位。R73–R77 已把演示任务做成品（行为级钉死零密钥旅程），本轮把「漏斗第一屏」从裂图换成该旅程的真实录制——作品集评审者不用装任何东西就能看到产品主线全貌。
+
+**实现**：
+- **真实 UI 自动录制**（非摆拍）：本地 Streamlit（headless Playwright）驱动完整零密钥演示旅程——入口页 → 展开演示入口创建任务（0d32f3e8）→ 基础分析（答案列=类别/分组=编号/排除=处理结果）→ 转换预览 → 对比核验**二连对**（防碰巧蒙对机制真实触发）→ 样例确认 → 配套演示全量验证（10 条 · 0 问题）→ 盲标核验 **5/5 一致**（Wilson 95% 下界 ~57% 如实披露在页）→ 物化分区（训练 8 · 验证 1 · 测试 1）→ 真实 Qwen3-1.7B tokenizer（页面「本机已准备的候选模型」自动发现 ~/.cache 缓存）预检 passed。逐步骤视口截图 11 张（1440×900）入 `docs/assets/frames/`（01-entry … 11-preflight-passed）；帧内容证据链 = 每张截图前的 DOM 可访问性快照（两个 VLM 工具 MiniMax 配额耗尽 / zai 30s 无响应，如实降级不外发截图）。
+- **GIF 组装**（Pillow）：11 帧 → 880×550、665,609 字节（0.63MB，指南不变量 <5MB）、每帧 1.4s / 末帧 2.6s、loop=0。
+- **README**：hero 占位说明句（"Replace this with a 30s GIF"）与 `RECORDING_TODO` 注释撤下，换真实 GIF + 如实说明（**fictional** 数据、**no API key**、auto-recorded from the real UI）+ 指向录制指南的锚链接；文末 details 录制指南改写为「How the hero GIF was captured — and how to regenerate it」（帧目录、Pillow 再组装、两条不变量：体积 <5MB + hero 说明诚实）。
+- **Pin**：`DOCUMENTED_PENDING_ASSETS` 清空（豁免撤销，hero img src 落回 `test_all_local_links_resolve_to_existing_files` 的存在性检查）；+1 `test_hero_gif_is_real_recorded_asset`（65→66）：GIF 存在、<5MB、占位句/TODO 负断言、hero 引用实物、`no API key` + `fictional` 在场、指南锚点指向 details 内真标题。
+
+**测试**：对齐套件 **66 passed**（65→66）；ruff check/format 双绿。
+
+**回归与错误修复**：
+- **死锚事故与根治（本轮核心教训）**：hero 指南锚第一版 `#-demo-recording-guide` 按标题规则推导，但锚目标是 `<summary>` 元素——GitHub 只给 h1–h6 生成锚 id。r79-reviewer 用已推送分支的真实渲染 HTML 实证（`user-content--demo-recording` 计数 0；details 内 `###` 标题有锚、summary 无锚）判 FAIL：不仅死锚，且我的 pin 用错误规则把它钉成「正确行为」——**错误的 pin 比没有 pin 更糟**。修法 (a)：hero 改指 details 内真标题锚 `#how-the-hero-gif-was-captured--and-how-to-regenerate-it`（em dash 删除后双空格→双连字符，与既有 `#-distributed-training-fsdp--deepspeed` 同规则、抓取页双重实证），测试断言与注释同步（错误前提「与目录 #-why-this-project 同规则」清除，换成正确规则 + 勿再对 summary 推导锚）。复核 PASS：旧死锚全仓零残留、锚推导逐字符核对、独立复跑 66 passed。
+- **独立审查**：r79-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维——A 诚实红线 PASS（fictional/零密钥/「passing every semantic-safety gate」与仓库单一来源逐点对上：探针本就是「可选证据非门禁」；「nothing staged」与帧时间戳序列一致；局限如实登记：帧像素未独立目击，结论基于单一来源+帧命名+时间交叉印证）；C 资产一致 PASS（11 帧清单/880×550/0.63MB/2.6s 一一对应）；D 一致性 PASS（diff 仅 2 文件+2 资产目录、独立复跑与主会话一致）；E 遗漏 PASS（全 README 13 个页内锚逐一核对，死锚清零；hero alt 旅程顺序与帧名单调一致）；B 首轮 FAIL→修复后 PASS。非阻断建议 1 条已采纳：「per gate」→「per step」（11 帧对约 9 道关口径如实）。
+- 非全量回归到期轮（下次 R80/R81 边界到期，基线 1949 passed / 324.97s）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：刷新线上部署（使含目标与数据主线与演示任务）后撤 Option 2 定界句并同步 pin；hero GIF 亦可考虑进托管 README。成本钩子读数 $106.61（不计成本授权下继续，逐轮如实上报）。
