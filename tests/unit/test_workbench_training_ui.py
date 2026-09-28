@@ -298,7 +298,7 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
         def __init__(self, root):
             pass
 
-        def list_reports(self, dataset_version=None):
+        def list_reports(self, dataset_version=None, purpose=None):
             return reports
 
         def compare(self, current, models, protocol):

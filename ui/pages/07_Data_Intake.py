@@ -1264,6 +1264,21 @@ with st.sidebar:
         on_change=select_task,
     )
     st.button("新建数据任务", on_click=new_task)
+    with st.expander("全部任务停点快照"):
+        # 北极星「度量体系·过程漏斗」:跨任务的只读停点计数。与 CLI
+        # funnel-report 同一份 collect_funnel + summarize_funnel
+        # (单一来源,页面与 CLI 不各说各话)。
+        from src.workbench.funnel_report import collect_funnel, summarize_funnel
+
+        report = collect_funnel(
+            PROJECT_ROOT / "outputs" / "workbench" / "intake",
+            PROJECT_ROOT / "outputs" / "workbench" / "training",
+            PROJECT_ROOT / "outputs" / "workbench" / "evaluations",
+            PROJECT_ROOT / "outputs" / "workbench" / "acceptance",
+            PROJECT_ROOT / "outputs" / "workbench" / "iterations",
+        )
+        for line in summarize_funnel(report):
+            st.write(line)
 
 base_url, model, api_key, allow_remote = render_agent_settings(
     PROJECT_ROOT / "outputs" / "workbench" / "agent-settings.json"

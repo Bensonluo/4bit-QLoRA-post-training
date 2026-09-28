@@ -2293,3 +2293,65 @@ UI 13）+ 文档钉死与 e2e worker 15 项 + 爆炸半径 110 项（data intake
 report_summary 69、sft_trainer 41）全绿。开发中格式修正两处：07 页面 caption
 超 100 字符换行、data_intake.py R52 遗留括号样式（ruff format）。全量回归
 **1825 passed / 0 failed**（1821 基线 + 4 新增，/tmp/round54_regression.log，272 秒）。
+
+## 第 55 轮 = 过程漏斗快照（恢复循环第 36 轮）
+
+**背景**：北极星「度量体系·过程漏斗」尚未落地——闭环九环节已串联（R52 收口
+环节⑨交接出口），但没有一个跨任务视角回答「所有任务现在各停在哪个环节、
+停点最集中在哪一段」。停点清单就是下一轮开发/运营的输入：哪段堆积最多，
+哪段就是最值得查看具体卡点的入口。本轮做只读停点计数快照，CLI 与页面
+双面落地，不发起任何计算。
+
+**实现**：
+- `src/workbench/funnel_report.py`（新模块）：`build_funnel` 纯函数把
+  13 个 next_action 枚举映射到数据准备旅程五段（分析与方案／样例预览确认／
+  全量验证／独立分区／预检就绪），未收录枚举进 unmapped 按原样保留（不硬塞
+  相近段）；`collect_funnel` 从五个 workbench 记录目录（`--store` + 训练/
+  评测/验收/轮次四个 root）只读收集各段状态，每段独立容错——某段记录损坏
+  只在 errors 点名跳过（「训练记录读取失败，该段未计入（其余段照常统计）」），
+  不假装为零；`summarize_funnel` 人话摘要单一来源：停点计数行、停得最多
+  段的「下一个最值得查看具体卡点的入口」指引、训练/评测/验收/轮次状态行、
+  固定收尾边界句（当前停点快照不是历史通过率；旅程可回退，回退后按新停点
+  重新计数；计数只描述进度，不代表业务效果）。
+- `scripts/data_intake.py`：新增 `funnel-report` 子命令（description 齐全，
+  子命令 --help 不再是盲区——R51/R52 教训）。双流契约：stdout 纯 JSON、
+  stderr 逐行 `summarize_funnel`。
+- `ui/pages/07_Data_Intake.py`：侧栏新增「全部任务停点快照」折叠区，
+  与 CLI 同一份 collect_funnel + summarize_funnel（单一来源，页面与 CLI
+  不各说各话）；渲染在 st.stop() 之前，所有页面状态可见。
+- 复用既有 `--store`/`--*-root` 顶层参数（与所有其他子命令一致，不新增）。
+  --store 只圈数据任务库、四个 root 各自独立是既有设计，非缺陷。
+
+**测试**（新增 tests/unit/test_funnel_report.py，13 个测试）：
+- build_funnel 纯映射：13 枚举全覆盖（analysis 6／preview_confirm 1／
+  full_validation 4／split 1／preflight_ready 1）、unmapped 排序去重、
+  计数字典按键排序。
+- summarize_funnel：空态句、停点行与最集中段指引、全越段 + 未收录枚举
+  原样列出（且不给「停得最多」结论）、四段人话行（含无决策轮次半句省略、
+  未知状态原样）、容错点名行、裸记录不崩溃、收尾边界句。
+- collect_funnel：五目录不存在/空目录 → 全零 + 无 errors（先探针后钉死）；
+  训练段抛 ValueError → 只点名「训练记录」、会话段照常计数；会话段 OSError
+  → 点名「数据任务记录」。
+- CLI 双流契约：argv 注入五 root → stdout json.loads 可解析 + stderr 含
+  空态句与边界句。
+- UI：空库页显示侧栏空态句；建 1 个任务后与 CLI 同一条停点句
+  （「共 1 个数据任务，当前停点：分析与方案 1。」）+ 最集中段行——
+  页面与 CLI 单一来源词汇被直接钉死。既有 25 个 07 页面测试全绿
+  （漏斗块在所有流程下无 page.exception）。
+- 开发中修复：IntakeService 构造时会建自己的根目录，空目录轮 mkdir
+  需 exist_ok=True。
+- test_readme_alignment.py +1 pin 测试：11 条文档断言 + 子命令 --help
+  同步（不收 RUN_ID/--revision/--tail）。
+
+**文档**：agent-setup.md「CLI 配置与检查」段新增 funnel-report 段落：五段
+停点、最集中段指引、未收录枚举口径、容错点名口径、数据来源参数、页面位点
+与同源同词汇承诺、边界句——全部被 test_funnel_report_docs_pinned 钉死。
+
+**回归与错误修复**：针对性 72 项全绿（funnel 13 + readme_alignment 46 +
+data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回归 5 败
+（training UI 3 + business scoring UI 2）：两个测试桩的 `list_reports` 还停在
+旧签名，漏了真实服务后来加的 `purpose` 关键字参数，collect_funnel 的
+`list_reports(purpose=None)` 撞 TypeError（不在容错清单内，页面中断）。
+修法是给两个桩补上 `purpose=None` 对齐真实接口——桩的职责就是镜像生产
+签名，不能反过来在生产代码里吞 TypeError 掩盖接口不匹配。复跑全量回归
+**1839 passed / 0 failed**（1825 基线 + 14 新增，/tmp/round55_regression.log）。

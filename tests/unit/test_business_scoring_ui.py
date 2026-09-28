@@ -84,7 +84,7 @@ def scoring_page(training_page, monkeypatch):  # noqa: F811
         def __init__(self, *args):
             pass
 
-        def list_reports(self, dataset_version=None):
+        def list_reports(self, dataset_version=None, purpose=None):
             return reports
 
         def compare(self, current, models, protocol):

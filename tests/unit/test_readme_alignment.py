@@ -856,3 +856,31 @@ def test_train_loss_trend_docs_pinned():
     assert "训练进行中，趋势判定等训练完成后再看" in section, "训练中不做三态判定必须写明"
     assert "「训练未完成时已记录的 loss 曲线」区" in section, "中断态页面位点必须写明"
     assert "只代表已训练的部分" in section, "中断态边界必须写明"
+
+
+def test_funnel_report_docs_pinned(monkeypatch, capsys, tmp_path):
+    """funnel-report(过程漏斗快照)人话口径钉死:停点五段、容错点名、页面同源与边界句。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## CLI 配置与检查",
+        "## 从样例继续到全量数据",
+    )
+    assert "funnel-report" in section, "命令名必须写明"
+    assert "`summarize_funnel` 单一来源" in section, "摘要单一来源必须写明"
+    assert "只读快照，不发起计算" in section, "只读边界必须写明"
+    assert "分析与方案／样例预览确认／全量验证／独立分区／预检就绪" in section, (
+        "数据准备五段停点必须写明"
+    )
+    assert "下一个最值得查看具体卡点的入口" in section, "最集中停点指引必须写明"
+    assert "未收录的停点状态按原样列出，不硬塞进相近段" in section, "未知枚举口径必须写明"
+    assert "点名跳过" in section and "不假装为零" in section, "容错口径必须写明"
+    assert "`--store` 与四个 `--*-root` 参数" in section, "数据来源参数必须写明"
+    assert "「全部任务停点快照」" in section, "页面位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    assert "不是历史通过率" in section and "不代表业务效果" in section, "边界句必须写明"
+    # 帮助文本与命令面同步:不收 RUN_ID/--revision/--tail,说明这是只读停点计数。
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "funnel-report")
+    assert "停点计数" in help_text and "只读" in help_text, "帮助文本必须说明只读停点计数"
+    assert "run_id" not in help_text, "funnel-report 不收 RUN_ID"
+    assert "--revision" not in help_text, "快照不针对具体修订"
+    assert "--tail" not in help_text, "--tail 是 train-logs 专属"

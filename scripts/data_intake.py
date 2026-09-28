@@ -384,6 +384,8 @@ def main() -> int:
     )
     train_list = sub.add_parser("train-list", help="列出数据任务的训练版本")
     train_list.add_argument("session_id")
+    _funnel_help = "全部任务在闭环各环节的当前停点计数（只读快照，不发起计算）"
+    sub.add_parser("funnel-report", help=_funnel_help, description=_funnel_help)
     eval_compare = sub.add_parser(
         "eval-compare", help="在同一固定开发集上顺序比较基座与已完成微调版本"
     )
@@ -1068,6 +1070,22 @@ def main() -> int:
             from src.workbench.report_summary import summarize_comparison
 
             for line in summarize_comparison(result):
+                print(line, file=sys.stderr)
+            return 0
+        if args.command == "funnel-report":
+            # 过程漏斗快照:北极星「度量体系」的停点计数。stdout 纯 JSON,
+            # stderr 人话摘要(summarize_funnel 单一来源,与页面同源同词汇)。
+            from src.workbench.funnel_report import collect_funnel, summarize_funnel
+
+            result = collect_funnel(
+                args.store,
+                args.training_root,
+                args.evaluation_root,
+                args.acceptance_root,
+                args.iteration_root,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            for line in summarize_funnel(result):
                 print(line, file=sys.stderr)
             return 0
         if args.command.startswith("train-"):
