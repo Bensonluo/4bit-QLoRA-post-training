@@ -1012,5 +1012,22 @@ def test_task_spec_design_doc_pinned():
     )
     assert "本轮补齐的是呈现统一，不是补落盘" in doc, "侦察纠正必须如实登记"
     assert "协作轨迹呈现已统一" in doc, "差距 3 呈现统一登记必须写明"
-    # R62:修订/评分/方案三处已上同格式轨迹行,剩余候选如实限定为训练运行记录落盘。
-    assert "训练运行记录本身不落 trace" in doc, "剩余候选必须如实限定为训练运行记录落盘"
+    # R63:训练运行记录补齐 plan_trace 快照与同格式轨迹行,差距 3 完全收口。
+    assert "训练运行记录也已补齐（R63 落地，2026-09-28）：方案执行时把方案 trace 快照进运行记录" in doc, (
+        "训练运行记录轨迹补齐必须如实登记"
+    )
+    assert "差距 3 完全收口" in doc, "差距收口结论必须写明"
+
+
+def test_train_run_summary_trace_docs_pinned():
+    """训练运行摘要轨迹行钉死(R63):plan_trace 为方案阶段快照,直接启动如实缺席。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 在同一任务中启动真实训练",
+        "## 允许一次显存不足技术恢复",
+    )
+    assert "`summarize_training_run` 单一来源" in section, "运行摘要单一来源必须写明"
+    assert "`plan_trace` 键" in section, "方案阶段轨迹快照键必须写明"
+    assert "`summarize_tool_trace` 单一来源" in section, "轨迹行单一来源必须写明"
+    assert "训练方案只依赖成功的调用" in section, "轨迹行句式必须在场"
+    assert "如实缺席，不编造轨迹" in section, "直接启动缺位态口径必须写明"

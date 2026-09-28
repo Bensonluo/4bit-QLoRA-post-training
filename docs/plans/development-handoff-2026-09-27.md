@@ -2452,3 +2452,18 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **文档**：见实现第三条——agent-setup.md 与设计文档为本轮全部文档改动。
 
 **回归与错误修复**：集成核对：六文件联合定向 **162 passed**（18.94s：test_report_summary 48 + test_scoring_cli/test_training_plan_cli 10 + test_readme_alignment 50 + test_data_intake_ui 28 + test_data_intake）+ ruff 九文件全过 + 单一来源确认（「只依赖成功的调用」在 report_summary.py 仅 1 处字面，各 subject 运行时拼出）；mypy 自查与 HEAD 错误集完全相同（摘要切片零新增）。**本轮按用户指示未跑全量回归（2-3 大轮次节奏首次适用），上次全量 = 第 61 轮 1855 passed / 0 failed**；下次全量安排在 R63 或 R64。实现代码零返工。
+
+## 第 63 轮 = 训练运行记录方案轨迹落盘与人话摘要（恢复循环第 44 轮）
+
+**背景**：R62 收口后，R61 审计候选只剩 ③：训练运行记录本身不落工具核查轨迹——方案确认时 Agent 已核查过模型/数据上下文（training_context / probe 等），但 prepare() 生成的运行记录没有这份证据，运行目录不能自成证据包；页面上训练摘要也没有与评测解读同格式的轨迹行。本轮补齐 plan→run 链路：方案确认把 trace 快照进运行记录，摘要以单一来源渲染，差距 3 完全收口。本轮是 2-3 轮全量回归节奏的到期轮（上次全量 R61，且本轮动 training_runs.py 核心），按约定跑全量。
+
+**实现**：三路并行子代理（r63-run / r63-summary / r63-docs，文件所有权互斥）+ 主会话一处恢复链路收尾：
+- **落盘**（src/workbench/training_runs.py，+3）：prepare() 新增 keyword-only 参数 `plan_trace: list[dict] | None = None`，记录新增 `"plan_trace": list(plan_trace or [])` 键（方案确认时固化快照；不经方案的直接启动如实为空列表）。异常分支照旧写 run.json，阻断记录也带轨迹。方案流（training_plans.py:491）传 `plan_trace=record.get("trace")`；恢复链路（training_recovery.py:173）传 `plan_trace=parent.get("plan_trace")`——技术重试延续父运行的方案执行，子运行目录同样自成证据包（旧父记录无该键 → `.get` 得 None → 空列表，向后兼容；plan_trace 不属于 config，恢复的配置一致性门禁不受影响）。iterations.py 与 CLI 直接 prepare 默认空——不经方案的启动如实没有轨迹。
+- **人话行**（src/workbench/report_summary.py，+2）：summarize_training_run 尾部接 `summarize_tool_trace(record.get("plan_trace"), "训练方案")`（单一来源 717-727，R61 起 7 个呈现位共用）。CLI train-status/train-stop 返回记录、train-start/plan-prepare 调摘要，行自动流经各入口。空轨迹无行——直接启动不显示轨迹行，与「如实没有」边界一致。
+- **文档**：设计文档 §8 差距 3 收口登记（「训练运行记录也已补齐（R63 落地，2026-09-28）……差距 3 完全收口」）；§9 Phase 3 行追加「（修订/评分/方案记录轨迹行 R62 补齐；训练运行记录 R63 补齐）」；agent-setup.md 训练记录段补轨迹行条款。口径由 test_readme_alignment 钉死。
+
+**测试**：test_workbench_training_runs.py +23（默认空、带 trace 等值+落盘回读、阻断记录仍落、blocked prepare → 空）；test_training_plans.py +15（生产形状 trace 固化进 run 记录+落盘回读，dict 形状夹具升级为 list-of-dicts——dict 会被 `list()` 静默腐蚀成键列表，R55/R59 教训）；test_report_summary.py +34（test_training_run_summary_renders_shared_tool_trace_lines：3 调用 2 成功 1 失败 → 整句精确断言 + 顺序契约 + 空/删键负例）；test_workbench_training_cli.py +37（train-start 摘要含轨迹行，TracedStartStub 生产形状）；test_training_recovery.py +2（fixture 传 plan_trace，child 断言 `child["plan_trace"] == parent["plan_trace"]`）；test_readme_alignment.py +21（R62 剩余候选 pin 替换为收口 pin + 新 test_train_run_summary_trace_docs_pinned，总数 51）。
+
+**文档**：见实现第三条——设计文档两处收口 + agent-setup 一段为本轮全部文档改动，与钉死测试同 commit。
+
+**回归与错误修复**：集成核对：grep 单一来源确认（summarize_tool_trace 7 个呈现位全在 report_summary.py；plan_trace 落盘 3 个调用方齐备；「训练方案只依赖成功的调用」3 个测试文件钉死）；六文件联合定向 **166 passed**（41.64s）；恢复链路定向 **24 passed**；ruff 十文件全过。全量回归按节奏到期执行，过程如实记录：首次全量 **1859 passed / 5 failed**（376.66s）——5 个失败全部是 UI 测试（test_data_intake_ui / test_iteration_decide_ui / test_label_verification_ui×2 / test_learnability_probe_ui），根因是主会话在后台全量运行期间并行跑了联合定向测试，两个 pytest 会话并发争抢资源所致（这 5 个文件本轮与 R62 均未改动）；逐个隔离复跑 **5/5 passed**（7.79s）确认非真实回归；随后干净串行复跑全量 **tests/unit 1864 passed / 0 failed**（190.68s，/tmp/round63_regression.log；1855 基线 + R62 新增 6 + R63 新增 3 = 1864，逐项对账吻合）。教训登记：后台全量回归期间不再并行任何 pytest 会话。实现代码零返工。

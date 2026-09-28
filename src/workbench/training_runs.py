@@ -150,6 +150,7 @@ class TrainingRunService:
         training_options: dict | None = None,
         lora_options: dict | None = None,
         model_options: dict | None = None,
+        plan_trace: list[dict] | None = None,
     ) -> dict:
         from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
         from config.sft import SFTConfig
@@ -172,6 +173,8 @@ class TrainingRunService:
             "preflight": None,
             "artifacts": {},
             "metrics": {},
+            # 方案确认时固化的工具核查轨迹快照；不经方案的直接启动如实为空。
+            "plan_trace": list(plan_trace or []),
             "failure": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }

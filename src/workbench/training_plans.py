@@ -488,6 +488,7 @@ class TrainingPlanService:
                     session,
                     proposal["model_path"],
                     **{key: proposal[key] for key in ("max_length", *OPTION_FIELDS)},
+                    plan_trace=record.get("trace"),
                 )
                 record["run_id"] = run["run_id"]
                 record["prepared_at"] = datetime.now(timezone.utc).isoformat()

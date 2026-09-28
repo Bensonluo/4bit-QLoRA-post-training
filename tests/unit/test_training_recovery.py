@@ -46,6 +46,7 @@ def failed(environment):  # noqa: F811
             "logging_steps": 1,
         },
         model_options={"quantization_bits": None, "torch_dtype": "float32"},
+        plan_trace=[{"tool": "training_context", "ok": True}],
     )
     parent.update(
         status="failed",
@@ -156,6 +157,7 @@ def test_single_child_preserves_all_unapproved_config_and_cannot_chain(failed):
     child = training._load(result["child_run_id"])
     assert child["recovery_parent_run_id"] == parent["run_id"]
     assert child["recover_technical_failures"] is False
+    assert child["plan_trace"] == parent["plan_trace"]
     for section in ("model", "data", "lora"):
         assert child["config"][section] == parent["config"][section]
     for key, value in parent["config"]["training"].items():

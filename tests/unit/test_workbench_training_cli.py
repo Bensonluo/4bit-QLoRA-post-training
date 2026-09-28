@@ -201,3 +201,40 @@ def test_train_start_prints_task_spec_before_run_summary(training_cli, capsys):
     assert "不代表模型效果达标" in captured.err
     # 规约在前、运行摘要在后:同一条 stderr 流内的顺序契约。
     assert captured.err.index("的任务规约") < captured.err.index("正在训练中")
+
+
+def test_train_start_run_summary_includes_plan_trace_line(training_cli, capsys, monkeypatch):
+    """train-start 运行摘要尾行:run 记录带 plan_trace 时渲染统一轨迹行(单一来源)。"""
+    run, session, _ = training_cli
+    import src.workbench.training_runs
+
+    # training_cli 夹具已把 TrainingRunService 换成桩类;这里在其上派生,仅让 start
+    # 的返回记录多带 plan_trace(1 成功 1 失败),其余夹具行为不动。
+    stub_base = src.workbench.training_runs.TrainingRunService
+
+    class TracedStartStub(stub_base):
+        def start(self, run_id, current, **kwargs):
+            record = super().start(run_id, current, **kwargs)
+            return {
+                **record,
+                "plan_trace": [
+                    {"tool": "discover_local_models", "ok": True},
+                    {"tool": "probe_model", "ok": False, "error": "缺 tokenizer 文件"},
+                ],
+            }
+
+    monkeypatch.setattr(src.workbench.training_runs, "TrainingRunService", TracedStartStub)
+    assert (
+        run(
+            "train-start",
+            session.session_id,
+            "run-1",
+            "--revision",
+            session.revision,
+            "--acknowledge-warnings",
+        )
+        == 0
+    )
+    err = capsys.readouterr().err
+    assert "工具核查轨迹：2 次调用，成功 1 次、失败 1 次" in err
+    assert "训练方案只依赖成功的调用" in err

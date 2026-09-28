@@ -122,8 +122,18 @@ def test_prepare_uses_matching_model_tokenizer_and_confirmed_data(environment):
     assert record["config"]["data"]["validation_split"] == 0
     assert record["config"]["data"]["dataset_loader"] == "alpaca"
     assert record["config"]["logging"]["use_wandb"] is False
+    assert record["plan_trace"] == []
     assert service.list_runs(session.session_id)[0]["run_id"] == record["run_id"]
     assert service.list_runs("unrelated") == []
+    # 方案确认传入的工具核查轨迹快照原样固化进运行记录（自包含证据包）。
+    trace = [
+        {"tool": "probe_dataset", "ok": True},
+        {"tool": "x", "ok": False, "error": "e"},
+    ]
+    traced = _prepare(environment, plan_trace=trace)
+    assert traced["plan_trace"] == trace
+    on_disk = json.loads((service.root / traced["run_id"] / "run.json").read_text(encoding="utf-8"))
+    assert on_disk["plan_trace"] == trace
 
 
 def test_changed_session_or_model_cannot_start(environment):
@@ -153,11 +163,22 @@ def test_same_size_and_timestamp_weight_change_cannot_reuse_prepared_identity(en
 
 def test_missing_local_weights_and_invalid_parameters_are_reviewable_blockers(environment):
     _, session, service, model = environment
-    record = service.prepare(session, model / "missing", max_length=32)
+    record = service.prepare(
+        session,
+        model / "missing",
+        max_length=32,
+        plan_trace=[{"tool": "model_facts", "ok": False, "error": "missing weights"}],
+    )
     assert record["status"] == "blocked"
     assert record["issues"][-1]["severity"] == "blocking"
+    # 预检/校验失败的异常分支同样带着轨迹键落盘。
+    on_disk = json.loads((service.root / record["run_id"] / "run.json").read_text(encoding="utf-8"))
+    assert on_disk["plan_trace"] == [
+        {"tool": "model_facts", "ok": False, "error": "missing weights"}
+    ]
     record = service.prepare(session, model, training_options={"output_dir": "/tmp/other"})
     assert record["status"] == "blocked"
+    assert record["plan_trace"] == []
 
 
 def test_runner_uses_explicit_python_and_excludes_arbitrary_agent_secrets(environment, monkeypatch):

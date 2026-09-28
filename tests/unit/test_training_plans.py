@@ -35,9 +35,12 @@ def _proposal(model, **changes):
 def _save(plans, **changes):
     service, session, model = plans
     context = service.context(session, [str(model)])
-    return service.save(
-        session, _proposal(model, **changes), context, {"observations": ["context", "probe"]}
-    )
+    # 生产形状的轨迹（src/agent/training.py）：逐工具调用记录，含失败项。
+    trace = [
+        {"tool": "training_context", "ok": True},
+        {"tool": "probe_dataset", "ok": True},
+    ]
+    return service.save(session, _proposal(model, **changes), context, trace)
 
 
 def test_actual_context_and_probe_do_not_prepare_a_run(plans, tmp_path):
@@ -69,6 +72,12 @@ def test_save_reopen_confirm_prepare_and_repeat_reuses_one_actual_run(plans):
     assert not reopened.list_plans("different-session")
     result = service.prepare(plan["plan_id"], session)
     assert result["training_run"]["status"] == "prepared"
+    # 方案确认时把方案记录的 trace 固化进运行记录（run 目录自包含证据包）。
+    assert result["training_run"]["plan_trace"] == plan["trace"]
+    run_on_disk = json.loads(
+        (service.training.root / result["run_id"] / "run.json").read_text(encoding="utf-8")
+    )
+    assert run_on_disk["plan_trace"] == plan["trace"]
     config = result["training_run"]["config"]
     assert config["data"]["train_file"] == session.dataset.paths["train"]
     assert config["data"]["validation_split"] == 0

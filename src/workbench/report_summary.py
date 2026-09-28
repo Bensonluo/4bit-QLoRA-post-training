@@ -419,6 +419,8 @@ def summarize_training_run(record: dict) -> list[str]:
         lines.append(
             "训练完成只说明产出了模型；效果要用同一套开发题与基座对照来判断，请看对照报告。"
         )
+    # 方案快照的工具核查轨迹(plan_trace):不经方案的直接启动为空,不渲染轨迹行。
+    lines.extend(summarize_tool_trace(record.get("plan_trace"), "训练方案"))
     return lines
 
 

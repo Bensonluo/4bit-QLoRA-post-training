@@ -136,6 +136,40 @@ def test_training_run_summary_status_and_honesty():
     assert "training阶段：显存不足" in joined
 
 
+def test_training_run_summary_renders_shared_tool_trace_lines():
+    """train-* 尾行:记录带 plan_trace 时以统一格式渲染工具核查轨迹,空/缺省不加轨迹行。"""
+    from src.workbench.report_summary import summarize_training_run
+
+    record = {
+        "status": "succeeded",
+        "model_path": "/models/Qwen3-1.7B",
+        "config": {"training": {"num_epochs": 1}},
+        "metrics": {"train_loss": 0.42},
+        "plan_trace": [
+            {"tool": "discover_local_models", "ok": True},
+            {"tool": "probe_model", "ok": True},
+            {"tool": "preflight_tokenizer", "ok": False, "error": "缺 tokenizer 文件"},
+        ],
+    }
+    lines = summarize_training_run(record)
+    joined = "\n".join(lines)
+    assert (
+        "工具核查轨迹：3 次调用，成功 2 次、失败 1 次——"
+        "失败的调用没有取到证据，训练方案只依赖成功的调用。" in joined
+    )
+    # 轨迹行统一放所有内容行之后(loss 行与对照报告行都在它前面)
+    loss_index = next(i for i, line in enumerate(lines) if line.startswith("训练损失"))
+    trace_index = next(i for i, line in enumerate(lines) if line.startswith("工具核查轨迹"))
+    assert loss_index < trace_index
+    assert trace_index == len(lines) - 1
+
+    # 空 plan_trace / 旧记录缺该键:默认行为不变,无轨迹行
+    record["plan_trace"] = []
+    assert not any("工具核查轨迹" in line for line in summarize_training_run(record))
+    del record["plan_trace"]
+    assert not any("工具核查轨迹" in line for line in summarize_training_run(record))
+
+
 def test_preflight_summary_gives_concrete_length_advice():
     from src.workbench.report_summary import summarize_preflight
 

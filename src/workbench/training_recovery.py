@@ -168,6 +168,9 @@ class TrainingRecoveryService:
                         for key, value in config["model"].items()
                         if key not in {"name", "max_length", "trust_remote_code"}
                     },
+                    # 技术重试延续父运行执行的方案：快照父记录里的方案轨迹，
+                    # 子运行目录保持自成证据包。旧记录无该键 → 空列表（向后兼容）。
+                    plan_trace=parent.get("plan_trace"),
                 )
                 child["recovery_parent_run_id"] = run_id
                 child["recover_technical_failures"] = False
