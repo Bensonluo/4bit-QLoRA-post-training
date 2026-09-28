@@ -914,6 +914,31 @@ def test_funnel_report_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "--tail" not in help_text, "--tail 是 train-logs 专属"
 
 
+def test_task_spec_show_docs_pinned(monkeypatch, capsys, tmp_path):
+    """task-spec-show(任务规约投影)口径钉死:五要素、草稿不入投影、页面同源与边界句。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 训练启动前对齐：任务规约投影",
+        "## 在同一任务中启动真实训练",
+    )
+    assert "task-spec-show SESSION_ID" in section, "命令与位置参数必须写明"
+    assert "`summarize_task_spec` 单一来源" in section, "摘要单一来源必须写明"
+    assert "只读汇编" in section and "不写任何状态" in section, "只读边界必须写明"
+    for element in ("业务目标", "答案语义", "评分口径", "验收标准", "时间约束"):
+        assert element in section, f"规约五要素缺 {element}"
+    assert "草稿评分规则不进入规约" in section, "草稿不入投影必须写明"
+    assert "未冻结验收不假装存在标准" in section, "未冻结如实边界必须写明"
+    assert "「📋 任务规约投影」" in section, "页面位点必须写明"
+    assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    assert "不代表模型效果达标" in section, "边界句必须写明"
+    # 帮助文本与命令面同步:收 SESSION_ID,只读投影不收 --revision/--tail。
+    help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "task-spec-show")
+    assert "session_id" in help_text, "task-spec-show 收位置参数 SESSION_ID"
+    assert "只读" in help_text, "帮助文本必须说明这是只读投影"
+    assert "--revision" not in help_text, "投影不针对具体修订"
+    assert "--tail" not in help_text, "--tail 是 train-logs 专属"
+
+
 def test_train_cost_docs_pinned(monkeypatch, capsys, tmp_path):
     """train-cost(成本账 CLI 平权)口径钉死:单一来源、0 不对比、估计值边界与页面同源。"""
     section = _section(
@@ -956,6 +981,8 @@ def test_task_spec_design_doc_pinned():
     # 环节协议与多轮状态机的关键口径。
     assert "Agent 介入是设计选择，不是默认" in doc, "环节介入原则必须写明"
     assert "insufficient_evidence" in doc, "证据不足作为合法决定必须写明"
-    # 差距与路线如实:投影未实现点名,外部依赖不纳入自主迭代。
-    assert "任务规约投影未实现" in doc, "缺口必须如实点名"
+    # 差距与路线如实:Phase 1 投影已实现并点名实现位,外部依赖不纳入自主迭代。
+    assert "任务规约投影——已实现（Phase 1 落地，2026-09-28）" in doc, "投影落地必须如实登记"
+    assert "task-spec-show SESSION" in doc, "落地入口必须点名"
+    assert "src/workbench/task_spec_projection.py" in doc, "实现位点必须可追溯"
     assert "不纳入自主迭代" in doc, "外部依赖边界必须写明"

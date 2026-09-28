@@ -47,7 +47,7 @@ def acceptance_page(training_page, monkeypatch):  # noqa: F811
                     "evaluation_suite": {"suite_id": "fixed-suite"},
                     "blind_test": True,
                     "report": None,
-                    "result": None,
+                    "result": {"decision": "pending_run"},
                 }
             )
             return records[-1]
@@ -131,7 +131,9 @@ def test_open_final_review_requires_reason_and_forbids_accepting_truncated_outpu
             "session_id": session.session_id,
             "status": "needs_business_review",
             "model": {"adapter_path": "/tmp/adapter"},
+            "protocol": {"scorer": "open_review"},
             "criteria": {
+                "metric": "manual_acceptance_rate",
                 "business_standard": "关键步骤齐全",
                 "minimum_score": 0.9,
                 "minimum_cases": 20,

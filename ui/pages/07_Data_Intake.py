@@ -2716,6 +2716,23 @@ if dataset is not None:
             )
     if next_action(session) == "ready_for_training_preflight":
         st.success("独立数据分区已生成，可继续训练前检查；分区就绪不代表模型效果已验收。")
+        with st.expander("📋 任务规约投影（训练启动前对齐「我们在教模型什么」）"):
+            # ADR-1 只读投影:由既有确认记录汇编,不新增状态;与 CLI task-spec-show 同源同词汇。
+            from src.workbench.task_spec_projection import collect_task_spec, summarize_task_spec
+
+            spec = collect_task_spec(
+                session.session_id,
+                PROJECT_ROOT / "outputs/workbench/intake",
+                PROJECT_ROOT / "outputs/workbench/business-scoring",
+                PROJECT_ROOT / "outputs/workbench/acceptance",
+                PROJECT_ROOT / "outputs/workbench/evaluations",
+                PROJECT_ROOT / "outputs/workbench/iterations",
+                PROJECT_ROOT / "outputs/workbench/training",
+            )
+            for line in summarize_task_spec(spec):
+                st.write(line)
+            with st.expander("查看规约原始 JSON"):
+                st.json(spec)
         st.subheader("训练前检查")
         st.caption(
             "只读取本地目录或已有缓存中的 tokenizer，不自动下载、不加载模型权重、不启动训练。"

@@ -396,6 +396,14 @@ def main() -> int:
     train_list.add_argument("session_id")
     _funnel_help = "全部任务在闭环各环节的当前停点计数（只读快照，不发起计算）"
     sub.add_parser("funnel-report", help=_funnel_help, description=_funnel_help)
+    _task_spec_help = (
+        "汇编既有确认记录生成任务规约只读投影（业务目标/答案语义/评分口径/验收标准/时间约束），"
+        "不写任何状态"
+    )
+    task_spec_show = sub.add_parser(
+        "task-spec-show", help=_task_spec_help, description=_task_spec_help
+    )
+    task_spec_show.add_argument("session_id")
     eval_compare = sub.add_parser(
         "eval-compare", help="在同一固定开发集上顺序比较基座与已完成微调版本"
     )
@@ -1096,6 +1104,24 @@ def main() -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             for line in summarize_funnel(result):
+                print(line, file=sys.stderr)
+            return 0
+        if args.command == "task-spec-show":
+            # 任务规约投影(ADR-1 只读投影):训练启动前对齐「我们在教模型什么、
+            # 按什么口径验收」。stdout 纯 JSON,stderr 人话摘要(单一来源,与页面规约卡同源)。
+            from src.workbench.task_spec_projection import collect_task_spec, summarize_task_spec
+
+            spec = collect_task_spec(
+                args.session_id,
+                args.store,
+                args.scoring_root,
+                args.acceptance_root,
+                args.evaluation_root,
+                args.iteration_root,
+                args.training_root,
+            )
+            print(json.dumps(spec, ensure_ascii=False, indent=2))
+            for line in summarize_task_spec(spec):
                 print(line, file=sys.stderr)
             return 0
         if args.command.startswith("train-"):
