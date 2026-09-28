@@ -1379,3 +1379,17 @@ def test_quickstart_onboarding_docs_pinned():
     assert "只读文件、不加载权重" in section, "发现边界必须写明"
     assert "文件完整只表示可以进一步检查" in section, "文件完整边界必须与 model-list 同口径"
     assert "HF_ENDPOINT=https://hf-mirror.com" in section, "镜像指引必须在场"
+
+
+def test_quickstart_model_and_install_guidance_consistent():
+    """快速开始一致性钉死(R75):点名的 0.6B 在中文显存表可查且数字与英文表同源,
+    国内 pip 镜像指引与 HF 镜像指引同场。"""
+    text = README.read_text(encoding="utf-8")
+    quickstart = _section(text, "### 快速开始", "### 显存参考")
+    assert "mirrors.aliyun.com/pypi/simple/" in quickstart, "国内 pip 镜像指引必须在场"
+    vram = _section(text, "### 显存参考")
+    assert "| Qwen3-0.6B | ~1.2 GB | ~1 GB |" in vram, "快速开始点名的 0.6B 必须在显存表可查"
+    assert "| Qwen3-1.7B | ~2.0 GB | ~2 GB |" in vram, "次小档 1.7B 同步在场"
+    # 数字与英文 Model Compatibility 表同源:两表不各说各话。
+    assert "| Qwen3 0.6B | ~1.2 GB | ~1 GB |" in text, "英文表 0.6B 行必须在场"
+    assert "| Qwen3 1.7B | ~2.0 GB | ~2 GB |" in text, "英文表 1.7B 行必须在场"

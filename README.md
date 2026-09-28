@@ -578,6 +578,8 @@ If this project helped you fine-tune on budget hardware, please ⭐ star the rep
 git clone https://github.com/Bensonluo/4bit-QLoRA-post-training.git
 cd 4bit-QLoRA-post-training
 pip install -e ".[ui]"
+# 国内网络 pip 安装慢（含 torch 大包）可加：
+#   pip install -i https://mirrors.aliyun.com/pypi/simple/ -e ".[ui]"
 python scripts/launch_dashboard.py
 # 打开 http://localhost:8501
 ```
@@ -594,6 +596,8 @@ hf download Qwen/Qwen3-0.6B --local-dir models/Qwen3-0.6B
 
 | 模型 | NVIDIA 4-bit | Apple Silicon 64GB |
 |------|-------------|--------------------|
+| Qwen3-0.6B | ~1.2 GB | ~1 GB |
+| Qwen3-1.7B | ~2.0 GB | ~2 GB |
 | Qwen3-4B | ~3.5 GB | ~4 GB |
 | Qwen3-8B | ~6.0 GB | ~8 GB |
 | Qwen3-14B | 需 16GB+ | ~14 GB |

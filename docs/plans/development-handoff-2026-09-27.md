@@ -2643,3 +2643,18 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：对齐＋旅程 **63 passed**（62→63）；ruff check/format 双闸绿（无重排）。README 无新增 markdown 链接（仅既有 agent-setup 链接形式），链接 lint 随套件通过。
 
 **回归与错误修复**：非全量回归到期轮（R75 到期，基线 1930 passed / 205.59s）。本轮无失败、无重排、无子代理参与（文档轮单通道）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $70.00（不计成本授权下继续，逐轮如实上报）。
+
+## 第 75 轮 = 快速开始一致性补齐：显存表 0.6B 同步与国内 pip 镜像指引（全量回归新基线 1946）
+
+**日期**：2026-09-29（R75 到期全量回归轮；子代理 r75-reviewer 独立审查通过）
+
+**选点**：R73/R74 连续两轮缺口①使能（演示入口、本地模型准备指引）落地后的一致性收尾。侦察发现：R74 快速开始点名 `Qwen3-0.6B`，但中文「### 显存参考」表从 4B 起步，新手在表里查不到被点名的最小档；英文 Model Compatibility 表早有 0.6B/1.7B 行（`| Qwen3 0.6B | ~1.2 GB | ~1 GB |`），中文表按英文表现有数字同源补齐、零新造。同时中文快速开始有 HF 镜像指引却无 pip 镜像（`.[ui]` 含 torch 大包，国内安装是第一道墙），补 aliyun pip 镜像注释行。防冗余核查：R74 承诺的「下载到 models/ 自动发现」已有 test_local_models.py::test_hf_home_and_cwd_models_are_known_default_locations 行为级覆盖（monkeypatch.chdir 建模型即发现），不加重复 pin。
+
+**实现**：
+- **README「### 快速开始」**：bash 块 +2 行注释——「国内网络 pip 安装慢（含 torch 大包）可加：`pip install -i https://mirrors.aliyun.com/pypi/simple/ -e ".[ui]"`」（可照抄）。
+- **README「### 显存参考」**：表头新增 `| Qwen3-0.6B | ~1.2 GB | ~1 GB |`、`| Qwen3-1.7B | ~2.0 GB | ~2 GB |` 两行（数字与英文 Model Compatibility 表逐字同源）。
+- **Pin**：test_readme_alignment.py +1 `test_quickstart_model_and_install_guidance_consistent`（62→63）——中文表 0.6B/1.7B 行在场、pip 镜像指引在场、英文表对应行在场（双侧硬钉，两表不各说各话）。
+
+**测试**：对齐＋旅程 **63 passed**（62→63）；ruff check/format 双闸绿（reviewer nit 修复——pin 内三次 read_text 合并为一次——后复跑仍绿）。全量回归到期已履行：**1946 passed / 205.85s**（新基线；R72 边界 1930 passed / 205.59s，+16 = R73 演示任务 14 项 + R74/R75 pin 各 1；下次按节奏 R77/R78 边界）。
+
+**回归与错误修复**：无失败。独立审查：r75-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维审查结论**通过**（自跑 63/63 全绿；pin 双侧硬钉有效、表数字同源无新造、镜像注释可照抄合法 bash、diff 纯增量不断既有 pin、R74 的 0.6B 点名由其命令 pin 覆盖），唯一 nit（新 pin 三次 read_text）已当场修复并复跑门禁。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。成本钩子读数 $77.51（不计成本授权下继续，逐轮如实上报）。
