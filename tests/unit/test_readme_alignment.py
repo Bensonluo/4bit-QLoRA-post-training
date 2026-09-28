@@ -225,6 +225,30 @@ def test_north_star_pins_authority_and_key_sentences():
     assert "场景多样性用场景矩阵系统性覆盖" in text
 
 
+def test_north_star_gap_section_pins_closed_evidence_and_remaining_gaps():
+    """差距对照节随轮次演进:已收口三差距带证据,未收口差距如实点名且旧表述不复存在。"""
+    text = NORTH_STAR_FILE.read_text(encoding="utf-8")
+    # 旧表述(2026-09-27 声称三差距开放)必须已被修订替换。
+    assert "差距集中在三点" not in text
+    # 已收口:三差距的证据指针在场。
+    for phrase in (
+        "与现状的对照(2026-09-28",
+        "train-export",
+        "过程漏斗",
+        "f24cfbd..3aa6eef",
+    ):
+        assert phrase in text, f"北极星差距对照缺少收口证据指针: {phrase}"
+    # 仍然开放的差距如实点名:北极星指标零真实测量是当前第一差距。
+    for phrase in (
+        "北极星指标从未被测过",
+        "开发者自测",
+        "不构成北极星证据",
+        "task-spec-and-agent-adaptation-design.md",
+        "CLI 平权",
+    ):
+        assert phrase in text, f"北极星差距对照缺少开放差距点名: {phrase}"
+
+
 def _cli_help_text(monkeypatch, capsys, tmp_path, *command):
     """进程内跑真实 CLI 的 --help(参考 test_label_verify_cli 的 argv 注入模式)。"""
     from scripts import data_intake
@@ -782,9 +806,9 @@ def test_train_lineage_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "点名全部版本与别名" in section, "已注册口径必须写明"
     assert "可照抄的合并与注册命令" in section, "未注册指引必须写明"
     assert "查询失败如实报告原因，不编造状态" in section, "失败态口径必须写明"
-    assert (
-        "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标" in section
-    ), "注册边界句必须写明"
+    assert "注册只说明模型库记录了这次训练的产物与血缘，不代表业务效果达标" in section, (
+        "注册边界句必须写明"
+    )
     assert "registry_cli.py lineage" in section, "反向血缘入口必须写明"
     assert "`summarize_lineage` 单一来源" in section, "反向摘要单一来源必须写明"
     assert "缺项如实显示「-」" in section, "缺项回退口径必须写明"
@@ -812,9 +836,9 @@ def test_train_export_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "export_evidence.json" in section, "证据链文件必须写明"
     assert "重复导出不会改变模型内容" in section, "幂等口径必须写明"
     assert "逐条点名原因，不静默降级" in section, "阻塞态口径必须写明"
-    assert (
-        "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署" in section
-    ), "导出边界句必须写明"
+    assert "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署" in section, (
+        "导出边界句必须写明"
+    )
     assert "只读盘点，不在页面执行合并" in section, "页面只读盘点边界必须写明"
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
     # 帮助文本与命令面同步:收 RUN_ID 与 --output-dir,不收只读族没有的 --revision/--tail。

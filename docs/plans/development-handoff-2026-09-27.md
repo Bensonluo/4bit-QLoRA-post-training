@@ -2355,3 +2355,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 修法是给两个桩补上 `purpose=None` 对齐真实接口——桩的职责就是镜像生产
 签名，不能反过来在生产代码里吞 TypeError 掩盖接口不匹配。复跑全量回归
 **1839 passed / 0 failed**（1825 基线 + 14 新增，/tmp/round55_regression.log）。
+
+## 第 56 轮 = 北极星差距对照修订（恢复循环第 37 轮）
+
+**背景**：north-star.md「与现状的对照」节仍停留在 2026-09-27 快照——声称三差距（旅程串联/非专家可视化/三角血缘）开放，而 R51-R55 已逐一收口（血缘人话 CLI f24cfbd／环节⑨交接出口 392ad29／loss 曲线+实时 15147c7、a626a25／过程漏斗 3aa6eef）。权威文档与现实脱节比普通文档更严重：一切优先级判断以它为最高依据。先核实的证据链：钉测试 test_north_star_pins_authority_and_key_sentences 不覆盖该节（修订不破坏既有钉）；task-spec-and-agent-adaptation-design.md 确认不存在；cost_summary 仅 07 页面消费（grep 3251-3273 行），CLI 零入口；场景矩阵现值 47（下限断言 ≥47）。
+
+**实现**：
+- north-star.md「与现状的对照」重写为 2026-09-28 修订版——三差距标注收口与证据（第 51-55 轮，提交 f24cfbd..3aa6eef，回归 1839 全绿；train-export／实时曲线／诊断提示双侧／血缘人话平权／funnel-report）；同时如实点名四项仍然开放的差距：①北极星指标从未被测过（试用模板就绪未回收，47 项矩阵 as_expected 仍是开发者自测，按演进原则不构成北极星证据）；②Agent 判断真实性证据不足（自定义评分真实 GLM 起草未验证、单次在线验证未尝试）；③Agent 全流程协作架构文档未产出；④成本可计算仅页面无 CLI。
+- 一句话定义/安全层/度量体系等其余各节零改动——修订只动状态对照，不动目标定义。
+
+**测试**：test_readme_alignment +1（test_north_star_gap_section_pins_closed_evidence_and_remaining_gaps）——负断言钉死旧表述「差距集中在三点」不复存在，正断言钉死新节日期、三证据指针（train-export/过程漏斗/提交区间）与四差距关键词（北极星指标从未被测过/开发者自测/不构成北极星证据/task-spec 文件名/CLI 平权）。
+
+**文档**：north-star.md 本体即交付物；agent-setup.md 无涉（本轮不改产品行为）。
+
+**回归与错误修复**：定向 readme_alignment 47 项全绿；全量回归 **1840 passed / 0 failed**（1839 基线 + 1 钉测试，/tmp/round56_regression.log，277 秒）。ruff format 一处换行修正后 check 干净；本轮零代码改动，无运行期错误。
