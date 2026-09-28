@@ -1698,3 +1698,55 @@ def test_acceptance_summary_renders_gate_lines_from_frozen_suite():
     # 旧记录缺题集引用:算术静默
     del record["evaluation_suite"]
     assert not any(line.startswith("按 ") for line in summarize_acceptance(record))
+
+
+def test_all_zero_with_only_technical_failures_does_not_claim_unlearnable():
+    """全技术性零分:没写完/生成失败覆盖全部题时,「学不出」定性被撤回,先修生成再谈三问。"""
+    report = _report(
+        [
+            _model("基座", 2, 0.0, statuses=["truncated", "failed"]),
+            _model("本轮微调", 2, 0.0, statuses=["failed", "truncated"]),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "全部 2 道题都没写完或生成失败" in joined
+    assert "这个零分只说明生成环节没走通" in joined
+    assert "还不构成「按当前数据量和任务定义学不出这个任务」的证据" in joined
+    assert "先修生成长度与失败原因后重测,再谈补数据、改任务定义或停止" in joined
+    # 定性撤回:旧句「说明…学不出这个任务;」不再出现;全技术态不叠加对号行
+    assert "说明按当前数据量和任务定义学不出这个任务;" not in joined
+    assert "失败原因对号处理" not in joined
+
+
+def test_all_zero_maps_each_cause_to_first_action_before_adding_data():
+    """混合零分对号行:只列观察到的原因,每类给第一步,补数据排在这些之后。"""
+    echo = "某指令文本较长较长较长较长" + "继续复述" * 3
+    report = _report(
+        [
+            _model("基座", 6, 0.0, statuses=["truncated", "failed"] + ["correct"] * 4),
+            _model("本轮微调", 6, 0.0, outputs=[echo] * 6),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert (
+        "失败原因对号处理：复述题目——补数据治不了回声,先核对提示模板与指令长度；"
+        "截断——先加生成长度重测,当前分数低估了模型；"
+        "生成失败——先修失败原因,失败题没有测到模型；"
+        "重复输出——先对照上面的答案分布披露判断。" in joined
+    )
+    assert "补数据是这些技术原因逐一排除后的选项" in joined
+    assert "改任务定义还是停止,在排除后再按业务判断" in joined
+
+
+def test_all_zero_without_diagnostics_gates_three_way_choice_on_format():
+    """无诊断零分:格式对得上之前,补数据/改任务定义都还不是下一步。"""
+    report = _report(
+        [
+            _model("基座", 4, 0.0, outputs=[f"错{i}" for i in range(4)]),
+            _model("本轮微调", 4, 0.0, outputs=[f"错{i}" for i in range(4)]),
+        ]
+    )
+    joined = "\n".join(summarize_comparison(report))
+    assert "零分更可能来自答案格式不匹配" in joined
+    assert "格式对得上之前,补数据和改任务定义都还不是下一步" in joined
+    assert "失败原因对号处理" not in joined  # 无失败原因可对号

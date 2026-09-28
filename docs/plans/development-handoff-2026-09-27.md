@@ -2550,3 +2550,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_report_summary.py +4（换算主路径逐字 pin 含 0.7→7 道二进制边界；minimum_cases>N 预警逐字；五类不可算输入静默；summarize_acceptance 挂载位置 pin「按 90% 通过率门槛」<「容错为 0 道」<「条款已冻结」+ 缺题集静默负例）；test_acceptance_ui.py +1（UI 4）；test_acceptance_cli.py +1（CLI 5）；test_readme_alignment.py +1（56）。联合定向 acceptance cluster 三文件 **73 passed**（report_summary 64 + acceptance_ui 4 + acceptance_cli 5）+ 旅程与对齐两文件 **57 passed**（journey 1 + readme_alignment 56）+ ruff check/format 六代码文件双闸绿（文档两文件过 check）。
 
 **回归与错误修复**：全量回归非到期轮（上次 R67 1894 passed，下次按节奏 R69 开工首步）。主会话错误如实登记：① Fraction 精确算术与浮点判定分叉（见集成收口）——第一轮测试失败后定位到 Fraction(0.9)*10 进位方向与预期相反，改为同一式浮点除法；② zsh `=` 前缀展开再犯（R67 已登记过，本轮又以 `echo ===GATES===` 中止整条命令）——已在流程中改用引号包裹的标记字符串，此为第二次登记，第三次将升级为「禁止任何裸 = 开头 token」自查步骤。子代理事件如实登记：r68-pins 因供应商 429 限额中途死亡（测试已落树、闸门未跑、报告未发），主会话吸收验证；r68-docs 交付完成后遇 429（无影响）。实现代码零返工（除同一式修正本身）。
+
+## 第 69 轮 = 介入点编码切片⑤：零分对照失败原因对号处理（恢复循环第 50 轮）
+
+**背景**：R68 收掉介入点 9 后轮到第 2 条（大白话解读句「微调后仍是零分,说明按当前数据量和任务定义学不出这个任务」——出现时能否独立决定是补数据、改任务定义还是停止？）。缺口有二：①零分分支虽点名失败形态（复述/截断/生成失败/重复）但全部汇到「逐题查看完整输出定位属于哪一类」，没告诉用户每类原因的**第一步动作**与补数据在优先级里的位置；②全部题都是技术性失败（没写完/生成失败）时，「按当前数据量和任务定义学不出这个任务」是错误框定——零分只证明生成环节没走通，不构成学习结论。全部输入是记录内确定性事实（逐行 status、echo 检测、dominant 检测，全部已在 summarize_comparison 循环里算好）。本轮为 2-3 轮全量回归节奏到期轮，开工首步全量：**1908 passed / 0 failed**（199.86s，/tmp/round69_regression.log；对账 1908 = R67 开工基线 1894 + R67 新增 7 + R68 新增 7）。
+
+**实现**（子代理容量因供应商 429 限额至 02:24 未恢复，本轮主会话单通道完成全部通道，R64/R65 单通道先例）：
+- **单一来源升级**（src/workbench/report_summary.py 零分分支，+40）：①全技术性零分判定 `all_technical = total>0 and 所有模型所有行 status ∈ {truncated,failed}`——成立时撤回定性句，zero_head 改为「——但全部 N 道题都没写完或生成失败,这个零分只说明生成环节没走通,还不构成「按当前数据量和任务定义学不出这个任务」的证据；」、尾句改「先修生成长度与失败原因后重测,再谈补数据、改任务定义或停止。」；②混合零分（存在完整输出）追加「失败原因对号处理」行——只列观察到的原因，每类给第一步（复述题目——补数据治不了回声,先核对提示模板与指令长度；截断——先加生成长度重测,当前分数低估了模型；生成失败——先修失败原因,失败题没有测到模型；重复输出——先对照答案分布披露判断），收尾「补数据是这些技术原因逐一排除后的选项;改任务定义还是停止,在排除后再按业务判断。」（全技术态不叠加，头部已给行动顺序）；③无诊断分支补「格式对得上之前,补数据和改任务定义都还不是下一步。」。挂载零改动：页面大白话解读与 CLI eval-* stderr 本就渲染 summarize_comparison（R57 平权链），同源自动获得。
+- **文档**：agent-setup.md「比较基座与本轮微调效果」节 +1 段（回声分流段之后：对号行四映射、补数据优先级、全技术性零分定性撤回、三问决定权在用户、不作统计结论）；user-trial-log.md 介入点 2 +1 行「2026-09-29 现状补充」（历史原文不改写）；test_readme_alignment.py +1 pin `test_zero_score_remedy_docs_pinned`（56→57）。
+
+**集成收口（主会话）**：开工前 grep 核实「学不出」仅存在于源头一处、无任何测试/文档 pin（旅程测试不钉零分文案），改动安全。全量回归与代码编辑并行：回归在 HEAD 7ca1957 干净树上跑（1908 passed），src/test 编辑在 pytest 收集完成后落盘不影响后台运行；docs 编辑等回归结束才动（test_readme_alignment 运行时读盘，中途改 docs 会假失败）——该时序约束本轮首次显式执行。
+
+**测试**：test_report_summary.py +3（全技术性零分：定性撤回逐字 pin + 旧句不出现 + 对号行不叠加；混合零分：四映射整行逐字 pin + 补数据优先级句；无诊断零分：格式门槛句 + 对号行不出现），文件 64→67；test_readme_alignment.py +1（57）。联合定向三文件 **125 passed**（report_summary 67 + readme_alignment 57 + journey 1）+ ruff check 五文件过 + format 两代码文件绿 + 单一来源 grep（「失败原因对号处理」生产字面仅 report_summary.py:212）。
+
+**回归与错误修复**：全量回归到期轮已履行（1908 passed / 0 failed，见背景），下次按节奏 R72 左右。主会话零返工、零事故；本轮无子代理参与（429 限额未重置，主会话单通道）。现有零分态旧测试（test_zero_score_with_echo / test_all_zero_plugs / test_zero_scores_without_finetuned / test_all_zero_without_diagnostics）全部原样通过，分支改写未破坏既有钉住。

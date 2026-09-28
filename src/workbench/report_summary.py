@@ -170,23 +170,56 @@ def summarize_comparison(report: Any) -> list[str]:
             cause_parts.append(f"{len(failed_questions)} 题生成失败")
         if dominant_models:
             cause_parts.append("有模型在反复输出同一答案")
-        zero_head = (
-            "微调后仍是零分,说明按当前数据量和任务定义学不出这个任务;"
-            if tuned_stats
-            else "所有模型都是零分;"
+        # 全技术性零分:所有题在所有模型里都没写完或生成失败——零分只证明生成没走通,
+        # 不构成「学不出这个任务」的证据;此时不给对号行(头部已给行动顺序)。
+        all_technical = total > 0 and all(
+            all(row.get("status") in {"truncated", "failed"} for row in model["rows"])
+            for model in models
         )
+        if all_technical:
+            zero_head = ("微调后仍是零分" if tuned_stats else "所有模型都是零分") + (
+                f"——但全部 {total} 道题都没写完或生成失败,这个零分只说明生成环节没走通,"
+                "还不构成「按当前数据量和任务定义学不出这个任务」的证据;"
+            )
+            zero_tail = "先修生成长度与失败原因后重测,再谈补数据、改任务定义或停止。"
+        else:
+            zero_head = (
+                "微调后仍是零分,说明按当前数据量和任务定义学不出这个任务;"
+                if tuned_stats
+                else "所有模型都是零分;"
+            )
+            zero_tail = "逐题查看完整输出定位属于哪一类。"
         if cause_parts:
             lines.append(
                 zero_head
                 + "继续加数据之前,先核对失败原因——本次对照观察到"
                 + "、".join(cause_parts)
-                + ",逐题查看完整输出定位属于哪一类。"
+                + "，"
+                + zero_tail
             )
+            if not all_technical:
+                # 介入点编码:每类失败原因的第一步各不相同,补数据排在这些技术原因之后。
+                remedy_parts = []
+                if echo_questions:
+                    remedy_parts.append("复述题目——补数据治不了回声,先核对提示模板与指令长度")
+                if truncated_questions:
+                    remedy_parts.append("截断——先加生成长度重测,当前分数低估了模型")
+                if failed_questions:
+                    remedy_parts.append("生成失败——先修失败原因,失败题没有测到模型")
+                if dominant_models:
+                    remedy_parts.append("重复输出——先对照上面的答案分布披露判断")
+                lines.append(
+                    "失败原因对号处理："
+                    + "；".join(remedy_parts)
+                    + "。补数据是这些技术原因逐一排除后的选项;改任务定义还是停止,"
+                    "在排除后再按业务判断。"
+                )
         else:
             lines.append(
                 zero_head
                 + "本次没有观察到截断、生成失败、复述或重复输出,零分更可能来自答案格式不匹配;"
-                "继续加数据之前,先核对输出格式与期望答案是否对得上。"
+                "继续加数据之前,先核对输出格式与期望答案是否对得上;"
+                "格式对得上之前,补数据和改任务定义都还不是下一步。"
             )
     elif best_score == 1.0:
         lines.append(

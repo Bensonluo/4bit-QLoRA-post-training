@@ -1191,3 +1191,29 @@ def test_acceptance_gate_docs_pinned():
     assert "同一式" in item9, "第 9 条补充必须点名算术与执行判定同一式"
     assert "软件不替你设定业务门槛" in item9, "第 9 条历史原文必须保留"
     assert "数值本身是否需要专家意见" in item9, "第 9 条历史原文必须保留"
+
+
+def test_zero_score_remedy_docs_pinned():
+    """零分对照失败原因对号处理钉死(R69):summarize_comparison 零分分支、对号行、
+    补数据优先级与全技术性零分定性撤回,试用记录第 2 条现状补充在场。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 比较基座与本轮微调效果",
+        "## 让 Agent 解读结果与下一步",
+    )
+    assert "src/workbench/report_summary.py" in section, "单一来源模块路径必须写明"
+    assert "`summarize_comparison` 零分分支" in section, "零分对号单一来源必须点名函数"
+    assert "失败原因对号处理" in section, "对号行措辞必须写明"
+    assert "补数据治不了回声" in section, "复述→改模板不补数据的映射必须写明"
+    assert "逐一排除后的选项" in section, "补数据优先级边界必须写明"
+    assert "学不出这个任务" in section and "撤回" in section, "全技术性零分定性撤回必须写明"
+    assert "不作统计结论" in section, "统计边界必须写明"
+    # 试用记录介入点清单第 2 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item2 = _section(trial, "2. - [ ]", "3. - [ ]")
+    assert "2026-09-29 现状补充" in item2, "介入点清单第 2 条缺现状补充"
+    assert "summarize_comparison" in item2, "第 2 条补充必须点名单一来源函数"
+    assert "对号处理" in item2, "第 2 条补充必须点名对号口径"
+    assert "撤回「学不出这个任务」定性" in item2, "第 2 条补充必须点名定性撤回"
+    assert "微调后仍是零分" in item2, "第 2 条历史原文必须保留"
+    assert "补数据、改任务定义还是停止" in item2, "第 2 条历史原文必须保留"
