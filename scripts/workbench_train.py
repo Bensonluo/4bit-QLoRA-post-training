@@ -114,12 +114,17 @@ def main():
         from src.training.sft_trainer import run_sft_training
 
         stage = "training"
+        # 实时曲线写入侧:逐次日志点重写 loss 序列,训练中页面即可画曲线;
+        # 训练结束的权威序列仍由下方 extract_loss_history 完整重写。
+        from src.workbench.live_loss import LiveLossWriter
+
         trainer = run_sft_training(
             model_config=ModelConfig(**config["model"]),
             training_config=TrainingConfig(**config["training"]),
             lora_config=LoRAConfig(**config["lora"]),
             data_config=DataConfig(**config["data"]),
             logging_config=LoggingConfig(**config["logging"]),
+            extra_callbacks=[LiveLossWriter(config["training"]["output_dir"])],
         )
         result.update(mlflow_reference(config, record))
         stage = "artifacts"
@@ -144,13 +149,14 @@ def main():
         required["metrics"] = output / "workbench_metrics.json"
         # 保留逐 step loss 序列：flat metrics 只剩每个键的最后值，曲线在压平
         # 时就被销毁；序列单独落盘，页面曲线与 train-status 趋势人话由此生成。
-        from src.workbench.training_progress import extract_loss_history
+        # (实时写入侧见 LiveLossWriter;此处完整重写为权威序列。)
+        from src.workbench.training_progress import LOSS_HISTORY_FILENAME, extract_loss_history
 
         write_json(
-            output / "workbench_loss_history.json",
+            output / LOSS_HISTORY_FILENAME,
             extract_loss_history(trainer.trainer.state.log_history),
         )
-        required["loss_history"] = output / "workbench_loss_history.json"
+        required["loss_history"] = output / LOSS_HISTORY_FILENAME
         manifest = {
             "run_id": record["run_id"],
             "dataset_version": record["dataset_version"],

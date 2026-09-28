@@ -3133,6 +3133,36 @@ if next_action(session) == "ready_for_training_preflight" or training_runs:
                 if run.get("failure"):
                     failure = run["failure"]
                     st.error(f"{failure.get('stage', '训练')}：{failure.get('message', '')}")
+                if run.get("output_dir") and run["status"] != "succeeded":
+                    # 环节⑤「实时曲线」:训练中/中断态也画曲线(数据来自
+                    # LiveLossWriter 的增量写入)。训练中只画曲线不给三态判定
+                    # (半程数据不足以支持整场结论);中断态给趋势但注明只代表
+                    # 已训练部分。成功态走下方 metrics 块,两块互斥。
+                    from src.workbench.training_progress import (
+                        load_loss_history,
+                        loss_trend_lines,
+                    )
+
+                    partial = load_loss_history(run["output_dir"])
+                    if len(partial) >= 2:
+                        if run["status"] in {"running", "stopping"}:
+                            st.write("**训练中的 loss 曲线**")
+                            st.caption(
+                                "训练进行中，曲线只画到最近一次日志点；刷新页面查看最新进度。"
+                            )
+                        else:
+                            st.write("**训练未完成时已记录的 loss 曲线**")
+                            st.caption("训练中断，以下内容只代表已训练的部分。")
+                            for line in loss_trend_lines(partial):
+                                st.caption(line)
+                        from ui.components.charts import make_metric_timeseries
+
+                        st.plotly_chart(
+                            make_metric_timeseries(
+                                {"loss": [(int(p["step"]), p["loss"]) for p in partial]}
+                            ),
+                            width="stretch",
+                        )
                 if run.get("metrics"):
                     st.write("**本轮训练指标**")
                     # 环节⑤可视化：逐条 loss 序列 → 趋势人话 + 曲线（单一来源

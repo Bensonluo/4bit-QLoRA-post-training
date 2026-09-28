@@ -103,6 +103,30 @@ def test_same_page_prepare_start_logs_stop_are_explicit_actions(training_page):
     assert any("已停止" in block.label for block in page.expander)
 
 
+def test_running_training_shows_live_curve_without_verdict(training_page, tmp_path):
+    """环节⑤「实时曲线」:训练中(running)页面读实时序列画曲线并提示刷新,
+    不给三态判定——半程数据不足以支持整场结论;成功态才走指标区,两块互斥。"""
+    _, session, page, _, records = training_page
+    live_output = tmp_path / "live-run"
+    live_output.mkdir()
+    (live_output / "workbench_loss_history.json").write_text(
+        json.dumps([{"step": s, "loss": 2.0 - 0.1 * s} for s in range(6)]),
+        encoding="utf-8",
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(t for t in page.text_input if t.label == "本地基础模型目录").input("/tmp/local-base").run()
+    button(page, "准备本轮训练方案").click().run()
+    assert not page.exception
+    records[0]["output_dir"] = str(live_output)
+    button(page, "启动这轮训练").click().run()
+    assert not page.exception
+    assert any("训练中的 loss 曲线" in block.value for block in page.markdown)
+    assert any("刷新页面查看最新进度" in block.value for block in page.caption)
+    assert not any("整体在下降" in block.value for block in page.caption)
+    assert not any("本轮训练指标" in block.value for block in page.markdown)
+
+
 def test_freeze_question_suite_does_not_rewrite_parent_training_data(training_page):
     service, session, page, _, _ = training_page
     page.run()

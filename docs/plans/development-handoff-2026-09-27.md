@@ -2228,3 +2228,68 @@ test_train_loss_trend_docs_pinned 钉死。
 40 + report_summary 24）全绿。开发中修复一处：test_workbench_training_ui.py
 新加的 json import 插在 from copy 之后触发 ruff I001，排序修正。全量回归
 **1821 passed / 0 failed**（1814 基线 + 7 新增，/tmp/round53_regression.log，275 秒）。
+
+## 第 54 轮 = 训练中实时 loss 曲线（恢复循环第 35 轮）
+
+**背景**：R53 收口了北极星差距②，但环节⑤写的是「**实时**曲线」——R53 的曲线
+只在训练成功后出现：页面训练记录区在 running/stopping/failed/stopped 态只显示
+日志文本（`run.get("metrics")` 门槛只在成功路径成立），worker 也只在训练结束后
+一次性写 `workbench_loss_history.json`。「实时」二字未兑现：训练进行中非专家
+刷新页面看到的仍是纯文本日志，看不到曲线。本轮把写入侧（增量）与呈现侧
+（未完成态渲染）补齐。
+
+**实现**（垂直切片，复刻 R50-R53 模式）：
+- 新训练侧模块 `src/workbench/live_loss.py`：`LiveLossWriter(TrainerCallback)`
+  在每次 on_log 追加一个点（step/loss/learning_rate）并整体重写产物目录的
+  `workbench_loss_history.json`（文件很小，整体重写最简单也最不易坏）；写失败
+  (OSError) 静默吞掉——实时曲线是呈现增强，不能让磁盘小故障中断训练。模块
+  顶层导入 transformers（与 src/training/callbacks.py 同类）；training_progress.py
+  保持纯 stdlib 不动（页面/CLI 无负担复用）。
+- `src/training/sft_trainer.py`：`run_sft_training` 新增 `extra_callbacks`
+  参数（`Sequence[TrainerCallback] | None`），在 setup_trainer 之后、train()
+  之前注册——训练在本函数内运行，调用方事后 add_callback 来不及。默认 None，
+  既有调用方零扰动。
+- `scripts/workbench_train.py`：训练调用传
+  `extra_callbacks=[LiveLossWriter(config["training"]["output_dir"])]`；artifacts
+  阶段的序列文件写入去重为 `LOSS_HISTORY_FILENAME` 常量（与实时侧同一文件名
+  单一来源）。训练结束的完整 log_history 重写仍是权威序列（extract_loss_history）。
+- `src/workbench/training_progress.py`：`loss_trend_lines` 新增 keyword-only
+  `in_progress` 旗标——True 时只给跨度句（「…（共 N 个记录点），训练进行中，
+  趋势判定等训练完成后再看。」）+ 固定边界句，不给三态判定（半程数据不足以
+  支持整场结论）；默认 False 行为逐字不变。
+- `ui/pages/07_Data_Intake.py` 训练记录区：新块在 metrics 块之前、与 metrics
+  块互斥（`output_dir` 存在且 status≠succeeded 时渲染）：running/stopping →
+  「**训练中的 loss 曲线**」+「刷新页面查看最新进度」caption + 曲线；stopped/
+  failed → 「**训练未完成时已记录的 loss 曲线**」+「只代表已训练的部分」caption
+  + 完整趋势人话（终态中断，已训练部分的判定有效）+ 曲线。≥2 个点才画。
+- `scripts/data_intake.py` train-* 尾部：门槛从 `result.get("metrics")` 扩为
+  「有 metrics 或 status ∈ {running, stopping, failed, stopped}」；内层
+  「有序列或带指标」才打印；`in_progress` 按 status 传——训练中与页面同一
+  口径（只给跨度与等待句），中断态给完整趋势。旧产物无序列且无 metrics 时
+  什么都不追加（不编造）。
+
+**测试**（新增 4 个测试函数 + 1 处既有用例扩展）：
+- test_training_progress.py +2：in_progress 六点序列逐字断言首句
+  （span + 等待句合成一句）与边界句、「整体在下降」不出现、默认 False 仍走
+  三态；LiveLossWriter 直测（eval 行不写、乱序按 step 排好、learning_rate
+  保留、目录被文件占位时 OSError 吞掉不抛）。
+- test_cli_summaries.py +1：running 记录 + output_dir 指向带序列临时目录 →
+  stderr 含「训练进行中，趋势判定等训练完成后再看。」、不含「整体在下降」。
+- test_workbench_training_ui.py +1：training_page 夹具 prepare→改 output_dir
+  →start 进入 running → 页面钉死「训练中的 loss 曲线」markdown、「刷新页面
+  查看最新进度」caption、「整体在下降」与「本轮训练指标」均不出现（两块互斥）。
+- test_readme_alignment.py test_train_loss_trend_docs_pinned 扩展 9 条断言：
+  LiveLossWriter 回调名、extra_callbacks 参数、实时语义句、训练中页面位点、
+  刷新提示、等待句、中断态页面位点、「只代表已训练的部分」。
+
+**文档**：agent-setup.md 训练段扩展：写入侧（LiveLossWriter 逐次日志点重写 +
+extra_callbacks 注入点 + 完整重写仍为权威序列）、实时语义（训练中页面与 CLI
+读到的就是已训练部分的曲线）、训练中口径（页面位点 + 刷新提示 + 等待句 + 不做
+三态判定 + CLI 同口径）、中断态口径（页面位点 + 只代表已训练的部分）——全部被
+test_train_loss_trend_docs_pinned 钉死。
+
+**回归与错误修复**：针对性 29 项（training_progress 7 + CLI 摘要 9 + training
+UI 13）+ 文档钉死与 e2e worker 15 项 + 爆炸半径 110 项（data intake UI +
+report_summary 69、sft_trainer 41）全绿。开发中格式修正两处：07 页面 caption
+超 100 字符换行、data_intake.py R52 遗留括号样式（ruff format）。全量回归
+**1825 passed / 0 failed**（1821 基线 + 4 新增，/tmp/round54_regression.log，272 秒）。

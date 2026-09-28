@@ -847,3 +847,12 @@ def test_train_loss_trend_docs_pinned():
     assert "不代表业务效果；效果要看同一套开发题上的对照报告" in section, "边界句必须写明"
     assert "没有逐条记录，不编造曲线" in section, "缺位态口径必须写明"
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
+    # 实时曲线(R54):写入侧、训练中口径与中断态口径同段钉死。
+    assert "LiveLossWriter" in section, "实时写入回调名必须写明"
+    assert "`extra_callbacks` 参数" in section, "回调注入参数必须写明"
+    assert "训练进行中页面与 CLI 读到的就是已训练部分的曲线" in section, "实时语义必须写明"
+    assert "「训练中的 loss 曲线」区" in section, "训练中页面位点必须写明"
+    assert "刷新页面查看最新进度" in section, "刷新提示必须写明"
+    assert "训练进行中，趋势判定等训练完成后再看" in section, "训练中不做三态判定必须写明"
+    assert "「训练未完成时已记录的 loss 曲线」区" in section, "中断态页面位点必须写明"
+    assert "只代表已训练的部分" in section, "中断态边界必须写明"

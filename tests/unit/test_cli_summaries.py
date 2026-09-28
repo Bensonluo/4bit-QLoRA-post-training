@@ -221,6 +221,23 @@ def test_train_status_appends_loss_trend_when_metrics_present(
     assert "这次训练没有留下逐条 loss 记录" in capsys.readouterr().err
 
 
+def test_train_status_running_state_defers_trend_verdict(train_status_cli, tmp_path, capsys):
+    """训练中(running)读同一份实时序列文件,但只给跨度与等待句——
+    半程数据不足以支持整场三态判定;与页面训练中曲线同一来源。"""
+    invoke, record = train_status_cli
+    output = tmp_path / "run-9-live"
+    output.mkdir()
+    (output / "workbench_loss_history.json").write_text(
+        json.dumps([{"step": s, "loss": 2.0 - 0.1 * s} for s in range(6)]),
+        encoding="utf-8",
+    )
+    record.update({"status": "running", "output_dir": str(output)})
+    assert invoke("train-status", "run-9") == 0
+    err = capsys.readouterr().err
+    assert "训练进行中，趋势判定等训练完成后再看。" in err
+    assert "整体在下降" not in err
+
+
 def test_materialize_stderr_carries_dataset_summary(tmp_path, monkeypatch, capsys):
     """materialize stderr 追加分区人话摘要:分组路径此前零人话,现在与页面同口径;
     stdout 仍是纯 JSON 任务记录。"""

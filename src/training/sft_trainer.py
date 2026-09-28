@@ -2,7 +2,7 @@
 
 import os
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -597,6 +597,7 @@ def run_sft_training(
     data_config: DataConfig,
     logging_config: LoggingConfig,
     resume_from_checkpoint: str | None = None,
+    extra_callbacks: Sequence[TrainerCallback] | None = None,
 ) -> SFTTrainer:
     """Run complete SFT training pipeline.
 
@@ -607,6 +608,10 @@ def run_sft_training(
         data_config: Data configuration
         logging_config: Logging configuration
         resume_from_checkpoint: Optional path to checkpoint for resuming
+        extra_callbacks: Optional extra HF Trainer callbacks registered after
+            setup but before training starts (e.g. the workbench live-loss
+            writer) — training runs inside this function, so a caller-side
+            ``add_callback`` after return would be too late.
 
     Returns:
         The SFTTrainer after training — callers can post-process ``trainer.model``
@@ -629,6 +634,10 @@ def run_sft_training(
 
     # Setup trainer
     trainer.setup_trainer()
+
+    # Register caller-supplied callbacks before training starts
+    for callback in extra_callbacks or ():
+        trainer.trainer.add_callback(callback)
 
     # Train (Trainer runs final eval automatically if eval_dataset exists)
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)

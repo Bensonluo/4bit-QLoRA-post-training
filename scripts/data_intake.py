@@ -374,9 +374,7 @@ def main() -> int:
         command.add_argument("run_id")
         if name == "train-logs":
             command.add_argument("--tail", type=int, default=100)
-    _train_export_help = (
-        "把成功训练的适配器合并导出为 vLLM/Ollama/LM Studio 可直接加载的模型目录"
-    )
+    _train_export_help = "把成功训练的适配器合并导出为 vLLM/Ollama/LM Studio 可直接加载的模型目录"
     train_export = sub.add_parser(
         "train-export", help=_train_export_help, description=_train_export_help
     )
@@ -1160,16 +1158,28 @@ def main() -> int:
 
                 for line in summarize_training_run(result):
                     print(line, file=sys.stderr)
-                if result.get("metrics"):
+                if result.get("metrics") or result.get("status") in {
+                    "running",
+                    "stopping",
+                    "failed",
+                    "stopped",
+                }:
                     # 训练带指标时补逐条 loss 趋势人话：与页面曲线同一来源
-                    # (loss_trend_lines 单一来源)，旧产物没有序列时如实说没有。
+                    # (loss_trend_lines 单一来源)，旧产物没有序列时如实说没有；
+                    # 未完成态有序列时给训练中/中断口径的同一来源人话
+                    # (训练中不做三态判定，等训练完成后再看)。
                     from src.workbench.training_progress import (
                         load_loss_history,
                         loss_trend_lines,
                     )
 
-                    for line in loss_trend_lines(load_loss_history(result.get("output_dir"))):
-                        print(line, file=sys.stderr)
+                    history = load_loss_history(result.get("output_dir"))
+                    if history or result.get("metrics"):
+                        for line in loss_trend_lines(
+                            history,
+                            in_progress=result.get("status") in {"running", "stopping"},
+                        ):
+                            print(line, file=sys.stderr)
                 if result.get("preflight"):
                     from src.workbench.report_summary import summarize_preflight
 

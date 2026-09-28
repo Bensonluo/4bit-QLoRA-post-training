@@ -7,6 +7,9 @@
    workbench_loss_history.json，与 flat metrics 并存、互不替代）；
 2. loss_trend_lines 把序列翻译成趋势人话（单一来源，页面与 CLI 同源）。
 
+训练中该文件由 worker 的 LiveLossWriter 逐次日志点增量重写（环节⑤
+「实时曲线」）；训练结束再用完整 log_history 重写为权威序列。
+
 趋势判定只对比首段/末段均值（各约 1/4 记录点），只陈述观察事实，
 不认定原因、不预言业务效果——与截断/坍缩提示同一纪律。
 """
@@ -66,11 +69,13 @@ def _segment_mean(points: list[dict[str, float]]) -> float:
     return sum(item["loss"] for item in points) / len(points)
 
 
-def loss_trend_lines(history: list[dict[str, float]]) -> list[str]:
+def loss_trend_lines(history: list[dict[str, float]], *, in_progress: bool = False) -> list[str]:
     """把逐条 loss 序列翻译成趋势人话：先给首末与点数，再给三态判定。
 
     三态 = 在下降 / 基本持平 / 末段反而更高，判定依据是首段与末段均值的
     对比（±5% 以内算持平）；每条序列都以「loss 下降不代表业务效果」收尾。
+    in_progress=True（训练进行中）只给首末 span，不给三态判定——半程数据
+    不足以支持「整体在下降」这类整场结论，等训练完成后再看。
     """
     if not history:
         return ["这次训练没有留下逐条 loss 记录，看不出训练过程的变化。"]
@@ -87,6 +92,11 @@ def loss_trend_lines(history: list[dict[str, float]]) -> list[str]:
         f"loss 从第 {first['step']:.0f} 步的 {first['loss']:.4f} "
         f"走到第 {last['step']:.0f} 步的 {last['loss']:.4f}（共 {len(history)} 个记录点），"
     )
+    if in_progress:
+        return [
+            span + "训练进行中，趋势判定等训练完成后再看。",
+            "loss 下降只说明模型在逐步记住训练题，不代表业务效果；效果要看同一套开发题上的对照报告。",
+        ]
     if tail < head * 0.95:
         verdict = "整体在下降。"
     elif tail > head * 1.05:
