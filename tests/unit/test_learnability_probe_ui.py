@@ -258,3 +258,34 @@ def test_probe_candidates_table_shows_source_hints(probe_page, monkeypatch):
     assert "建议对照原始来源行" in table.loc[table["行ID"] == "r000002", "证据"].iloc[0]
     # 计数如实:两条候选都展示
     assert any("共 2 条候选" in c.value for c in page.caption)
+
+
+def test_probe_below_baseline_renders_triage_captions(probe_page, monkeypatch):
+    """低于基线时页面逐行渲染方向分辨(与 CLI stderr 同一来源),不低于基线不渲染。"""
+    service, session, page = probe_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    textbox = next(t for t in page.text_input if "本地基础模型目录" in t.label)
+    textbox.input("/tmp/local-base").run()
+
+    import src.workbench.learnability_probe as probe_module
+
+    def fake_probe(current, model_path, **kwargs):
+        result = _probe_result([])
+        # 低于基线 + 词表外输出:命中「提示模板方向」分辨行
+        result["label_vocabulary"] = ["yes", "no"]
+        result["observations"] = [
+            {
+                "row_id": "r000003",
+                "expected": "yes",
+                "generated": "词表外的输出",
+                "match": False,
+                "truncated": False,
+            }
+        ]
+        return result
+
+    monkeypatch.setattr(probe_module, "probe_learnability", fake_probe)
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert any("不在这份开发集的标签里出现过" in c.value for c in page.caption)
+    assert any(c.value.startswith("对号处理") for c in page.caption)

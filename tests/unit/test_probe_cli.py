@@ -290,3 +290,53 @@ def test_cli_probe_listing_beyond_twenty_truncates_but_csv_stays_complete(
     text = csv_path.read_bytes().decode("utf-8-sig")
     assert "r000025" in text, "CSV 导出不受 CLI 清单截断影响,包含全部候选"
     assert len([line for line in text.splitlines() if line.strip()]) == 26
+
+
+def _factory_truncated(answer):
+    def make(model):
+        class Runtime:
+            def generate(self, prompt, protocol):
+                return Generation(answer, truncated=True)
+
+            def close(self):
+                pass
+
+        return Runtime()
+
+    return make
+
+
+def test_cli_probe_below_baseline_prints_triage_lines(store, monkeypatch, capsys, tmp_path):
+    """低于瞎猜基线时 stderr 逐行输出方向分辨;回读渲染同一份行,重看不丢引导。"""
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    # 全部行同一词表外输出:零样本 0%,必低于基线 → 词汇方向 + 对号处理
+    _mock_runtime(monkeypatch, "绝不正确的答案")
+    assert _run_probe(monkeypatch, service, evaluation_root, session) == 0
+    _, err = capsys.readouterr()
+    assert "不在这份开发集的标签里出现过" in err
+    assert any(line.startswith("对号处理") for line in err.splitlines())
+    # 候选表头同源带改标签门槛
+    assert "人工核对后仍不认同才修正数据" in err
+
+    # 回读同样先给方向分辨:重看结论不必重新加载模型,也不丢引导
+    assert _run_show(monkeypatch, service, evaluation_root, session) == 0
+    _, err = capsys.readouterr()
+    assert "不在这份开发集的标签里出现过" in err
+    assert any(line.startswith("对号处理") for line in err.splitlines())
+
+
+def test_cli_probe_truncated_below_baseline_prints_retest_first(
+    store, monkeypatch, capsys, tmp_path
+):
+    """全截断的低于基线:先提示加大 max_new_tokens 重测,不对没写完的输出定性。"""
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    monkeypatch.setattr(
+        "src.workbench.learnability_probe._default_runtime",
+        _factory_truncated("截断的半句话"),
+    )
+    assert _run_probe(monkeypatch, service, evaluation_root, session) == 0
+    _, err = capsys.readouterr()
+    assert "条生成被截断" in err and "加大 max_new_tokens" in err
+    assert "任务定义或标注口径" not in err

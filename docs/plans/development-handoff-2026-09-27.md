@@ -2580,3 +2580,19 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试**：test_label_verification.py +8（函数级 7：全一致返回[] / 词汇不在全集含 known_labels=None 降级 / 同向重复对 / 仅 1 处 / 同答案多标签 / 分散错位 / 尾行对号修正恒在三形态；服务级 1：失败落键含词汇行+尾行、reload 持久、通过态无键），文件 30→38；test_label_verify_cli.py +1（未通过 stderr 逐行含词汇行+对号修正+换一组题；通过轮不输出），文件 7→8；test_label_verification_ui.py +1（未通过页 caption 含词汇行+对号修正+通用指引并存），文件 12→13；test_readme_alignment.py +1（58）。联合定向三文件 **51 passed** + 对齐 58 passed + 旅程 1 passed + ruff check/format 七文件双闸绿（format 重排 3 文件后复跑仍 51 passed）+ 单一来源 grep（triage 字面仅 intake_service.py 生产一处）。
 
 **回归与错误修复**：非全量回归到期轮（上次 R69 1908 passed，下次按节奏 R72）。主会话错误如实登记：①CLI pin 起草残留一行死代码（`if False else` 的空操作行），Edit 删除；②ruff format 重排 3 文件（首拍未跑 format），复跑定向 51 passed 证实无破坏。本轮无子代理参与（429 未重置）。介入点清单剩余：3（探针判定模板 vs 定义）、4（探针弱信号候选）、10（需补答案找人）、12（现场）。
+
+## 第 71 轮 = 介入点编码切片⑧：探针方向分辨＋弱信号改标签门槛（介入点 3+4）
+
+**日期**：2026-09-29（单通道；429 限制 02:24 重置前不开子代理）
+
+**选点**：介入点清单第 3 条（探针判定「零样本低于瞎猜基线——先核查提示格式与任务定义」——能否独立分辨提示模板问题还是任务定义问题）与第 4 条（弱信号候选要不要改标签）。同模块配对编码（R65/R67 先例）：两者都是可学性探针的判定解读缺口——判定行只说「先核查」，没说往哪个方向查；弱信号证据只说「供参考」，没说要不要改数据。第 3 条编码为低于基线时的**记录内事实分流**（截断/词汇/同答/其余四路），第 4 条编码为**改标签门槛常量三处同源**。剩余：10（需补答案找人）、12（现场）。
+
+**实现**：
+- **单一来源**（src/workbench/learnability_probe.py）：①新函数 `low_baseline_triage_lines(result)` 置于 describe_probe_verdict 之后——纯渲染函数，guard `difference is None or >= 0 → []`，无 observations → []。四路分流：有截断→「N 条生成被截断——分数被截断压低，先加大 max_new_tokens 重测」（R69 零分对照同口径）；非截断输出存在词表外词汇→「不在这份开发集的标签里出现过——没有用任务的答案词汇作答」提示模板方向（补全式模板与对话型基座不匹配点名；elif 语义——词汇行已解释同答则同答行不再出）；elif 全部非截断输出完全相同（≥2 条）→「没有按输入区分作答」模板没讲清与输入缺区分信息两方向都在，先换模板重测仍同答再核输入；elif 有正常输出→「更像任务定义或标注口径的问题」对照类别边界与标注规则。尾行「对号处理：…（不动数据）／…（改任务定义）／两边都核对过分数仍低，如实保留低分证据，不硬修」。②记录新字段 `label_vocabulary: sorted(label_counts)`（开发集标签全集，词汇分辨依据）。③弱信号门槛常量 `WEAK_SIGNAL_RULE = "单凭模型不认同不改标签，人工核对后仍不认同才修正数据"`——弱证据字符串、candidates_note 尾句、describe_candidates 表头三处引用同一常量（真单一来源）；强证据串/「弱信号」子串/「原始来源行」排除既有 pin 全部保持。
+- **架构决策——渲染时现算，不存记录**：与 R70 mismatch_triage（算一次存记录）相反方向，选 echo_triage_lines 先例——全部输入（difference/observations/label_vocabulary）已在存档记录里，渲染处现算；旧记录缺 label_vocabulary 时跳过词汇检查、其余分辨照常（如实降级不报错），缺 observations 的裸记录返回 []。UI fixture `_probe_result` 无 observations 键→页面渲染 []→既有 UI 测试零改动通过即证明降级安全。
+- **三通道同源挂载**：①页面 render_probe_result 在 verdict st.info 之后逐行 st.caption（lazy import 与 probe_verdict_phrase 同处）；②CLI learnability-probe 在 describe_probe_verdict 循环后逐行 stderr；③CLI learnability-probe-show 同位置（回读重看不丢引导）。
+- **文档**：agent-setup.md 可学性探针 bullet 扩展（四路分流、对号处理、label_vocabulary 降级、WEAK_SIGNAL_RULE 三处同源）；user-trial-log.md 介入点 3、4 各 +1 行「2026-09-29 现状补充」；test_readme_alignment.py +1 pin `test_low_baseline_triage_docs_pinned`（58→59，含第 3/4 条 trial 补充断言）。
+
+**测试**：test_learnability_probe.py +3（`_triage_result` 构造器；方向分流：≥0/None/无观察→[]、词表外→模板行+尾行、同答在词表内→两方向行、任务词汇按输入→任务定义行 len==2；截断优先+全截断只有截断行+尾行、旧记录无 label_vocabulary 降级；label_vocabulary 存记录+弱证据带门槛+三处同源），文件 13→16；test_probe_cli.py +2（`_factory_truncated` 变体：词表外低于基线 stderr 词汇行+对号处理+门槛，show 回读同一份行；全截断→先加长度重测且无任务定义定性），文件 8→10；test_learnability_probe_ui.py +1（低于基线 caption 渲染词汇行+对号处理，monkeypatch 对齐既有 probe_module 模式），文件 6→7。探针三件套 27→**33 passed**（首跑全绿）+ 对齐 **59 passed** + 旅程 1 passed + ruff check/format 双闸绿（import 排序 1 次修正：low_ 排 load_ 之后；format 重排 test_probe_cli.py 1 文件后 92 passed 复证）+ 单一来源 grep（分辨行与门槛字面仅 learnability_probe.py 一处）。
+
+**回归与错误修复**：非全量回归到期轮（上次 R69 1908 passed，下次 R72 到期）。主会话错误如实登记：①UI pin 初稿用了错误 monkeypatch 写法（"ui.pages.07_Data_Intake.probe_module" 字符串路径 + page.get_by_label），既有测试用 `import src.workbench.learnability_probe as probe_module` + next(page.button)——按既有模式重写后通过；②ruff I001 import 排序。本轮无子代理参与（429 未重置）。介入点清单剩余：10（需补答案找人）、12（现场）。

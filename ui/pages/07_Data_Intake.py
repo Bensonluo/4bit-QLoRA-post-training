@@ -214,7 +214,7 @@ def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = N
     """渲染一次可学性探针结果:指标、判定与标签问题候选(证据强者在先)。"""
     delta = result["difference"]
     # 三态判定词汇与 CLI 同源(probe_verdict_phrase):页面与 stderr 不各说各话。
-    from src.workbench.learnability_probe import probe_verdict_phrase
+    from src.workbench.learnability_probe import low_baseline_triage_lines, probe_verdict_phrase
 
     verdict = probe_verdict_phrase(result)
     st.metric(
@@ -223,6 +223,10 @@ def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = N
         delta_color="normal" if delta >= 0 else "inverse",
     )
     st.info(f"{verdict}。{result['note']}")
+    # 低于瞎猜基线时按记录内事实逐行给出核查方向分辨(单一来源,与 CLI stderr 同一份行):
+    # 截断→先加长度重测;词汇外→模板方向;同答→两方向都要核;其余→任务定义方向。
+    for triage_line in low_baseline_triage_lines(result):
+        st.caption(triage_line)
     candidates = result.get("label_error_candidates") or []
     st.subheader("标签问题候选(优先人工核对)")
     if candidates:

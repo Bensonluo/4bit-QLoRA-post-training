@@ -1535,6 +1535,7 @@ def main() -> int:
                 describe_candidates,
                 describe_probe_verdict,
                 load_latest_probe_record,
+                low_baseline_triage_lines,
             )
 
             session = service.load(args.session_id)
@@ -1565,6 +1566,10 @@ def main() -> int:
             # 回读同样先给判定行:结论先于清单,词汇与页面 render_probe_result 同源。
             for line in describe_probe_verdict(saved):
                 print(line, file=sys.stderr)
+            # 回读同样给低于基线时的核查方向分辨(单一来源):与 learnability-probe、
+            # 页面探针区渲染同一份行,重看结论不丢方向引导。
+            for triage_line in low_baseline_triage_lines(saved):
+                print(triage_line, file=sys.stderr)
             # 回读同样逐行列出候选:重看结论不应重新加载模型,也不该丢掉核对清单。
             for line in describe_candidates(saved.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
@@ -1583,6 +1588,7 @@ def main() -> int:
                 candidates_to_csv,
                 describe_candidates,
                 describe_probe_verdict,
+                low_baseline_triage_lines,
                 probe_learnability,
                 save_probe,
             )
@@ -1602,6 +1608,11 @@ def main() -> int:
             # 判定行先于候选清单:先说结论(带三组数字与三态词汇),再给核对清单。
             for line in describe_probe_verdict(result):
                 print(line, file=sys.stderr)
+            # 低于瞎猜基线时按记录内事实逐行给出核查方向分辨(单一来源):「模板问题
+            # 还是任务定义问题」由截断/输出词汇/是否同答等可观察事实分流,页面探针
+            # 区与回读命令渲染同一份行,不认定原因、不替用户决定。
+            for triage_line in low_baseline_triage_lines(result):
+                print(triage_line, file=sys.stderr)
             for line in describe_candidates(result.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
             if args.export_csv is not None:

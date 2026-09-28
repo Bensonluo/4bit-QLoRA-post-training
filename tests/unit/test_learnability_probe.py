@@ -369,3 +369,98 @@ def test_cli_probe_show_reads_saved_result_without_rerunning(store, tmp_path, mo
     assert "不能预测微调效果" in err, "note 原文复述,不改编"
     tail = err[err.index("可学性探针判定") :]
     assert ("标签问题候选" in tail) or ("没有发现值得优先核对的行" in tail), "判定行先于清单"
+
+
+def _triage_result(answers, *, vocabulary=None, truncated=None, difference=-0.25):
+    """构造低于基线的探针记录:answers 是逐条生成输出,truncated 同长布尔。"""
+    flags = truncated if truncated is not None else [False] * len(answers)
+    return {
+        "difference": difference,
+        "label_vocabulary": vocabulary,
+        "observations": [
+            {
+                "row_id": f"r{i}",
+                "expected": "yes",
+                "generated": answer,
+                "match": answer == "yes",
+                "truncated": flag,
+            }
+            for i, (answer, flag) in enumerate(zip(answers, flags))
+        ],
+    }
+
+
+def test_low_baseline_triage_direction_split_by_recorded_facts():
+    """低于基线时的方向分辨:提示模板方向 vs 任务定义方向由记录内事实分流。"""
+    from src.workbench.learnability_probe import low_baseline_triage_lines
+
+    # 不低于基线(差异>=0)、差异缺位或没有观察:一行不发,不制造恐慌
+    assert low_baseline_triage_lines({"difference": 0.1, "observations": [{}]}) == []
+    assert low_baseline_triage_lines({"difference": None}) == []
+    assert low_baseline_triage_lines(_triage_result(["no"], difference=0.0)) == []
+    assert low_baseline_triage_lines({"difference": -0.1}) == []
+
+    # 输出词汇不在标签全集 → 提示模板方向(模型没用任务的答案词汇作答)
+    lines = low_baseline_triage_lines(
+        _triage_result(["不知道", "拒绝回答"], vocabulary=["yes", "no"])
+    )
+    assert any("不在这份开发集的标签里出现过" in line for line in lines)
+    assert any("提示模板" in line for line in lines)
+    assert all("同一个输出" not in line for line in lines), "词汇行已解释同答,不重复"
+    assert lines[-1].startswith("对号处理")
+
+    # 全部未截断输出完全相同且在词汇内 → 模板没讲清与输入缺区分信息两方向都在
+    lines = low_baseline_triage_lines(
+        _triage_result(["yes", "yes", "yes"], vocabulary=["yes", "no"])
+    )
+    assert any("同一个输出「yes」" in line for line in lines)
+    assert any("没有按输入区分作答" in line for line in lines)
+    assert all("不在这份开发集的标签" not in line for line in lines)
+
+    # 用任务词汇、按输入作答仍低于基线 → 更像任务定义/标注口径的问题
+    lines = low_baseline_triage_lines(_triage_result(["yes", "no"], vocabulary=["yes", "no"]))
+    assert any("任务定义或标注口径" in line for line in lines)
+    assert len(lines) == 2  # 方向行 + 对号处理,不灌多余行
+
+
+def test_low_baseline_triage_truncation_first_and_degrade_for_old_records():
+    """截断优先提示先加长度重测;旧记录缺 label_vocabulary 时如实降级不报错。"""
+    from src.workbench.learnability_probe import low_baseline_triage_lines
+
+    # 有截断:被截断的输出已按不匹配计,先加大 max_new_tokens 重测再谈方向
+    lines = low_baseline_triage_lines(
+        _triage_result(["", "no"], vocabulary=["yes", "no"], truncated=[True, False])
+    )
+    assert any("条生成被截断" in line and "加大 max_new_tokens" in line for line in lines)
+    # 全部截断:只有截断行 + 对号处理,不对没写完的输出编造方向
+    lines = low_baseline_triage_lines(
+        _triage_result(["", ""], vocabulary=["yes", "no"], truncated=[True, True])
+    )
+    assert len(lines) == 2
+    assert all("任务定义或标注口径" not in line for line in lines)
+
+    # 旧记录没有 label_vocabulary:跳过词汇检查,同答/其余分辨照常
+    lines = low_baseline_triage_lines(_triage_result(["同一个答案", "同一个答案"]))
+    assert any("同一个输出「同一个答案」" in line for line in lines)
+    lines = low_baseline_triage_lines(_triage_result(["yes", "no"]))
+    assert any("任务定义或标注口径" in line for line in lines)
+
+
+def test_probe_stores_label_vocabulary_and_weak_signal_threshold(store):
+    """记录携带标签全集供方向分辨;弱信号证据带改标签门槛,三处同源不冒充溯源。"""
+    from src.workbench.learnability_probe import describe_candidates
+
+    _, session = store
+    result = probe_learnability(
+        session, "/tmp/base", runtime_factory=_factory("绝不正确的答案"), sample_size=4
+    )
+    labels = {row["output"] for row in _labels(session)}
+    assert result["label_vocabulary"] == sorted(labels), "标签全集按字典序存进记录"
+    weak = [c for c in result["label_error_candidates"] if not c["user_blind_answer"]]
+    assert weak and all("人工核对后仍不认同才修正数据" in c["evidence"] for c in weak)
+    assert all("弱信号" in c["evidence"] for c in weak)
+    assert all("原始来源行" not in c["evidence"] for c in weak), "门槛不冒充溯源建议"
+    # 改标签门槛三处同源:候选 note、CLI 清单表头、弱信号证据列
+    assert "人工核对后仍不认同才修正数据" in result["candidates_note"]
+    header = describe_candidates(result["label_error_candidates"])[0]
+    assert "人工核对后仍不认同才修正数据" in header

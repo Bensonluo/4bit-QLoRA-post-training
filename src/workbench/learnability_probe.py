@@ -14,6 +14,11 @@ from pathlib import Path
 
 from src.workbench.sources import content_digest
 
+# 弱信号候选的改标签门槛(单一来源):仅基座零样本不认同是弱证据,不足以修正数据;
+# 人工核对后仍不认同才修正。候选清单的 note、CLI 逐行清单的表头与候选的证据列
+# 都引用这一句,三处不各说各话。
+WEAK_SIGNAL_RULE = "单凭模型不认同不改标签，人工核对后仍不认同才修正数据"
+
 
 def probe_learnability(
     session,
@@ -103,7 +108,7 @@ def probe_learnability(
                 "evidence": (
                     "基座零样本与用户盲标都不认同数据标签——强证据,优先人工核对,建议对照原始来源行"
                     if user_also_disagrees
-                    else "仅基座零样本不认同——模型可能错,标签也可能错,弱信号供参考"
+                    else f"仅基座零样本不认同——模型可能错,标签也可能错,弱信号供参考;{WEAK_SIGNAL_RULE}"
                 ),
             }
         )
@@ -118,6 +123,7 @@ def probe_learnability(
         "zero_shot_accuracy": accuracy,
         "majority_baseline": majority_share,
         "majority_label": majority_label,
+        "label_vocabulary": sorted(label_counts),
         "difference": accuracy - majority_share,
         "observations": observations,
         "label_error_candidates": candidates,
@@ -126,7 +132,7 @@ def probe_learnability(
             f"其中 {sum(1 for c in candidates if c['user_blind_answer'])} 行与用户盲标也不一致)。"
             "候选不等于错误——模型可能错;但优先人工核对这些行是性价比最高的数据清理。"
             "与盲标也不一致的强证据行,建议对照原始来源行(row original 与来源文件行号)"
-            "溯源确认标签后再决定改不改,不要只凭模型输出下结论。"
+            f"溯源确认标签后再决定改不改,不要只凭模型输出下结论。{WEAK_SIGNAL_RULE}。"
         ),
         "note": (
             f"基座零样本 {accuracy:.0%} vs 全开发集多数类「{majority_label}」{majority_share:.0%}"
@@ -216,7 +222,7 @@ def describe_candidates(candidates: list[dict], limit: int | None = 20) -> list[
     strong = sum(1 for item in candidates if item.get("user_blind_answer"))
     lines = [
         f"标签问题候选 {len(candidates)} 行（其中强证据 {strong} 行）；"
-        "候选不等于错误——基座可能错，标签也可能错："
+        f"候选不等于错误——基座可能错，标签也可能错；{WEAK_SIGNAL_RULE}："
     ]
     listed = candidates if limit is None else candidates[:limit]
     for item in listed:
@@ -271,6 +277,65 @@ def describe_probe_verdict(result: dict) -> list[str]:
     ]
     if result.get("note"):
         lines.append(result["note"])
+    return lines
+
+
+def low_baseline_triage_lines(result: dict) -> list[str]:
+    """零样本低于瞎猜基线时的核查方向分辨(单一来源):按记录内事实给方向,不认定原因。
+
+    「提示模板问题还是任务定义问题」由可观察事实分流:生成被截断→分数被截断
+    压低,先加长度重测(R69 同口径);输出词汇不在开发集标签全集→模型没用任务
+    的答案词汇作答,模板方向;全部未截断输出完全相同→没按输入区分作答,模板
+    没讲清与输入缺区分信息两方向都在;用任务词汇、按输入作答仍低于瞎猜→更
+    像任务定义/标注口径问题。尾行给对号处理映射,不替用户决定。渲染时从已
+    存记录现算(echo_triage_lines 先例):早期记录缺 label_vocabulary 时跳过
+    词汇检查,其余分辨照常,如实降级不编造。
+    """
+    delta = result.get("difference")
+    if delta is None or delta >= 0:
+        return []
+    observations = result.get("observations") or []
+    if not observations:
+        return []
+    generated = [obs.get("generated", "") for obs in observations if not obs.get("truncated")]
+    truncated_count = sum(1 for obs in observations if obs.get("truncated"))
+    lines: list[str] = []
+    if truncated_count:
+        lines.append(
+            f"{truncated_count} 条生成被截断——被截断的输出已按不匹配计，当前分数被截断压低；"
+            "先加大 max_new_tokens 重测，再判断是模板还是任务定义的问题。"
+        )
+    vocabulary = result.get("label_vocabulary")
+    unknown_answers = (
+        [answer for answer in dict.fromkeys(generated) if answer not in vocabulary]
+        if vocabulary is not None
+        else []
+    )
+    if unknown_answers:
+        names = "、".join(f"「{answer}」" for answer in unknown_answers)
+        lines.append(
+            f"基座输出 {names} 不在这份开发集的标签里出现过——模型没有用任务的答案词汇作答，"
+            "先核对提示模板是否讲清了按什么口径、用什么词汇作答"
+            "（补全式模板与对话型基座不匹配是常见形态）。"
+        )
+    elif len(generated) >= 2 and len(set(generated)) == 1:
+        lines.append(
+            f"模型对全部 {len(generated)} 条输入给了同一个输出「{generated[0]}」"
+            "——没有按输入区分作答；提示模板没把任务讲清与输入本身缺少区分信息"
+            "两种可能都在：先补清指令或换对话式模板重测，仍同答再核对输入是否足以判断。"
+        )
+    elif generated:
+        lines.append(
+            "输出用的是任务答案词汇、也按输入区分作答，方向仍低于瞎猜多数类"
+            "——更像任务定义或标注口径的问题：先核对类别边界与标注规则"
+            "（对照标签问题候选与盲标核验的不一致行）。"
+        )
+    if lines:
+        lines.append(
+            "对号处理：模板没讲清就补指令或换模板后重测（不动数据）；"
+            "输入缺信息或类别边界不清就补输入字段、澄清标注口径（改任务定义）；"
+            "两边都核对过分数仍低，如实在记录里保留低分证据，不硬修。"
+        )
     return lines
 
 

@@ -1249,3 +1249,46 @@ def test_mismatch_triage_docs_pinned():
     assert "不认定原因" in item5, "第 5 条补充必须写明分辨边界"
     assert "三种原因的分辨与修正动作" in item5, "第 5 条历史原文必须保留"
     assert "改数据 or 改方案" in item5, "第 5 条历史原文必须保留"
+
+
+def test_low_baseline_triage_docs_pinned():
+    """探针低于基线方向分辨钉死(R71):low_baseline_triage_lines 单一来源、四路
+    分流、对号处理、label_vocabulary 如实降级、弱信号改标签门槛,试用记录第 3、
+    4 条现状补充在场。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "- **可学性探针（可选证据，非门禁）**：",
+        "这三道关卡都不使用 LLM 判断",
+    )
+    assert "src/workbench/learnability_probe.py" in section or (
+        "`low_baseline_triage_lines` 单一来源" in section
+    ), "单一来源必须点名"
+    assert "`low_baseline_triage_lines` 单一来源" in section
+    assert "先加大 `max_new_tokens` 重测" in section, "截断分流方向必须写明"
+    assert "不在这份开发集的标签里出现过" in section, "词汇分流方向必须写明"
+    assert "没有用任务的答案词汇作答" in section, "词汇分流的理由必须写明"
+    assert "没有按输入区分作答" in section, "同答分流方向必须写明"
+    assert "任务定义或标注口径" in section, "任务定义分流方向必须写明"
+    assert "不动数据" in section and "改任务定义" in section, "对号处理映射必须写明"
+    assert "保留低分证据" in section, "如实保留边界必须写明"
+    assert "不认定原因" in section, "分辨边界（只给方向）必须写明"
+    assert "`label_vocabulary`" in section, "记录字段必须写明"
+    assert "如实降级" in section, "旧记录降级边界必须写明"
+    assert "`WEAK_SIGNAL_RULE` 单一来源" in section, "弱信号门槛单一来源必须点名"
+    assert "单凭模型不认同不改标签" in section, "改标签门槛必须写明"
+    assert "人工核对后仍不认同才修正数据" in section
+    # 试用记录介入点清单第 3、4 条:现状补充在场,历史原文未改写。
+    trial = USER_TRIAL_LOG.read_text(encoding="utf-8")
+    item3 = _section(trial, "3. - [ ] 探针判定", "4. - [ ]")
+    assert "2026-09-29 现状补充" in item3, "介入点清单第 3 条缺现状补充"
+    assert "low_baseline_triage_lines" in item3, "第 3 条补充必须点名单一来源函数"
+    assert "方向分辨" in item3, "第 3 条补充必须点名方向分辨"
+    assert "label_vocabulary" in item3, "第 3 条补充必须点名标签全数字段"
+    assert "不认定原因" in item3, "第 3 条补充必须写明分辨边界"
+    assert "能否独立分辨是提示模板问题还是任务定义问题" in item3, "第 3 条历史原文必须保留"
+    item4 = _section(trial, "4. - [ ] 探针「标签问题候选", "5. - [ ]")
+    assert "2026-09-29 现状补充" in item4, "介入点清单第 4 条缺现状补充"
+    assert "WEAK_SIGNAL_RULE" in item4, "第 4 条补充必须点名单一来源常量"
+    assert "单凭模型不认同不改标签" in item4, "第 4 条补充必须写明门槛"
+    assert "原始来源行" in item4, "第 4 条补充必须写明弱信号不冒充溯源"
+    assert "弱信号供参考" in item4, "第 4 条历史原文必须保留"
