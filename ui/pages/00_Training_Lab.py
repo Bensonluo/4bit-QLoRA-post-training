@@ -458,7 +458,8 @@ with tab_configure:
             if not pv_path:
                 st.warning("先填一个数据集路径（或直接提交，提交时也会强制预检）。")
             else:
-                pv_errors, pv_insp = check_dataset_for_sft(pv_path)
+                with st.spinner("正在体检数据集格式与样本…"):
+                    pv_errors, pv_insp = check_dataset_for_sft(pv_path)
                 if pv_insp is None:
                     st.info(
                         f"`{pv_path}` 按 HF 数据集名处理（无 .json/.jsonl 后缀），"
@@ -472,7 +473,8 @@ with tab_configure:
                             f"体检通过：**{pv_insp.fmt}** 格式，{pv_insp.n_records} 条样本"
                             f"（SFT 可直接训练）。"
                         )
-                        pv_records, pv_err = load_preview_records(Path(pv_path), limit=3)
+                        with st.spinner("正在读取样本预览…"):
+                            pv_records, pv_err = load_preview_records(Path(pv_path), limit=3)
                         if pv_err:
                             st.error(f"预览读取失败：{pv_err}")
                         else:
@@ -517,7 +519,8 @@ with tab_configure:
         if technique == "sft":
             from src.data.preflight import check_dataset_for_sft
 
-            ds_errors, ds_insp = check_dataset_for_sft(dataset)
+            with st.spinner("正在体检数据集格式与样本…"):
+                ds_errors, ds_insp = check_dataset_for_sft(dataset)
             if ds_errors:
                 for msg in ds_errors:
                     st.error(msg)

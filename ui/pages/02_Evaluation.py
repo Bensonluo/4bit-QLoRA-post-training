@@ -41,18 +41,19 @@ if not domains:
             from src.tracking.eval_logger import log_eval_to_mlflow
 
             imported = 0
-            for domain_dir in DOMAINS_DIR.iterdir():
-                if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
-                    continue
-                results_dir = domain_dir / "data" / "results"
-                if not results_dir.exists():
-                    continue
-                for json_file in results_dir.glob("eval_detail_*.json"):
-                    try:
-                        log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
-                        imported += 1
-                    except Exception as e:
-                        st.warning(f"Failed to import {json_file.name}: {e}")
+            with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):
+                for domain_dir in DOMAINS_DIR.iterdir():
+                    if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
+                        continue
+                    results_dir = domain_dir / "data" / "results"
+                    if not results_dir.exists():
+                        continue
+                    for json_file in results_dir.glob("eval_detail_*.json"):
+                        try:
+                            log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                            imported += 1
+                        except Exception as e:
+                            st.warning(f"Failed to import {json_file.name}: {e}")
             if imported:
                 st.success(f"Imported {imported} file(s).")
             else:
@@ -112,13 +113,14 @@ if not data:
 
             imported = 0
             results_dir = DOMAINS_DIR / selected_domain / "data" / "results"
-            if results_dir.exists():
-                for json_file in results_dir.glob("eval_detail_*.json"):
-                    try:
-                        log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
-                        imported += 1
-                    except Exception as e:
-                        st.warning(f"Failed: {e}")
+            with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):
+                if results_dir.exists():
+                    for json_file in results_dir.glob("eval_detail_*.json"):
+                        try:
+                            log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                            imported += 1
+                        except Exception as e:
+                            st.warning(f"Failed: {e}")
             if imported:
                 st.success(f"Imported {imported} file(s).")
                 st.rerun()
@@ -172,18 +174,21 @@ with st.expander("📥 Import Historical Results to MLflow"):
         from src.tracking.eval_logger import log_eval_to_mlflow
 
         imported = 0
-        for domain_dir in DOMAINS_DIR.iterdir():
-            if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
-                continue
-            results_dir = domain_dir / "data" / "results"
-            if not results_dir.exists():
-                continue
-            for json_file in results_dir.glob("eval_detail_*.json"):
-                try:
-                    log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
-                    imported += 1
-                except Exception as e:
-                    st.warning(f"Failed to import {json_file.name}: {e}")
+        # 同一「Scan & Import」操作在本页有三处入口(无域分支/无数据分支/此处),
+        # 反馈三处同在——只包一处会让最常到达的入口反而裸跑。
+        with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):
+            for domain_dir in DOMAINS_DIR.iterdir():
+                if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
+                    continue
+                results_dir = domain_dir / "data" / "results"
+                if not results_dir.exists():
+                    continue
+                for json_file in results_dir.glob("eval_detail_*.json"):
+                    try:
+                        log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                        imported += 1
+                    except Exception as e:
+                        st.warning(f"Failed to import {json_file.name}: {e}")
         if imported:
             st.success(f"Imported {imported} evaluation result file(s) to MLflow.")
         else:

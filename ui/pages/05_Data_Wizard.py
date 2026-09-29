@@ -65,7 +65,8 @@ def _load_bytes(name: str, data: bytes, template_hint: str) -> None:
         tmp_dir = Path(tempfile.mkdtemp(prefix="tunesmith_wizard_"))
         path = tmp_dir / name
         path.write_bytes(data)
-        table = import_table(path)
+        with st.spinner("正在读取表格…"):
+            table = import_table(path)
     except WizardError as exc:
         st.error(str(exc))
         return
@@ -101,7 +102,8 @@ with path_col:
     )
     if st.button("读取该路径", disabled=not server_path.strip()):
         try:
-            table = import_table(server_path.strip())
+            with st.spinner("正在读取表格…"):
+                table = import_table(server_path.strip())
         except WizardError as exc:
             st.error(str(exc))
         else:
@@ -239,7 +241,9 @@ if gen_col.button("🚀 生成训练集", type="primary", disabled=not ready):
             seed=int(seed),
         )
         out_dir = (PROJECT_ROOT / out_dir_text).resolve()
-        report = WizardPipeline(spec).run(table, out_dir)
+        # 标签如实点名流水线的真实阶段（WizardPipeline 无阶段回调，不虚构分段进度）
+        with st.spinner("正在生成训练集：候选构造 → 数据体检 → 防泄漏切分 → 导出…"):
+            report = WizardPipeline(spec).run(table, out_dir)
     except WizardError as exc:
         st.error(f"生成失败：{exc}")
     else:

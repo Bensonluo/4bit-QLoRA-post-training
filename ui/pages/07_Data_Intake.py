@@ -914,7 +914,8 @@ def show_training_recommendations() -> None:
                 )
                 if st.button("确认推荐方案并准备训练", key=f"prepare_plan_{plan_id}"):
                     try:
-                        plans.prepare(plan_id, service.load(session.session_id))
+                        with st.spinner("正在准备训练方案并核对 token 消费…"):
+                            plans.prepare(plan_id, service.load(session.session_id))
                         st.rerun()
                     except (ValueError, RuntimeError, OSError, ImportError) as exc:
                         st.error(str(exc))
@@ -1641,12 +1642,13 @@ if iterations:
                             "用本轮固定题集准备数据版本", key=f"materialize_iteration_{identity}"
                         ):
                             try:
-                                service.materialize_dataset(
-                                    session.session_id,
-                                    session.revision,
-                                    evaluation_suite=iteration["evaluation_suite"],
-                                    independent_rows_confirmed=independent_iteration_rows,
-                                )
+                                with st.spinner("正在按本轮固定题集准备数据版本…"):
+                                    service.materialize_dataset(
+                                        session.session_id,
+                                        session.revision,
+                                        evaluation_suite=iteration["evaluation_suite"],
+                                        independent_rows_confirmed=independent_iteration_rows,
+                                    )
                                 st.rerun()
                             except (ValueError, RuntimeError, OSError) as exc:
                                 st.error(str(exc))
@@ -1656,7 +1658,10 @@ if iterations:
                         disabled=attached_suite != iteration["evaluation_suite"],
                     ):
                         try:
-                            iteration_service.prepare(identity, service.load(session.session_id))
+                            with st.spinner("正在准备本轮训练并核对 token 消费…"):
+                                iteration_service.prepare(
+                                    identity, service.load(session.session_id)
+                                )
                             st.rerun()
                         except (ValueError, RuntimeError, OSError, ImportError) as exc:
                             st.error(str(exc))
@@ -2314,7 +2319,8 @@ if session.confirmed_revision is not None or session.full_data is not None:
             )
             if can_reuse and st.button("验证已提供的全部全量资料"):
                 try:
-                    service.validate_full_sources(session.session_id, session.revision)
+                    with st.spinner("正在验证全部全量资料…"):
+                        service.validate_full_sources(session.session_id, session.revision)
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
@@ -2344,28 +2350,30 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     )
                 else:
                     try:
-                        service.validate_full_sources(
-                            session.session_id,
-                            session.revision,
-                            {
-                                alias: (upload.name, upload.getvalue())
-                                for alias, upload in full_files.items()
-                            },
-                            # 只有用户填写了 sheet 的资料才进入指定;留空仍读第一个 sheet。
-                            sheets={
-                                alias: (value or "").strip() or None
-                                for alias, value in full_sheets.items()
-                                if value
-                            }
-                            or None,
-                        )
+                        with st.spinner("正在验证全部全量资料…"):
+                            service.validate_full_sources(
+                                session.session_id,
+                                session.revision,
+                                {
+                                    alias: (upload.name, upload.getvalue())
+                                    for alias, upload in full_files.items()
+                                },
+                                # 只有用户填写了 sheet 的资料才进入指定;留空仍读第一个 sheet。
+                                sheets={
+                                    alias: (value or "").strip() or None
+                                    for alias, value in full_sheets.items()
+                                    if value
+                                }
+                                or None,
+                            )
                         st.rerun()
                     except (ValueError, OSError) as exc:
                         st.error(str(exc))
         else:
             if session.source.scope == "full" and st.button("验证首次上传的全量文件"):
                 try:
-                    service.validate_full_data(session.session_id, session.revision)
+                    with st.spinner("正在验证全量数据…"):
+                        service.validate_full_data(session.session_id, session.revision)
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
@@ -2378,12 +2386,13 @@ if session.confirmed_revision is not None or session.full_data is not None:
             )
             if demo_full_pair is not None and st.button(DEMO_FULL_BUTTON):
                 try:
-                    service.validate_full_data(
-                        session.session_id,
-                        session.revision,
-                        demo_full_pair[0],
-                        demo_full_pair[1],
-                    )
+                    with st.spinner("正在验证全量数据…"):
+                        service.validate_full_data(
+                            session.session_id,
+                            session.revision,
+                            demo_full_pair[0],
+                            demo_full_pair[1],
+                        )
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
@@ -2407,17 +2416,21 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     st.error("请提供全量文件；不会自动把样例当作全量。")
                 else:
                     try:
-                        service.validate_full_data(
-                            session.session_id,
-                            session.revision,
-                            full_upload.name,
-                            full_upload.getvalue(),
-                            encoding=full_encoding.strip() or None,
-                            delimiter={"逗号": ",", "分号": ";", "Tab": "\t", "竖线": "|"}.get(
-                                full_delimiter
-                            ),
-                            sheet=(full_sheet or "").strip() or None,
-                        )
+                        with st.spinner("正在验证全量数据…"):
+                            service.validate_full_data(
+                                session.session_id,
+                                session.revision,
+                                full_upload.name,
+                                full_upload.getvalue(),
+                                encoding=full_encoding.strip() or None,
+                                delimiter={
+                                    "逗号": ",",
+                                    "分号": ";",
+                                    "Tab": "\t",
+                                    "竖线": "|",
+                                }.get(full_delimiter),
+                                sheet=(full_sheet or "").strip() or None,
+                            )
                         st.rerun()
                     except (ValueError, OSError) as exc:
                         st.error(str(exc))
@@ -2710,20 +2723,21 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     split_seed = st.number_input("可复现分区种子", min_value=0, value=42, step=1)
             if st.button("生成数据集版本", disabled=not groups and not independent_rows):
                 try:
-                    service.materialize_dataset(
-                        session.session_id,
-                        session.revision,
-                        name=dataset_name.strip() or None,
-                        validation_fraction=validation_fraction,
-                        test_fraction=test_fraction,
-                        seed=int(split_seed),
-                        independent_rows_confirmed=independent_rows,
-                        **(
-                            {"evaluation_suite": available_suites[selected_suite]}
-                            if selected_suite
-                            else {}
-                        ),
-                    )
+                    with st.spinner("正在生成独立训练与评测分区…"):
+                        service.materialize_dataset(
+                            session.session_id,
+                            session.revision,
+                            name=dataset_name.strip() or None,
+                            validation_fraction=validation_fraction,
+                            test_fraction=test_fraction,
+                            seed=int(split_seed),
+                            independent_rows_confirmed=independent_rows,
+                            **(
+                                {"evaluation_suite": available_suites[selected_suite]}
+                                if selected_suite
+                                else {}
+                            ),
+                        )
                     st.rerun()
                 except (ValueError, RuntimeError, OSError) as exc:
                     st.error(str(exc))
@@ -2785,7 +2799,8 @@ if dataset is not None:
         st.caption("需要进行多轮改进时，先固定当前开发与测试题目，使后续提升可在同一题集上验证。")
         if st.button("固定当前开发与测试题集"):
             try:
-                reference = suite_service.freeze(session)
+                with st.spinner("正在固定开发与测试题集…"):
+                    reference = suite_service.freeze(session)
                 st.session_state[f"frozen_suite_{session.session_id}"] = reference["suite_id"]
                 st.rerun()
             except (ValueError, RuntimeError, OSError) as exc:
