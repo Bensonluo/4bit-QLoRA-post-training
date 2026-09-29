@@ -3167,3 +3167,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地将领先 15 commits，用户未授权推送）；②benluo.art 部署（portfolio 仓，与本项目无关，仅提醒存在待授权项）；③venv 重建（mypy shebang 问题，登记在案）。
 
 **成本**：主会话成本钩子多次 CRITICAL：$70.57→$77.67→$77.96→$81.77→$81.92（本轮采纳入编辑时）；r107-reviewer 自报 $81.62。按不计成本授权如实登记，未中断。
+
+---
+
+## 第 108 轮（2026-09-30）——Chat 空态死端指路 + 指路句失配修复
+
+**选点**：r108-scout 全仓审计（基线实测 --collect-only 2044，与 R107 预测精确吻合）裁决首选：06 Chat 页在新克隆机（outputs/ 为空）是死端三件套——①06:37-48 选择器只剩「⌨️ 自定义」一个选项②06:54-58 随即抛两个专家级裸输入框（HF 名/LoRA adapter 术语零解释）③06:112-114 主区「在左侧选择模型并点⚡加载模型」指向一个没有任何模型的列表，全页零 switch_page 零指路。发现层无辜（test_inference_discovery.py:82-86 已钉空态返回 []），死的是页面旅程层。落选与登记：app.py 首跑双主 CTA → R109 候选（最小切法已登记：空态 info 加去 00 页按钮，不动 CTA 层级与指标卡）；07 IA 史诗 → 独立轮次（next_action_phrase 全套 CLI 语域，侧栏直显终端命令违背 05/07 语域标杆，且 07 页 3562 行碰撞全库最高）。顺手两件采纳：05:124 幽灵按钮句（点名不存在的「试试演示数据」，实际按钮是医疗/主数据两个——R106 00:189 同类缺陷）+ 05→00 交接横幅双源码钉（R107 审查发现零覆盖）。
+
+**证据核实**：①AppTest switch_page 双场景实证（r108-scout /tmp 实验，streamlit 1.57.0）：直接 from_file 页文件点页内 switch 按钮 → StreamlitAPIException「Could not find page」（switch_page 按 entrypoint 目录解析相对路径）；入口锚定 from_file(ui/app.py) → at.switch_page("pages/06_Chat.py") → 点按钮 → 树切到 00 页，零异常——与 R107 select_slider 专用访问器同型教训：按实证形态写钉，不猜 API，全库首例页内 switch 按钮 journey；②monkeypatch 时序设计：app.py 先以真实根跑（只读扫描，不对其内容断言→跨机稳定），跑完再 patch tmp_path，switch 进 06 时页模块才 import 并读 ui.config.PROJECT_ROOT；③交接代码现场：05:343-348 三件套（dataset_input/wizard_handoff/switch_page）与 00:184-191 pop+横幅均在场——交接两钉是既有契约特征化钉，非行为变更。
+
+**实现**：06_Chat.py 主区分支改按 options 分流：空态渲染训练指路 st.info（如实披露 🔧 adapter/📦 合并产物语义与「⌨️ 自定义」逃生门——急着体验填底座名直接聊，示例底座名正是侧栏默认值 Qwen/Qwen2.5-0.5B-Instruct）+「🏋️ 去训练一个模型」primary 按钮 → st.switch_page("pages/00_Training_Lab.py")（路径写法与 app.py:27/05:348 同形）；非空分支文案逐字不动；侧栏专家路径不封死（控件先于 st.stop 渲染）。05_Data_Wizard.py:124 指路句改点名真实按钮。共 2 页面文件 +10 余行，符合打磨轮小切片。
+
+**测试 RED→GREEN**：净 6。新 test_chat_empty_state_ui.py 三钉：空态指路旅程钉（指路 info 到场/误导句退场/主按钮在场/自定义底座逃生门保活）、switch 跳转旅程钉（点按钮后树切到 00 页标题）、非空分支旅程钉（r108-reviewer nit-1 采纳升级：tmp adapter 四行 fixture，锁分支行为不锁字串）。test_loading_feedback_ui.py 追加三钉：05 指路句点名真实按钮钉、交接发送侧三件套钉、接收侧 pop/渲染钉。RED 口径如实：4 行为钉对 HEAD 正确理由失败；2 交接钉生而绿（特征化钉，docstring 披露）。门禁 44 passed（chat 3+loading 10+localization 9+discovery 22）+ ruff 双净，采纳后复跑一致。
+
+**审查**：r108-reviewer（opus 只读五维度）verdict **PASS-with-findings**：0 should-fix / 2 nit / 1 observation。独立实证：4 态对抗矩阵（options 空/非空 × loaded 有/无，含主会话点名的 C 态「自定义已加载」组合——新分支不渲染、正常对话）零异常；非空分支与 HEAD byte-identical 对照；逆序复跑 44 passed 无顺序依赖；全库 grep 零旧文案钉；审查者探针首版在 C/D 态误触真实模型下载卡死——终止后 patch load_chat_model 重跑（审查方法自纠，如实披露）。裁决：nit-1 采纳（非空保活源码钉升级旅程钉）；nit-2 采纳（06 注释行号引用改具名 discover_chat_models(PROJECT_ROOT)，防编辑腐烂）；observation 采纳（测试 docstring 时长口径修正：torch/mlflow 导入进程内摊销，整套门禁实测 4.5s，勿按 5-10s/进程报成本）。
+
+**增量复核**：三项采纳落地后定向门禁 44 passed、ruff 双净；审查者与主会话两跑一致。
+
+**登记对账与 R109 选点**：R109 候选首 = app.py 首跑空态指路（最小切法：00 页同款「去训练」按钮加进 app:181 空态 info，+1 行 +1 钉，不动 hero CTA 层级与零指标卡——双 primary 竞争无实证属主观裁决，本轮不动）。backlog：02 入口2 rerun 不对称（02:113-126 vs 174-190）、R104 nit-3 registry race、read_recent_logs seek-tail、07 IA 史诗（独立轮次完整设计）。R108 scout 附带确认：02 页干净（R103/R106 已闭环）、06 交接横幅全 AppTest 旅程（05 演示→生成→点交接→断言 00 横幅）技术可行但成本中等，登记不做。
+
+**边界**：本轮未跑全量回归（节奏 2-3 大轮一次，R106 跑过，R109 是对账轮——R107+R108 两轮累计净 12，需全量验证 2044+6=2050）。基线口径承 R106/R107 修正案：实测基线+净增双录。
+
+**待授权**：①push origin（本地将领先 17 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。事故披露：R108 feat commit 消息中 StreamlitAPIException 误拼为「StreamlinkAPIException」——按禁 amend 规则以本轮报正名，代码与测试零影响。
+
+**成本**：主会话成本钩子持续 CRITICAL：$81.92→$84.40→$86.73；r108-scout 转达 $84.10；r108-reviewer 审查期间 $86.40→$86.69（会话级共享口径）。按不计成本授权如实登记，未中断。
