@@ -1421,3 +1421,19 @@ def test_preflight_passed_state_moves_page_exits_forward(data_page, monkeypatch)
     )
     page.run()
     assert not page.exception
+
+
+def test_acceptance_and_plan_names_source_from_report_summary_constants():
+    """验收结论横幅与方案状态标签单源化(R97):页面不再手抄第二套名字——
+    验收 map 换 ACCEPTANCE_DECISION_NAMES、方案 labels 换 PLAN_STATUS_NAMES;
+    手抄句退场(此前已与摘要漂移:「已冻结」vs「运行前冻结」,同屏两种结论措辞)。"""
+    source = PAGE.read_text(encoding="utf-8")
+    assert "ACCEPTANCE_DECISION_NAMES" in source
+    assert "PLAN_STATUS_NAMES" in source
+    assert "达到已冻结的业务验收标准" not in source
+    assert "未达到已冻结的业务验收标准" not in source
+    # 对称缺口补钉(r97-reviewer nit-1):新措辞也不得手抄回页面——横幅值必须经
+    # 常量运行时取,防未来用新词再抄第二份 map 而现有四钉全拦不住。
+    assert "达到运行前冻结的验收标准" not in source
+    # 方案三态标签的字面量定义只剩 report_summary.py 一处,页面不再留第二份
+    assert '"方案可供确认"' not in source

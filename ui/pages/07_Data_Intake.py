@@ -636,13 +636,11 @@ def show_final_acceptance(run: dict) -> None:
                 )
             result = record.get("result") or {}
             decision = result.get("decision")
-            decisions = {
-                "passed": "达到已冻结的业务验收标准",
-                "failed": "未达到已冻结的业务验收标准",
-                "insufficient_evidence": "证据不足，不能确认可交付",
-                "pending_review": "等待逐题业务判断",
-                "pending_run": "等待按冻结条款执行",
-            }
+            from src.workbench.report_summary import ACCEPTANCE_DECISION_NAMES
+
+            # 验收结论横幅与摘要终态句同源（ACCEPTANCE_DECISION_NAMES 单一来源）:
+            # R97 前此处手抄 map 已与摘要漂移（「已冻结」vs「运行前冻结」）。
+            decisions = ACCEPTANCE_DECISION_NAMES
             if decision:
                 {
                     "passed": st.success,
@@ -849,11 +847,10 @@ def show_training_recommendations() -> None:
     except (ValueError, OSError) as exc:
         st.error(f"无法读取已保存训练方案：{exc}")
         return
-    labels = {
-        "ready": "方案可供确认",
-        "needs_data": "需要先完善数据",
-        "unsupported": "当前条件不支持",
-    }
+    from src.workbench.report_summary import PLAN_STATUS_NAMES
+
+    # 方案状态标签与 CLI plan-* 摘要同源（PLAN_STATUS_NAMES 单一来源）。
+    labels = PLAN_STATUS_NAMES
     for plan in saved_plans:
         proposal = plan["proposal"]
         status = plan["status"]

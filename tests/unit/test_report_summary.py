@@ -813,6 +813,25 @@ def test_acceptance_summary_pending_blocked_failed_and_bare_states():
     assert "通过 " not in joined, "裸 result 没有计数,不得编造通过数"
 
 
+def test_acceptance_decision_names_single_source_pins():
+    """验收结论名单一来源(R97):终态三键与摘要结论句同值,pending 两键是页面横幅
+    短名(摘要里是带动态事实的场景长句,分层);键集与漏斗紧凑短名等值;值唯一防一词两义。"""
+    from src.workbench.funnel_report import _ACCEPTANCE_NAMES
+    from src.workbench.report_summary import ACCEPTANCE_DECISION_NAMES
+
+    assert ACCEPTANCE_DECISION_NAMES == {
+        "passed": "达到运行前冻结的验收标准",
+        "failed": "未达到运行前冻结的验收标准",
+        "insufficient_evidence": "证据不足，不能确认可交付",
+        "pending_review": "等待逐题业务判断",
+        "pending_run": "等待按冻结条款执行",
+    }
+    # 键集与漏斗短名等值:同一 decision 枚举,两套场景化命名不得一边多键一边少键
+    assert set(_ACCEPTANCE_NAMES) == set(ACCEPTANCE_DECISION_NAMES)
+    values = list(ACCEPTANCE_DECISION_NAMES.values())
+    assert len(set(values)) == len(values), "五个结论名互不相同,防止一词两义"
+
+
 def test_iteration_summary_states_and_decision_echo():
     """轮次摘要:决定回显与业务理由如实入句,采用补不自动部署边界;未决状态只报流程停点。"""
     from src.workbench.report_summary import summarize_iteration

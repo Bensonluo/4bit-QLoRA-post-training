@@ -310,7 +310,9 @@ def summarize_dataset(statistics: dict) -> list[str]:
     return lines
 
 
-_PLAN_STATUS_NAMES = {
+# 方案状态枚举 → 人话名的单一来源（公开常量）：CLI plan-* 摘要的状态行与页面
+# 方案卡的状态标签从这里取名。README 的三态说明由 test_readme_alignment 钉住同词汇。
+PLAN_STATUS_NAMES = {
     "ready": "方案可供确认",
     "needs_data": "需要先完善数据",
     "unsupported": "当前条件不支持",
@@ -351,7 +353,7 @@ def summarize_plan(record: dict) -> list[str]:
     else:
         lines = ["这份方案还没有选择基础模型。"]
     if status:
-        lines.append(f"当前状态：{_PLAN_STATUS_NAMES.get(status, status)}。")
+        lines.append(f"当前状态：{PLAN_STATUS_NAMES.get(status, status)}。")
     rationale = [str(item) for item in (proposal.get("rationale") or []) if str(item).strip()]
     if rationale:
         lines.append("推荐理由：" + "；".join(rationale))
@@ -539,6 +541,19 @@ def acceptance_gate_lines(
     return lines
 
 
+# 验收结论枚举 → 人话名的单一来源（公开常量）：报告摘要的终态结论句与页面验收
+# 横幅从这里取名。pending_run/pending_review 在摘要里是带动态事实的场景长句、
+# 在漏斗里是紧凑短名——同枚举的场景化分层，键集由 test_report_summary 的
+# test_acceptance_decision_names_single_source_pins 键集等值钉锁定，不在此强求同值。
+ACCEPTANCE_DECISION_NAMES = {
+    "passed": "达到运行前冻结的验收标准",
+    "failed": "未达到运行前冻结的验收标准",
+    "insufficient_evidence": "证据不足，不能确认可交付",
+    "pending_review": "等待逐题业务判断",
+    "pending_run": "等待按冻结条款执行",
+}
+
+
 def summarize_acceptance(record: dict) -> list[str]:
     """把一次最终验收翻译成人话：冻结了什么条款、结论是哪一态、哪些数字不作数。
 
@@ -591,12 +606,9 @@ def summarize_acceptance(record: dict) -> list[str]:
             "不能人工改标为通过。"
         )
     else:
-        names = {
-            "passed": "达到运行前冻结的验收标准",
-            "failed": "未达到运行前冻结的验收标准",
-            "insufficient_evidence": "证据不足，不能确认可交付",
-        }
-        lines.append(f"当前结论：{names.get(decision, decision)}。")
+        # 终态结论名与页面验收横幅同源（ACCEPTANCE_DECISION_NAMES 单一来源,
+        # R97 前页面手抄 map 已与摘要漂移:「已冻结」vs「运行前冻结」）。
+        lines.append(f"当前结论：{ACCEPTANCE_DECISION_NAMES.get(decision, decision)}。")
         accepted = result.get("accepted_cases")
         total = result.get("total_cases")
         score = result.get("score")
