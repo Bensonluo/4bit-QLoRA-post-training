@@ -39,7 +39,19 @@ domain = st.selectbox("领域", domains, format_func=get_domain_display_name)
 data = load_eval_data(domain)
 
 if len(data) < 2:
-    st.warning("对比至少需要 2 个模型的评测结果，请先完成更多评测。")
+    if not data:
+        st.warning("还没有任何模型的评测结果。")
+    else:
+        st.warning(
+            f"目前只有 1 个模型的评测结果（{data[0].get('model', '模型 0')}），对比至少需要 2 个。"
+        )
+    # 出口裁决 00 不去 02（r111-scout 核实）：02 无发起评测能力，指过去是空→空接力；
+    # 指路句不宣称评测结果会出现在本页（scripts/evaluate.py 不写 domains/*/data/results/，
+    # 诚实红线），只停在「训练出（下一个）模型」这一 00 真实能力上
+    st.info("去训练实验室发起（下一个）训练吧。已有的评测结果可在「评测结果」页查看。")
+    # st.stop 封页前给出最后一条出路（R108-R110 空态死端范式）：否则用户只能靠侧栏自救
+    if st.button("🏋️ 去训练实验室", type="primary"):
+        st.switch_page("pages/00_Training_Lab.py")
     st.stop()
 
 # ── Model Selectors ─────────────────────────────────────────────

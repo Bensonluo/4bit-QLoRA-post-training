@@ -69,8 +69,10 @@ def test_experiments_empty_state_button_navigates_to_training_lab(monkeypatch):
     assert any(t.value == "🏋️ 训练实验室" for t in at.title), "必须切到 00 训练实验室"
 
 
-def test_experiments_nonempty_branch_structure_preserved():
-    """非空分支结构保活(源码钉):空态 info 文案与 st.stop 顺序钉住——本轮
+def test_experiments_empty_branch_exit_before_stop():
+    """空态分支出路结构钉(源码钉,r111-scout 建议随轮携带改名:原名
+    nonempty_branch 名实不符,钉的是空态分支内 info/按钮→st.stop 顺序,
+    与 R110 兄弟 test_registry_empty_branch_exit_before_stop 同构):
     只在 info 与 st.stop 之间插入按钮,不碰其他任何结构。直锁结构 delta
     成本最低;非空页面的运行时保活由兄弟旅程钉承担(见下)。"""
     source = _source(PAGE_EXP)
