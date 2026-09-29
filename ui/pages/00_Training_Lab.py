@@ -221,6 +221,26 @@ with tab_configure:
         registry_name = ""
         merge_before_register = True
 
+        # 高级参数 toggle 置表单外（与技术单选同理：表单内 toggle 须提交才
+        # 生效，无法即时展开专家区块）
+        advanced = st.toggle(
+            "高级参数",
+            value=False,
+            help="默认隐藏专家参数（学习率/批大小/LoRA 等），预设值即可开跑；需要精调时展开。",
+        )
+
+        # 高级隐藏时的预设兜底（上面临近的 GRPO 机制同一范式）：config_dict
+        # 无条件读这些变量，隐藏的专家参数以预设值流入契约，而不是凭空消失
+        validation_split = 0.1
+        max_length = 512
+        batch_size = 1
+        grad_accum = p_grad_accum
+        lora_r = p_r
+        lora_alpha = p_r * 2
+        lora_dropout = 0.05
+        lr_value = float(p_lr)  # 预设值是代码常量，解析不可能失败
+        quant_bits = 4 if is_cuda else None  # 平台默认：CUDA 上 4-bit QLoRA
+
         with st.form("training_config"):
             st.subheader("模型与数据")
             c1, c2 = st.columns([3, 1])
@@ -248,35 +268,47 @@ with tab_configure:
             ds1, ds2, ds3 = st.columns(3)
             with ds1:
                 max_samples = st.number_input("最大样本数", 10, 100000, p_samples, 100)
-            with ds2:
-                validation_split = st.slider("验证集比例", 0.05, 0.3, 0.1, 0.05)
-            with ds3:
-                max_length = st.number_input(
-                    "最大长度", 128, 8192, 512, 64, help="序列长度预算（token）"
-                )
+            if advanced:
+                with ds2:
+                    validation_split = st.slider("验证集比例", 0.05, 0.3, 0.1, 0.05)
+                with ds3:
+                    max_length = st.number_input(
+                        "最大长度", 128, 8192, 512, 64, help="序列长度预算（token）"
+                    )
 
             st.subheader("训练参数")
             t1, t2, t3, t4 = st.columns(4)
             with t1:
                 epochs = st.number_input("轮数", 1, 50, p_epochs)
-            with t2:
-                learning_rate = st.text_input("学习率", p_lr)
-            with t3:
-                batch_size = st.number_input("批大小", 1, 8, 1)
-            with t4:
-                grad_accum = st.number_input("梯度累积", 1, 32, p_grad_accum)
+            if advanced:
+                with t2:
+                    # 学习率挡位化：非专家不必懂「2e-4」记法，解析错误路径
+                    # 随自由文本整体退场；挡位覆盖两个预设值（1e-4/2e-4）
+                    lr_tiers = [1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3]
+                    lr_value = st.select_slider(
+                        "学习率",
+                        options=lr_tiers,
+                        value=float(p_lr) if float(p_lr) in lr_tiers else 2e-4,
+                        format_func=lambda v: f"{v:.0e}".replace("e-0", "e-"),
+                        help="预设与教程常用挡位；不确定就保持默认",
+                    )
+                with t3:
+                    batch_size = st.number_input("批大小", 1, 8, 1)
+                with t4:
+                    grad_accum = st.number_input("梯度累积", 1, 32, p_grad_accum)
 
-            effective_bs = batch_size * grad_accum
-            st.caption(f"实际批大小：**{effective_bs}**")
+                effective_bs = batch_size * grad_accum
+                st.caption(f"实际批大小：**{effective_bs}**")
 
-            st.subheader("LoRA")
-            l1, l2, l3 = st.columns(3)
-            with l1:
-                lora_r = st.slider("LoRA 秩（r）", 4, 64, p_r, 4)
-            with l2:
-                lora_alpha = st.number_input("LoRA Alpha", value=lora_r * 2)
-            with l3:
-                lora_dropout = st.slider("Dropout 比例", 0.0, 0.3, 0.05, 0.01)
+            if advanced:
+                st.subheader("LoRA")
+                l1, l2, l3 = st.columns(3)
+                with l1:
+                    lora_r = st.slider("LoRA 秩（r）", 4, 64, p_r, 4)
+                with l2:
+                    lora_alpha = st.number_input("LoRA Alpha", value=lora_r * 2)
+                with l3:
+                    lora_dropout = st.slider("Dropout 比例", 0.0, 0.3, 0.05, 0.01)
 
             run_name = st.text_input(
                 "运行名",
@@ -285,7 +317,7 @@ with tab_configure:
                 value=f"{model_name.split('/')[-1].lower().replace('.', '-')}-{epochs}ep",
             )
 
-            if technique != "grpo":
+            if advanced and technique != "grpo":
                 st.subheader("模型注册表")
                 reg1, reg2 = st.columns([1, 2])
                 with reg1:
@@ -349,7 +381,7 @@ with tab_configure:
                         help="已注册奖励（src/training/reward_engine.py）",
                     )
 
-            if is_cuda:
+            if advanced and is_cuda:
                 st.subheader("量化")
                 quant_choice = st.radio(
                     "模式",
@@ -358,8 +390,7 @@ with tab_configure:
                     horizontal=True,
                 )
                 quant_bits = 4 if quant_choice == "4-bit QLoRA" else None
-            else:
-                quant_bits = None
+            elif not is_cuda:
                 st.info("全精度 LoRA——4-bit 量化仅在 NVIDIA CUDA 可用", icon="💡")
 
             submitted = st.form_submit_button("🚀 开始训练", type="primary", width="stretch")
@@ -380,16 +411,6 @@ with tab_configure:
             }
         else:
             technique_sections = {}
-
-        # LR arrives as free text — parse once, warn instead of crashing the page.
-        try:
-            lr_value = float(learning_rate)
-            lr_error: str | None = None
-        except ValueError:
-            lr_value = 2e-4
-            lr_error = f"学习率无效 {learning_rate!r}——请填数字，如 2e-4 或 0.0002"
-        if lr_error:
-            st.warning(lr_error)
 
         config_dict = {
             "model": {
@@ -424,6 +445,8 @@ with tab_configure:
             **technique_sections,
         }
         st.code(yaml.dump(config_dict, default_flow_style=False), language="yaml")
+        if not advanced:
+            st.caption("高级参数未展开：使用预设默认值（展开「高级参数」可调整）。")
 
         # VRAM estimate — table-driven from MODEL_OPTIONS (whose values are
         # 4-bit estimates); full-precision scales weights by ~1/0.35 (bf16 vs NF4).
@@ -502,8 +525,6 @@ with tab_configure:
 
     if submitted:
         error = _validate_run_name(run_name)
-        if not error and lr_error:
-            error = lr_error
         if not error and technique == "grpo" and not reward_funcs:
             error = "GRPO 至少需要一个奖励函数。"
         if not error and register_model and not registry_name.strip():
