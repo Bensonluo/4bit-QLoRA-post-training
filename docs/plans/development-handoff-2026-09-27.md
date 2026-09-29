@@ -3045,5 +3045,5 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **登记对账**：新登记 登记-1（in-progress message 双渲染家族）与 登记-2（授权漂移尾句措辞）入候选池——与 A（:136/:160/:165/:194 泛指从句，R101 首选）同文件同病族，R101 可合并评估。维持登记：C（E/N2 双源，agent-setup.md:360 镜像）、⑦ training_progress.py:114、⑧ 裸子命令 vs 全前缀、R91 nit-①、nit-4 venv mypy、r95-reviewer nit-2、r98-reviewer nit-2/nit-3、funnel 组合钉降级项。有意跳过：「同题对照」两处 in-progress 短语（:506/:520 句群，归入登记-1 同族一并治）。
 - **边界全量回归**：本轮边界证据由审查者独立实跑提供——**2000 passed / 228.24s**（R99 边界 1993 + 本轮净 +7）。下一边界轮 R102/R103。
 - **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源）；② Agent 判断真实性（依赖真实 BYOK 后端）。
-- **待用户授权**：① 分支推送（origin/main 落后本地 200+ commits，Zed review hook 管推送）；② benluo.art 线上部署刷新；③ venv 重建（mypy shebang 失效）。
+- **待用户授权**：① 分支推送（本轮核实 origin/main 已在 df84d3a=R99，本地仅领先 R100 一个提交；Zed review hook 管推送）；② benluo.art 线上部署刷新；③ venv 重建（mypy shebang 失效）。
 - **成本**：会话累计约 $253.86（不计成本授权下随轮报上报）。
