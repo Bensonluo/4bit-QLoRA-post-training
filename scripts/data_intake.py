@@ -214,9 +214,11 @@ def main() -> int:
     baseline = sub.add_parser(
         "baseline-analyze",
         help="不配置模型的基础分析：按字段选择生成确定性方案，零密钥（与页面"
-        "「没有 Agent 服务？用基础分析开始」同一来源）",
+        "「没有 Agent 服务？用基础分析开始」同一来源）；已有基础分析时可调整字段重新生成"
+        "（替换旧方案），已有 Agent 分析时拒绝",
         description="不配置模型的基础分析：按字段选择生成确定性方案，零密钥（与页面"
-        "「没有 Agent 服务？用基础分析开始」同一来源）",
+        "「没有 Agent 服务？用基础分析开始」同一来源）；已有基础分析时可调整字段重新生成"
+        "（替换旧方案，预览与确认状态随之失效），已有 Agent 分析时拒绝",
     )
     baseline.add_argument("session_id")
     baseline.add_argument("--target", required=True, help="答案列（模型要预测的字段）")
@@ -1482,14 +1484,15 @@ def main() -> int:
                 for line in summarize_analysis(session.analysis.model_dump(), session.tool_trace):
                     print(line, file=sys.stderr)
         elif args.command == "baseline-analyze":
-            # 页面的基础分析入口只在尚无分析时出现（expander 条件 not session.analysis），
-            # CLI 同口径：不悄悄覆盖已有的 Agent 分析或基础分析。
+            # 页面的基础分析入口在尚无分析、或已有分析也是基础分析（可调整字段重跑）时出现；
+            # CLI 同口径：不悄悄覆盖 Agent 分析——把 Agent 方案换成确定性方案是质量降级。
             session = service.load(args.session_id)
-            if session.analysis is not None:
+            if session.analysis is not None and session.agent_model != "baseline-deterministic":
                 raise ValueError(
-                    "该任务已有分析结果；页面在已有分析时不再显示基础分析入口，CLI 同口径。"
-                    "补充说明后重新分析请用 analyze（需配置 Agent 服务）。"
+                    "该任务已有 Agent 分析结果；页面在已有 Agent 分析时不再显示基础分析入口，"
+                    "CLI 同口径。补充说明后重新分析请用 analyze（需配置 Agent 服务）。"
                 )
+            replacing_baseline = session.analysis is not None
             temporal_policy = None
             if args.temporal:
                 missing = [
@@ -1528,6 +1531,11 @@ def main() -> int:
                 ),
                 model="baseline-deterministic",
             )
+            if replacing_baseline:
+                print(
+                    "已替换此前的基础分析：预览与确认状态随之失效，请重新核对。",
+                    file=sys.stderr,
+                )
             if session.analysis:
                 from src.workbench.report_summary import summarize_analysis
 

@@ -139,6 +139,10 @@ def test_next_action_tail_docs_pinned():
     assert "awaiting_analysis 的尾行同时点名两条路径" in section, (
         "零密钥路径进尾行必须在场(R81):awaiting_analysis 不只指 analyze"
     )
+    assert "needs_data_revision 的尾行同样点名两条重分析路径" in section, (
+        "重分析路径进尾行必须在场(R82):needs_data_revision 不只指需密钥的 analyze"
+    )
+    assert "零密钥用户在问题行修复后不会走进死胡同" in section, "R82 死胡同根治的诚实边界必须写明"
     assert "不会被指去配置密钥才能跑的命令" in section, "零密钥诚实边界必须写明"
     assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"
     for command in ("show", "create", "analyze", "confirm", "materialize"):
@@ -263,6 +267,9 @@ def _cli_help_text(monkeypatch, capsys, tmp_path, *command):
     """进程内跑真实 CLI 的 --help(参考 test_label_verify_cli 的 argv 注入模式)。"""
     from scripts import data_intake
 
+    # CJK 描述在默认 80 列下会被 argparse 折行,把逐字钉死的短语从中间拆断——
+    # 统一放宽到 240 列,断言对象是文案本身而不是终端宽度。
+    monkeypatch.setenv("COLUMNS", "240")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -1373,6 +1380,10 @@ def test_demo_cli_parity_docs_pinned():
     assert "propose_baseline_analysis" in section, "单一来源函数必须点名"
     assert "baseline-deterministic" in section, "确定性方案的 model 记名必须写明"
     assert "CLI 同口径，不悄悄覆盖" in section, "已有分析时的同口径边界必须写明"
+    assert "可调整字段重新生成" in section, "基础→基础替换(R82)必须写明"
+    assert "预览与确认状态随之失效" in section, "替换的失效语义必须与 Agent 重分析同口径"
+    assert "needs_data_revision 的零密钥出口" in section, "R82 死胡同根治定位句必须在场"
+    assert "已替换此前的基础分析" in section, "替换时 stderr 先说明必须写明"
     assert "逐一点名缺哪些" in section, "--temporal 缺参点名必须写明"
     assert "不静默退回随机切分" in section, "时间分区不静默降级必须写明"
     assert "summarize_analysis" in section, "人话摘要同源必须点名"

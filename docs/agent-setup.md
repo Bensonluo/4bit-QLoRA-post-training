@@ -58,7 +58,7 @@ python scripts/data_intake.py analyze SESSION_ID --answer '质检类别才是需
 python scripts/data_intake.py show SESSION_ID
 ```
 
-凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。awaiting_analysis 的尾行同时点名两条路径——配置了 Agent 的 `analyze` 与零密钥的 `baseline-analyze`（与页面「没有 Agent 服务？用基础分析开始」入口同词汇），零密钥用户不会被指去配置密钥才能跑的命令。
+凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。awaiting_analysis 的尾行同时点名两条路径——配置了 Agent 的 `analyze` 与零密钥的 `baseline-analyze`（与页面「没有 Agent 服务？用基础分析开始」入口同词汇），零密钥用户不会被指去配置密钥才能跑的命令。needs_data_revision 的尾行同样点名两条重分析路径——配置了 Agent 的 `analyze` 与「此前的基础分析可调整字段重跑 baseline-analyze」，零密钥用户在问题行修复后不会走进死胡同。
 
 五个清单命令（`train-list`、`plan-list`、`iteration-list`、`acceptance-list`、`scoring-list`）同样在 stderr 追加一行清单尾行（`summarize_listing` 单一来源）：空清单点名该走的第一步入口——用户分不清「还没有」和「查错了任务」；非空给计数，不逐条灌业务人话。
 
@@ -74,7 +74,7 @@ python scripts/data_intake.py show SESSION_ID
 
 新建任务页提供「第一次使用？用内置演示任务开始」入口：一键用仓库自带的虚构售后工单样例（2 条）创建任务（`src/workbench/demo_task.py` 单一来源，目标与数据说明与《用户试用记录》的试点任务同一份），代替「先找一份 CSV 再填表」的冷启动。入口只代劳找文件与填表这一步——创建后的每一步（基础分析、预览核对、对比核验、盲标核验）与真实任务完全相同，没有预设结论，也不跳过任何门禁。样例确认后需要全量数据时，来源就是演示样例的任务（按文件内容摘要比对，同名不同内容不算）会在全量上传框旁多一个「使用配套演示全量数据（虚构，10 条）」按钮；摘要对不上的真实任务看不到这个按钮，演示数据不会混进任何真实任务。演示文件不在场时入口如实隐藏（`demo_sample` 返回 None），不编造演示数据。演示数据与真实业务数据无关，仅为流程演示。
 
-CLI 有同源的两个零密钥入口。`create --demo` 用同一份演示目标与样例创建任务，不收 `--input`/`--goal`，也不收 `--description`/`--encoding`/`--delimiter`/`--sheet`/`--scope full`——单一来源不被自定义值污染，给出的自定义参数逐一点名并直接报错，不静默忽略；演示文件不在场时如实报错退出，不编造演示数据；创建后 stderr 给出对演示数据逐字可用的下一步命令。`baseline-analyze SESSION_ID --target 答案列 [--group 分组列] [--exclude 排除列] [--instruction 补充指令]` 与页面「没有 Agent 服务？用基础分析开始」区同一来源（`propose_baseline_analysis` 确定性生成方案，`model` 记为 `baseline-deterministic`），时间分区用 `--temporal` 加三个时间字段与三个边界参数。已有分析结果时命令如实拒绝（页面在已有分析时隐藏该入口，CLI 同口径，不悄悄覆盖）；`--temporal` 缺参数时逐一点名缺哪些，不静默退回随机切分。stdout 任务 JSON 与 stderr 的 `summarize_analysis` 人话摘要与 `analyze` 同一格式。演示任务的 CLI 冷启动组合：`create --demo` 之后直接照抄 stderr 提示的 `baseline-analyze SESSION_ID --target 类别 --group 编号 --exclude 处理结果`，零密钥进入真实预览。
+CLI 有同源的两个零密钥入口。`create --demo` 用同一份演示目标与样例创建任务，不收 `--input`/`--goal`，也不收 `--description`/`--encoding`/`--delimiter`/`--sheet`/`--scope full`——单一来源不被自定义值污染，给出的自定义参数逐一点名并直接报错，不静默忽略；演示文件不在场时如实报错退出，不编造演示数据；创建后 stderr 给出对演示数据逐字可用的下一步命令。`baseline-analyze SESSION_ID --target 答案列 [--group 分组列] [--exclude 排除列] [--instruction 补充指令]` 与页面「没有 Agent 服务？用基础分析开始」区同一来源（`propose_baseline_analysis` 确定性生成方案，`model` 记为 `baseline-deterministic`），时间分区用 `--temporal` 加三个时间字段与三个边界参数。已有 Agent 分析结果时命令如实拒绝（页面在已有 Agent 分析时不再显示该入口，CLI 同口径，不悄悄覆盖）；已有的分析也是基础分析时，可调整字段重新生成——替换旧方案、预览与确认状态随之失效（与 Agent 重分析同一套失效语义），这是 needs_data_revision 的零密钥出口：问题行修复后不必配置密钥就能重跑。页面同口径：已有基础分析时入口保持可见并提示「重新生成会替换它」。`--temporal` 缺参数时逐一点名缺哪些，不静默退回随机切分。stdout 任务 JSON 与 stderr 的 `summarize_analysis` 人话摘要与 `analyze` 同一格式；替换时 stderr 先说明「已替换此前的基础分析」。演示任务的 CLI 冷启动组合：`create --demo` 之后直接照抄 stderr 提示的 `baseline-analyze SESSION_ID --target 类别 --group 编号 --exclude 处理结果`，零密钥进入真实预览。
 
 ### 多份资料一起分析
 

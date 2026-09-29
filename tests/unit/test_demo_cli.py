@@ -19,7 +19,7 @@ import pytest
 from scripts import data_intake
 from src.workbench.demo_task import DEMO_DESCRIPTION, DEMO_GOAL, is_demo_session
 from src.workbench.intake_service import IntakeService
-from tests.unit.test_data_intake import CSV
+from tests.unit.test_data_intake import CSV, analysis
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -137,7 +137,8 @@ def test_baseline_analyze_zero_key_preview_and_summary(monkeypatch, capsys, tmp_
 
 
 def test_baseline_analyze_blocked_when_analysis_exists(monkeypatch, capsys, tmp_path):
-    """已有分析时拒绝:页面在已有分析时隐藏基础分析入口,CLI 同口径不悄悄覆盖。"""
+    """已有 Agent 分析时拒绝:页面此时隐藏基础分析入口,CLI 同口径不悄悄覆盖——
+    把 Agent 方案换成确定性方案是质量降级。已有基础分析可重跑见替换测试。"""
     sample = tmp_path / "sample.csv"
     sample.write_bytes(CSV)
     _run(
@@ -151,16 +152,10 @@ def test_baseline_analyze_blocked_when_analysis_exists(monkeypatch, capsys, tmp_
         "目标",
     )
     session_id = json.loads(capsys.readouterr().out)["session_id"]
-    _run(
-        monkeypatch,
-        capsys,
-        tmp_path / "intake",
-        "baseline-analyze",
-        session_id,
-        "--target",
-        "类别",
-    )
-    capsys.readouterr()
+    # 用 Agent 家族分析占位(model="" 非 baseline-deterministic):
+    # 页面同口径——已有 Agent 分析时不再显示基础分析入口。
+    service = IntakeService(tmp_path / "intake")
+    service.apply_analysis(service.load(session_id), analysis())
     code = _run(
         monkeypatch,
         capsys,
@@ -171,7 +166,64 @@ def test_baseline_analyze_blocked_when_analysis_exists(monkeypatch, capsys, tmp_
         "类别",
     )
     assert code == 2
-    assert "CLI 同口径" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "CLI 同口径" in err
+    assert "请用 analyze" in err, "拒绝时必须点名 Agent 重分析的出口,不是死胡同"
+
+
+def test_baseline_analyze_replaces_prior_baseline_analysis(monkeypatch, capsys, tmp_path):
+    """needs_data_revision 的零密钥出口(R82):已有基础分析时调整字段重新生成——
+    替换旧方案、预览与确认状态随之失效(与 Agent 重分析同一套失效语义)。"""
+    sample = tmp_path / "sample.csv"
+    sample.write_bytes(CSV)
+    _run(
+        monkeypatch,
+        capsys,
+        tmp_path / "intake",
+        "create",
+        "--input",
+        str(sample),
+        "--goal",
+        "目标",
+    )
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "baseline-analyze",
+            session_id,
+            "--target",
+            "类别",
+        )
+        == 0
+    )
+    capsys.readouterr()
+    # 确认样例后重跑:确认状态被替换打回原形,这是零密钥用户修复问题行后的循环。
+    service = IntakeService(tmp_path / "intake")
+    confirmed = service.confirm(session_id, service.load(session_id).revision)
+    assert confirmed.confirmed_revision is not None, "前置:重跑前确已确认"
+    code = _run(
+        monkeypatch,
+        capsys,
+        tmp_path / "intake",
+        "baseline-analyze",
+        session_id,
+        "--target",
+        "类别",
+        "--instruction",
+        "只依据客户原话判断,不要参考处理结果",
+    )
+    assert code == 0, "同族(基础→基础)重跑必须放行,这是零密钥出口"
+    captured = capsys.readouterr()
+    assert "已替换此前的基础分析" in captured.err, "替换必须先于摘要明说,不悄悄覆盖"
+    loaded = IntakeService(tmp_path / "intake").load(session_id)
+    assert loaded.confirmed_revision is None, "替换后确认状态必须失效,重新核对"
+    assert loaded.agent_model == "baseline-deterministic"
+    assert loaded.analysis.recipe.instruction == "只依据客户原话判断,不要参考处理结果", (
+        "调整的字段必须真实进入新方案"
+    )
 
 
 def test_baseline_analyze_temporal_missing_flags_exit_2(monkeypatch, capsys, tmp_path):
@@ -337,3 +389,5 @@ def test_cli_help_documents_zero_key_entries(monkeypatch, capsys, tmp_path, comm
         assert "--temporal" in help_text
         assert "零密钥" in help_text
         assert "没有 Agent 服务？用基础分析开始" in help_text, "入口文案必须与页面一致"
+        assert "重新生成" in help_text, "已有基础分析可调整字段重新生成(R82 零密钥出口)必须在场"
+        assert "已有 Agent 分析时拒绝" in help_text, "拒绝边界同样写在帮助文本里"

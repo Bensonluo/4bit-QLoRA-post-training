@@ -86,7 +86,7 @@ _NEXT_ACTION_PHRASES: dict[str, str] = {
     "needs_business_answers": "Agent 还有业务问题待回答，回答后重新分析才能生成方案。",
     "needs_capability": "当前资料不足以支撑任务目标，请调整目标或补充资料。",
     "needs_recipe": "还没有转换方案，请完成分析生成处理规则。",
-    "needs_data_revision": "转换存在异常或同输入答案冲突，请查看问题行并补充业务规则后重新分析。",
+    "needs_data_revision": "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。",
     "needs_labels": "样例缺少可学习的答案，补齐标注后才能核对预览。",
     "review_preview": "样例转换含义待确认：核对预览并完成对比核验（二连对）。",
     "review_full_data": "全量报告待核对：确认覆盖与问题处理后再继续。",

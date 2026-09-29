@@ -2005,12 +2005,16 @@ if st.button(
     except (ValueError, RuntimeError, OSError) as exc:
         st.error(str(exc))
 
-if not session.analysis:
+if session.analysis is None or session.agent_model == "baseline-deterministic":
     with st.expander("没有 Agent 服务？用基础分析开始（产品内置判断，无需任何密钥）"):
         st.caption(
             "基础分析只依据你的字段选择和数据事实生成方案：不判断业务含义，"
             "之后仍需在真实预览里逐行核对；需要多源组合、时间分区或业务问答时再配置 Agent。"
         )
+        if session.analysis is not None:
+            st.caption(
+                "当前已有一份基础分析：调整字段重新生成会替换它，此前的预览确认与对比核验随之失效。"
+            )
         baseline_target = st.selectbox(
             "答案列（模型要预测的字段）",
             list(session.source.columns),
@@ -2314,7 +2318,10 @@ if session.preview:
     elif status == "awaiting_full_validation":
         st.info("转换含义已确认；仍需完成全量业务质量、分区与训练消费检查。")
     elif status == "needs_data_revision":
-        st.warning("转换中存在异常或同输入的答案冲突，请查看问题行并补充业务规则后重新分析。")
+        st.warning(
+            "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；"
+            "此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。"
+        )
     with st.expander("处理规则与工具记录"):
         st.json(
             session.analysis.recipe.model_dump()

@@ -2758,3 +2758,29 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **独立审查五维结论**：A 诚实红线 PASS（不暗示等价；能力边界在它该在的位置——baseline-analyze help「按字段选择生成确定性方案」/页面 caption/summarize_analysis，一行尾行不塞边界说明是合理节制）；B 正确性 PASS（109+144、ruff 双绿、in-process smoke `create --demo` 两行指引同向不矛盾）；C 爆炸半径 PASS（旧句全仓零残留——仅本计划文档历史记载属正常；README/README_EN 干净；test_answer_sheet_cli.py:86 旧断言「先运行 analyze」恰为新报错真实前缀，非子串碰巧）；D 一致性 PASS（doc 括号引用与页面 2009 行逐字一致）。
 - **审查发现（不阻塞，登记待办）**：① should-fix（后续轮前瞻项）——`needs_data_revision` 短语（intake_service.py:89「…补充业务规则后重新分析」）是零密钥可达状态（baseline 预览同样可能出 invalid/conflict 行），但零密钥用户无法重跑 baseline-analyze（已有分析即拦，data_intake.py:1488-1492）；短语未点名需密钥命令且与页面 2317 逐字同源，修复需页面+CLI 协同（补零密钥出口或明示边界），建议独立一轮决策；② nit——总述「与页面提示同词汇」对此条是近似（页面「无需任何密钥」vs CLI 既定词汇「零密钥」，同一事实不同表层词），doc 定点引用准确、不构成不诚实，可留后续润色。
 - 北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：① 刷新线上部署（含目标与数据主线与演示任务，之后撤 Option 2 定界句并同步 pin）；② 分支领先 origin 61 commits，push 受 Zed review hook 门控，待用户决定。成本钩子读数 $124.91（CRITICAL；不计成本授权下继续，逐轮如实上报）。
+
+## 第 82 轮 = needs_data_revision 的零密钥出口（baseline-analyze 同族替换）
+
+**日期**：2026-09-29（审查者 r82-reviewer 独立五维审查 PASS，含 1 should-fix 已当场修复 + 2 nit 登记；承接 R81 登记的 ①号 should-fix 正式立项闭环）。
+
+**选点**：R81 审查者登记的必修项——`needs_data_revision`（转换预览存在 invalid/conflict 行，或时间行非法，intake_service.py:52-61）是**零密钥可达状态**：baseline 预览同样会产出问题行，但旧 guard 在已有任何分析时一律拒绝 `baseline-analyze` 重跑（data_intake.py 旧 1488-1492），`analyze` 又需 Agent 密钥——零密钥用户修复问题行后**无处可去**，与北极星「没有密钥经基础路径走通」直接冲突。同族替换本来就是零密钥用户「补充业务规则」的自然循环（重选字段/排除列/补指令），旧设计把它一并拦死。
+
+**实现**（7 文件）：
+- **同族放行、降级仍拦**：guard 改为 `session.analysis is not None and session.agent_model != "baseline-deterministic"` 才拒绝（Agent→基础是质量降级，不悄悄覆盖；无分析/已有基础分析两态放行）；拒绝信息点名 `analyze` 出口（审查 should-fix 修复：措辞由「页面在已有分析时」改为「页面在已有 Agent 分析时」不再显示该入口，消除与页面新行为的字面矛盾）。`replacing_baseline` 时 stderr 先打「已替换此前的基础分析：预览与确认状态随之失效，请重新核对。」再出 summarize_analysis。
+- **替换继承全部失效语义**：仍走 `service.apply_analysis` 单一路径——previous_analysis 保留历史、analysis 替换、preview 由 preview_recipe 重生成、confirmed_revision/dataset/training_preflight 清空、full_data 置 stale；与 Agent 路径重分析同一套失效语义，无特判。
+- **短语双路径**：`_NEXT_ACTION_PHRASES["needs_data_revision"]` 改为「转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。」（「此前的基础分析」是条件式指代，与 awaiting_analysis 双路径句式同构）；页面 needs_data_revision warning（07_Data_Intake.py:2322）逐字镜像。
+- **页面入口重开**：基础分析 expander 门控由 `if not session.analysis:` 改为 `analysis is None or agent_model == "baseline-deterministic"`，已有基础分析时入口保持可见并加 caption「当前已有一份基础分析：调整字段重新生成会替换它，此前的预览确认与对比核验随之失效」——页面与 CLI 同口径，Agent 会话仍看不到入口（无覆盖口子）。
+- **文档同步**：agent-setup.md 尾行段补 needs_data_revision 双路径句（「零密钥用户在问题行修复后不会走进死胡同」）；「内置演示任务」CLI 平权段重写替换语义（保留 R80 钉死子串「CLI 同口径，不悄悄覆盖」），写明「needs_data_revision 的零密钥出口」与 stderr 替换说明；parser help/description 同步「已有基础分析时可调整字段重新生成（替换旧方案）…已有 Agent 分析时拒绝」。
+
+**测试**：
+- test_demo_cli.py：`test_baseline_analyze_blocked_when_analysis_exists` 重做——用 agent-family 分析占位（`service.apply_analysis(load, analysis())` 默认 model="" 非 baseline-deterministic）钉死拒绝路径（exit 2、「CLI 同口径」「请用 analyze」）；新增 `test_baseline_analyze_replaces_prior_baseline_analysis`——create → baseline-analyze → service.confirm → 再 baseline-analyze 换 --instruction → exit 0、stderr「已替换此前的基础分析」、重载后 confirmed_revision is None、agent_model 仍 baseline-deterministic、instruction 真实进新方案；help pin 加「重新生成」「已有 Agent 分析时拒绝」。
+- test_data_intake.py：`next_action_phrase("needs_data_revision")` 逐字钉死新短语（13 态覆盖集不变）。
+- test_readme_alignment.py：尾行段钉「needs_data_revision 的尾行同样点名两条重分析路径」「零密钥用户在问题行修复后不会走进死胡同」；CLI 平权段钉「可调整字段重新生成」「预览与确认状态随之失效」「needs_data_revision 的零密钥出口」「已替换此前的基础分析」。
+- **工具层修复（顺带根除）**：`_cli_help_text` helper 设 `COLUMNS=240`——argparse 按 80 列折行会把 CJK 逐字钉死短语从中间拆断（R82 文案变长后暴露，旧文案 55 字单行侥幸通过），放宽列宽后断言对象是文案本身而不是终端宽度；全部 12+ 调用方均为子串断言，无副作用（test_readme_alignment 全文件通过实证）。
+
+**回归与错误修复**：
+- **全量回归边界轮**（R80 基线 1963 passed / 317.24s / 93%）：**1964 passed / 471.16s / 93%**——净增 1 测试即同族替换测试，覆盖率持平 93%；耗时变长系审查者子代理并行抢核，无失败无跳过。
+- 定向门禁：test_data_intake / test_demo_cli / test_readme_alignment / test_answer_sheet_cli / test_baseline_analysis **129 passed**；修复途中 1 red→green（help pin 失败暴露 COLUMNS 折行问题 → helper 修复后通过）。审查者另补跑作者清单遗漏的 test_baseline_analysis_ui + test_data_intake_ui **42 passed**（UI 侧门控改动无回归，合计 171）+ ruff 双绿。
+- **独立审查五维结论**：A 诚实红线 PASS（条件式指代不构成虚假陈述；降级真拦住；无覆盖口子）；B 正确性 PASS（失效清单逐行核对与 Agent 重分析一致；agent_model 持久化重载钉死；stderr 顺序与 docs 一致）；C 爆炸半径 PASS（旧短语零残留；COLUMNS=240 无副作用）；D 一致性 PASS（四方逐字同源；should-fix 措辞矛盾已修复）；E 遗漏 PASS（两个触发源都覆盖；--temporal 替换同一路径；README 无需同步）。
+- **审查发现（不阻塞，登记待办）**：① nit——training_plans.py:263 对 needs_data_revision 另有一套存量措辞（readiness 清单面，不在本轮单一来源集合内），后续轮可评估归并；② nit——字节级相同字段的重复重跑会让旧对比核验连胜按绑定键继续挂着（同预览=旧证据仍有效，caption 在该角落轻微过度声明，可接受）。
+- 北极星缺口①②仍开放（均待外部资源）。**待用户授权（沿 R78，未决）**：① 刷新线上部署；② 分支领先 origin 61 commits，push 受 Zed review hook 门控。成本钩子读数 $131.46（CRITICAL；不计成本授权下继续，逐轮如实上报）。
