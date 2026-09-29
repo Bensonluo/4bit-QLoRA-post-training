@@ -79,7 +79,9 @@ def test_registry_empty_branch_exit_before_stop():
     """空态分支出路结构钉(源码钉,r110-reviewer nit-1 采纳改名:原名
     nonempty_branch 名实不符,钉的是空态分支内部顺序):info 锚点与
     st.stop 顺序钉住——本轮只在 info 与 st.stop 之间插入按钮,info 文案
-    重写,不碰其他任何结构。"""
+    重写,不碰其他任何结构。R112 兄弟钉批量同步补 switch<stop 断言
+    (生而绿,披露):旧三断言下把 switch 挪到 st.stop 之后仍全绿——
+    按钮在 stop 前但接线死了,只有旅程钉能抓;补上后结构钉也抓得住。"""
     source = _source(PAGE_REG)
     assert "暂无已注册的模型" in source
     block = source.split("暂无已注册的模型", 1)[1]
@@ -89,6 +91,7 @@ def test_registry_empty_branch_exit_before_stop():
     assert stop_pos != -1, "空态分支必须保持 st.stop 封页语义"
     assert btn_pos != -1 and btn_pos < stop_pos, "出路按钮必须在 st.stop 之前"
     assert switch_pos != -1 and btn_pos < switch_pos, "按钮必须接线到 00 页"
+    assert switch_pos < stop_pos, "switch 接线必须在 st.stop 之前(R112)"
 
 
 def test_registry_nonempty_page_renders(monkeypatch):

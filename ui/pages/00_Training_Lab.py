@@ -50,10 +50,26 @@ def _render_next_steps(run_id: str, info: dict) -> None:
             st.markdown(f"想先直观感受效果？到 **💬 Chat** 页选 `{arts.output_dir}` 直接对话。")
             if arts.eval_sets.get("test"):
                 st.markdown("**评测**（Data Wizard 已备好 test 集）")
+                # r112-reviewer 发现采纳：原推荐 --test-file 不是该脚本合法选项
+                # （typer 选项为 --dataset/--max-samples/--num-generations/--compare-with/
+                # --output），原命令在 argparse 即死；--dataset 吃本地 Alpaca JSON
+                # （loaders.py:100-105 HF 回落 load_dataset("json")），已实证过解析
                 st.code(
                     f"python scripts/evaluate.py --model-path {arts.output_dir} "
-                    f"--test-file {arts.eval_sets['test']}",
+                    f"--dataset {arts.eval_sets['test']}",
                     language="bash",
+                )
+                # 诚实限界（R112）：上面命令的输出只进终端，不写
+                # domains/*/data/results/——用户回「评测结果 / 模型对比」页
+                # 仍空会以为训练白做。点亮两页的路是领域评测（evaluate.py:194
+                # 无条件 save_results → 02/03 的数据源）；底座自动从
+                # adapter_config.json 解析（eval/models.py:427-438），无需
+                # --base-model；Wizard test.json 不符领域候选 schema，不挂数
+                st.caption(
+                    "注：上面命令的结果只在终端显示，不会出现在「评测结果」或"
+                    "「模型对比」页。想点亮这两页，请跑领域评测："
+                    f"`python -m domains.medical_entity.evaluate --model-path {arts.output_dir}`"
+                    "（用领域自带的测试集；底座自动从 adapter 配置读取）。"
                 )
             if arts.registered_name:
                 st.info(

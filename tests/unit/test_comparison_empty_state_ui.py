@@ -95,7 +95,9 @@ def test_comparison_len1_copy_names_the_single_model(monkeypatch):
 def test_comparison_empty_branch_exit_before_stop():
     """空态分支出路结构钉(源码钉):len(data)<2 分支内按钮与接线先于
     st.stop——出路必须在封页前。命名循 R110 nit-1 先例(钉空态分支
-    顺序,不叫 nonempty)。"""
+    顺序,不叫 nonempty)。R112 兄弟钉批量同步补 switch<stop 断言
+    (生而绿,披露):旧三断言下把 switch 挪到 st.stop 之后仍全绿——
+    接线死了只有旅程钉能抓,补上后结构钉也抓。"""
     source = _source(PAGE_CMP)
     assert "len(data) < 2" in source
     block = source.split("len(data) < 2", 1)[1]
@@ -105,6 +107,7 @@ def test_comparison_empty_branch_exit_before_stop():
     assert stop_pos != -1, "空态分支必须保持 st.stop 封页语义"
     assert btn_pos != -1 and btn_pos < stop_pos, "出路按钮必须在 st.stop 之前"
     assert switch_pos != -1 and btn_pos < switch_pos, "按钮必须接线到 00 页"
+    assert switch_pos < stop_pos, "switch 接线必须在 st.stop 之前(R112)"
 
 
 def test_comparison_nonempty_page_renders(monkeypatch):

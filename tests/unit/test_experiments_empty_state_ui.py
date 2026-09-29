@@ -74,7 +74,9 @@ def test_experiments_empty_branch_exit_before_stop():
     nonempty_branch 名实不符,钉的是空态分支内 info/按钮→st.stop 顺序,
     与 R110 兄弟 test_registry_empty_branch_exit_before_stop 同构):
     只在 info 与 st.stop 之间插入按钮,不碰其他任何结构。直锁结构 delta
-    成本最低;非空页面的运行时保活由兄弟旅程钉承担(见下)。"""
+    成本最低;非空页面的运行时保活由兄弟旅程钉承担(见下)。R112 兄弟
+    钉批量同步补 switch<stop 断言(生而绿,披露):旧三断言下把 switch
+    挪到 st.stop 之后仍全绿——接线死了只有旅程钉能抓,补上后结构钉也抓。"""
     source = _source(PAGE_EXP)
     assert 'st.info("暂无实验记录。请先在训练实验室（Training Lab）发起训练。")' in source
     block = source.split("暂无实验记录", 1)[1]
@@ -84,6 +86,7 @@ def test_experiments_empty_branch_exit_before_stop():
     assert stop_pos != -1, "空态分支必须保持 st.stop 封页语义"
     assert btn_pos != -1 and btn_pos < stop_pos, "出路按钮必须在 st.stop 之前"
     assert switch_pos != -1 and btn_pos < switch_pos, "按钮必须接线到 00 页"
+    assert switch_pos < stop_pos, "switch 接线必须在 st.stop 之前(R112)"
 
 
 def test_experiments_nonempty_page_renders(monkeypatch):
