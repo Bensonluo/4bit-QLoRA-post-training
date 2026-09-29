@@ -183,13 +183,12 @@ class IterationExecutionService:
             elif record["status"] in MANAGED:
                 pid = record.get("worker_pid")
                 if pid and not _pid_alive(int(pid)):
+                    # R99 去重:message 只报事实,排查指向由 summarize_execution 单处输出,
+                    # 不再与摘要的建议句同屏堆叠。
                     return self._update(
                         record,
                         status="failed",
-                        message=(
-                            "后台执行进程已退出且未完成；请查看执行日志 worker.log，"
-                            "处理问题后提出新的改进轮次。"
-                        ),
+                        message="后台执行进程已退出且未完成。",
                     )
                 # Duplicate submission while in progress: never retrain.
                 return record
@@ -311,6 +310,9 @@ class IterationExecutionService:
             record,
             status="queued",
             worker_pid=process.pid,
+            # R99:落盘真实日志路径,摘要据此给出 worker.log 的完整位置;只在启动后
+            # 写入——从未启动的失败(缺少脚本)没有日志文件,不落幻影路径。
+            log_path=str(log_path),
             message="后台执行已启动；关闭页面不影响执行，可随时查看状态或停止。",
         )
 
@@ -479,10 +481,12 @@ class IterationExecutionService:
                         terminal=True,
                         run_id=iteration["new_run_id"],
                         issues=run.get("issues") or [],
+                        # R99 去重(采纳 should-fix-1):message 只报事实,「处理问题后
+                        # 提出新的改进轮次」由摘要尾句单处输出——blocked+log_path 同屏
+                        # 曾逐字出现两次。
                         message=(
                             f"训练未成功（{run['status']}）："
                             f"{failure.get('message') or '请查看训练日志。'}"
-                            "请处理问题后提出新的改进轮次。"
                         ),
                     )
                     return False

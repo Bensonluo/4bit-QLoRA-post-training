@@ -1046,6 +1046,11 @@ def test_execution_summary_state_machine_translates_user_action_states():
     assert "自动执行已暂停" in joined
     assert "勾选确认继续才会恢复" in joined
     assert "不会跳过提示自动训练" in joined
+    # 极简夹具缺三键:回退大写占位符命令(R99),不假装知道 ID
+    assert (
+        "命令行恢复：可运行 iteration-execute SESSION_ID ITERATION_ID"
+        " --revision REVISION --acknowledge-warnings 继续本轮执行。" in joined
+    )
 
     done = summarize_execution(
         {"status": "completed", "run_id": "wb-run-x", "evaluation_id": "ev-x"}
@@ -1072,11 +1077,79 @@ def test_execution_summary_state_machine_translates_user_action_states():
     joined = "\n".join(failed)
     assert "自动执行失败。" in joined, "没有 message 时如实降级,不得编造原因"
     assert "worker.log" in joined
+    assert "位于" not in joined, "缺 log_path 的旧记录回退泛指句,不得编造路径"
 
     stopped = summarize_execution({"status": "stopped"})
     joined = "\n".join(stopped)
     assert "已按请求停止自动执行" in joined
     assert "不代表业务效果达标" in joined
+
+
+def test_execution_recovery_and_log_path_name_real_ids():
+    """命令行恢复与日志位置(R99):暂停态给可照抄的 iteration-execute 真实三键插值命令
+    ——「勾选」是页面词汇,CLI 用户没有可勾的框;失败态按落盘 log_path 给出 worker.log
+    完整位置;缺键回退占位符/泛指句,不假装知道 ID 或路径。"""
+    from src.workbench.report_summary import summarize_execution
+
+    ack = summarize_execution(
+        {
+            "status": "awaiting_warning_ack",
+            "session_id": "sess-r99",
+            "iteration_id": "it-r99",
+            "session_revision": 2,
+        }
+    )
+    joined = "\n".join(ack)
+    assert (
+        "可运行 iteration-execute sess-r99 it-r99 --revision 2"
+        " --acknowledge-warnings 继续本轮执行" in joined
+    )
+    assert joined.count("iteration-execute ") == 1  # 单条命令行,不与状态句重复
+    assert "SESSION_ID" not in joined
+
+    # revision=0 是会话初始真值(int),必须原样插值——None-guard 不把 0 误判成缺键
+    zero = summarize_execution(
+        {
+            "status": "awaiting_warning_ack",
+            "session_id": "sess-zero",
+            "iteration_id": "it-zero",
+            "session_revision": 0,
+        }
+    )
+    joined = "\n".join(zero)
+    assert "iteration-execute sess-zero it-zero --revision 0" in joined
+    assert "REVISION" not in joined
+
+    dead = summarize_execution(
+        {
+            "status": "failed",
+            "message": "后台执行进程已退出且未完成。",
+            "log_path": "/executions/it-r99/worker.log",
+        }
+    )
+    joined = "\n".join(dead)
+    assert "执行日志 worker.log 位于 /executions/it-r99/worker.log" in joined
+    # 建议句单处输出(R99 去重背书):服务层 message 已只报事实,不与摘要同屏堆叠
+    assert joined.count("处理问题后提出新的改进轮次") == 1
+    assert "自动执行失败：后台执行进程已退出且未完成。" in joined
+
+    # 旧记录缺 log_path:回退泛指句,不编造路径
+    legacy = summarize_execution({"status": "failed"})
+    joined = "\n".join(legacy)
+    assert "请查看执行记录与 worker.log，处理问题后提出新的改进轮次。" in joined
+
+    # blocked+log_path 同面(采纳 r99-reviewer should-fix-1):worker 侧 message 已
+    # 只报事实,建议句仍只在摘要尾句单处出现——同屏不堆叠两次。
+    blocked = summarize_execution(
+        {
+            "status": "blocked",
+            "message": "训练未成功（failed）：显存不足",
+            "log_path": "/executions/it-r99/worker.log",
+        }
+    )
+    joined = "\n".join(blocked)
+    assert joined.count("处理问题后提出新的改进轮次") == 1
+    assert "自动执行被阻断：训练未成功（failed）：显存不足" in joined
 
 
 def test_plan_summary_ready_states_model_params_reasons_and_boundaries():

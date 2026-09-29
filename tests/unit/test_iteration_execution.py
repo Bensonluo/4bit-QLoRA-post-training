@@ -1,6 +1,7 @@
 """Service-level guards: authorization scope, duplicate submission, stop, resume."""
 
 import json
+import sys
 
 import pytest
 
@@ -149,8 +150,75 @@ def test_dead_worker_is_reported_not_silently_requeued(harness, harness2=None):
     harness["monkeypatch"].setattr(execution_module, "_pid_alive", lambda pid: False)
     result = service.start(IDENTITY, harness["live"])
     assert result["status"] == "failed"
-    assert "worker.log" in result["message"] or "后台执行进程" in result["message"]
+    # R99 去重:message 只报事实,排查指向(worker.log 位置/建议句)由 summarize_execution
+    # 单处输出——精确钉取代旧 OR 钉:带 worker.log 的旧措辞分支彻底退场。
+    assert result["message"] == "后台执行进程已退出且未完成。"
     assert harness["launches"] and len(harness["launches"]) == 1
+
+
+def test_launch_missing_script_fails_without_phantom_log_path(tmp_path):
+    """从未启动的失败不落幻影日志路径(R99):缺后台执行脚本时 worker.log 尚不存在,
+    记录不得携带 log_path——摘要据此回退泛指句,不指去一个空路径。"""
+    service = IterationExecutionService(
+        tmp_path / "executions",
+        tmp_path / "intake",
+        tmp_path / "iterations",
+        tmp_path / "training",
+        tmp_path / "eval",
+        project_root=tmp_path,
+    )
+    record = {
+        "iteration_id": IDENTITY,
+        "project_root": str(tmp_path),
+        "python_executable": sys.executable,
+        "status": "queued",
+    }
+    # 生产前置:start/_authorize 在 _launch 前已建执行目录
+    service._directory(IDENTITY).mkdir(parents=True, exist_ok=True)
+    result = service._launch(record)
+    assert result["status"] == "failed"
+    assert "缺少后台执行脚本" in result["message"]
+    assert "log_path" not in result
+
+
+def test_launch_success_persists_log_path(tmp_path, monkeypatch):
+    """启动成功即落盘真实日志路径(R99):摘要据此给出 worker.log 完整位置;
+    Popen 打桩,不真起后台进程。project_root 指向 tmp 并造假脚本——不依赖真实
+    仓库文件存在(采纳 r99-reviewer nit-1,与缺脚本测试对称自包含)。"""
+    service = IterationExecutionService(
+        tmp_path / "executions",
+        tmp_path / "intake",
+        tmp_path / "iterations",
+        tmp_path / "training",
+        tmp_path / "eval",
+        project_root=tmp_path,
+    )
+    launched = []
+
+    class FakePopen:
+        pid = 4242
+
+    monkeypatch.setattr(
+        execution_module.subprocess, "Popen", lambda *a, **k: launched.append(a) or FakePopen()
+    )
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    (scripts_dir / "workbench_iterate.py").write_text("# test stub\n", encoding="utf-8")
+    record = {
+        "iteration_id": IDENTITY,
+        "project_root": str(service.project_root),
+        "python_executable": sys.executable,
+        "status": "queued",
+    }
+    # 生产前置:start/_authorize 在 _launch 前已建执行目录
+    service._directory(IDENTITY).mkdir(parents=True, exist_ok=True)
+    result = service._launch(record)
+    assert result["status"] == "queued"
+    assert result["worker_pid"] == 4242
+    assert result["log_path"] == str(service._directory(IDENTITY) / "worker.log")
+    # append 模式打开即创建:路径不止是字符串,文件真实在场
+    assert (service._directory(IDENTITY) / "worker.log").exists()
+    assert launched and launched[0][0][0] == sys.executable
 
 
 def test_warning_ack_resume_requires_explicit_acknowledgement(harness):

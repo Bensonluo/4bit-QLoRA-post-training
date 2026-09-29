@@ -799,6 +799,17 @@ def summarize_execution(record: dict) -> list[str]:
     elif status == "awaiting_warning_ack":
         lines.append("自动执行已暂停：预检存在需核对的提示。")
         lines.append("请查看提示内容后，在原入口勾选确认继续才会恢复；不会跳过提示自动训练。")
+        # 命令行恢复出口(R99):「勾选」是页面词汇,CLI 用户没有可勾的框——真实恢复
+        # 命令按记录三键插值;缺键的旧记录/极简夹具回退大写占位符,不假装知道 ID。
+        session_id = record.get("session_id") or "SESSION_ID"
+        iteration_id = record.get("iteration_id") or "ITERATION_ID"
+        revision = record.get("session_revision")
+        if revision is None:  # 显式判 None:revision 是 int,or 链会把 0 误判成缺键
+            revision = "REVISION"
+        lines.append(
+            f"命令行恢复：可运行 iteration-execute {session_id} {iteration_id}"
+            f" --revision {revision} --acknowledge-warnings 继续本轮执行。"
+        )
     elif status == "completed":
         lines.append("自动执行已完成：三模型同题对照报告已生成。")
         pointers = []
@@ -822,7 +833,13 @@ def summarize_execution(record: dict) -> list[str]:
             if len(issues) > 3:
                 shown += "等"
             lines.append(f"问题：{shown}。")
-        lines.append("请查看执行记录与 worker.log，处理问题后提出新的改进轮次。")
+        # worker.log 位置插值(R99):记录在启动时落盘 log_path,据此给出完整位置;
+        # 旧记录缺该键时回退泛指句——不编造不存在的路径。
+        log_path = record.get("log_path")
+        if log_path:
+            lines.append(f"执行日志 worker.log 位于 {log_path}；处理问题后提出新的改进轮次。")
+        else:
+            lines.append("请查看执行记录与 worker.log，处理问题后提出新的改进轮次。")
     elif status == "stopped":
         lines.append("已按请求停止自动执行；本轮不再推进，如需继续请提出新的改进轮次。")
     else:

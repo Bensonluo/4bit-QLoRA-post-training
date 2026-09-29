@@ -17,7 +17,14 @@ def execution_cli(tmp_path, monkeypatch):
     intake = IntakeService(tmp_path / "intake")
     session = intake.create("判断类别", "sample.csv", CSV)
     calls = []
-    result = {"iteration_id": "it-" + "a" * 32, "status": "queued"}
+    # R99:带上 session_id/session_revision——执行摘要据此插值可照抄的恢复命令,
+    # paused 态 stderr 钉真 ID 端到端(与真实服务落盘记录同形状)。
+    result = {
+        "iteration_id": "it-" + "a" * 32,
+        "status": "queued",
+        "session_id": session.session_id,
+        "session_revision": session.revision,
+    }
 
     class Execution:
         def __init__(self, root, intake_root, iteration_root, training_root, evaluation_root):
@@ -87,7 +94,7 @@ def test_status_and_stop_do_not_dispatch_start(execution_cli, capsys):
 
 def test_execution_commands_print_plain_language_summary_to_stderr(execution_cli, capsys):
     """自动执行子命令 stdout 仍是纯 JSON,stderr 追加人话:进行中/等确认/已停止各如实。"""
-    invoke, _, _, result, _ = execution_cli
+    invoke, _, session, result, _ = execution_cli
 
     assert invoke("iteration-execution-status", result["iteration_id"]) == 0
     queued = capsys.readouterr()
@@ -101,6 +108,12 @@ def test_execution_commands_print_plain_language_summary_to_stderr(execution_cli
     assert json.loads(paused.out)["status"] == "awaiting_warning_ack"
     assert "自动执行已暂停" in paused.err
     assert "勾选确认继续才会恢复" in paused.err
+    # R99:恢复命令真 ID 插值端到端钉——「勾选」是页面词汇,CLI 用户拿到可照抄的命令
+    assert (
+        f"iteration-execute {session.session_id} {result['iteration_id']}"
+        f" --revision {session.revision} --acknowledge-warnings" in paused.err
+    )
+    assert "SESSION_ID" not in paused.err
 
     assert invoke("iteration-execution-stop", result["iteration_id"]) == 0
     stopped = capsys.readouterr()
