@@ -197,9 +197,11 @@ def test_context_explains_current_data_todo_without_original_rows(plans):
     assert context["dataset"] is None
     assert context["data_readiness"]["next_action"] == "awaiting_dataset_split"
     assert "分区" in context["data_readiness"]["required_actions"][0]
+    assert "materialize" in context["data_readiness"]["required_actions"][1]
     revised.full_data.status = "stale"
     context = service.context(revised, [])
     assert "现有全量资料重新校验" in context["data_readiness"]["required_actions"][0]
+    assert "full-validate" in context["data_readiness"]["required_actions"][1]
     revised.full_data = None
     context = service.context(revised, [])
     assert context["data_readiness"]["next_action"] in {
@@ -209,3 +211,60 @@ def test_context_explains_current_data_todo_without_original_rows(plans):
     assert context["data_readiness"]["full_row_count"] is None
     assert "rows" not in context["data_readiness"]["sample"]
     assert "original" not in json.dumps(context["data_readiness"])
+
+
+def test_readiness_required_actions_append_single_source_exit_lines(plans):
+    """就绪说明的出口行单一来源（R87）：门禁句之后附 next_action_phrase 的人话——
+    方案推荐 Agent 的「需要先完善数据」与 CLI 尾行、页面提示同词汇，不为 Agent
+    另造一套出口；ready_for_training_preflight 不在门禁表里，required_actions
+    保持为空，也不在此编造出口。"""
+    from src.workbench.intake_models import Question
+    from src.workbench.intake_service import next_action_phrase
+
+    service, session, _ = plans
+    # 夹具基态：全量已确认且分区在场——就绪态没有门禁句，出口行也不出现。
+    ready = service.context(session, [])["data_readiness"]
+    assert ready["next_action"] == "ready_for_training_preflight"
+    assert ready["required_actions"] == []
+
+    # Agent 产物三态（R86 已给 CLI 尾行出口；R87 补方案上下文同一词汇）。
+    questioning = session.model_copy(deep=True)
+    questioning.analysis.questions = [
+        Question(question_id="q1", question="类别以哪次审核为准？", why="同一工单存在两次审核。")
+    ]
+    gapped = session.model_copy(deep=True)
+    gapped.analysis.questions = []
+    gapped.analysis.capability_gaps = ["任务需要多源组合，当前入口未配置。"]
+    recipeless = session.model_copy(deep=True)
+    recipeless.analysis.questions = []
+    recipeless.analysis.capability_gaps = []
+    recipeless.preview = None
+    for state, expected, gate_keyword in (
+        (questioning, "needs_business_answers", "business.questions"),
+        (gapped, "needs_capability", "缺口"),
+        (recipeless, "needs_recipe", "样例预览"),
+    ):
+        readiness = service.context(state, [])["data_readiness"]
+        assert readiness["next_action"] == expected
+        lines = readiness["required_actions"]
+        assert len(lines) == 2, f"{expected} 应为门禁句+出口行两元素"
+        assert gate_keyword in lines[0], f"{expected} 的门禁句保持在出口行之前"
+        assert lines[1] == next_action_phrase(expected)
+    answers = service.context(questioning, [])["data_readiness"]["required_actions"][1]
+    assert "analyze --answer" in answers
+    capability = service.context(gapped, [])["data_readiness"]["required_actions"][1]
+    assert "add-source" in capability and "调整目标" in capability
+    assert "baseline-analyze" not in capability
+    recipe = service.context(recipeless, [])["data_readiness"]["required_actions"][1]
+    assert "analyze" in recipe and "重新分析" in recipe
+    assert "baseline-analyze" not in recipe
+
+    # R82 nit-① 随同一机制收口：needs_data_revision 的就绪说明此前缺零密钥重分析
+    # 出口，现在两条路径都进入出口行（改 counts 把状态机路由到该态）。
+    broken = session.model_copy(deep=True)
+    broken.preview.counts["invalid"] = 1
+    readiness = service.context(broken, [])["data_readiness"]
+    assert readiness["next_action"] == "needs_data_revision"
+    exit_line = readiness["required_actions"][1]
+    assert exit_line == next_action_phrase("needs_data_revision")
+    assert "analyze" in exit_line and "baseline-analyze" in exit_line

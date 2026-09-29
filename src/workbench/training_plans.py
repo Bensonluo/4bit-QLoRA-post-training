@@ -232,7 +232,7 @@ class TrainingPlanService:
 
     def context(self, session, model_paths: list[str]) -> dict:
         from src.utils.platform_utils import detect_platform, recommend_settings
-        from src.workbench.intake_service import next_action
+        from src.workbench.intake_service import next_action, next_action_phrase
 
         if not isinstance(model_paths, list) or any(
             not isinstance(path, str) or not path.strip() for path in model_paths
@@ -272,9 +272,17 @@ class TrainingPlanService:
         full = session.full_data
         if full and action in {"awaiting_full_data", "awaiting_full_validation"}:
             required[action] = "已有全量报告与当前方案不再一致，请用现有全量资料重新校验并确认。"
+        # 出口行单一来源：就绪说明在门禁句之后附 next_action_phrase 的下一步人话——
+        # 方案推荐 Agent 的「需要先完善数据」与 CLI 尾行、页面提示同词汇，
+        # 不为 Agent 另造一套出口；ready_for_training_preflight 不在门禁表里，
+        # required_actions 保持为空（就绪无门禁），也不在此编造出口。
+        required_actions = [required[action]] if action in required else []
+        exit_line = next_action_phrase(action)
+        if required_actions and exit_line:
+            required_actions.append(exit_line)
         readiness = {
             "next_action": action,
-            "required_actions": [required[action]] if action in required else [],
+            "required_actions": required_actions,
             "sample": {
                 "scope": session.source.scope,
                 "row_count": len(session.source.rows),

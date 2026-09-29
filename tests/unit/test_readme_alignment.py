@@ -828,6 +828,24 @@ def test_model_list_tail_docs_pinned():
     assert "与页面候选模型区同词汇" in section, "页面与 CLI 同源必须写明"
 
 
+def test_plan_context_readiness_exit_docs_pinned():
+    """方案上下文就绪说明的出口行钉死(R87):data_readiness 附单一来源出口、
+    与 CLI 尾行同词汇、就绪态为空、不含原始行——Agent 面与 CLI/页面不各说各话。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"),
+        "## 让 Agent 推荐训练方案",
+        "## 在同一任务中启动真实训练",
+    )
+    assert "`data_readiness.required_actions`" in section, "就绪说明键名必须写明"
+    assert "`next_action_phrase` 单一来源" in section, "出口行单一来源必须写明"
+    assert "与 CLI 尾行、页面提示同词汇" in section, "Agent 面同词汇承诺必须写明"
+    assert "不为 Agent 另造一套出口" in section, "不另造出口边界必须写明"
+    assert "就绪态没有门禁句" in section and "`required_actions` 为空" in section, (
+        "就绪态空列表边界必须写明"
+    )
+    assert "不包含原始行" in section, "不含原始行边界必须写明"
+
+
 def test_analysis_summary_docs_pinned():
     """analyze stderr 发现与待确认问题摘要钉死:单一来源、kind 四译名、证据行引用、工具核查轨迹行与边界句。"""
     section = _section(
