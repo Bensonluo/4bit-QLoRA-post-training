@@ -30,9 +30,11 @@ def summarize_comparison(report: Any) -> list[str]:
     models = report.models
     if not models:
         return ["该报告没有模型结果。"]
-    # 逐题查看出口点名(R98):评分理由与完整输出只在已存盘报告的 rows 里,
-    # eval-show 命令存在却从不被点名;缺键的极简夹具回退大写占位符,不假装知道 ID。
+    # 逐题查看出口(R98 点名→R101 帧尾单命令):评分理由与完整输出只在已存盘报告的
+    # rows 里,各语境只报事实与要判断什么,命令在结语行前单处发射、整帧至多一条;
+    # 缺键的极简夹具回退大写占位符,不假装知道 ID。
     evaluation_id = getattr(report, "evaluation_id", None) or "EVALUATION_ID"
+    inspect_targets: list[str] = []  # 帧尾单命令的查看目标,保序去重拼接
     lines: list[str] = []
     total = models[0]["metrics"].get("total") or 0
     lines.append(f"这次对照在固定开发集的 {total} 道题上进行,所有模型用同样的题目和评分规则。")
@@ -109,8 +111,9 @@ def summarize_comparison(report: Any) -> list[str]:
             "JSON 答案按声明的字段逐项核对,上面的「答对」指全部字段都对:"
             + "、".join(field_parts)
             + "。生成失败、截断或无法按 JSON 解析的题按该字段错误计入;"
-            f"要知道该字段具体错在哪里,可运行 eval-show {evaluation_id} 逐题查看完整输出。"
+            "要知道该字段具体错在哪里,需逐题查看完整输出。"
         )
+        inspect_targets.append("完整输出")
 
     truncation_models = high_truncation_models(models)
     if truncation_models:
@@ -133,9 +136,10 @@ def summarize_comparison(report: Any) -> list[str]:
             "观察到输出高度重复（"
             + "、".join(dominant_parts)
             + "）：该模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时,"
-            "模型可能只是复述多数类,不一定是学坏了;分布不集中时,逐题查看完整输出确认"
-            "每题是否本该有不同答案。这是观察事实,不认定原因。"
+            "模型可能只是复述多数类,不一定是学坏了;分布不集中时,需确认每题是否"
+            "本该有不同答案。这是观察事实,不认定原因。"
         )
+        inspect_targets.append("完整输出")
 
     for model in models:
         lines.extend(
@@ -153,8 +157,9 @@ def summarize_comparison(report: Any) -> list[str]:
         lines.append(
             "自定义业务评分按已确认规则逐题打分:上面的「通过」指达到单题通过分数,"
             "业务评分均值是各题得分的平均数,两者都不是严格准确率;"
-            f"要知道哪里扣分,可运行 eval-show {evaluation_id} 逐题查看评分理由。"
+            "要知道哪里扣分,需逐题查看评分理由。"
         )
+        inspect_targets.append("评分理由")
     elif not strict:
         lines.append(
             "开放任务不做自动评分:以上只有生成与失败事实,每题通过与否由你逐题人工判断,"
@@ -162,8 +167,9 @@ def summarize_comparison(report: Any) -> list[str]:
         )
     elif best_score == 0:
         lines.append(
-            "没有一个模型答对任何题:目前不能说任何模型学会了这个任务,常见原因是题目太难、数据太少或提示格式不匹配,可查看每题的完整输出再判断。"
+            "没有一个模型答对任何题:目前不能说任何模型学会了这个任务,常见原因是题目太难、数据太少或提示格式不匹配;属于哪一类,需逐题判断。"
         )
+        inspect_targets.append("完整输出")
         cause_parts = []
         if echo_questions:
             cause_parts.append(f"{len(echo_questions)} 题在复述题目")
@@ -191,7 +197,7 @@ def summarize_comparison(report: Any) -> list[str]:
                 if tuned_stats
                 else "所有模型都是零分;"
             )
-            zero_tail = "逐题查看完整输出定位属于哪一类。"
+            zero_tail = "再逐题定位属于哪一类。"
         if cause_parts:
             lines.append(
                 zero_head
@@ -232,6 +238,7 @@ def summarize_comparison(report: Any) -> list[str]:
         lines.append(
             f"答对最多的是{best_label}({best_correct}/{total});请结合逐题输出判断答错的部分是否可接受。"
         )
+        inspect_targets.append("完整输出")
     if strict and best_score > 0 and base_stats and tuned_stats:
         diff = tuned_stats["score"] - base_stats["score"]
         if diff >= 0.2:
@@ -239,14 +246,23 @@ def summarize_comparison(report: Any) -> list[str]:
                 f"本轮微调比基座答对更多({tuned_stats['correct']}/{total} vs "
                 f"{base_stats['correct']}/{total})——但要注意样本量,并逐题核对答错的部分再下判断。"
             )
+            inspect_targets.append("完整输出")
         elif abs(diff) < 0.05:
             lines.append(
                 f"微调没有带来可见变化({tuned_stats['correct']}/{total} vs "
                 f"{base_stats['correct']}/{total})——数据量不足或任务难度过高都可能是原因;"
                 "先逐题核对输出,再决定是加数据还是改任务定义。"
             )
+            inspect_targets.append("完整输出")
     if (strict or custom) and 0 < total < 20:
         lines.append(f"注意:开发集只有 {total} 道题,任何百分比都受单题影响很大,只当方向参考。")
+    if inspect_targets and (strict or custom):
+        # 帧尾单命令(R101):各语境的查看需求汇成一条命令,整帧 count==1;
+        # 目标保序去重——复述+自定义叠加帧为「完整输出与评分理由」。
+        # 开放任务不点名命令(r98-reviewer nit-1 既定决策):该命令不解决开放
+        # 任务的人工判断问题,点名反而是噪音——开放帧即使复述语境置位也不发射。
+        target = "与".join(dict.fromkeys(inspect_targets))
+        lines.append(f"逐题查看{target}:eval-show {evaluation_id}。")
     lines.append("以上是观察事实,不是业务达标结论;是否采用仍由你按业务标准决定。")
     return lines
 

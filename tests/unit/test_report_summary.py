@@ -679,23 +679,30 @@ def test_comparison_custom_scoring_and_open_tasks_are_not_fake_zero():
 
 
 def test_comparison_pointer_names_real_eval_show_command_with_id():
-    """逐题查看出口点名(R98):字段准确率与自定义评分两处主指向句插值真实
-    evaluation_id 的 eval-show 命令——悬空「请逐题查看」退场;两分支互斥
-    (custom = not strict),一帧不会出现重复命令行;缺键回退大写占位符。"""
+    """逐题查看出口点名(R98)→帧尾单命令(R101):字段准确率与自定义评分语境句
+    只报「需逐题查看什么」的事实,命令在结语行前单处发射、整帧 count==1;
+    悬空「请逐题查看」与 R98 句中内联命令「可运行 eval-show」双双退场;
+    缺键回退大写占位符,不假装知道 ID。"""
     field = _model("本轮微调", 4, 0.5)
     field["metrics"]["field_accuracy"] = {"日期": 0.5, "类别": 1.0}
     joined = "\n".join(
         summarize_comparison(SimpleNamespace(models=[field], evaluation_id="ev-real-01"))
     )
-    assert "可运行 eval-show ev-real-01 逐题查看完整输出" in joined
+    assert "需逐题查看完整输出" in joined
+    assert "逐题查看完整输出:eval-show ev-real-01" in joined
     assert "请逐题查看" not in joined
-    # 互斥性断言背书(r98-reviewer nit-1):一帧只有一条命令行,docstring 不再只是推理
+    assert "可运行 eval-show" not in joined  # R98 旧内联命令形态退场
+    # 单命令不变量(R101,承 r98-reviewer nit-1 互斥性背书):一帧只有一条命令行
     assert joined.count("eval-show ") == 1
 
     def custom(label):
         rows = [
-            {"status": "scored", "output": "答", "prompt": "题目:某指令文本较长较长较长较长"}
-            for _ in range(4)
+            {
+                "status": "scored",
+                "output": f"答{index}",
+                "prompt": "题目:某指令文本较长较长较长较长",
+            }
+            for index in range(4)
         ]
         return {
             "label": label,
@@ -708,7 +715,8 @@ def test_comparison_pointer_names_real_eval_show_command_with_id():
             SimpleNamespace(models=[custom("本轮微调")], evaluation_id="ev-real-02")
         )
     )
-    assert "可运行 eval-show ev-real-02 逐题查看评分理由" in joined
+    assert "需逐题查看评分理由" in joined
+    assert "逐题查看评分理由:eval-show ev-real-02" in joined
     assert "请逐题查看" not in joined
     assert joined.count("eval-show ") == 1
 
@@ -716,6 +724,72 @@ def test_comparison_pointer_names_real_eval_show_command_with_id():
     joined = "\n".join(summarize_comparison(_report([field])))
     assert "eval-show EVALUATION_ID" in joined
     assert "ev-real" not in joined
+
+
+def test_comparison_eval_show_single_frame_end_invariant():
+    """R101 帧尾单命令不变量:零分+复述+字段+截断多语境叠加帧,eval-show 命令
+    仍然只有一条、且在结语行前;四处泛指从句(复述尾/零分头/零分尾/自定义)
+    退场为纯事实句;部分分帧的「请结合逐题输出」也由帧尾单命令接住;
+    该夹具的全对帧(无重复输出、无其他语境置位)零命令——≥4 条相同输出
+    的全对帧仍会因复述语境发射命令,零命令不是全对帧的普适性质。"""
+    echo = "某指令文本较长较长较长较长" + "继续复述" * 3
+    collapsed = _model("基座", 4, 0.0, statuses=["truncated"] * 4, outputs=[echo] * 4)
+    field = _model("本轮微调", 4, 0.0)
+    field["metrics"]["field_accuracy"] = {"日期": 0.0, "类别": 1.0}
+    lines = summarize_comparison(
+        SimpleNamespace(models=[collapsed, field], evaluation_id="ev-stack")
+    )
+    joined = "\n".join(lines)
+    # 多语境叠加:命令只有一条,目标保序去重后仍是「完整输出」
+    assert joined.count("eval-show ") == 1
+    assert "逐题查看完整输出:eval-show ev-stack" in joined
+    # 帧尾位置钉:命令行是结语行的前一行
+    assert lines[-2] == "逐题查看完整输出:eval-show ev-stack。"
+    assert lines[-1].startswith("以上是观察事实")
+    # 旧悬空指令句与内联命令退场,语境句只报要判断什么
+    assert "可运行 eval-show" not in joined
+    assert "可查看每题的完整输出" not in joined
+    assert "逐题查看完整输出定位" not in joined
+    assert "逐题查看完整输出确认" not in joined
+    assert "需确认每题是否本该有不同答案" in joined
+    assert "需逐题判断" in joined
+    assert "再逐题定位属于哪一类" in joined
+
+    # 部分分帧:请结合逐题输出 → 帧尾单命令
+    partial = "\n".join(
+        summarize_comparison(
+            SimpleNamespace(
+                models=[_model("基座", 10, 0.3), _model("本轮微调", 10, 0.8)],
+                evaluation_id="ev-partial",
+            )
+        )
+    )
+    assert "请结合逐题输出" in partial
+    assert partial.count("eval-show ") == 1
+
+    # 该夹具全对帧(无重复输出):没有要逐题核查的问题 → 零命令
+    perfect = "\n".join(summarize_comparison(_report([_model("本轮微调", 3, 1.0)])))
+    assert "eval-show" not in perfect
+
+    # 自定义+复述叠加:目标保序去重拼成「完整输出与评分理由」
+    def custom_collapse(label):
+        rows = [
+            {"status": "scored", "output": "同一回答", "prompt": "题目:某指令文本较长较长较长较长"}
+            for _ in range(6)
+        ]
+        return {
+            "label": label,
+            "metrics": {"total": 6, "exact_match": None, "business_score": 0.6, "pass_rate": 0.5},
+            "rows": rows,
+        }
+
+    both = "\n".join(
+        summarize_comparison(
+            SimpleNamespace(models=[custom_collapse("本轮微调")], evaluation_id="ev-cd")
+        )
+    )
+    assert both.count("eval-show ") == 1
+    assert "逐题查看完整输出与评分理由:eval-show ev-cd" in both
 
 
 def _acceptance_record(result, status="completed", metric="exact_match"):
