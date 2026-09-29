@@ -170,8 +170,14 @@ def main() -> int:
     check.add_argument("--base-url")
     check.add_argument("--model")
     create = sub.add_parser("create", help="本地读取文件并保存任务，不调用模型")
-    create.add_argument("--input", type=Path, required=True)
-    create.add_argument("--goal", required=True)
+    create.add_argument("--input", type=Path, help="样例文件路径（与 --demo 互斥）")
+    create.add_argument("--goal", help="业务目标一句话（与 --demo 互斥）")
+    create.add_argument(
+        "--demo",
+        action="store_true",
+        help="用仓库自带的虚构售后工单样例创建任务，与页面「第一次使用？用内置演示任务开始」"
+        "同一来源（src/workbench/demo_task.py）；演示文件不在场时如实报错，不编造演示数据",
+    )
     create.add_argument("--description", default="")
     create.add_argument("--scope", choices=["sample", "full"], default="sample")
     create.add_argument("--encoding")
@@ -205,6 +211,36 @@ def main() -> int:
         action="store_true",
         help="允许向所选远程模型服务发送本次业务说明、画像和选取的证据行",
     )
+    baseline = sub.add_parser(
+        "baseline-analyze",
+        help="不配置模型的基础分析：按字段选择生成确定性方案，零密钥（与页面"
+        "「没有 Agent 服务？用基础分析开始」同一来源）",
+        description="不配置模型的基础分析：按字段选择生成确定性方案，零密钥（与页面"
+        "「没有 Agent 服务？用基础分析开始」同一来源）",
+    )
+    baseline.add_argument("session_id")
+    baseline.add_argument("--target", required=True, help="答案列（模型要预测的字段）")
+    baseline.add_argument(
+        "--group",
+        action="append",
+        default=[],
+        help="业务分组字段（可重复；同一客户/会话/对象多行时选择，防泄漏）",
+    )
+    baseline.add_argument(
+        "--exclude", action="append", default=[], help="排除字段（可重复；不作为模型输入）"
+    )
+    baseline.add_argument("--instruction", help="覆盖任务指令（缺省按业务目标与字段自动生成）")
+    baseline.add_argument(
+        "--temporal", action="store_true", help="按时间分区切分（需三个时间字段与三个边界）"
+    )
+    baseline.add_argument("--available-at-column", help="信息实际可获得时间字段")
+    baseline.add_argument("--prediction-at-column", help="作出预测时间字段")
+    baseline.add_argument(
+        "--label-end-column", help="标签窗口结束时间字段（仅用于分区，不作为模型输入）"
+    )
+    baseline.add_argument("--validation-start", help="验证起点（含时区 ISO 时间）")
+    baseline.add_argument("--test-start", help="测试起点（含时区 ISO 时间）")
+    baseline.add_argument("--observation-end", help="观察截止（含时区 ISO 时间）")
     show = sub.add_parser("show")
     show.add_argument("session_id")
     confirm = sub.add_parser("confirm", help="确认已查看的转换输入与答案符合业务含义")
@@ -1360,16 +1396,65 @@ def main() -> int:
                         print(line, file=sys.stderr)
             return 0
         if args.command == "create":
-            session = service.create(
-                args.goal,
-                args.input.name,
-                args.input.read_bytes(),
-                data_description=args.description,
-                scope=args.scope,
-                encoding=args.encoding,
-                delimiter=args.delimiter,
-                sheet=args.sheet,
-            )
+            if args.demo:
+                # 演示冷启动与页面入口同一来源：入口只代劳找文件与填表，
+                # 目标/样例/数据说明全部来自 src/workbench/demo_task.py，不收自定义值。
+                demo_conflicts = [
+                    flag
+                    for flag, given in (
+                        ("--input", args.input is not None),
+                        ("--goal", bool((args.goal or "").strip())),
+                        ("--description", bool(args.description.strip())),
+                        ("--encoding", args.encoding is not None),
+                        ("--delimiter", args.delimiter is not None),
+                        ("--sheet", args.sheet is not None),
+                        ("--scope full", args.scope == "full"),
+                    )
+                    if given
+                ]
+                if demo_conflicts:
+                    raise ValueError(
+                        f"create --demo 不收 {'、'.join(demo_conflicts)}：演示任务的目标、样例"
+                        "与数据说明来自仓库单一来源（src/workbench/demo_task.py），"
+                        "自定义值不会被采用，逐一点名并直接报错，不静默忽略。"
+                    )
+                from src.workbench.demo_task import DEMO_DESCRIPTION, DEMO_GOAL, demo_sample
+
+                demo_pair = demo_sample(PROJECT_ROOT)
+                if demo_pair is None:
+                    raise ValueError(
+                        "演示文件不在场（data/custom/examples/aftercare_tickets_sample.csv）；"
+                        "如实报错，不编造演示数据。"
+                    )
+                session = service.create(
+                    DEMO_GOAL,
+                    demo_pair[0],
+                    demo_pair[1],
+                    data_description=DEMO_DESCRIPTION,
+                    scope="sample",
+                )
+                print(
+                    "已用内置演示任务创建（虚构售后工单样例，与页面入口同一来源）。",
+                    file=sys.stderr,
+                )
+                print(
+                    "零密钥继续：baseline-analyze SESSION_ID "
+                    "--target 类别 --group 编号 --exclude 处理结果",
+                    file=sys.stderr,
+                )
+            else:
+                if args.input is None or not (args.goal or "").strip():
+                    raise ValueError("create 需要 --input 与 --goal；零密钥冷启动可改用 --demo。")
+                session = service.create(
+                    args.goal,
+                    args.input.name,
+                    args.input.read_bytes(),
+                    data_description=args.description,
+                    scope=args.scope,
+                    encoding=args.encoding,
+                    delimiter=args.delimiter,
+                    sheet=args.sheet,
+                )
         elif args.command == "add-source":
             session = service.add_source(
                 args.session_id,
@@ -1391,6 +1476,58 @@ def main() -> int:
             if args.answer:
                 service.answer(args.session_id, args.answer)
             session = service.analyze(args.session_id, client)
+            if session.analysis:
+                from src.workbench.report_summary import summarize_analysis
+
+                for line in summarize_analysis(session.analysis.model_dump(), session.tool_trace):
+                    print(line, file=sys.stderr)
+        elif args.command == "baseline-analyze":
+            # 页面的基础分析入口只在尚无分析时出现（expander 条件 not session.analysis），
+            # CLI 同口径：不悄悄覆盖已有的 Agent 分析或基础分析。
+            session = service.load(args.session_id)
+            if session.analysis is not None:
+                raise ValueError(
+                    "该任务已有分析结果；页面在已有分析时不再显示基础分析入口，CLI 同口径。"
+                    "补充说明后重新分析请用 analyze（需配置 Agent 服务）。"
+                )
+            temporal_policy = None
+            if args.temporal:
+                missing = [
+                    name
+                    for name, value in (
+                        ("--available-at-column", args.available_at_column),
+                        ("--prediction-at-column", args.prediction_at_column),
+                        ("--label-end-column", args.label_end_column),
+                        ("--validation-start", args.validation_start),
+                        ("--test-start", args.test_start),
+                        ("--observation-end", args.observation_end),
+                    )
+                    if not (value or "").strip()
+                ]
+                if missing:
+                    raise ValueError(f"--temporal 需要同时提供：{'、'.join(missing)}。")
+                temporal_policy = {
+                    "available_at_column": args.available_at_column,
+                    "prediction_at_column": args.prediction_at_column,
+                    "label_end_at_column": args.label_end_column,
+                    "validation_start": args.validation_start.strip(),
+                    "test_start": args.test_start.strip(),
+                    "observation_end": args.observation_end.strip(),
+                }
+            from src.workbench.baseline_analysis import propose_baseline_analysis
+
+            session = service.apply_analysis(
+                session,
+                propose_baseline_analysis(
+                    session,
+                    target_column=args.target,
+                    group_columns=args.group,
+                    excluded_columns=args.exclude,
+                    instruction=(args.instruction or "").strip() or None,
+                    temporal_policy=temporal_policy,
+                ),
+                model="baseline-deterministic",
+            )
             if session.analysis:
                 from src.workbench.report_summary import summarize_analysis
 

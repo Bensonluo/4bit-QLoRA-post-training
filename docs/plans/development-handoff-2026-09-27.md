@@ -2719,3 +2719,23 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **死锚事故与根治（本轮核心教训）**：hero 指南锚第一版 `#-demo-recording-guide` 按标题规则推导，但锚目标是 `<summary>` 元素——GitHub 只给 h1–h6 生成锚 id。r79-reviewer 用已推送分支的真实渲染 HTML 实证（`user-content--demo-recording` 计数 0；details 内 `###` 标题有锚、summary 无锚）判 FAIL：不仅死锚，且我的 pin 用错误规则把它钉成「正确行为」——**错误的 pin 比没有 pin 更糟**。修法 (a)：hero 改指 details 内真标题锚 `#how-the-hero-gif-was-captured--and-how-to-regenerate-it`（em dash 删除后双空格→双连字符，与既有 `#-distributed-training-fsdp--deepspeed` 同规则、抓取页双重实证），测试断言与注释同步（错误前提「与目录 #-why-this-project 同规则」清除，换成正确规则 + 勿再对 summary 推导锚）。复核 PASS：旧死锚全仓零残留、锚推导逐字符核对、独立复跑 66 passed。
 - **独立审查**：r79-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维——A 诚实红线 PASS（fictional/零密钥/「passing every semantic-safety gate」与仓库单一来源逐点对上：探针本就是「可选证据非门禁」；「nothing staged」与帧时间戳序列一致；局限如实登记：帧像素未独立目击，结论基于单一来源+帧命名+时间交叉印证）；C 资产一致 PASS（11 帧清单/880×550/0.63MB/2.6s 一一对应）；D 一致性 PASS（diff 仅 2 文件+2 资产目录、独立复跑与主会话一致）；E 遗漏 PASS（全 README 13 个页内锚逐一核对，死锚清零；hero alt 旅程顺序与帧名单调一致）；B 首轮 FAIL→修复后 PASS。非阻断建议 1 条已采纳：「per gate」→「per step」（11 帧对约 9 道关口径如实）。
 - 非全量回归到期轮（下次 R80/R81 边界到期，基线 1949 passed / 324.97s）。北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：刷新线上部署（使含目标与数据主线与演示任务）后撤 Option 2 定界句并同步 pin；hero GIF 亦可考虑进托管 README。成本钩子读数 $106.61（不计成本授权下继续，逐轮如实上报）。
+
+## 第 80 轮 = 零密钥演示旅程的 CLI 平权（create --demo 与 baseline-analyze）
+
+**日期**：2026-09-29（子代理 r80-reviewer 独立审查：首轮 FAIL（1 must-fix + 2 should-fix）→ 修复 → 复核 PASS）
+
+**选点**：grep 证实 `propose_baseline_analysis` 在 `scripts/data_intake.py` 的命中为零——零密钥旅程（演示冷启动 + 基础分析）此前只属于页面，CLI 用户创建任务后必须配置 Agent 才能继续，与「零密钥走到训练前检查」的产品承诺不符（北极星差距对照点名「CLI 平权」开放差距的一条实质缺口）。选点时同步发现范围比预想大：不只演示入口，**基础分析也是 UI-only**——诚实单元是两条命令。
+
+**实现**：
+- **`create --demo`**：目标/说明/样例来自 `demo_task.py` 单一来源（`DEMO_GOAL`/`DEMO_DESCRIPTION`/`demo_sample`），创建出的任务 digest 可被配套全量按钮门控（`is_demo_session`）识别；与全部自定义参数互斥（`--input`/`--goal`/`--description` 非空、`--encoding`/`--delimiter`/`--sheet` 非 None、`--scope full`），冲突时逐一点名并直接报错（「自定义值不会被采用……不静默忽略」），`--scope sample` 与演示默认一致不构成冲突；演示文件缺席如实报错退出，不编造演示数据；创建后 stderr 给出对演示数据逐字可用的下一步命令（`baseline-analyze SESSION_ID --target 类别 --group 编号 --exclude 处理结果`）。
+- **`baseline-analyze SESSION_ID --target 答案列 [--group] [--exclude] [--instruction]`**：与页面「没有 Agent 服务？用基础分析开始」区同一来源（`propose_baseline_analysis` 确定性生成方案，`apply_analysis(model="baseline-deterministic")`）；`--temporal` 六参数（三个时间字段 + 三个边界）齐全才生成时间方案，缺哪些逐一点名，不静默退回随机切分；已有分析结果时如实拒绝（页面同口径隐藏入口，CLI 不悄悄覆盖）；stdout 纯任务 JSON + stderr `summarize_analysis` 人话摘要与 `analyze` 同格式。
+- **审查驱动的 must-fix**：temporal_policy 字典键名 `label_end_column` → `label_end_at_column`（与 `TemporalSplitPolicy` 字段一致，intake_models.py:112；修复前 CLI 时间分区成功路径 100% 报 pydantic 验证错——页面与全仓 20+ 处引用全用正确键名，唯独 CLI 写错，且无成功路径测试兜底）。CLI flag `--label-end-column` 不变。
+- **agent-setup.md**：「内置演示任务」段新增 CLI 平权段——两个零密钥入口、互斥清单、诚实拒绝边界、`--instruction`、演示冷启动组合命令逐字可照抄。
+
+**测试**：新增 `tests/unit/test_demo_cli.py`（11 个测试）：同源验证（goal/description/digest 门控识别）、互斥三场景 + 缺参、演示文件缺席如实报错、零密钥预览 + 摘要、已有分析拒绝、temporal 缺参逐一点名、**temporal 成功路径**（复用 `test_baseline_analysis.TEMPORAL_ROWS` fixture，钉死 `temporal_split["label_end_at_column"]`——键名再写错这里先红）、`--instruction` 覆盖 pin、CLI 零密钥旅程最小闭环（create --demo → baseline-analyze → preview 非空）、`--help` 可发现性（入口文案与页面词汇一致）。扩展 `test_readme_alignment.py` docs-pin（互斥清单含 `--scope full`、「逐一点名并直接报错，不静默忽略」、`[--instruction 补充指令]`）。
+
+**回归与错误修复**：
+- **全量回归到期轮**：基线 1951 passed / 322.14s（c50df49，bgugf0o0i）→ 修复中途树 1961（bhg376l58，guard 扩展前，作废）→ **最终树 1963 passed / 317.24s，覆盖率 93%**（+12：11 个新 CLI 测试 + 1 个 parametrize 展开）。中途两次回归因树变动失效被 TaskStop 弃用，最终数字以修复后树为准。
+- **独立审查**：r80-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维。正向：同源核实无平行实现、错误路径全诚实（未知任务/坏 --target 列出可用列/--group==--target 拦截）、stdout 纯 JSON 可解析、analyze 可覆盖且错误消息正确指向、digest 检查「超出预期」。FAIL 项：temporal 键名 must-fix（实测复现 pydantic 双验证错）+ --demo 静默丢弃 `--description/--encoding/--delimiter/--sheet/--scope full`（should-fix，主会话在报告到达前已抢先修复并主动披露）+ temporal 成功路径缺测试。修复后复核：**增量 PASS + R80 整体 PASS**（目标门禁 78/78、邻近五套件 130/130、mktemp 隔离目录逐一 smoke 七个互斥 flag）。
+- **延后 nit（reviewer 建议留后续轮）**：`create --demo` stderr 零密钥指引与共享尾行「下一步状态： awaiting_analysis（…先运行 analyze…）」打架——触及 `next_action_phrase` 单一来源（intake_service.py:101），全局爆炸半径，单独一轮处理。
+- 北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：① 刷新线上部署（含目标与数据主线与演示任务，之后撤 Option 2 定界句并同步 pin）；② 分支领先 origin 60 commits，push 受 Zed review hook 门控，待用户决定。成本钩子读数 $107.41（CRITICAL；不计成本授权下继续，逐轮如实上报）。

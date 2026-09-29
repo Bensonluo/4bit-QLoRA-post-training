@@ -1351,6 +1351,31 @@ def test_demo_task_docs_pinned():
     assert "src/workbench/demo_task.py" in trial, "试用记录补充必须点名单一来源模块"
 
 
+def test_demo_cli_parity_docs_pinned():
+    """演示任务 CLI 平权钉死(R80):create --demo 与 baseline-analyze 的同源、
+    互斥、诚实拒绝边界在 agent-setup 写明——零密钥旅程不再只属于页面。"""
+    section = _section(
+        AGENT_SETUP.read_text(encoding="utf-8"), "### 内置演示任务", "### 多份资料一起分析"
+    )
+    assert "CLI 有同源的两个零密钥入口" in section, "CLI 平权主题句必须在场"
+    assert "create --demo" in section, "演示冷启动 CLI 命令必须写明"
+    assert "不收 `--input`/`--goal`" in section, "互斥边界必须写明"
+    assert "`--scope full`" in section, "互斥清单必须覆盖 scope=full 矛盾"
+    assert "逐一点名并直接报错，不静默忽略" in section, "不静默忽略边界必须写明"
+    assert "baseline-analyze SESSION_ID --target 答案列" in section, "基础分析 CLI 必须写明"
+    assert "[--instruction 补充指令]" in section, "CLI 独有的补充指令参数必须写明"
+    assert "没有 Agent 服务？用基础分析开始" in section, "必须与页面入口词汇一致"
+    assert "propose_baseline_analysis" in section, "单一来源函数必须点名"
+    assert "baseline-deterministic" in section, "确定性方案的 model 记名必须写明"
+    assert "CLI 同口径，不悄悄覆盖" in section, "已有分析时的同口径边界必须写明"
+    assert "逐一点名缺哪些" in section, "--temporal 缺参点名必须写明"
+    assert "不静默退回随机切分" in section, "时间分区不静默降级必须写明"
+    assert "summarize_analysis" in section, "人话摘要同源必须点名"
+    assert "--target 类别 --group 编号 --exclude 处理结果" in section, (
+        "演示冷启动组合命令必须逐字可照抄"
+    )
+
+
 def test_quickstart_onboarding_docs_pinned():
     """快速开始与本地模型准备钉死(R74):演示入口文案与页面一致、零密钥承诺、
     hf download 可照抄命令、自动发现位点与镜像指引;agent-setup 同源分界钉死。"""
