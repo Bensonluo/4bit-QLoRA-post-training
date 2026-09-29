@@ -30,6 +30,9 @@ def summarize_comparison(report: Any) -> list[str]:
     models = report.models
     if not models:
         return ["该报告没有模型结果。"]
+    # 逐题查看出口点名(R98):评分理由与完整输出只在已存盘报告的 rows 里,
+    # eval-show 命令存在却从不被点名;缺键的极简夹具回退大写占位符,不假装知道 ID。
+    evaluation_id = getattr(report, "evaluation_id", None) or "EVALUATION_ID"
     lines: list[str] = []
     total = models[0]["metrics"].get("total") or 0
     lines.append(f"这次对照在固定开发集的 {total} 道题上进行,所有模型用同样的题目和评分规则。")
@@ -106,7 +109,7 @@ def summarize_comparison(report: Any) -> list[str]:
             "JSON 答案按声明的字段逐项核对,上面的「答对」指全部字段都对:"
             + "、".join(field_parts)
             + "。生成失败、截断或无法按 JSON 解析的题按该字段错误计入;"
-            "要知道该字段具体错在哪里,请逐题查看完整输出。"
+            f"要知道该字段具体错在哪里,可运行 eval-show {evaluation_id} 逐题查看完整输出。"
         )
 
     truncation_models = high_truncation_models(models)
@@ -150,7 +153,7 @@ def summarize_comparison(report: Any) -> list[str]:
         lines.append(
             "自定义业务评分按已确认规则逐题打分:上面的「通过」指达到单题通过分数,"
             "业务评分均值是各题得分的平均数,两者都不是严格准确率;"
-            "要知道哪里扣分,请逐题查看评分理由。"
+            f"要知道哪里扣分,可运行 eval-show {evaluation_id} 逐题查看评分理由。"
         )
     elif not strict:
         lines.append(

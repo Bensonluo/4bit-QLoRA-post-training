@@ -673,6 +673,49 @@ def test_comparison_custom_scoring_and_open_tasks_are_not_fake_zero():
     assert "答对" not in joined, "开放任务没有自动评分,不得出现「答对」措辞"
     assert "开放任务不做自动评分" in joined
     assert "不能人工标为通过" in joined
+    # 命令行 absence 钉(r98-reviewer nit-1):开放任务摘要不点名 eval-show——
+    # 该命令不解决开放任务的人工判断问题,点名反而是噪音
+    assert "eval-show" not in joined
+
+
+def test_comparison_pointer_names_real_eval_show_command_with_id():
+    """逐题查看出口点名(R98):字段准确率与自定义评分两处主指向句插值真实
+    evaluation_id 的 eval-show 命令——悬空「请逐题查看」退场;两分支互斥
+    (custom = not strict),一帧不会出现重复命令行;缺键回退大写占位符。"""
+    field = _model("本轮微调", 4, 0.5)
+    field["metrics"]["field_accuracy"] = {"日期": 0.5, "类别": 1.0}
+    joined = "\n".join(
+        summarize_comparison(SimpleNamespace(models=[field], evaluation_id="ev-real-01"))
+    )
+    assert "可运行 eval-show ev-real-01 逐题查看完整输出" in joined
+    assert "请逐题查看" not in joined
+    # 互斥性断言背书(r98-reviewer nit-1):一帧只有一条命令行,docstring 不再只是推理
+    assert joined.count("eval-show ") == 1
+
+    def custom(label):
+        rows = [
+            {"status": "scored", "output": "答", "prompt": "题目:某指令文本较长较长较长较长"}
+            for _ in range(4)
+        ]
+        return {
+            "label": label,
+            "metrics": {"total": 4, "exact_match": None, "business_score": 0.6, "pass_rate": 0.5},
+            "rows": rows,
+        }
+
+    joined = "\n".join(
+        summarize_comparison(
+            SimpleNamespace(models=[custom("本轮微调")], evaluation_id="ev-real-02")
+        )
+    )
+    assert "可运行 eval-show ev-real-02 逐题查看评分理由" in joined
+    assert "请逐题查看" not in joined
+    assert joined.count("eval-show ") == 1
+
+    # 极简夹具缺 evaluation_id:回退大写占位符,不假装知道 ID(R96 同款回退)
+    joined = "\n".join(summarize_comparison(_report([field])))
+    assert "eval-show EVALUATION_ID" in joined
+    assert "ev-real" not in joined
 
 
 def _acceptance_record(result, status="completed", metric="exact_match"):
