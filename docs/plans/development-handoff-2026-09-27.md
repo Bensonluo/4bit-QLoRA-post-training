@@ -3212,3 +3212,24 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地将领先 19 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
 
 **成本**：主会话成本钩子持续 CRITICAL：$86.73→$88.33→$90.38（破 $90）；r109-reviewer 转达 $89.92→$90.22，并明确建议向用户转达：如希望收敛成本可减少并行 agent 数量。按不计成本授权如实登记未中断，收敛建议已转达用户。
+## 第 110 轮（2026-09-30）——04 注册表页空态死端指路
+
+**选点**：r110-scout 审计（R109 轮报登记候选首核实成立）裁决单切片：04_Registry.py:37-42 空态 st.info 两条出路全是专家语域——①「在训练配置 LoggingConfig 中设置 register_model=True」（要求改 Python 配置类）②「运行 python scripts/registry_cli.py register」（要求跑终端命令）——非专家画像两条都走不通，且 st.stop() 封页、零按钮零页面内出路。**本机 outputs/mlruns/models 真实为空（scout scenario A：info 在场+buttons=[]）——空态即当前真实状态，活死端坐实为实证级**。按钮去向裁决 00 页（不是 01）：00 页覆盖两条真实旅程——(a) Configure「模型注册表」区「训练后自动注册」checkbox；(b) Activity「🧭 下一步」的 📦 合并导出+注册 CLI。01 只有 run 历史无注册动作。落选登记：02 入口3 rerun 不对称（真缺陷但钉贵修廉——钉要伪造 eval JSON+打桩 log_eval_to_mlflow+验证 rerun，修法仅 +1 行）；03_Model_Comparison 双空态封页（03:35-36「暂无包含评测数据的领域」+03:42-43「对比至少需要 2 个模型」）→ **R111 候选首**（出口天然 02 去跑评测）；02:45 入口1 无 exists 守卫（仓库恒带 domains/ 不可达）；R104 nit-3 归属修正：查 commit 0026ac6 实为 Popen 进程注册表竞态（非 04 页 mlflow 缓存），04 页三动作本就有 clear()+rerun，维持登记不修。
+
+**证据核实**：①打桩实证（scout B）：04:19 from ui.queries import fetch_model_versions 是页运行时导入——入口锚定 from_file(app.py) 真实根跑完后 setattr ui.queries.fetch_model_versions→空 DF 再 switch 进 04 即被读取（R109 时序范式）；打桩目标单函数（01 需两个）。本机 registry 恰为空，不打桩测试也能过，但钉必须打桩——否则未来本机一注册模型钉就静默漂移。②非空最小 DF（scout C，R109 nit-1 教训先验证再下结论）：7 列全字段单行（name/version/aliases/current_stage/status/created/run_id）完整跑通 04 非空路径（选择器/KPI/表格/别名动作区）。③控件名一手核实：00:321「模型注册表」subheader、00:325「训练后自动注册」checkbox 均在 advanced 门内（00:320 `if advanced and technique != "grpo"`）——info 指路必须写明「展开高级参数」路径，否则构成新幽灵指路。
+
+**实现**：04:37-47 空态分支：info 重写——主路指 00 页实控件路径（「展开「高级参数」→「模型注册表」区勾选「训练后自动注册」」），CLI 降为已训练完用户诚实副句；「🏋️ 去训练实验室」primary 按钮→st.switch_page("pages/00_Training_Lab.py") 插在 st.stop() 前（01:41 家族范式同款注释）。非空路径零触碰。共 +9−2 行。
+
+**测试 RED→GREEN**：净 4。空态指路钉（「暂无已注册的模型」锚+「训练后自动注册」控件点名断言+主按钮在场）；switch 旅程钉（入口锚定，点按钮断言 00 真标题「🏋️ 训练实验室」）；空态分支出路结构钉（btn_pos<stop_pos+switch 接线）；非空旅程特征化钉（7 列 DF+「版本数」metric=="1" 正向断言——R109 两教训均未重犯；生而绿 docstring 如实披露）。RED 3 失败理由全部正确（控件点名缺/按钮缺/源码无钮），1 特征化钉生而绿。门禁定向 31 passed（registry 4+register_unification 8+experiments 4+home 3+chat 3+loading 9）+ ruff 双净；采纳改名后复跑一致。
+
+**审查**：r110-reviewer（opus 只读五维度）verdict **PASS-with-findings**：0 should-fix / 1 nit / 3 observation。独立实证：git diff 单 hunk 证明非空路径 byte-identical；info 三控件名与 00 页逐字对上；三个变更动作区零触碰且测试不点动作钮（lambda 无 .clear()，点即 AttributeError——没点，安全）；打桩绕开 @st.cache_data 稳定；**审查者抓到主会话定向清单漏列 test_register_unification_ui.py（同跑 04 页）——独立补跑 8 passed 无回归，采纳进门禁**；GRPO 边界独立裁决（主会话提的边界题）：**不构成幽灵指路**——①技术单选 index=0 默认 SFT，照 info 走必见该区；②advanced+technique!="grpo" 是诚实能力门（grpo_trainer 无注册钩子，R107 决策+00:218 注释+CLAUDE.md 三处一致），GRPO 用户本就没有自动注册可找；③已训 GRPO 产物想注册恰好被 CLI 副句兜住。与 R108 05:124 本质不同：那是任何状态都不存在的按钮，这是默认态及所有非 GRPO 态都在的实控件。裁决：nit-1 采纳（钉3 函数名 nonempty 名实不符→改 test_registry_empty_branch_exit_before_stop；R109 experiments 同名误称登记 R111 清理）；obs-1 登记（GRPO 括注属噪音不建议）；obs-2 登记（钉2 运行时点按补钉3 switch 顺序缺口，互补完整）；obs-3 登记（created 用 int 时间戳 vs 真实格式化字符串，纯展示列无害）。环境脚注（审查者如实转达）：agent shell 里 source venv/bin/activate 不生效（PATH 未应用落 pyenv python）→ pytest 报 5 skipped「No module named streamlit」，改 ./venv/bin/python -m pytest 直跑正常——**门禁跑出「N skipped」要当未跑处理，别当通过**（流程教训，本轮登记）。
+
+**增量复核**：nit-1 改名落地后定向门禁 31 passed（6 套件）、ruff 双净；审查者与主会话两跑一致。
+
+**登记对账与 R111 选点**：口径修正（如实披露）：R108/R109 轮报分套件归因 ±1 记岔（loading 实为 9、localization 9，总集门禁另含 chat 3+discovery 等），总数 44/27/23/31 均为 pytest 直读数无损；今后分套件计数一律 pytest --collect-only 实测。R111 候选首 = 03_Model_Comparison 双空态封页（03:35-36 无评测数据态+03:42-43 模型不足 2 态，出口天然 02 去跑评测——按钮去向与 04 不同需裁决：跑评测页 02 是否有可执行入口还是仅看结果，scout 需核实）；次级：R109 experiments 钉3 同名误称清理、02 入口3 rerun（钉贵修廉维持登记）、02:45 守卫（不可达）、07 IA 史诗（独立轮次）。
+
+**边界**：全量跳过（节奏 2-3 大轮一次：R106→R109 已跑 2056，R111/R112 再对账）。scout 实测 --collect-only 2057 与 R109 收口预测（2056+采纳 1）精确吻合；R110 净 +4 → 下次全量预期 **2061**。
+
+**待授权**：①push origin（本地将领先 21 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
+
+**成本**：主会话成本钩子持续 CRITICAL：$90.38→$92.17→$92.56→$94.66；r110-scout 期间 $90.38→$92.33；r110-reviewer 期间 $94.86→$95.03（已破 $95）。两轮审查者均明确建议向用户转达收敛建议（减少并行 agent）。按不计成本授权如实登记未中断，收敛建议已再次转达。
