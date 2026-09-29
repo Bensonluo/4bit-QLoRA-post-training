@@ -3033,3 +3033,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源）；② Agent 判断真实性（同上）。
 - **待用户授权**：① benluo.art 线上部署刷新；② 分支推送（领先 origin 约 80 commits）；③ venv 重建（mypy shebang 失效）。
 - **成本**：会话累计约 $233.91（不计成本授权下随轮报上报）。
+
+## 第 100 轮 = 自动执行六态 message 收敛纯事实轮（单处建议原则贯通出口链）
+
+- **日期**：2026-09-29
+- **选点**：r100-scout 四候选评估（B>A>C>D）。B 实质损害已证：①完成态 message 三态口径「决定采用、继续或停止」与摘要 completed 句四态口径（含「证据不足」）同屏漂移——同一屏两种决定词汇；②六处 message 自带建议句（「请查看问题后处理」「请查看后在原入口确认继续」「请查看评测报告」「请核对三模型结果后…」「请重新核对后提出新的改进轮次」）与摘要尾句/恢复指引同屏堆叠（R99 已治两处，本轮治余六处）；③零服务级测试钉（grep 实证，test_report_summary:1067 用自搓夹具）。A（四处泛指从句）让位 R101——count==1 不变量需先设计（「每语境至多一处」或帧尾单命令）。
+- **实现**：六处 message 收敛纯事实短句 + 各带 R100 一行注释（iteration_execution.py :366/:421/:431/:445/:558/:572 六个 write_transition 出口）；_worker_world 仿真世界（json-safe IntakeSession 载荷走真实 model_dump_json→model_validate_json 授权快照往返——model_construct 宽松对象过不了 validate，实测 16 个 ValidationError 后换载荷；TrainingRunService 按构造签名整体打桩，因 _iterations():139 用 self._training() 覆写 service.training，class attr 会被顶掉——首版 RED 六测全落到「自动执行被阻断：找不到该训练运行。」后修正）；test_execution_pure_fact_contract 摘要互补钉；:1067 旧夹具补「旧落盘记录形态」注释（历史长句 message 由摘要原样嵌入不重写）；agent-setup.md :482 补 message 纯事实契约句。
+- **测试**：新增 7 测（六态 worker 精确钉 + 摘要互补钉）。RED 实证 6 failed（六态 message 全文不等值，各自先到达正确状态——钉打在措辞收敛而非状态机）+1 passed（摘要钉为夹具驱动契约钉）。定向门禁：**161 passed**（五文件：iteration_execution/report_summary/execution_ui/readme_alignment）+ ruff check/format clean + 退场 grep（请查看问题后处理/请查看后在原入口确认继续/决定采用、继续或停止）src/ui/scripts 零残留——tests/docs 残留均为钉本身（docstring/断言/历史夹具）。
+- **独立审查五维结论（r100-reviewer，sonnet 只读，全部结论实跑取证）**：总裁决 **PASS（0 should-fix / 2 nit / 2 登记）**。A 正确性 PASS——六态逐处核对（各到达正确状态并落正确字段，issues 原样透传，evaluation_id/bind_evaluation 在完成态生效）；UI 渲染面核实（07:1495-1499 经 st.error/st.info verbatim 渲染 message、issues 随后，纯事实句在页面语境成立）；B 单一来源 PASS——summarize_execution 生产消费面仅页面+CLI 两处、零手抄；C 测试充分性 强——审查者独立复刻 RED 沙箱（/tmp/ts-red：HEAD 旧源码+新测试 6 failed，失败精确为 message 全文差异而状态断言全过——回归捕获真实有效）；D 诚实边界 PASS（回退句不假装知道、partial 态无已绑定报告不指认、历史记录不重写）；E 回归风险 PASS——**审查者独立实跑全量回归 2000 passed / 228.24s（1993+7 分毫不差）**，pre-existing 钉全部存活。nit-1（:495 训练失败 message 的缺省回退句「请查看训练日志。」与摘要 worker.log 指向同屏双日志指引——回退句也应只报事实）；nit-2（:564 注释「查看指向交给摘要/页面」不精确——partial 态本无已绑定报告可指，宜改「诊断以 issues 落盘」口径）。登记-1（in-progress 各态 message 与摘要 _EXECUTION_IN_PROGRESS 短语同句双渲染：:391/:412/:466/:506/:520 五处 + :316「关闭页面不影响执行」与摘要同句重复——同族病，pre-existing）；登记-2（blocked 尾句「处理问题后提出新的改进轮次」对授权漂移语境略偏——「重新核对」语义在收敛时丢失，措辞项）。
+- **审查后采纳**：**nit-1 + nit-2 均采纳**——nit-1：:495 回退句改「失败详情未记录。」（纯事实，采纳前 grep 验证「请查看训练日志」在源码与钉中零出现后落编辑）；nit-2：:564 注释改「诊断以 issues 落盘，blocked 行动指引由摘要单处输出——partial 态本无已绑定报告可指」。采纳后复跑定向门禁 161 passed + ruff 双净 + 回退短语退场 grep 干净。
+- **登记对账**：新登记 登记-1（in-progress message 双渲染家族）与 登记-2（授权漂移尾句措辞）入候选池——与 A（:136/:160/:165/:194 泛指从句，R101 首选）同文件同病族，R101 可合并评估。维持登记：C（E/N2 双源，agent-setup.md:360 镜像）、⑦ training_progress.py:114、⑧ 裸子命令 vs 全前缀、R91 nit-①、nit-4 venv mypy、r95-reviewer nit-2、r98-reviewer nit-2/nit-3、funnel 组合钉降级项。有意跳过：「同题对照」两处 in-progress 短语（:506/:520 句群，归入登记-1 同族一并治）。
+- **边界全量回归**：本轮边界证据由审查者独立实跑提供——**2000 passed / 228.24s**（R99 边界 1993 + 本轮净 +7）。下一边界轮 R102/R103。
+- **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源）；② Agent 判断真实性（依赖真实 BYOK 后端）。
+- **待用户授权**：① 分支推送（origin/main 落后本地 200+ commits，Zed review hook 管推送）；② benluo.art 线上部署刷新；③ venv 重建（mypy shebang 失效）。
+- **成本**：会话累计约 $253.86（不计成本授权下随轮报上报）。

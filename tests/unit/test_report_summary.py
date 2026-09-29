@@ -1064,6 +1064,8 @@ def test_execution_summary_state_machine_translates_user_action_states():
     blocked = summarize_execution(
         {
             "status": "blocked",
+            # 旧落盘记录形态：R100 前的 message 自带建议句，摘要须原样嵌入历史
+            # message 不重写——新形态的互补钉见 test_execution_pure_fact_contract。
             "message": "训练准备未通过，请查看问题后处理。",
             "issues": ["数据版本过期", "预检阻断"],
         }
@@ -1150,6 +1152,56 @@ def test_execution_recovery_and_log_path_name_real_ids():
     joined = "\n".join(blocked)
     assert joined.count("处理问题后提出新的改进轮次") == 1
     assert "自动执行被阻断：训练未成功（failed）：显存不足" in joined
+
+
+def test_execution_pure_fact_contract():
+    """R100 六处服务 message 收敛纯事实后的摘要互补钉：行动建议只在摘要单处输出。
+
+    ①blocked：新形态 message（纯事实）+摘要尾句同屏时，「提出新的改进轮次」
+    恰出现一次——message 自带建议句的堆叠形态（R99 前旧病）不得回潮；
+    ②awaiting：恢复指引（勾选确认继续+命令行命令）单处，message 不再自带
+    「请查看后在原入口确认继续」；
+    ③completed：四态词汇（采用、继续、停止或证据不足）只在摘要句，message
+    里的三态手抄「决定采用、继续或停止」退场——同屏不再出现两种决定口径。
+    """
+    from src.workbench.report_summary import summarize_execution
+
+    blocked = summarize_execution(
+        {
+            "status": "blocked",
+            "message": "训练准备未通过。",
+            "log_path": "/exec/it-r100/worker.log",
+        }
+    )
+    joined = "\n".join(blocked)
+    assert "自动执行被阻断：训练准备未通过。" in joined
+    assert joined.count("提出新的改进轮次") == 1
+
+    ack = summarize_execution(
+        {
+            "status": "awaiting_warning_ack",
+            "message": "预检存在需核对的提示。",
+            "session_id": "sess-r100",
+            "iteration_id": "it-r100",
+            "session_revision": 3,
+        }
+    )
+    joined = "\n".join(ack)
+    assert joined.count("确认继续") == 1
+    assert "请查看后在原入口确认继续" not in joined
+
+    done = summarize_execution(
+        {
+            "status": "completed",
+            "message": "开发集对照已完成。",
+            "run_id": "wb-r100",
+            "evaluation_id": "ev-r100",
+        }
+    )
+    joined = "\n".join(done)
+    assert "证据不足" in joined
+    assert "采用、继续、停止或证据不足" in joined
+    assert "决定采用、继续或停止" not in joined
 
 
 def test_plan_summary_ready_states_model_params_reasons_and_boundaries():

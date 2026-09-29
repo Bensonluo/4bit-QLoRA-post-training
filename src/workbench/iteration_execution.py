@@ -367,10 +367,9 @@ class IterationExecutionService:
                 write_transition(
                     "blocked",
                     terminal=True,
-                    message=(
-                        "授权后业务目标、资料或数据方案已变化，原授权不能继续；"
-                        "请重新核对后提出新的改进轮次。"
-                    ),
+                    # R100 去重:message 只报事实,「提出新的改进轮次」的行动指向
+                    # 由 summarize_execution 的 blocked 尾句单处输出。
+                    message="授权后业务目标、资料或数据方案已变化，原授权不能继续。",
                 )
                 return False
 
@@ -424,7 +423,9 @@ class IterationExecutionService:
                         terminal=True,
                         run_id=iteration["new_run_id"],
                         issues=run["issues"],
-                        message="训练准备未通过，请查看问题后处理。",
+                        # R100 去重:message 只报事实,查看问题的建议句退场——
+                        # 摘要 blocked 尾句单处给「处理问题后提出新的改进轮次」。
+                        message="训练准备未通过。",
                     )
                     return False
                 preflight = run.get("preflight") or {}
@@ -434,7 +435,8 @@ class IterationExecutionService:
                         terminal=True,
                         run_id=iteration["new_run_id"],
                         issues=run["issues"],
-                        message="启动前数据校验未通过，请查看问题后处理。",
+                        # R100 去重:同上,message 只报事实。
+                        message="启动前数据校验未通过。",
                     )
                     return False
                 warnings = [
@@ -450,7 +452,9 @@ class IterationExecutionService:
                         terminal=False,
                         run_id=iteration["new_run_id"],
                         issues=preflight["issues"],
-                        message="预检存在需核对的提示；请查看后在原入口确认继续。",
+                        # R100 去重:message 只报事实,恢复指引(勾选确认继续+命令行
+                        # 命令)由 summarize_execution 的 awaiting 分支单处输出。
+                        message="预检存在需核对的提示。",
                     )
                     return False
                 if stop_requested():
@@ -486,7 +490,9 @@ class IterationExecutionService:
                         # 曾逐字出现两次。
                         message=(
                             f"训练未成功（{run['status']}）："
-                            f"{failure.get('message') or '请查看训练日志。'}"
+                            # 采纳 r100-reviewer nit-1:回退句也只报事实——「请查看
+                            # 训练日志」与摘要 worker.log 指向同屏双日志指引。
+                            f"{failure.get('message') or '失败详情未记录。'}"
                         ),
                     )
                     return False
@@ -555,7 +561,9 @@ class IterationExecutionService:
                     terminal=True,
                     run_id=iteration["new_run_id"],
                     issues=[{"severity": "warning", "message": note} for note in report.notes],
-                    message="开发集对照未完整完成，请查看评测报告。",
+                    # R100 去重(采纳 r100-reviewer nit-2):诊断以 issues 落盘,
+                    # blocked 行动指引由摘要单处输出——partial 态本无已绑定报告可指。
+                    message="开发集对照未完整完成。",
                 )
                 return False
             iterations.bind_evaluation(
@@ -566,7 +574,9 @@ class IterationExecutionService:
                 terminal=True,
                 run_id=iteration["new_run_id"],
                 evaluation_id=report.evaluation_id,
-                message="开发集对照已完成；请核对三模型结果后决定采用、继续或停止。",
+                # R100 去重:message 只报事实;摘要 completed 句是四态口径
+                # (含「证据不足」),旧三态手抄与之同屏漂移,收敛后词汇只在摘要单处。
+                message="开发集对照已完成。",
             )
             return True
         except KeyboardInterrupt:
