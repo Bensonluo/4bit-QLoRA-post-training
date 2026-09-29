@@ -522,3 +522,35 @@ def test_echo_triage_silent_without_echo_rows() -> None:
         == []
     )
     assert echo_triage_lines("基座", []) == []
+
+
+def test_warning_sentences_single_source_shared_by_page_and_summary() -> None:
+    """R102 C+登记-①:截断/坍缩两句警告从页面手抄收编为单一来源 builder。
+
+    页面 st.warning 与 summarize_comparison 此前各写一套——页面句还带着已退场的
+    「逐题查看完整输出」内联指令与无检测器支撑的「缺少停止标记」提醒(R101 收敛
+    语境句后两处尾句已事实漂移)。收编后页面与摘要渲染同一函数返回值,词汇漂移
+    在结构上不可能。
+    """
+    from src.workbench.evaluation_diagnostics import (
+        dominant_warning_sentence,
+        truncation_warning_sentence,
+    )
+
+    truncation = truncation_warning_sentence([("基座", 2), ("本轮微调", 1)], 32)
+    assert truncation == (
+        "多个输出因触及生成长度上限被截断（基座 2 题、本轮微调 1 题，当前 max_new_tokens 为 32）；"
+        "先核查 max_new_tokens 是否小于最短合法答案、输出是否在重复生成，"
+        "再决定是否加长——触及上限不等于只需增加长度。"
+    )
+    # 协议未记录上限:不拼「当前 max_new_tokens」段,不编造数值
+    assert "当前 max_new_tokens" not in truncation_warning_sentence([("基座", 2)], None)
+
+    dominant = dominant_warning_sentence([("基座", 4, 4, "同一回答")])
+    assert dominant == (
+        "观察到输出高度重复（基座 有 4/4 条输出完全相同（同一回答））：该模型在反复输出同一答案。"
+        "请对照开发集答案分布——分布本身集中时,模型可能只是复述多数类,不一定是学坏了;"
+        "分布不集中时,需确认每题是否本该有不同答案。这是观察事实,不认定原因。"
+    )
+    # 超长重复片段截到 24 字 + 省略号,同页面此前手抄口径
+    assert ("长" * 24 + "…") in dominant_warning_sentence([("基座", 4, 4, "长" * 30)])

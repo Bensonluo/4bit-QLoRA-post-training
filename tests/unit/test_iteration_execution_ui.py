@@ -93,13 +93,12 @@ def test_confirmed_iteration_executes_once_and_only_through_explicit_click(execu
     execute.click().run()
     assert not page.exception
     assert calls == [("start", IDENTITY, {"independent_rows_confirmed": True})]
-    # After submission the page shows progress and the start entry is gone.
-    assert any("正在训练" in message.value for message in page.info)
+    # After submission the start entry is gone. R102: 进度 message 框退场——
+    # 记录 message 由语言化摘要单源输出,页面不再手抄第二份。
+    assert not any("正在训练" in message.value for message in page.info)
     assert not any(b.label == "按确认方案执行到开发集对照" for b in page.button)
-    # 与 CLI 同口径的人话摘要：后台推进 + 关闭页面不影响执行边界。
-    assert any(
-        "自动执行正在后台推进：训练已按确认方案启动。" in block.value for block in page.markdown
-    )
+    # 与 CLI 同口径的人话摘要：进行中句插值记录 message（正在训练。）+ 关闭页面边界。
+    assert any("自动执行正在后台推进：正在训练。" in block.value for block in page.markdown)
     assert any(
         "后台进程独立于页面与终端运行，关闭页面不影响执行。" in block.value
         for block in page.markdown

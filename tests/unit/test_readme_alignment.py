@@ -623,7 +623,10 @@ def test_dominant_output_disclosure_docs_pinned():
         "## 让 Agent 解读结果与下一步",
     )
     assert "输出高度重复" in section
-    assert "`dominant_output_models` 单一来源" in section
+    # R102:披露句收敛为 warning builder 单一来源——检测仍由 dominant_output_models
+    # 完成,警告句原文同出 dominant_warning_sentence(页面 st.warning 与摘要同函数)。
+    assert "`dominant_warning_sentence` 单一来源" in section
+    assert "`truncation_warning_sentence`" in section
     assert "80%" in section and "至少 4 条" in section, "判定口径必须写明"
     assert "对照开发集答案分布" in section, "核查方向必须写明"
     assert "复述多数类" in section, "答案分布集中的假阳性边界必须写明"

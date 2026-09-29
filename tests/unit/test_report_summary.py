@@ -1158,6 +1158,8 @@ def test_execution_summary_state_machine_translates_user_action_states():
     stopped = summarize_execution({"status": "stopped"})
     joined = "\n".join(stopped)
     assert "已按请求停止自动执行" in joined
+    # r102-reviewer nit-2:停止态尾句统一带逗号变体,与 blocked/failed 分支同一写法
+    assert "如需继续，请提出新的改进轮次。" in joined
     assert "不代表业务效果达标" in joined
 
 
@@ -1204,26 +1206,30 @@ def test_execution_recovery_and_log_path_name_real_ids():
         }
     )
     joined = "\n".join(dead)
-    assert "执行日志 worker.log 位于 /executions/it-r99/worker.log" in joined
-    # 建议句单处输出(R99 去重背书):服务层 message 已只报事实,不与摘要同屏堆叠
-    assert joined.count("处理问题后提出新的改进轮次") == 1
+    assert "执行日志 worker.log 位于 /executions/it-r99/worker.log。" in joined
+    # R102 登记-2:进程退出无 issues 可修,尾句给中性「如需继续」指针——
+    # 「处理问题后」对无问题清单的语境是错误指引
+    assert "如需继续，请提出新的改进轮次。" in joined
+    assert "处理问题后" not in joined
     assert "自动执行失败：后台执行进程已退出且未完成。" in joined
 
-    # 旧记录缺 log_path:回退泛指句,不编造路径
+    # 旧记录缺 log_path:回退泛指句,不编造路径;无 issues 同样走「如需继续」
     legacy = summarize_execution({"status": "failed"})
     joined = "\n".join(legacy)
-    assert "请查看执行记录与 worker.log，处理问题后提出新的改进轮次。" in joined
+    assert "请查看执行记录与 worker.log。" in joined
+    assert "如需继续，请提出新的改进轮次。" in joined
 
-    # blocked+log_path 同面(采纳 r99-reviewer should-fix-1):worker 侧 message 已
-    # 只报事实,建议句仍只在摘要尾句单处出现——同屏不堆叠两次。
+    # blocked+log_path+issues 同面:问题清单在场,建议先处理后新开轮次
     blocked = summarize_execution(
         {
             "status": "blocked",
             "message": "训练未成功（failed）：显存不足",
+            "issues": [{"severity": "warning", "message": "资源不足"}],
             "log_path": "/executions/it-r99/worker.log",
         }
     )
     joined = "\n".join(blocked)
+    assert "执行日志 worker.log 位于 /executions/it-r99/worker.log。" in joined
     assert joined.count("处理问题后提出新的改进轮次") == 1
     assert "自动执行被阻断：训练未成功（failed）：显存不足" in joined
 
@@ -1276,6 +1282,26 @@ def test_execution_pure_fact_contract():
     assert "证据不足" in joined
     assert "采用、继续、停止或证据不足" in joined
     assert "决定采用、继续或停止" not in joined
+
+
+def test_execution_in_progress_prefers_record_message_single_source():
+    """R102 登记-1:进行中状态句插值记录 message(单源)——worker 落盘的动态事实
+    不再被静态字典句覆写;旧记录缺 message 时回退字典短句。queue 态三处词汇
+    (worker「已受理，等待后台执行。」/字典「已受理，等待后台执行开始。」/页面
+    标签)曾三方漂移,此钉后摘要只认记录本体。"""
+    from src.workbench.report_summary import summarize_execution
+
+    fresh = summarize_execution({"status": "queued", "message": "已受理，等待后台执行。"})
+    joined = "\n".join(fresh)
+    assert "自动执行正在后台推进：已受理，等待后台执行。" in joined
+    # 记录 message 在场时不渲染第二种口径
+    assert "已受理，等待后台执行开始。" not in joined
+    assert "关闭页面不影响执行" in joined
+
+    # 旧记录缺 message:回退字典短句,不编造动态事实
+    legacy = summarize_execution({"status": "materializing"})
+    joined = "\n".join(legacy)
+    assert "自动执行正在后台推进：正在用本轮固定题集准备数据版本。" in joined
 
 
 def test_plan_summary_ready_states_model_params_reasons_and_boundaries():

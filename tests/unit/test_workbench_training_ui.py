@@ -394,8 +394,10 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
     assert any(block.value == "基座的完整输出" for block in page.code)
     assert any(block.value == "本轮微调的完整输出" for block in page.code)
     # 一半样本被截断，达到高比例阈值：对照区给出 max_new_tokens 核查提示（观察事实，不认定原因）。
+    # R102:警告句与语言化摘要同出 truncation_warning_sentence(单一来源),
+    # 页面旧手抄 lead-in「高比例输出截断」退场,钉改指 builder 输出原文。
     assert any(
-        "高比例输出截断" in message.value and "max_new_tokens" in message.value
+        "多个输出因触及生成长度上限被截断" in message.value and "max_new_tokens" in message.value
         for message in page.warning
     )
     assert any("触及上限不等于只需增加长度" in message.value for message in page.warning)

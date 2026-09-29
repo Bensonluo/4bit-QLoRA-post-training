@@ -180,6 +180,36 @@ def echo_triage_lines(
     return lines
 
 
+def truncation_warning_sentence(truncation_models: list[tuple[str, int]], limit: int | None) -> str:
+    """高比例截断警告句（单一来源，页面 st.warning 与对照摘要渲染同一返回值）。
+
+    只陈述截断事实与核查顺序，不认定原因；协议未记录上限时不编造当前值。
+    """
+    counts = "、".join(f"{label} {count} 题" for label, count in truncation_models)
+    limit_note = f"，当前 max_new_tokens 为 {limit}" if limit is not None else ""
+    return (
+        f"多个输出因触及生成长度上限被截断（{counts}{limit_note}）；"
+        "先核查 max_new_tokens 是否小于最短合法答案、输出是否在重复生成，"
+        "再决定是否加长——触及上限不等于只需增加长度。"
+    )
+
+
+def dominant_warning_sentence(dominant_models: list[tuple[str, int, int, str]]) -> str:
+    """输出坍缩（高度重复）警告句（单一来源，页面 st.warning 与对照摘要渲染同一返回值）。
+
+    超长重复片段截到 24 字 + 省略号；只陈述观察事实与对照方向，不认定原因。
+    """
+    parts = []
+    for label, count, generated, top_output in dominant_models:
+        clipped = top_output if len(top_output) <= 24 else top_output[:24] + "…"
+        parts.append(f"{label} 有 {count}/{generated} 条输出完全相同（{clipped}）")
+    return (
+        f"观察到输出高度重复（{'、'.join(parts)}）：该模型在反复输出同一答案。"
+        "请对照开发集答案分布——分布本身集中时,模型可能只是复述多数类,不一定是学坏了;"
+        "分布不集中时,需确认每题是否本该有不同答案。这是观察事实,不认定原因。"
+    )
+
+
 class EvaluationDiagnostics:
     def __init__(self, report: EvaluationReport, session: IntakeSession):
         if not dataset_is_current(session):

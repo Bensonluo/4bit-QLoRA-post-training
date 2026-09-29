@@ -216,6 +216,9 @@ def test_launch_success_persists_log_path(tmp_path, monkeypatch):
     result = service._launch(record)
     assert result["status"] == "queued"
     assert result["worker_pid"] == 4242
+    # R102 登记-1:启动 message 是纯事实短句——进度的解释与恢复边界由摘要单源输出,
+    # 不在 message 里重复第二套口径
+    assert result["message"] == "后台执行已启动。"
     assert result["log_path"] == str(service._directory(IDENTITY) / "worker.log")
     # append 模式打开即创建:路径不止是字符串,文件真实在场
     assert (service._directory(IDENTITY) / "worker.log").exists()

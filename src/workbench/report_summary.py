@@ -42,9 +42,11 @@ def summarize_comparison(report: Any) -> list[str]:
     from src.workbench.evaluation_diagnostics import (
         count_instruction_echo,
         dominant_output_models,
+        dominant_warning_sentence,
         echo_triage_lines,
         high_truncation_models,
         output_echoes_prompt,
+        truncation_warning_sentence,
     )
 
     first_metrics = models[0]["metrics"]
@@ -118,27 +120,12 @@ def summarize_comparison(report: Any) -> list[str]:
     truncation_models = high_truncation_models(models)
     if truncation_models:
         limit = (getattr(report, "protocol", None) or {}).get("max_new_tokens")
-        lines.append(
-            "多个输出因触及生成长度上限被截断（"
-            + "、".join(f"{label} {count} 题" for label, count in truncation_models)
-            + (f"，当前 max_new_tokens 为 {limit}" if limit is not None else "")
-            + "）；先核查 max_new_tokens 是否小于最短合法答案、输出是否在重复生成，"
-            "再决定是否加长——触及上限不等于只需增加长度。"
-        )
+        # 截断/坍缩警告句与页面 st.warning 同源(builder 单一来源,R102)
+        lines.append(truncation_warning_sentence(truncation_models, limit))
 
     dominant_models = dominant_output_models(models)
     if dominant_models:
-        dominant_parts = []
-        for label, count, generated, top_output in dominant_models:
-            clipped = top_output if len(top_output) <= 24 else top_output[:24] + "…"
-            dominant_parts.append(f"{label} 有 {count}/{generated} 条输出完全相同（{clipped}）")
-        lines.append(
-            "观察到输出高度重复（"
-            + "、".join(dominant_parts)
-            + "）：该模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时,"
-            "模型可能只是复述多数类,不一定是学坏了;分布不集中时,需确认每题是否"
-            "本该有不同答案。这是观察事实,不认定原因。"
-        )
+        lines.append(dominant_warning_sentence(dominant_models))
         inspect_targets.append("完整输出")
 
     for model in models:
@@ -810,7 +797,10 @@ def summarize_execution(record: dict) -> list[str]:
     status = record.get("status")
     lines = []
     if status in _EXECUTION_IN_PROGRESS:
-        lines.append(f"自动执行正在后台推进：{_EXECUTION_IN_PROGRESS[status]}")
+        # 进行中事实单源(R102):优先插值记录本体 message——worker 落盘的动态事实
+        # 不被静态字典句覆写;字典只作为旧记录缺 message 的回退。
+        fact = record.get("message") or _EXECUTION_IN_PROGRESS[status]
+        lines.append(f"自动执行正在后台推进：{fact}")
         lines.append("后台进程独立于页面与终端运行，关闭页面不影响执行。")
     elif status == "awaiting_warning_ack":
         lines.append("自动执行已暂停：预检存在需核对的提示。")
@@ -850,14 +840,23 @@ def summarize_execution(record: dict) -> list[str]:
                 shown += "等"
             lines.append(f"问题：{shown}。")
         # worker.log 位置插值(R99):记录在启动时落盘 log_path,据此给出完整位置;
-        # 旧记录缺该键时回退泛指句——不编造不存在的路径。
+        # 旧记录缺该键时回退泛指句——不编造不存在的路径。尾句按 issues 在场与否
+        # 分流(R102 登记-2):有问题清单给「先处理后新开」;无清单(进程退出/授权
+        # 漂移)给中性「如需继续」指针——没有可指认的问题时「处理问题后」是错误指引。
         log_path = record.get("log_path")
         if log_path:
-            lines.append(f"执行日志 worker.log 位于 {log_path}；处理问题后提出新的改进轮次。")
+            lines.append(f"执行日志 worker.log 位于 {log_path}。")
         else:
-            lines.append("请查看执行记录与 worker.log，处理问题后提出新的改进轮次。")
+            lines.append("请查看执行记录与 worker.log。")
+        if issues:
+            lines.append("处理问题后提出新的改进轮次。")
+        else:
+            lines.append("如需继续，请提出新的改进轮次。")
     elif status == "stopped":
-        lines.append("已按请求停止自动执行；本轮不再推进，如需继续请提出新的改进轮次。")
+        # 停止态同样按事实行+建议行拆分(r102-reviewer nit-2):尾句与 blocked/failed
+        # 分支统一带逗号变体「如需继续，请提出新的改进轮次。」,不再留第二套写法。
+        lines.append("已按请求停止自动执行；本轮不再推进。")
+        lines.append("如需继续，请提出新的改进轮次。")
     else:
         message = record.get("message")
         lines.append(f"自动执行状态：{message}" if message else "自动执行状态未记录。")

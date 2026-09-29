@@ -1423,6 +1423,17 @@ def test_preflight_passed_state_moves_page_exits_forward(data_page, monkeypatch)
     assert not page.exception
 
 
+def test_comparison_warnings_render_shared_builders_not_hand_copies():
+    """R102 源码扫描钉(r102-reviewer nit-1):对照区截断/重复输出警告必须经
+    truncation_warning_sentence / dominant_warning_sentence 渲染——与语言化摘要
+    同一函数返回值;页面手抄句「检测到高比例输出截断」退场后不得用任何新词
+    再抄第二份(运行时钉只拦措辞漂移,拦不住重新手抄)。"""
+    source = PAGE.read_text(encoding="utf-8")
+    assert "truncation_warning_sentence(" in source
+    assert "dominant_warning_sentence(" in source
+    assert "检测到高比例输出截断" not in source
+
+
 def test_acceptance_and_plan_names_source_from_report_summary_constants():
     """验收结论横幅与方案状态标签单源化(R97):页面不再手抄第二套名字——
     验收 map 换 ACCEPTANCE_DECISION_NAMES、方案 labels 换 PLAN_STATUS_NAMES;

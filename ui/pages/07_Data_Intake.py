@@ -989,8 +989,10 @@ def show_business_comparison(report, *, key: str) -> None:
     from src.workbench.evaluation_diagnostics import (
         count_instruction_echo,
         dominant_output_models,
+        dominant_warning_sentence,
         echo_triage_lines,
         high_truncation_models,
+        truncation_warning_sentence,
     )
 
     truncation_models = high_truncation_models(report.models)
@@ -1031,28 +1033,13 @@ def show_business_comparison(report, *, key: str) -> None:
         ):
             st.warning(line)
     if truncation_models:
-        limit = report.protocol.get("max_new_tokens")
+        # 截断/坍缩警告句与对照摘要同源(builder 单一来源,R102)——页面手抄退场。
         st.warning(
-            "检测到高比例输出截断（"
-            + "、".join(f"{label} {count} 题" for label, count in truncation_models)
-            + "）：大量输出触及生成长度上限。可核查：max_new_tokens"
-            + (f"（当前 {limit}）" if limit is not None else "")
-            + "是否小于最短合法答案；输出是否在重复生成或缺少停止标记。"
-            "触及上限不等于只需增加长度，这是观察事实，原因仍需核查。"
+            truncation_warning_sentence(truncation_models, report.protocol.get("max_new_tokens"))
         )
     dominant_models = dominant_output_models(report.models)
     if dominant_models:
-        dominant_parts = []
-        for label, count, generated, top_output in dominant_models:
-            clipped = top_output if len(top_output) <= 24 else top_output[:24] + "…"
-            dominant_parts.append(f"{label} 有 {count}/{generated} 条输出完全相同（{clipped}）")
-        st.warning(
-            "观察到输出高度重复（"
-            + "、".join(dominant_parts)
-            + "）：模型在反复输出同一答案。请对照开发集答案分布——分布本身集中时，"
-            "模型可能只是复述多数类，不一定是学坏了；分布不集中时，逐题查看完整输出。"
-            "这是观察事实，原因仍需核查。"
-        )
+        st.warning(dominant_warning_sentence(dominant_models))
     st.dataframe(summaries, hide_index=True, width="stretch")
     from src.workbench.report_summary import summarize_comparison
 
@@ -1475,6 +1462,8 @@ if iterations:
             with st.expander("继承配置与确认的覆盖"):
                 st.json(iteration.get("options", {}))
             if execution:
+                # 标签是紧凑状态芯片(漏斗紧凑短名分层惯例);事实句由
+                # summarize_execution 单源输出(R102:message 框退场,不再手抄第二份)。
                 execution_labels = {
                     "queued": "已受理，等待后台执行",
                     "materializing": "正在准备固定题集数据",
@@ -1492,11 +1481,6 @@ if iterations:
                     "**本轮后台进度：** "
                     + execution_labels.get(execution["status"], execution["status"])
                 )
-                if execution.get("message"):
-                    if execution["status"] in {"failed", "blocked", "unavailable"}:
-                        st.error(execution["message"])
-                    else:
-                        st.info(execution["message"])
                 issues = execution.get("issues") or (execution.get("preflight") or {}).get(
                     "issues", []
                 )
