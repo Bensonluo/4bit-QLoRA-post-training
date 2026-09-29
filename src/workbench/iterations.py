@@ -17,6 +17,11 @@ from src.workbench.intake_models import IntakeSession
 from src.workbench.sources import canonical, content_digest
 from src.workbench.training_runs import TrainingRunService
 
+# 迭代决策枚举的机器层单一来源（有序元组）：decide() 校验与 CLI --decision 选项共用；
+# 人话名映射在 report_summary.ITERATION_DECISION_NAMES，四面键集等值由
+# test_funnel_report 的键集等值钉锁定，新增决策态漏改任一面都会先在测试失败。
+ITERATION_DECISIONS = ("adopt", "continue", "stop", "insufficient_evidence")
+
 
 class IterationService:
     def __init__(self, root, training_root, evaluation_root):
@@ -409,7 +414,7 @@ class IterationService:
         record = self.get(iteration_id)
         if (
             record["status"] != "evaluated"
-            or decision not in {"adopt", "continue", "stop", "insufficient_evidence"}
+            or decision not in ITERATION_DECISIONS
             or not isinstance(reason, str)
             or not reason.strip()
         ):

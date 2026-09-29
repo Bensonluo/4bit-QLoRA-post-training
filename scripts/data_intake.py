@@ -597,13 +597,13 @@ def main() -> int:
                 action="store_true",
                 help="允许发送业务资料、已确认改进方向及父轮实际评测输出与坏例",
             )
+    from src.workbench.iterations import ITERATION_DECISIONS
+
     iteration_decide = sub.add_parser(
         "iteration-decide", help="记录采用、继续、停止或证据不足及理由"
     )
     iteration_decide.add_argument("iteration_id")
-    iteration_decide.add_argument(
-        "--decision", choices=["adopt", "continue", "stop", "insufficient_evidence"], required=True
-    )
+    iteration_decide.add_argument("--decision", choices=list(ITERATION_DECISIONS), required=True)
     iteration_decide.add_argument("--reason", required=True)
     iteration_list = sub.add_parser("iteration-list")
     iteration_list.add_argument("session_id")

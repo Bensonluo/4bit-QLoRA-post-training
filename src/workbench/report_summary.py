@@ -628,7 +628,10 @@ def summarize_acceptance(record: dict) -> list[str]:
     return lines
 
 
-_ITERATION_DECISION_NAMES = {
+# 迭代决策枚举 → 人话名的单一来源（公开常量）：报告摘要、页面决策表单与已决策回显
+# 都从这里取名。漏斗的紧凑短名（采用/继续/停止/证据不足）是同枚举的场景化分层，
+# 键集由 test_funnel_report 的键集等值钉锁定，不在此强求同值。
+ITERATION_DECISION_NAMES = {
     "adopt": "采用本轮结果",
     "continue": "继续改进",
     "stop": "停止本轮路线",
@@ -710,7 +713,7 @@ def summarize_iteration(record: dict) -> list[str]:
     status = record.get("status")
     if status == "decided":
         decision = record.get("decision")
-        lines.append(f"已记录你的业务决定：{_ITERATION_DECISION_NAMES.get(decision, decision)}。")
+        lines.append(f"已记录你的业务决定：{ITERATION_DECISION_NAMES.get(decision, decision)}。")
         reason = record.get("decision_reason")
         if reason:
             lines.append(f"业务理由：{reason}")

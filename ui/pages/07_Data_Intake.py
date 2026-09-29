@@ -1706,25 +1706,23 @@ if iterations:
                 st.write(
                     "请核对结果后作出业务决策；决策与理由记录在本轮，作为采用、继续或停止的依据。"
                 )
-                from src.workbench.report_summary import summarize_iteration
+                from src.workbench.report_summary import (
+                    ITERATION_DECISION_NAMES,
+                    summarize_iteration,
+                )
 
                 for line in summarize_iteration(iteration):
                     st.write(line)
                 decision_label = st.radio(
                     "本轮决策",
-                    ["采用", "继续（提出下一轮改进）", "停止", "证据不足"],
+                    list(ITERATION_DECISION_NAMES.values()),
                     key=f"decision_choice_{identity}",
                 )
                 decision_reason = st.text_area(
                     "业务理由（必填）",
                     key=f"decision_reason_{identity}",
                 )
-                decision_map = {
-                    "采用": "adopt",
-                    "继续（提出下一轮改进）": "continue",
-                    "停止": "stop",
-                    "证据不足": "insufficient_evidence",
-                }
+                decision_map = {name: code for code, name in ITERATION_DECISION_NAMES.items()}
                 if st.button(
                     "记录本轮决策",
                     key=f"decide_{identity}",
@@ -1739,18 +1737,16 @@ if iterations:
                     except (ValueError, RuntimeError, OSError) as exc:
                         st.error(str(exc))
             if iteration.get("decision"):
-                decision_names = {
-                    "adopt": "采用",
-                    "continue": "继续",
-                    "stop": "停止",
-                    "insufficient_evidence": "证据不足",
-                }
+                from src.workbench.report_summary import (
+                    ITERATION_DECISION_NAMES,
+                    summarize_iteration,
+                )
+
                 st.success(
-                    f"已记录决策：{decision_names.get(iteration['decision'], iteration['decision'])}"
+                    f"已记录决策："
+                    f"{ITERATION_DECISION_NAMES.get(iteration['decision'], iteration['decision'])}"
                     f" — {iteration.get('decision_reason', '')}"
                 )
-                from src.workbench.report_summary import summarize_iteration
-
                 for line in summarize_iteration(iteration):
                     st.write(line)
             if iteration.get("data_revision"):
@@ -1789,28 +1785,6 @@ if iterations:
                 st.info(
                     "下一步：在下方对应训练记录中启动或查看进度；成功后运行基座、父轮与本轮的固定题集对照。"
                 )
-            if iteration["status"] == "evaluated":
-                with st.form(f"iteration_decision_{identity}"):
-                    decision = st.selectbox(
-                        "这轮结果如何处理？",
-                        ["adopt", "continue", "stop", "insufficient_evidence"],
-                        format_func=lambda value: {
-                            "adopt": "采用本轮结果",
-                            "continue": "继续改进",
-                            "stop": "停止本轮路线",
-                            "insufficient_evidence": "证据不足",
-                        }[value],
-                    )
-                    reason = st.text_area("业务理由与剩余问题")
-                    decide = st.form_submit_button("保存本轮决策")
-                if decide:
-                    try:
-                        iteration_service.decide(identity, decision, reason)
-                        st.rerun()
-                    except (ValueError, RuntimeError, OSError) as exc:
-                        st.error(str(exc))
-            if iteration["status"] == "decided":
-                st.write(f"**已记录：** {iteration['decision']} · {iteration['decision_reason']}")
 original_sources = session.sources or {"main": session.source}
 with st.expander("原始资料与补充文件", expanded=len(original_sources) > 1):
     st.caption(

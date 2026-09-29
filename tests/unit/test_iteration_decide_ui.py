@@ -6,6 +6,7 @@ import pytest
 
 pytest.importorskip("streamlit")
 
+from src.workbench.report_summary import ITERATION_DECISION_NAMES
 from tests.unit import test_data_intake_ui as intake_ui
 from tests.unit.test_full_data import FULL, approved
 
@@ -86,10 +87,15 @@ def test_evaluated_iteration_shows_results_and_records_decision(decide_page):
     )
     record = next(b for b in page.button if b.label == "记录本轮决策")
     assert record.disabled
+    # 单一决策入口(R93):旧第二套 st.form 决策表单已删,同屏不再两套表单、两种选项词汇并存。
+    assert not any(s.label == "这轮结果如何处理？" for s in page.selectbox)
+    assert not any(b.label == "保存本轮决策" for b in page.button)
     next(t for t in page.text_area if t.label == "业务理由（必填）").input(
         "三模型仍未达标，但对照证据完整。"
     ).run()
     choices = next(c for c in page.radio if c.label == "本轮决策")
+    # 决策单选选项从单一来源派生(R93):就是 ITERATION_DECISION_NAMES 的值,页面不再手写第二套短名。
+    assert list(choices.options) == list(ITERATION_DECISION_NAMES.values())
     choices.set_value("证据不足").run()
     record = next(b for b in page.button if b.label == "记录本轮决策")
     assert not record.disabled
@@ -123,9 +129,12 @@ def test_decided_iteration_shows_recorded_decision_without_new_controls(decide_p
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert not page.exception
-    assert any("已记录决策：停止" in message.value for message in page.success)
+    # 已决策回显用单一来源长名(R93):success 行与摘要行同词汇,不再有「停止」短名第二套。
+    assert any("已记录决策：停止本轮路线" in message.value for message in page.success)
     assert not any(c.label == "本轮决策" for c in page.radio)
     assert decisions == []
+    # 旧的裸枚举回显行(**已记录：** stop · …)已删:决策对非专家只以人话名出现。
+    assert not any("**已记录：**" in block.value for block in page.markdown)
     # 已决策态的人话摘要与 CLI 同源：决定名 + 业务理由回显。
     assert any("已记录你的业务决定：停止本轮路线" in block.value for block in page.markdown)
     assert any("业务理由：试点完成，停止迭代。" in block.value for block in page.markdown)

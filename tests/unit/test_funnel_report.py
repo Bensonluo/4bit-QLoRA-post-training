@@ -149,6 +149,22 @@ def test_summarize_funnel_iteration_line_without_decisions_and_verbatim_unknown_
     assert "改进轮次共 1 轮。" in lines, "无决策时不出现「已决策」半句"
 
 
+def test_funnel_decision_names_share_enum_with_report_canonical():
+    """决策四态枚举四面手写、一钉锁全(R93 键集等值钉):漏斗短名(采用/继续/停止/
+    证据不足,服务计数行紧凑)、报告长名(采用本轮结果/继续改进/停止本轮路线/证据
+    不足,全旅程统一人话名)、decide() 校验集与 CLI --decision 选项(iterations.
+    ITERATION_DECISIONS)——值的分层是有意的场景化,但四面键集必须相等:任一侧新增
+    或改名决策态而其余面漏改时,此钉先失败,「（采用 1）」与页面选项不再可能静默
+    漏计新决策。另钉人话名值唯一:值撞名会让页面反向映射悄悄取错枚举。"""
+    from src.workbench.funnel_report import _ITERATION_DECISION_NAMES
+    from src.workbench.iterations import ITERATION_DECISIONS
+    from src.workbench.report_summary import ITERATION_DECISION_NAMES
+
+    assert set(_ITERATION_DECISION_NAMES) == set(ITERATION_DECISION_NAMES)
+    assert set(ITERATION_DECISIONS) == set(ITERATION_DECISION_NAMES)
+    assert len(set(ITERATION_DECISION_NAMES.values())) == len(ITERATION_DECISION_NAMES)
+
+
 def test_summarize_funnel_names_failed_segments_and_survives_bare_record():
     report = {"errors": ["训练记录", "业务验收记录"]}
     lines = summarize_funnel(report)
