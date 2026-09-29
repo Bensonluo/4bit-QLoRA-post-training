@@ -2884,3 +2884,16 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源，不纳入自主迭代）；② Agent 判断真实性（同上）。
 - **待用户授权**：① benluo.art 线上部署刷新（R78 起登记）；② 分支推送（Zed review hook 门禁，本分支已领先 origin 约 68 commits）。
 - **成本**：会话累计约 $171.40（不计成本授权下继续，随轮报上报；reviewer 侧同报 hook 警告，本审查只读）。
+
+## 第 89 轮 = 走通证明轮（R86 C-2 收口：Agent 产物三态出口从点名到实际走通）
+
+- **日期**：2026-09-29
+- **选点**：R86 登记 C-2——「腿 B/C 只证点名未证 add-source→analyze 清缺口走通，docstring 未过度声明，如实保留」。四条登记遗留（R86 A-2 / R86 C-2 / R83 nit-① / R85 nit-②）中唯一给行为测试增实质的一条：R86 A-2 已处置为规范性指引保留、R83 nit-① 已在 R84 明确不做、R85 nit-② 是措辞级小项留后续。本轮把 R81–R88 出口行系列最后一块「点名」升级为「走通」——直接服务北极星诚实红线（出口行不只是文案，按它走真的能走出去）。
+- **实现**（1 文件，只改测试）：`tests/unit/test_data_intake.py` 的 `test_agent_product_state_tails_name_exits_and_answer_reanalyze_completes` 腿 B/C 各补「出口走通」段。腿 B：needs_capability 态后真实 CLI `add-source`（labels.csv 落盘 tmp_path，`--revision` 取 `service.load` 重载后的最新值——analyze 已 bump revision，必须重载）→ 断言尾行回落 `awaiting_analysis（`（add_source 清空旧分析，不伪造进度，intake_service.py 单一来源行为）→ holder 换无缺口产物 `model_for(analysis())` 重新 `analyze` → 断言 `review_preview（`。腿 C：needs_recipe 态后同款重新 `analyze` → 断言 `review_preview（`。docstring 改写为「三态出口都实际走通」；腿 B 注释如实写明夹具只脚本化模型产物、证明的是状态机与 CLI 面通路而非 LLM 判断质量（ScriptedModel 同款边界）。
+- **测试**：定向单测 1 passed / 1.07s；整文件 `pytest tests/unit/test_data_intake.py` **28 passed / 0.28s**；`ruff check .` All checks passed；`ruff format --check .` 324 files already formatted。本轮非边界轮（R88 刚跑全量 1977），按 2–3 轮节奏只做定向门禁，下一边界 ≈ R90/R91。
+- **独立审查五维结论（r89-reviewer，PASS / 0 should-fix / 2 nit）**：A 正确性——链 1 needs_capability→add-source→awaiting_analysis→analyze→review_preview 逐环带行号核对（needs_capability 命中 intake_service.py:48-49；add_source 清空分析 ：1050-1052；revision 重载必要且正确——analyze 走 apply_analysis→_save 使 revision+1，不重载必触发「资料已更新」守卫 ：1029-1030；review_preview 落 ：68-69，多来源不阻断 ：462-467）；链 2 needs_recipe→analyze→review_preview 同核。add-source argparse 无遗漏必填（data_intake.py:188-194）。B 单一来源——尾行唯一组词点 data_intake.py:1955-1958（next_action_phrase 单一出处），断言词汇均为 _NEXT_ACTION_PHRASES 原文。C 测试充分性——C-2 按登记口径收口（登记原文只点名 add-source→analyze；「调整目标」不在登记范围，docstring 未过度声明）。D 诚实边界——「夹具只脚本化产物、证通路不证 LLM 判断」如实；labels.csv 列值与 main 对齐、描述自洽。E 回归风险——审查者自跑 28 passed / ruff ×2 全净 / git status 仅 1 文件（+34/−4）。
+- **审查后采纳 nit ×2（同轮落地，R84 先例）**：nit-①——awaiting_analysis 断言原先无法区分清分析归因（CLI 带 --description 时 service.answer 也会独立清分析 intake_service.py:424-425）；采纳空描述隔离：add-source 去掉 --description（CLI 只在描述非空时走 service.answer，data_intake.py:1472-1475），清分析只归因 add_source 自身（:1050-1052），并在注释写明归因单一。nit-②——docstring「三个出口都实际走通」是宽松摘要，收紧为「点名的出口给出实际走通的证明……走通验证的是其中 add-source 一条（调整目标不在本测试证明面）」。采纳后定向 28 passed + ruff ×2 全净。
+- **登记对账**：R86 C-2 本轮收口（登记行原文保留于 R86 条目，R89 条目为收口记录）；R86 A-2、R83 nit-①、R85 nit-② 维持登记；本轮无新登记。
+- **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源，不纳入自主迭代）；② Agent 判断真实性（同上）。
+- **待用户授权**：① benluo.art 线上部署刷新（R78 起登记）；② 分支推送（Zed review hook 门禁，本分支已领先 origin 约 69 commits）。
+- **成本**：会话累计约 $173.23+（不计成本授权下继续，随轮报上报）。

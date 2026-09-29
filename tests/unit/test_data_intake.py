@@ -166,10 +166,15 @@ def test_analyze_cli_appends_analysis_summary_to_stderr(
 def test_agent_product_state_tails_name_exits_and_answer_reanalyze_completes(
     monkeypatch, capsys, tmp_path, service, session
 ):
-    """Agent 产物三态尾行点名真实出口(R86):needs_business_answers 点名 analyze --answer
-    且该出口一次调用实际走通(回答后重新分析直达 review_preview);needs_capability 点名
-    资料侧出口(调整目标/add-source)而不伪造零密钥兜底;needs_recipe 点名重新 analyze。
-    Agent 分析在场时 baseline-analyze 会被拒绝,后两态尾行不得点名它。"""
+    """Agent 产物三态尾行点名真实出口(R86),且点名的出口给出实际走通的证明
+    (R89 收口 R86 C-2):needs_business_answers 点名 analyze --answer 且一次调用
+    直达 review_preview;needs_capability 点名资料侧出口(调整目标/add-source)
+    而不伪造零密钥兜底,走通验证的是其中 add-source 一条——add-source 后分析
+    失效回落 awaiting_analysis(add_source 清空旧分析,不伪造进度)、重新 analyze
+    且缺口清除后直达 review_preview(「调整目标」是改 goal 的另一路,不在本测试
+    证明面);needs_recipe 点名重新 analyze,且重新分析生成方案后同样直达
+    review_preview。Agent 分析在场时 baseline-analyze 会被拒绝,后两态尾行
+    不得点名它。"""
     import sys
 
     from scripts import data_intake
@@ -214,6 +219,31 @@ def test_agent_product_state_tails_name_exits_and_answer_reanalyze_completes(
     assert tail.startswith("下一步状态: needs_capability（"), tail
     assert "add-source" in tail and "调整目标" in tail
     assert "baseline-analyze" not in tail
+    # R89 收口 R86 C-2(腿 B 走通):add-source 补充资料后旧分析失效、状态回落
+    # awaiting_analysis——不伪造进度;重新 analyze(缺口清除的产物)直达
+    # review_preview,资料侧出口确实能清缺口走出去。不传 --description:CLI 只在
+    # 描述非空时走 service.answer(data_intake.py:1472-1475,answer 也会清分析
+    # intake_service.py:424-425),空描述使清分析只归因 add_source 自身
+    # (:1050-1052),awaiting_analysis 归因单一(r89-reviewer nit-① 采纳)。
+    # 夹具只脚本化模型产物,证明的是状态机与 CLI 面的通路,不是 LLM 判断质量
+    # (ScriptedModel 同款边界)。
+    labels = tmp_path / "labels.csv"
+    labels.write_bytes("编号,类别\n001,质量\n002,物流\n".encode())
+    session_b = service.load(session_b.session_id)
+    tail = run_cli(
+        "add-source",
+        session_b.session_id,
+        "--revision",
+        str(session_b.revision),
+        "--alias",
+        "labels",
+        "--input",
+        str(labels),
+    )
+    assert tail.startswith("下一步状态: awaiting_analysis（"), tail
+    holder["model"] = model_for(analysis())
+    tail = run_cli("analyze", session_b.session_id)
+    assert tail.startswith("下一步状态: review_preview（"), tail
 
     # leg C: 缺方案态点名重新分析;Agent 分析在场,baseline-analyze 不在出口里。
     holder["model"] = model_for(analysis(recipe=None))
@@ -222,6 +252,10 @@ def test_agent_product_state_tails_name_exits_and_answer_reanalyze_completes(
     assert tail.startswith("下一步状态: needs_recipe（"), tail
     assert "analyze" in tail
     assert "baseline-analyze" not in tail
+    # R89 收口 R86 C-2(腿 C 走通):重新 analyze 生成方案,直达 review_preview。
+    holder["model"] = model_for(analysis())
+    tail = run_cli("analyze", session_c.session_id)
+    assert tail.startswith("下一步状态: review_preview（"), tail
 
 
 def test_materialize_cli_prints_split_guidance_and_small_test_caution(
