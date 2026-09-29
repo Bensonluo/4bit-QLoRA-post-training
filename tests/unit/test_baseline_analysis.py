@@ -4,7 +4,7 @@ import pytest
 
 from src.workbench.baseline_analysis import propose_baseline_analysis
 from src.workbench.intake_models import IntakeAnalysis
-from src.workbench.intake_service import IntakeService
+from src.workbench.intake_service import IntakeService, next_action_phrase
 from tests.unit.test_data_intake import CSV
 
 
@@ -60,6 +60,39 @@ def test_baseline_applies_through_the_real_preview_pipeline(store):
     assert "客户描述" in rows[0].input
     assert rows[0].target in {"质量", "物流"}
     assert any(finding.kind == "needs_business_input" for finding in updated.analysis.findings)
+
+
+def test_baseline_next_steps_share_canonical_full_validate_vocabulary(store):
+    """零密钥路径 next_steps 手写句与单一来源短语共享工具词汇(R92 等值钉):baseline 的
+    下一步指引嵌着 awaiting_full_data 短语片段,CLI stderr「下一步：」行(report_summary)
+    与页面 bullet(07_Data_Intake.py:1980-1982)都渲染这句话,此前无派生也无测试锁——
+    工具名与多资料变体注从此与 next_action_phrase 同词汇,不再可能悄悄漂移。句式是
+    预览期预告(还要先核对预览并确认业务含义),不逐字复制整个短语,未含「覆盖、冲突
+    与独立分组」是预告粒度而非矛盾。"""
+    _, session = store
+    step = propose_baseline_analysis(session, target_column="类别").next_steps[0]
+    phrase = next_action_phrase("awaiting_full_data")
+    assert "提供全量文件并运行 full-validate 验证" in step
+    assert "提供全量文件并运行 full-validate 验证" in phrase
+    assert "（多资料任务用 full-sources）" in step
+    assert "（多资料任务用 full-sources）" in phrase
+
+
+def test_baseline_cli_prints_canonical_tail_and_next_steps_line(tmp_path):
+    """CLI 零密钥路径用户可见双行同词汇(R92):baseline-analyze 跑完 stderr 同时有公共
+    尾行(next_action_phrase 单一来源,跑完态为 review_preview)与「下一步：」手写行
+    (report_summary 渲染 analysis.next_steps)——本次 stderr 两行的 full-validate/
+    full-sources 措辞都被钉住;页面横幅的等值另由 R91 横幅钉锁定,不在此重复证明。"""
+    from tests.unit.test_full_data_cli import invoke
+
+    service = IntakeService(tmp_path / "intake")
+    session = service.create("根据客户描述判断售后类别", "工单.csv", CSV)
+    result = invoke(service, "baseline-analyze", session.session_id, "--target", "类别")
+    assert result.returncode == 0, result.stderr
+    assert next_action_phrase("review_preview") in result.stderr
+    assert "下一步：" in result.stderr
+    assert "提供全量文件并运行 full-validate 验证" in result.stderr
+    assert "（多资料任务用 full-sources）" in result.stderr
 
 
 def test_forecast_shaped_goal_gets_leakage_warning(store):

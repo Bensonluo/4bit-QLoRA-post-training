@@ -60,6 +60,27 @@ def test_baseline_analysis_entry_needs_no_agent_client(data_page):
     assert any("不判断业务含义" in finding.message for finding in current.analysis.findings)
 
 
+def test_baseline_next_steps_bullet_renders_canonical_vocabulary(data_page):
+    """页面零密钥路径的「下一步：」bullet 与单一来源短语同词汇(R92):基础分析后页面
+    渲染 analysis.next_steps(07_Data_Intake.py:1980-1982),其 full-validate/full-sources
+    措辞与 CLI「下一步：」行、next_action_phrase 同源——页面用户与 CLI 用户读到同一句
+    指引,零密钥入口不再有第二套词汇面。"""
+    from src.workbench.intake_service import next_action_phrase
+
+    service, session, page = data_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    target = next(s for s in page.selectbox if s.label.startswith("答案列"))
+    target.select("类别").run()
+    next(b for b in page.button if b.label == "生成基础分析并预览").click().run()
+    assert not page.exception
+    text = "\n".join(m.value for m in page.markdown)
+    assert "**下一步：**" in text
+    assert "提供全量文件并运行 full-validate 验证" in text
+    assert "（多资料任务用 full-sources）" in text
+    assert "提供全量文件并运行 full-validate 验证" in next_action_phrase("awaiting_full_data")
+
+
 def test_baseline_analysis_supports_temporal_partition_fields(temporal_page):
     """基础分析可选择时间分区字段与边界；不完整或格式错误就地报错，不悄悄退回随机切分。"""
     service, session, page = temporal_page

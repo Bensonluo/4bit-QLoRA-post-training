@@ -2925,3 +2925,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源，不纳入自主迭代）；② Agent 判断真实性（同上）。
 - **待用户授权**：① benluo.art 线上部署刷新（R78 起登记）；② 分支推送（Zed review hook 门禁，本分支已领先 origin 约 71 commits）。
 - **成本**：会话累计约 $183.41+（不计成本授权下继续，随轮报上报）。
+
+## 第 92 轮 = 零密钥路径出口行等值钉轮（baseline next_steps 手写句共享单一来源词汇）
+
+- **日期**：2026-09-29
+- **选点**：登记池仅剩 1 条低价值候选（R91 nit-① 采集器去重），按 loop 指令检索选点。派 r92-scout 侦查 R90 报告预告方向「baseline 零密钥路径出口行覆盖」——发现第四个词汇漂移面：`baseline_analysis.py:467-470` 手写 `next_steps` 字面量嵌入 awaiting_full_data 短语片段（「提供全量文件并运行 full-validate 验证（多资料任务用 full-sources）」），却在 CLI stderr「下一步：」行（report_summary.py:1119-1120）与页面 bullet（07_Data_Intake.py:1980-1983）两面用户可见、无派生无测试锁（test_baseline_analysis*.py 对 next_steps/下一步词汇零断言）。零密钥路径是非专家第一入口（北极星「更看得懂」+诚实红线：页面用户与 CLI 用户必须同词汇）。等值钉式收口，不改文案。R92 按节奏为边界轮（R86→R88→R90→R92），跑全量回归。
+- **实现**（2 文件，只加测试）：① `tests/unit/test_baseline_analysis.py` 新增 `test_baseline_next_steps_share_canonical_full_validate_vocabulary`——字面量与 `next_action_phrase("awaiting_full_data")` 双向共享「提供全量文件并运行 full-validate 验证」「（多资料任务用 full-sources）」两片段（双方都断言，两侧漂移都会 fail）；② 同文件 `test_baseline_cli_prints_canonical_tail_and_next_steps_line`——invoke() 真 subprocess 跑 `baseline-analyze --target 类别`，stderr 同时含公共尾行 `next_action_phrase("review_preview")` 与「下一步：」行 + 两片段（零密钥路径用户可见双行同词汇）；③ `tests/unit/test_baseline_analysis_ui.py` 新增 `test_baseline_next_steps_bullet_renders_canonical_vocabulary`——页面驱动基础分析入口（答案列选择+生成按钮，与既有入口测试同链）后 markdown 含「**下一步：**」+ 两片段。docstring 如实声明预告粒度：句式是预览期预告（前缀「核对真实转换预览并确认业务含义」），未含「覆盖、冲突与独立分组」是预告粒度而非矛盾。
+- **测试**：定向三新钉 **3 passed**（1.28s，首跑即绿）→ 两整文件 **26 passed**（5.38s）+ `ruff check .` All checks passed + `ruff format --check .` 324 files already formatted。边界全量回归 **1983 passed / 322.53s / EXIT=0**（对账：R90 基线 1979 + R91 净 1 + R92 净 3 = 1983 严丝合缝；覆盖率 93%）。采纳 nit 后复跑 26 passed + ruff ×2 仍全净。
+- **独立审查五维结论（r92-reviewer，PASS / 0 must-fix / 0 should-fix / 4 nit）**：A 正确性——状态流核对：baseline-analyze → apply_analysis（data_intake.py:1522-1533）后 confirmed_revision is None → review_preview（intake_service.py:68-69），断言短语态与状态机一致；UI 驱动链与既有入口测试同链（同 selectbox key、同按钮标签）；两片段与字面量逐字一致。B 单一来源——片段级等值如实且足够：baseline 句是预览期预告，docstring 预告粒度声明与实际字面量相符；断言双向使两侧任一漂移都失败；该字面量工具名仅 full-validate/full-sources 两个，full-confirm 只在 review_full_data 短语、正确地不在范围。C 测试充分性——审查者全仓 grep「full-validate|full-sources」枚举零密钥路径用户可见面：短语字典（源）/CLI 尾行/「下一步：」行/页面横幅（R91 已钉）/页面 bullet（本轮钉）——**无漏掉的第五面**；CLI 测试真 subprocess 同一 stderr 流双行齐验为最强面；review_summary.py:957 与 ui:1228 是评测/Agent 方案面，非此路径。D 诚实边界——docstring 每个 claim 有背书，一处轻微过度声明（见 nit-①）。E 回归风险——审查者实跑两文件 26 passed（5.65s）+ 相邻 test_demo_cli/test_full_data_cli 20 passed（invoke 跨文件导入无干扰）+ ruff ×2 全净；subprocess invoke 为成熟模式，CI 风险低。
+- **审查后采纳**：采纳 nit-①——CLI 测试 docstring 收尾句「零密钥路径没有第二套工具名词汇」措辞收窄为「本次 stderr 两行……页面横幅的等值另由 R91 横幅钉锁定」（声明面=证明面）；采纳 nit-②——两处 docstring 行号 1980-1983 修正为 1980-1982；nit-③（UI 测试短语侧断言与单元测试重复）不采纳——自包含文档性保留；nit-④ 为前提校勘（「无测试锁」实为 test_demo_cli.py:136 已弱钉裸词「下一步」，本轮是补强片段等值 + subprocess 双行同流而非从零），移交与轮报措辞已按此修正。
+- **登记对账**：R91 nit-①（UI 测试采集器与旅程测试 stage 采集器重复，纯重复度）维持登记不排期；本轮无新登记。
+- **边界轮声明**：R92 为边界轮（R86→R88→R90→R92，间隔 2 轮）；下一边界 ≈ R94/R95。
+- **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源，不纳入自主迭代）；② Agent 判断真实性（同上）。
+- **待用户授权**：① benluo.art 线上部署刷新（R78 起登记）；② 分支推送（Zed review hook 门禁，本分支已领先 origin 约 72 commits）。
+- **成本**：会话累计约 $189.65+（不计成本授权下继续，随轮报上报）。
