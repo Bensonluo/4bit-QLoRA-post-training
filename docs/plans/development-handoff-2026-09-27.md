@@ -3143,3 +3143,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**（不变）：①push origin（本地领先 13 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
 
 **成本**：主会话成本钩子持续 CRITICAL（$61.71→$70.36→$70.57），审查员会话另行转达其钩子水位 $70.36；SCOPE WARNING 33 files（R103-R106 多轮同会话预期内）。项目累计口径：R104 轮报 ≈$312+R105/R106 增量（主会话+双审查员+scout 多 agent 会话），具体数字以账单为准，钩子观测值如实登记。
+
+---
+
+## 第 107 轮（2026-09-30）——配置页渐进披露 + 学习率分级化
+
+**选点**：r107-scout 全仓审计（7 页 + components + 测试钉账）裁决首选项：00 配置标签页是画像（非专家使用者）的主任务页，~22 控件同权重铺开——LoRA 秩/Alpha/Dropout/自由文本学习率/梯度累积/注册表三件套与底座模型/数据集/运行名同级，认知负担全压在「第一次就想训练」的用户身上；自由文本学习率是真实失败模式：解析守卫只在输入后 warn（旧 384-392）、提交才拦（旧 505），且要求非专家懂「2e-4」记法。落选与登记：06 Chat 空选择器死端（06:37-48）→ R108 候选首；app.py 首跑双主 CTA → R108 候选；07 IA 重构为远期史诗（低碰撞首切片=只读「当前阶段」侧栏汇总）。
+
+**证据核实**：①仓库惯用法三先例——00:219-222 GRPO 隐藏注册表区块的表单外兜底变量、00:206-215 技术单选置表单外即时重渲染、07:2972「高级」expander 跨页范式，渐进披露不是新发明是既有 idiom 的组合；②AppTest 1.57.0 实证（/tmp 快照，写钉前先跑）：`page.toggle[i].set_value(bool).run()` 可用、**select_slider 不进 page.slider 桶**有专用 `page.select_slider` 访问器、`page.caption` 有 .value——旅程钉全按实证形态写，不猜 API；③caption 桶采纳前二次实证：st.caption 值不在 page.markdown 里，独立分桶（`has caption bucket: True`）。
+
+**实现**：00_Training_Lab.py 七处手术式编辑（+61/−40）：①`st.toggle("高级参数", value=False)` 置表单外（表单内 toggle 须提交才生效，无法即时展开）②表单前 9 个预设兜底变量（validation_split=0.1/max_length=512/batch_size=1/grad_accum=p_grad_accum/lora_r=p_r/lora_alpha=p_r*2/lora_dropout=0.05/lr_value=float(p_lr)/quant_bits=平台默认）——高级隐藏时 config_dict 无条件读这些变量，契约键零消失 ③数据区 ds2/ds3（验证集比例/最大长度）入 `if advanced:` ④训练参数区：轮数常驻 t1，学习率 select_slider 七挡位 [1e-5,2e-5,5e-5,1e-4,2e-4,5e-4,1e-3]（format_func 科学计数、value 取预设值在挡位内否则 2e-4 兜底）+批大小/梯度累积/实际批大小 caption 入 advanced ⑤LoRA section 整体 advanced 门 ⑥注册表 `advanced and technique != "grpo"` 双门 ⑦量化 `advanced and is_cuda` 双门/非 CUDA 平台全精度 info 常驻；学习率 try/float/except/lr_error/st.warning 解析块与提交守卫整体删除。三处标签-逻辑耦合不动：技术标签 `.lower()` 进 SCRIPTS、平台 "CUDA" 成员测试、量化单选标签即值。DPO/GRPO 技术区块保持仅按技术门控（设计决策：选 DPO 本身即专家动作，不叠加 advanced 门，免新增兜底）。
+
+**测试 RED→GREEN**：新文件 test_lab_progressive_disclosure_ui.py 六钉（RED 5/5 为正确理由失败——页面尚无 toggle/挡位；GREEN 后采纳期补 DPO 钉为 6）：基础视图控件清点（零 slider 零 select_slider+必填在场）/高级展开专家控件到场/披露 caption 基础在场·展开退场（双态）/DPO 基础视图技术门控钉（Beta（β）滑杆+参考模型在场）/契约完整性（YAML 全键+lora.r==16+lr≈2e-4+grad_accum==8+lora_alpha==32+展开后键集合不缩水）/学习率挡位钉（select_slider 首参正则+自由文本退场+lr_error 退场+挡位覆盖 1e-4/2e-4）/toggle 表单外钉（toggle.start()<form 索引+兜底块四字面量在两索引之间）。钉型教训一条：单行字面量钉在 ruff/black 逐参换行形态下误伤——首参正则 `st\.toggle\(\s*"高级参数"` 兼容两种形态。
+
+**审查**：r107-reviewer（opus 只读五维度）verdict **PASS-with-findings**：0 功能缺陷（18 态组合矩阵 {advanced×technique×platform} 全遍历 0 NameError/0 契约键丢失；全部变量读取每条路径有定义；两项轮报声明可复现——控件普查 21→11 精确）；1 钉债 should-fix + 4 nit。裁决：should-fix 全采纳（披露 caption 钉+DPO 基础视图钉——轮报声明的两条设计决策此前无钉，下轮改门者会让全部测试保持绿而行为静默漂移）；nit-2 采纳（`page.toggle[0]` 位置索引→具名查找，错则响亮失败）；nit-3 采纳（lora_alpha==32 值钉）；nit-1 登记（基础视图 st.columns(3)/(4) 渲染空列，纯外观不动布局）；nit-4 记录（表单语义固有：外部 toggle 翻转丢弃表单内未提交编辑，Streamlit 行为非本页缺陷）。审查者独立复跑 31 passed 一致、工作树字节一致零事故、其自身成本钩子 $81.62 如实上报。
+
+**增量复核**：采纳四项后定向门禁 32 passed（原 31+新 DPO 钉 1；5 套件：disclosure 6+localization 9+autorefresh 8+loading 6+runner_shared 3）、ruff check/format 双净、审查者与主会话两跑一致。
+
+**登记对账与 R108 选点**：R108 候选已登记——①06 Chat 空选择器死端（06:37-48：picker 仅「⌨️ 自定义」、两个裸路径输入、无 switch_page 指路——修法 st.info+按钮 st.switch_page 00）为候选首；②app.py 首跑双主 CTA；③07 IA 史诗首切片（只读「当前阶段」侧栏，next_action(session) 喂数据）。backlog：02 入口2 rerun 不对称（02:113-126 vs 174-190）、R104 nit-3 registry race、read_recent_logs seek-tail。审查发现顺带登记：05→00 向导交接横幅无专钉（本轮 DPO 钉范式可复制，R108 顺手）。
+
+**边界**：本轮未跑全量回归（回归节奏 2-3 大轮一次，R106 刚于上轮跑过 2038 passed/0 failed）；预测边界 2038+6（新文件 6 钉，无既有测试受影响——4 邻接套件本轮实测全绿）= **2044**。边界基线口径修正承 R106 轮报：旧记录 2020 为「采纳前口径」，真基线 2021，2021+R105 净 8+R106 净 9=2038 实测精确吻合；本轮起统一「实测基线+净增」双录。R108/R109 跑全量时对账 2044。
+
+**待授权**：①push origin（本地将领先 15 commits，用户未授权推送）；②benluo.art 部署（portfolio 仓，与本项目无关，仅提醒存在待授权项）；③venv 重建（mypy shebang 问题，登记在案）。
+
+**成本**：主会话成本钩子多次 CRITICAL：$70.57→$77.67→$77.96→$81.77→$81.92（本轮采纳入编辑时）；r107-reviewer 自报 $81.62。按不计成本授权如实登记，未中断。
