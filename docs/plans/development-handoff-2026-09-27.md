@@ -3047,3 +3047,17 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源）；② Agent 判断真实性（依赖真实 BYOK 后端）。
 - **待用户授权**：① 分支推送（本轮核实 origin/main 已在 df84d3a=R99，本地仅领先 R100 一个提交；Zed review hook 管推送）；② benluo.art 线上部署刷新；③ venv 重建（mypy shebang 失效）。
 - **成本**：会话累计约 $253.86（不计成本授权下随轮报上报）。
+
+## 第 101 轮 = 逐题查看出口收敛帧尾单命令轮（单处建议原则贯通对照摘要）
+
+- **日期**：2026-09-30
+- **选点**：R100 让位的 A 项（summarize_comparison 泛指查看从句）。设计先行：不变量选「帧尾单命令」而非「每语境至多一处」——语境不互斥（严格帧可叠加字段+复述+零分），count==1 只能由单一发射点保证。九处语境句（字段弱项尾/复述分布尾/自定义/零分头尾/部分分/差距两态）全部退场为纯事实句，查看需求汇入 `inspect_targets` 保序去重，结语行前单处发射 `逐题查看{target}:eval-show {id}。`。并行派 r102-scout 完成 R102 候选池评估（结论并入下条 R102 选型）。
+- **实现**：report_summary.py 九处语境句 + append 置位；帧尾发射 `if inspect_targets and (strict or custom)`——开放任务帧永不点名命令（r98-reviewer nit-1 既定决策：该命令不解决开放任务的人工判断问题）；`dict.fromkeys` 保序去重（叠加帧拼「完整输出与评分理由」）；缺键回退大写 `EVALUATION_ID` 占位符。agent-setup.md :360/:399 两段同步（复述尾句与自定义命令引用改为帧尾单命令口径）。
+- **测试**：RED 2 failed 实证 → GREEN 72 passed。新增不变量测 `test_comparison_eval_show_single_frame_end_invariant`（叠加帧 count==1 + lines[-2] 位置钉 + 四旧句退场钉 + 部分分帧/全对零命令/自定义+复述叠加目标拼合）；既有 pointer 测改钉新句（自定义夹具输出改互异 `f"答{index}"`——4 条相同输出会误触复述语境，审查者独立证实该修必要且叠加路径由 custom_collapse 单独覆盖）。定向回归：report_summary 72 + readme_alignment/data_intake_ui/evaluation_diagnostics 140 passed（项目 venv）+ ruff check/format 净 + 退场词 grep src/ui/scripts 零残留。
+- **独立审查五维结论（r101-reviewer，sonnet 只读，全部结论实跑取证）**：总裁决 **PASS（0 should-fix / 2 nit / 3 登记）**。A 正确性 PASS——九处置位点逐处核对 + elif 链可达性证明（best_score 仅在 strict 下更新 :91-93 → 零分/部分分/差距分支对非严格帧结构性不可达）+ /tmp 沙箱 8 种帧形实跑全绿（命令恒在 lines[-2]）+ `dict.fromkeys` 插入序保证与文档叠加序一致；B 单一来源 PASS——退场短语零命中、生产渲染面仅 :265 一处、文档两段与实跑输出逐字一致；C 测试充分性 强——count==1 真锁、lines[-2] 结构性保证（结语 append 无条件）、审查者双 stash 往返逐字节校验后独立复现 RED、自定义夹具修改必要性独立证实（无 masking）；D 诚实边界 PASS——开放帧例外在代码+文档双侧注明、:678 缺席钉比预期更强（夹具实证触发 dominant 检测——最难抑制路径被钉）；E 回归风险 PASS——ruff 净、mypy 6 错全在改动区外（既有 nit-4 登记 venv 状态）、宽面 879 passed 且 21 failed + 44 collection errors 与干净 HEAD **逐字节一致**（沙箱 venv 缺 streamlit/datasets/torch 的环境差，零 R101 回归）。nit-1（不变量测 docstring「全对帧零命令」过度泛化——≥4 条相同输出的全对帧会因复述语境合法发射，夹具限定缺失）；nit-2（文档命令引用缺生产尾句号，化妆项）。登记-①（页面复述警告手抄 07:1049-1055 确认并入已规划的 R102 主项合并面）；登记-②（handoff 历史轮报旧措辞有意保留，不动）；登记-③（环境备忘：边界全量回归必须在依赖完整环境跑并附注——审查者沙箱 venv 只能复现主会话 140-passed 中的 68）。
+- **审查后采纳**：**nit-1 + nit-2 均采纳**——nit-1：docstring 与行内注释改夹具限定口径（「该夹具的全对帧(无重复输出、无其他语境置位)零命令——≥4 条相同输出的全对帧仍会因复述语境发射命令」）；nit-2：agent-setup.md :399 命令引用补「。」与生产串逐字一致。采纳后复跑门禁 72 passed + ruff 双净 + 退场 grep 零。
+- **登记对账与 R102 选型（r102-scout 评估 + 审查登记合并）**：R102 三件套——主项 **R100登记-1 双渲染家族方案 A**：`summarize_execution` 进行中分支改 `record.get("message") or _EXECUTION_IN_PROGRESS[status]` 单源、:316 启动 message 改「后台执行已启动。」、删页面 message 双渲染盒（07:1495-1499，保留 issues/run_id/caption）、同步 UI 钉（test_iteration_execution_ui :98-105 现钉双渲染需重定向）；合并项 **C+登记-①**（复述警告 builder 抽到 evaluation_diagnostics.py，页面+摘要同源，截断句可选顺带）；搭车 **R100登记-2**（blocked 尾句按 issues 有无分裂：有 issues 留「处理问题后…」、无则「如需继续，请提出新的改进轮次。」，同步 :1208/:1214/:1226 三钉）。维持登记：⑦ training_progress.py:114、⑧ 裸子命令 vs 全前缀、R91 nit-①、nit-4 venv mypy、r95-reviewer nit-2、r98-reviewer nit-2/nit-3、funnel 组合钉降级项、登记-②（有意保留）。
+- **边界全量回归**：本轮非边界轮（R100 边界 2000 + R101 净 +1 新测试函数 → 下次边界预计 2001）。下一边界 R102/R103，**须在依赖完整环境跑并附环境注记**（登记-③）。
+- **北极星缺口**：① 北极星指标从未被真实试用者测量（外部资源）；② Agent 判断真实性（依赖真实 BYOK 后端）。
+- **待用户授权**：① 分支推送（origin/main 仍在 df84d3a=R99，本地领先 784bbd7+2846cc1 两个提交；Zed review hook 管推送）；② benluo.art 线上部署刷新；③ venv 重建（mypy shebang 失效；兼登记-③ 依赖完整性）。
+- **成本**：本会话（compaction 续会话）hook 计 $10.77；上轮记录跨会话累计 $253.86，累计口径续算约 $264.6（不计成本授权下随轮报上报）。
