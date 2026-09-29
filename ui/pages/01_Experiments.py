@@ -37,6 +37,9 @@ def _status_label(value: str) -> str:
 
 if runs.empty:
     st.info("暂无实验记录。请先在训练实验室（Training Lab）发起训练。")
+    # st.stop 封页前给出最后一条出路（R108 06 页范式）：否则用户只能靠侧栏自救
+    if st.button("🏋️ 去训练实验室", type="primary"):
+        st.switch_page("pages/00_Training_Lab.py")
     st.stop()
 
 # ── KPI Cards ───────────────────────────────────────────────────

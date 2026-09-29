@@ -179,5 +179,8 @@ try:
             )
     else:
         st.info("暂无训练记录。去训练实验室发起第一个实验吧。")
+        # 指路句自己接线（R108 06 页范式）：空态用户不必再去找别处的按钮
+        if st.button("🏋️ 发起第一个实验", type="primary"):
+            st.switch_page("pages/00_Training_Lab.py")
 except Exception as e:
     st.info(f"加载最近动态失败：{e}")
