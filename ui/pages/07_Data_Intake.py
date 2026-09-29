@@ -2313,10 +2313,14 @@ if session.preview:
                 st.error(str(exc))
     elif status == "awaiting_full_data":
         st.success(
-            "样例转换含义已确认。下一步是提供全量数据并验证覆盖、冲突与独立分组；尚未认定可以正式训练。"
+            "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组"
+            "（多资料任务用 full-sources）；尚未认定可以正式训练。"
         )
     elif status == "awaiting_full_validation":
-        st.info("转换含义已确认；仍需完成全量业务质量、分区与训练消费检查。")
+        st.info(
+            "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查"
+            "（已声明全量可省略 --input）。"
+        )
     elif status == "needs_data_revision":
         st.warning(
             "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；"

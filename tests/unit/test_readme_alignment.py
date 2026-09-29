@@ -152,6 +152,17 @@ def test_next_action_tail_docs_pinned():
     )
     assert "`contrast-check` 抽两道配对题" in section, "R84 工具链必须点名 contrast-check"
     assert "「完成对比核验」不是页面专属动作" in section, "R84 平权定位句必须在场"
+    assert "awaiting_full_data／awaiting_full_validation 的尾行点名 `full-validate`" in section, (
+        "全量验证入口进尾行必须在场(R85):awaiting_full_* 不能只说提供全量数据不给命令"
+    )
+    assert "多资料任务用 `full-sources`" in section, "R85 多资料变体必须点名"
+    assert "review_full_data 的尾行点名 `full-confirm`" in section, (
+        "R85 全量确认命令必须点名"
+    )
+    assert "needs_full_data_revision 的尾行点名修正后重跑" in section, (
+        "R85 阻断态重验出口必须点名"
+    )
+    assert "全量数据段每一步都有可照抄的命令入口" in section, "R85 平权定位句必须在场"
     assert "零密钥用户在问题行修复后不会走进死胡同" in section, "R82 死胡同根治的诚实边界必须写明"
     assert "不会被指去配置密钥才能跑的命令" in section, "零密钥诚实边界必须写明"
     assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"

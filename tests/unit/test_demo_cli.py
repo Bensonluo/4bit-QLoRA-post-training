@@ -559,6 +559,202 @@ def test_zero_key_review_preview_journey_via_contrast_check(monkeypatch, capsys,
     assert "awaiting_full_data" in confirmed.err, "确认后应进入待全量数据态"
 
 
+def test_zero_key_full_data_journey_via_full_validate(monkeypatch, capsys, tmp_path):
+    """awaiting_full_data 族的零密钥闭环(R85):样例确认 → full-validate 验证全量 →
+    阻断报告如实保存（needs_full_data_revision）→ 修正后重验 → review_full_data →
+    full-confirm → awaiting_dataset_split。尾行点名的每一步零密钥真实可走;
+    已声明全量的任务省略 --input 复用原文件同样以行为证明。"""
+    sample = tmp_path / "sample.csv"
+    sample.write_bytes(CSV)
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "create",
+            "--input",
+            str(sample),
+            "--goal",
+            "根据客户描述判断售后问题类型",
+        )
+        == 0
+    )
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "baseline-analyze",
+            session_id,
+            "--target",
+            "类别",
+            "--group",
+            "编号",
+        )
+        == 0
+    )
+    capsys.readouterr()
+    service = IntakeService(tmp_path / "intake")
+    # 对比核验是软门禁:未配对也可确认,confirm 尾行落到待全量数据态并点名验证入口。
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "confirm",
+            session_id,
+            "--revision",
+            str(service.load(session_id).revision),
+        )
+        == 0
+    )
+    confirmed = capsys.readouterr()
+    assert "awaiting_full_data（样例转换含义已确认" in confirmed.err, (
+        "样例确认后必须落到待全量数据态"
+    )
+    assert "full-validate" in confirmed.err and "full-sources" in confirmed.err, (
+        "尾行必须点名全量验证入口与多资料变体(R85),不能只说提供全量数据"
+    )
+    # 坏全量:同一输入配不同答案 → 冲突阻断。报告仍保存,阻断态尾行点名重跑出口。
+    bad_full = tmp_path / "bad_full.csv"
+    bad_full.write_bytes(
+        "编号,客户描述,类别,处理结果\n"
+        "001,杯子破损,质量,补发\n"
+        "011,杯子破损,物流,补发\n"
+        "012,屏幕碎裂,质量,补发\n".encode()
+    )
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "full-validate",
+            session_id,
+            "--revision",
+            str(service.load(session_id).revision),
+            "--input",
+            str(bad_full),
+        )
+        == 0
+    )
+    blocked = capsys.readouterr()
+    assert (
+        "存在阻断问题，需先按下面的问题修正资料或业务规则，再重新验证全量。" in blocked.err
+    ), "报告摘要必须如实给阻断结论(summarize_full_report 单一来源原文)"
+    assert "needs_full_data_revision（全量报告仍有阻断问题" in blocked.err, (
+        "阻断态尾行必须在场"
+    )
+    assert "重跑 full-validate" in blocked.err, "阻断态尾行必须点名重跑出口(R85)"
+    # 修正后的全量(独立输入、答案齐全):重跑 full-validate → 待核对,点名确认命令。
+    good_full = tmp_path / "good_full.csv"
+    good_full.write_bytes(
+        (
+            "编号,客户描述,类别,处理结果\n"
+            + "".join(f"{i:03d},描述{i},质量,补发\n" for i in range(1, 11))
+        ).encode()
+    )
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "full-validate",
+            session_id,
+            "--revision",
+            str(service.load(session_id).revision),
+            "--input",
+            str(good_full),
+        )
+        == 0
+    )
+    validated = capsys.readouterr()
+    assert "review_full_data（全量报告待核对" in validated.err, "干净全量必须落到待核对态"
+    assert "full-confirm" in validated.err, "待核对态尾行必须点名确认命令(R85)"
+    # 核对后确认 → 进入待分区(该尾行早已点名 materialize,顺带钉住状态推进)。
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "full-confirm",
+            session_id,
+            "--revision",
+            str(service.load(session_id).revision),
+        )
+        == 0
+    )
+    done = capsys.readouterr()
+    assert "awaiting_dataset_split" in done.err, "全量确认后应进入待分区态"
+    assert "运行 materialize" in done.err, "待分区态尾行点名 materialize(既有钉)"
+    # 已声明全量的任务:create --scope full 确认后落到 awaiting_full_validation,
+    # 尾行写明可省略 --input;省略后复用原文件同样过验证——复用条件不是空话。
+    declared = tmp_path / "declared.csv"
+    declared.write_bytes(CSV)
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "create",
+            "--input",
+            str(declared),
+            "--goal",
+            "根据客户描述判断售后问题类型",
+            "--scope",
+            "full",
+        )
+        == 0
+    )
+    full_session = json.loads(capsys.readouterr().out)["session_id"]
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "baseline-analyze",
+            full_session,
+            "--target",
+            "类别",
+            "--group",
+            "编号",
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "confirm",
+            full_session,
+            "--revision",
+            str(IntakeService(tmp_path / "intake").load(full_session).revision),
+        )
+        == 0
+    )
+    awaiting = capsys.readouterr()
+    assert "awaiting_full_validation（转换含义已确认" in awaiting.err, (
+        "已声明全量的任务确认后落到待全量验证态"
+    )
+    assert "省略 --input" in awaiting.err, "复用原文件条件必须写明(R85)"
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "full-validate",
+            full_session,
+            "--revision",
+            str(IntakeService(tmp_path / "intake").load(full_session).revision),
+        )
+        == 0
+    )
+    reused = capsys.readouterr()
+    assert "review_full_data" in reused.err, "省略 --input 复用原文件的验证同样可走"
+
+
 @pytest.mark.parametrize(
     "command",
     ["create", "baseline-analyze"],

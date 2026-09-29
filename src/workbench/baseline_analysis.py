@@ -465,7 +465,8 @@ def propose_baseline_analysis(
                 "再决定是否迭代；未配置 Agent，训练方案由后续推荐步骤确认。"
             ),
             "next_steps": [
-                "核对真实转换预览并确认业务含义，随后提供全量数据并验证。",
+                "核对真实转换预览并确认业务含义，随后提供全量文件并运行 full-validate 验证"
+                "（多资料任务用 full-sources）。",
             ],
             # 范围说明放 findings（如实但不阻断）：capability_gaps 仅用于
             # 「任务需要而当前能力缺失」的阻断场景；单表映射没有缺失。

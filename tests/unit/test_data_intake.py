@@ -494,8 +494,19 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
         "（二连对），之后运行 confirm 确认。"
     ), "配对工具链必须点名(R84):review_preview 不能只说完成对比核验不给命令入口"
     assert next_action_phrase("awaiting_full_data") == (
-        "样例转换含义已确认，请提供全量数据并验证覆盖、冲突与独立分组。"
-    )
+        "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组"
+        "（多资料任务用 full-sources）。"
+    ), "全量验证入口必须点名(R85):awaiting_full_data 不能只说提供全量数据不给命令"
+    assert next_action_phrase("awaiting_full_validation") == (
+        "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查"
+        "（已声明全量可省略 --input）。"
+    ), "已声明全量任务的验证入口必须点名(R85),省略 --input 的复用条件一并写明"
+    assert next_action_phrase("needs_full_data_revision") == (
+        "全量报告仍有阻断问题，修正资料或规则后重跑 full-validate（多资料任务用 full-sources）。"
+    ), "阻断态的重验出口必须点名(R85):修正后不是没有下一步的重验"
+    assert next_action_phrase("review_full_data") == (
+        "全量报告待核对：核对覆盖与问题处理后运行 full-confirm 确认。"
+    ), "全量确认命令必须点名(R85):review_full_data 不能只说确认后继续"
     assert next_action_phrase("awaiting_dataset_split") == (
         "可以准备独立训练与评测分区（运行 materialize；尚未认定可以正式训练）。"
     )

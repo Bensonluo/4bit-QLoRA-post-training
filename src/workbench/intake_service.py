@@ -89,12 +89,12 @@ _NEXT_ACTION_PHRASES: dict[str, str] = {
     "needs_data_revision": "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。",
     "needs_labels": "样例缺少可学习的答案：先用 answer-sheet 导出待补清单（零密钥）交填写人补齐，替换原文件后重新分析——配置了 Agent 运行 analyze；基础分析可调整字段重跑 baseline-analyze。",
     "review_preview": "样例转换含义待确认：核对预览，用 contrast-check 配对、contrast-check-submit 提交（二连对），之后运行 confirm 确认。",
-    "review_full_data": "全量报告待核对：确认覆盖与问题处理后再继续。",
-    "needs_full_data_revision": "全量报告仍有阻断问题，处理后需重新验证。",
+    "review_full_data": "全量报告待核对：核对覆盖与问题处理后运行 full-confirm 确认。",
+    "needs_full_data_revision": "全量报告仍有阻断问题，修正资料或规则后重跑 full-validate（多资料任务用 full-sources）。",
     "ready_for_training_preflight": "数据已就绪，可运行 preflight 做训练前检查（尚未开始训练）。",
     "awaiting_dataset_split": "可以准备独立训练与评测分区（运行 materialize；尚未认定可以正式训练）。",
-    "awaiting_full_data": "样例转换含义已确认，请提供全量数据并验证覆盖、冲突与独立分组。",
-    "awaiting_full_validation": "转换含义已确认，仍需完成全量业务质量、分区与训练消费检查。",
+    "awaiting_full_data": "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组（多资料任务用 full-sources）。",
+    "awaiting_full_validation": "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查（已声明全量可省略 --input）。",
 }
 
 
