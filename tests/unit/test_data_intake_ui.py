@@ -82,6 +82,50 @@ def test_open_task_analyze_confirm_and_return_to_new(data_page, monkeypatch):
     assert any(area.label == "希望模型完成什么业务工作？" for area in page.text_area)
 
 
+def test_full_segment_banners_render_single_source_phrase_verbatim(data_page):
+    """全量段横幅三态的页面等值钉(R91):页面选择逐字显示 next_action_phrase 的三个
+    状态——awaiting_full_data/awaiting_full_validation/needs_data_revision——渲染文本
+    必须逐字包含单一来源短语,R85/R90 的人工同步从此有测试锁定,页面词汇不再可能
+    悄悄漂移。awaiting_full_data 横幅以「；尚未认定可以正式训练。」接边界句替换短语
+    句号(页面惯例),子串断言剥去句号尾,其余词汇仍逐字锁定。其余状态的页面呈现是
+    动作本体(review_preview 的配对表单、awaiting_dataset_split 的分区小节等),不显
+    示命令行词汇,由页面旅程测试覆盖 cues,不在本钉范围。"""
+    from src.workbench.intake_service import next_action_phrase
+
+    service, session, page = data_page
+
+    def rendered_text(chosen):
+        page.run()
+        page.selectbox(key="intake_select").select(chosen.session_id).run()
+        assert not page.exception, [e.message for e in page.exception]
+        return "\n".join(
+            [m.value for m in page.markdown]
+            + [w.value for w in page.warning]
+            + [s.value for s in page.success]
+            + [i.value for i in page.info]
+            + [c.value for c in page.caption]
+        )
+
+    confirmed = service.apply_analysis(session, analysis())
+    confirmed = service.confirm(confirmed.session_id, confirmed.revision)
+    assert next_action(confirmed) == "awaiting_full_data"
+    assert next_action_phrase("awaiting_full_data").rstrip("。") in rendered_text(confirmed)
+
+    full_session = service.create("根据客户首次描述预测类别", "工单全量.csv", CSV, scope="full")
+    full_session = service.apply_analysis(full_session, analysis())
+    full_session = service.confirm(full_session.session_id, full_session.revision)
+    assert next_action(full_session) == "awaiting_full_validation"
+    assert next_action_phrase("awaiting_full_validation") in rendered_text(full_session)
+
+    conflict_csv = (
+        "编号,客户描述,类别,处理结果\n001,杯子破损,质量,补发\n002,杯子破损,物流,补发\n".encode()
+    )
+    broken = service.create("根据客户首次描述预测类别", "冲突.csv", conflict_csv)
+    broken = service.apply_analysis(broken, analysis())
+    assert next_action(broken) == "needs_data_revision"
+    assert next_action_phrase("needs_data_revision") in rendered_text(broken)
+
+
 def test_recipe_expander_renders_shared_tool_trace_line(data_page, monkeypatch):
     """处理规则与工具记录 expander:JSON 轨迹之外还有与评测解读同格式的人话行。"""
     import src.agent.intake
