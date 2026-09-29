@@ -35,7 +35,7 @@ def test_large_csv_cell_survives_upload_reopen_and_agent_chunk_reads(tmp_path):
     ]
     client = ScriptedModel([*chunks, *complete_steps(analysis())])
     _, trace = analyze_intake(session, client)
-    cells = results(client)[:len(chunks)]
+    cells = results(client)[: len(chunks)]
     assert "".join(cell["content"] for cell in cells) == value
     assert cells[-1]["has_more"] is False
     assert all(item["ok"] for item in trace)
@@ -43,7 +43,7 @@ def test_large_csv_cell_survives_upload_reopen_and_agent_chunk_reads(tmp_path):
 
 def test_large_malformed_csv_still_fails_and_restores_parser_limit():
     previous_limit = csv.field_size_limit()
-    data = ('field,answer\n"' + 'x' * 150000).encode()
+    data = ('field,answer\n"' + "x" * 150000).encode()
     with pytest.raises(ValueError, match="CSV.*解析失败"):
         read_source("broken.csv", data, delimiter=",")
     assert csv.field_size_limit() == previous_limit

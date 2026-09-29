@@ -69,9 +69,7 @@ def summarize_run_cost(
         account["api_comparison"] = {
             "expected_monthly_queries": expected_monthly_queries,
             "tokens_per_query_assumed": tokens_per_query,
-            "api_monthly_cost_estimated": round(
-                monthly_tokens_m * api_price_per_million_tokens, 2
-            ),
+            "api_monthly_cost_estimated": round(monthly_tokens_m * api_price_per_million_tokens, 2),
             "note": (
                 "API 成本按你给的单价与调用量估计;本地侧是一次性训练电费,推理在本地另有算力占用。"
                 "两者口径不同,仅供量级比较,不是精确账单。"

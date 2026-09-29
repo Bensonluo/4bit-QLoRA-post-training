@@ -251,9 +251,7 @@ class IterationExecutionService:
         ):
             raise ValueError("请先核对并确认全量数据，再提交自动执行。")
         verification = getattr(live, "label_verification", None)
-        if not (
-            isinstance(verification, dict) and verification.get("verdict") == "verified"
-        ):
+        if not (isinstance(verification, dict) and verification.get("verdict") == "verified"):
             raise ValueError(
                 "请先完成本轮数据的盲标核验（对抽样行隐藏答案作答并与数据标签一致），"
                 "再提交自动执行；数据或方案修订后核验会自动失效，需要重新完成。"

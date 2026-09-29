@@ -76,18 +76,24 @@ def test_page_journey_every_stage_shows_next_step(walker):
     stage("④已验证全量", ["确认全量数据含义"])
 
     # ⑤ 全量确认后: 盲标核验 + 分区入口
-    context["session"] = service.confirm_full_data(context["session"].session_id, context["session"].revision)
+    context["session"] = service.confirm_full_data(
+        context["session"].session_id, context["session"].revision
+    )
     stage("⑤已确认全量", ["盲标核验", "生成独立训练与评测分区"])
 
     # ⑥ 盲标核验通过 + 物化后: 训练前检查
-    pending = service.start_label_verification(context["session"].session_id, context["session"].revision)
+    pending = service.start_label_verification(
+        context["session"].session_id, context["session"].revision
+    )
     targets = {row.row_id: row.target for row in context["session"].full_data.preview.rows}
     service.submit_label_verification(
         context["session"].session_id,
         pending["verification_id"],
         {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
     )
-    context["session"] = service.materialize_dataset(context["session"].session_id, context["session"].revision)
+    context["session"] = service.materialize_dataset(
+        context["session"].session_id, context["session"].revision
+    )
     stage(
         "⑥已物化",
         ["训练前检查", "可学性探针", "用当前数据微调模型"],

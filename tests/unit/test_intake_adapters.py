@@ -205,9 +205,7 @@ def test_sparse_jsonl_preserves_absent_fields_without_inventing_nulls(real_sandb
         {"raw": "code:0012", "label": "A"},
         {"raw": "code:0013", "label": "B", "optional": None},
     ]
-    source = read_source(
-        "sparse.jsonl", "\n".join(json.dumps(row) for row in records).encode()
-    )
+    source = read_source("sparse.jsonl", "\n".join(json.dumps(row) for row in records).encode())
     result = apply_adapter(source, adapter())
     assert "optional" in result.source.columns
     assert "optional" not in result.source.rows[0].values

@@ -43,7 +43,9 @@ def plan_model_export(run_record: dict, output_dir: str | Path) -> dict:
     reasons: list[str] = []
     if run_record.get("status") != "succeeded":
         status = "not_succeeded"
-        reasons.append(f"只有成功完成的训练才能合并导出；这次运行当前状态是 {run_record.get('status') or '未知'}。")
+        reasons.append(
+            f"只有成功完成的训练才能合并导出；这次运行当前状态是 {run_record.get('status') or '未知'}。"
+        )
     elif not has_adapter:
         status = "adapter_missing"
         reasons.append(f"训练记录为成功，但产物目录缺少完整的 adapter 文件：{adapter_dir}")

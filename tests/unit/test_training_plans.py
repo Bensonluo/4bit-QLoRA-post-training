@@ -268,3 +268,55 @@ def test_readiness_required_actions_append_single_source_exit_lines(plans):
     exit_line = readiness["required_actions"][1]
     assert exit_line == next_action_phrase("needs_data_revision")
     assert "analyze" in exit_line and "baseline-analyze" in exit_line
+
+
+@pytest.mark.parametrize(
+    ("expected", "gate_keyword"),
+    [
+        ("awaiting_analysis", "数据分析"),
+        ("needs_labels", "监督标签"),
+        ("review_preview", "真实样例"),
+        ("awaiting_full_data", "样例依据"),
+        ("awaiting_full_validation", "实际校验"),
+        ("needs_full_data_revision", "full_issues"),
+        ("review_full_data", "全量转换"),
+        ("awaiting_dataset_split", "分区"),
+    ],
+)
+def test_readiness_exit_lines_cover_remaining_gating_states(plans, expected, gate_keyword):
+    """其余门禁态的出口行补钉（R87 nit-① + R88 should-fix）：状态机八态逐一
+    路由进 context()，门禁句在前、next_action_phrase 单源出口行在后——连同
+    R87 主测试四态，门禁表 12 态在 context() 面全部有 [1] 等值钉；stale 覆盖
+    句只换门禁句、出口行仍取同一 next_action_phrase(action)，其等值由
+    awaiting_full_* 两态的钉确定性传递；13 态审计在方案上下文面上不留只验
+    词汇不验等值的缺口（ready 态空列表钉在 R87 主测试）。"""
+    from src.workbench.intake_service import next_action_phrase
+
+    service, session, _ = plans
+    state = session.model_copy(deep=True)
+    if expected == "awaiting_analysis":
+        state.analysis = None
+    elif expected == "needs_labels":
+        # 与判定单一来源同口径：needs_label 行正是 answer-sheet 清单筛出的行；
+        # counts 不参与该路由（needs_data_revision 门只读 invalid/conflict 计数）。
+        state.preview.rows[0].status = "needs_label"
+    elif expected == "review_preview":
+        state.confirmed_revision = None
+    elif expected == "awaiting_full_data":
+        state.full_data = None
+    elif expected == "awaiting_full_validation":
+        state.full_data = None
+        state.source.scope = "full"
+    elif expected == "needs_full_data_revision":
+        state.full_data.status = "needs_revision"
+    elif expected == "review_full_data":
+        state.full_data.status = "review"
+    else:
+        # awaiting_dataset_split：全量已确认但独立分区缺失（dataset=None）。
+        state.dataset = None
+    readiness = service.context(state, [])["data_readiness"]
+    assert readiness["next_action"] == expected
+    lines = readiness["required_actions"]
+    assert len(lines) == 2, f"{expected} 应为门禁句+出口行两元素"
+    assert gate_keyword in lines[0], f"{expected} 的门禁句保持在出口行之前"
+    assert lines[1] == next_action_phrase(expected)

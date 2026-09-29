@@ -42,7 +42,9 @@ def test_api_comparison_uses_user_assumptions():
         tokens_per_query=512,
     )
     comparison = account["api_comparison"]
-    assert comparison["api_monthly_cost_estimated"] == round(512 * 8.0, 2)  # 100万次×512token=5.12亿token
+    assert comparison["api_monthly_cost_estimated"] == round(
+        512 * 8.0, 2
+    )  # 100万次×512token=5.12亿token
     lines = "\n".join(cost_lines(account))
     assert "1,000,000 次月调用量" in lines
     assert "口径不同" in lines or "量级比较" in lines

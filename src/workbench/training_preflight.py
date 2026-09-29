@@ -309,10 +309,14 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                         split=split,
                         row_ids=[row_id],
                     )
-                batch = collator([{
-                    "input_ids": actual_ids,
-                    "attention_mask": attention,
-                }])
+                batch = collator(
+                    [
+                        {
+                            "input_ids": actual_ids,
+                            "attention_mask": attention,
+                        }
+                    ]
+                )
                 batch_ids = batch["input_ids"][0].tolist()
                 extra_padding = len(batch_ids) - len(actual_ids)
                 if "offset_mapping" in actual and extra_padding:
@@ -325,7 +329,8 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                 actual_ids = batch_ids
                 attention = batch["attention_mask"][0].tolist()
                 supervised = [
-                    i for i, label in enumerate(batch["labels"][0].tolist())
+                    i
+                    for i, label in enumerate(batch["labels"][0].tolist())
                     if i > 0 and label != -100
                 ]
                 active_positions = [i for i, mask in enumerate(attention) if mask]

@@ -180,9 +180,7 @@ def test_agent_product_state_tails_name_exits_and_answer_reanalyze_completes(
         )
         assert data_intake.main() == 0
         captured = capsys.readouterr()
-        return next(
-            line for line in captured.err.splitlines() if line.startswith("下一步状态")
-        )
+        return next(line for line in captured.err.splitlines() if line.startswith("下一步状态"))
 
     holder = {}
     monkeypatch.setattr(data_intake, "_client", lambda args, probe=False: holder["model"])

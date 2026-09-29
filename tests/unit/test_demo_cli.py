@@ -639,12 +639,10 @@ def test_zero_key_full_data_journey_via_full_validate(monkeypatch, capsys, tmp_p
         == 0
     )
     blocked = capsys.readouterr()
-    assert (
-        "存在阻断问题，需先按下面的问题修正资料或业务规则，再重新验证全量。" in blocked.err
-    ), "报告摘要必须如实给阻断结论(summarize_full_report 单一来源原文)"
-    assert "needs_full_data_revision（全量报告仍有阻断问题" in blocked.err, (
-        "阻断态尾行必须在场"
+    assert "存在阻断问题，需先按下面的问题修正资料或业务规则，再重新验证全量。" in blocked.err, (
+        "报告摘要必须如实给阻断结论(summarize_full_report 单一来源原文)"
     )
+    assert "needs_full_data_revision（全量报告仍有阻断问题" in blocked.err, "阻断态尾行必须在场"
     assert "重跑 full-validate" in blocked.err, "阻断态尾行必须点名重跑出口(R85)"
     # 修正后的全量(独立输入、答案齐全):重跑 full-validate → 待核对,点名确认命令。
     good_full = tmp_path / "good_full.csv"

@@ -517,5 +517,8 @@ def test_echo_triage_states_alpaca_template_fact_when_recorded() -> None:
 def test_echo_triage_silent_without_echo_rows() -> None:
     from src.workbench.evaluation_diagnostics import echo_triage_lines
 
-    assert echo_triage_lines("基座", [_echo_row(0, prompt_len=100, truncated=False, echoes=False)]) == []
+    assert (
+        echo_triage_lines("基座", [_echo_row(0, prompt_len=100, truncated=False, echoes=False)])
+        == []
+    )
     assert echo_triage_lines("基座", []) == []

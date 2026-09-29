@@ -14,7 +14,8 @@ from tests.unit.test_workbench_training_runs import _prepare, _wait, environment
 
 
 def test_one_authorization_reaches_real_three_model_development_comparison(
-    environment, tmp_path  # noqa: F811
+    environment,  # noqa: F811
+    tmp_path,
 ):
     from src.workbench.iteration_execution import IterationExecutionService
 
@@ -33,14 +34,18 @@ def test_one_authorization_reaches_real_three_model_development_comparison(
     protocol = EvaluationProtocol("classification_exact", max_new_tokens=4)
     comparison = iterations.evaluations.compare(
         session,
-        [EvaluationModel("base", str(model)),
-         EvaluationModel("parent", str(model), parent["output_dir"])],
+        [
+            EvaluationModel("base", str(model)),
+            EvaluationModel("parent", str(model), parent["output_dir"]),
+        ],
         protocol,
     )
     assert comparison.status in {"completed", "completed_with_failures"}
     assert all(not entry["errors"] for entry in comparison.models), comparison.models
     proposal = iterations.propose(
-        session, parent_run_id=parent["run_id"], evaluation_id=comparison.evaluation_id,
+        session,
+        parent_run_id=parent["run_id"],
+        evaluation_id=comparison.evaluation_id,
         hypothesis="虚构样例用于检查已确认配置的自动执行交接",
         expected_outcome="获得同协议开发集证据，效果不作预设",
         changes="保持资料和训练配置，验证后台完成第二轮训练与对照",
@@ -48,9 +53,13 @@ def test_one_authorization_reaches_real_three_model_development_comparison(
     identity = proposal["iteration_id"]
     iterations.confirm(identity, session)
     executions = IterationExecutionService(
-        iterations.root / "executions", intake.root, iterations.root,
-        training.root, iterations.evaluations.root,
-        project_root=training.project_root, python_executable=sys.executable,
+        iterations.root / "executions",
+        intake.root,
+        iterations.root,
+        training.root,
+        iterations.evaluations.root,
+        project_root=training.project_root,
+        python_executable=sys.executable,
     )
     started = executions.start(identity, session)
     assert started["status"] not in {"blocked", "failed"}, started
@@ -61,7 +70,11 @@ def test_one_authorization_reaches_real_three_model_development_comparison(
         while time.monotonic() < deadline:
             result = executions.get(identity)
             if result["status"] in {
-                "completed", "blocked", "failed", "stopped", "awaiting_warning_ack"
+                "completed",
+                "blocked",
+                "failed",
+                "stopped",
+                "awaiting_warning_ack",
             }:
                 break
             time.sleep(0.2)

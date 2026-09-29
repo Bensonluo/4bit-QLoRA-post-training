@@ -156,12 +156,8 @@ def test_next_action_tail_docs_pinned():
         "全量验证入口进尾行必须在场(R85):awaiting_full_* 不能只说提供全量数据不给命令"
     )
     assert "多资料任务用 `full-sources`" in section, "R85 多资料变体必须点名"
-    assert "review_full_data 的尾行点名 `full-confirm`" in section, (
-        "R85 全量确认命令必须点名"
-    )
-    assert "needs_full_data_revision 的尾行点名修正后重跑" in section, (
-        "R85 阻断态重验出口必须点名"
-    )
+    assert "review_full_data 的尾行点名 `full-confirm`" in section, "R85 全量确认命令必须点名"
+    assert "needs_full_data_revision 的尾行点名修正后重跑" in section, "R85 阻断态重验出口必须点名"
     assert "全量数据段每一步都有可照抄的命令入口" in section, "R85 平权定位句必须在场"
     assert "Agent 产物三态同样点名出口" in section, (
         "Agent 产物三态出口进尾行必须在场(R86):三态不能只描述不给命令"

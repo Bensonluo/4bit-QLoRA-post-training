@@ -379,9 +379,7 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert calls == []
     # 环节⑨交接出口在场:成功记录下合并导出折叠区做只读盘点,页面不执行合并。
-    assert any(
-        block.label == "📦 合并导出：把这次训练的模型带出工作台" for block in page.expander
-    )
+    assert any(block.label == "📦 合并导出：把这次训练的模型带出工作台" for block in page.expander)
     # 环节⑤可视化:训练指标区给逐条 loss 趋势人话(与 train-status 同源),
     # 原始 flat JSON 收进折叠区,不再裸倾倒。
     assert any("整体在下降" in block.value for block in page.caption)

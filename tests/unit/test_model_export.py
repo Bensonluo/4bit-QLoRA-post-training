@@ -83,9 +83,7 @@ def test_plan_already_exported_when_target_looks_merged(tmp_path):
 def test_plan_blocked_states_name_the_cause(tmp_path):
     running = plan_model_export(_make_run(tmp_path, status="running"), tmp_path / "m")
     assert running["status"] == "not_succeeded"
-    assert running["reasons"] == [
-        "只有成功完成的训练才能合并导出；这次运行当前状态是 running。"
-    ]
+    assert running["reasons"] == ["只有成功完成的训练才能合并导出；这次运行当前状态是 running。"]
 
     no_adapter = plan_model_export(_make_run(tmp_path, with_adapter=False), tmp_path / "m")
     assert no_adapter["status"] == "adapter_missing"
