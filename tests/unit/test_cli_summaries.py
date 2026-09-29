@@ -177,6 +177,25 @@ def test_train_status_appends_preflight_summary_when_record_carries_one(train_st
     assert "不代表训练效果或业务达标" in err
 
 
+def test_train_status_succeeded_exit_names_eval_compare_with_real_ids(train_status_cli, capsys):
+    """train-status 成功态出口端到端(r96-reviewer nit-1):stderr 点名带真实 ID 的
+    eval-compare 命令——CLI 轮询到训练完成的用户拿到可照抄的下一步,不是悬空指向;
+    变体注同场(改进轮次的子训练加 --iteration-id)。"""
+    invoke, record = train_status_cli
+    record.update(
+        {
+            "status": "succeeded",
+            "session_id": "s-abc",
+            "session_revision": 3,
+            "config": {"training": {"num_epochs": 2}},
+        }
+    )
+    assert invoke("train-status", "run-9") == 0
+    err = capsys.readouterr().err
+    assert "可运行 eval-compare s-abc run-9 --revision 3 生成对照报告" in err
+    assert "（改进轮次的子训练加 --iteration-id）。" in err
+
+
 def test_train_status_without_preflight_does_not_invent_one(train_status_cli, capsys):
     """记录没带预检就只给训练状态句,不编造预检结论。"""
     invoke, record = train_status_cli

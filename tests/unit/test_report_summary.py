@@ -124,6 +124,43 @@ def test_training_run_summary_status_and_honesty():
     joined = "\n".join(done)
     assert "训练完成" in joined and "0.4200" in joined
     assert "要用同一套开发题与基座对照" in joined
+    # 极简夹具缺 ID:回退大写占位符,不假装知道 ID;变体注常在(R85 式惯例)
+    assert (
+        "可运行 eval-compare SESSION_ID RUN_ID --revision REVISION 生成对照报告"
+        "（改进轮次的子训练加 --iteration-id）。" in joined
+    )
+
+    done_with_ids = summarize_training_run(
+        {
+            "status": "succeeded",
+            "session_id": "s-abc",
+            "run_id": "wb-123",
+            "session_revision": 3,
+            "model_path": "/models/Qwen3-1.7B",
+            "config": {"training": {"num_epochs": 1}},
+        }
+    )
+    # 训练完成出口必须点名真实 ID 的对照命令(R96):悬空「请看对照报告」退场
+    joined = "\n".join(done_with_ids)
+    assert (
+        "可运行 eval-compare s-abc wb-123 --revision 3 生成对照报告"
+        "（改进轮次的子训练加 --iteration-id）。" in joined
+    )
+    assert "请看对照报告" not in joined
+
+    # revision=0 是会话初始真值(intake_models.py revision: int = 0),必须原样插值,
+    # 不能被回退成 REVISION 占位符(r96-reviewer nit-2:None-guard 的回归钉)。
+    zero_revision = summarize_training_run(
+        {
+            "status": "succeeded",
+            "session_id": "s-zero",
+            "run_id": "wb-0",
+            "session_revision": 0,
+        }
+    )
+    joined = "\n".join(zero_revision)
+    assert "eval-compare s-zero wb-0 --revision 0" in joined
+    assert "REVISION" not in joined
 
     failed = summarize_training_run(
         {

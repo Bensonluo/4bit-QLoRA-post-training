@@ -469,8 +469,18 @@ def summarize_training_run(record: dict) -> list[str]:
             f"训练损失（loss）最终为 {metrics['train_loss']:.4f}；它下降说明模型在记题，不代表业务效果。"
         )
     if status == "succeeded":
+        # 训练完成出口点名(R96):悬空「请看对照报告」换成真实命令与真实 ID——
+        # 落盘记录必带 run_id/session_id/session_revision(training_runs.py 落盘形状),
+        # 缺键的旧记录/极简夹具回退大写占位符,不假装知道 ID。
+        session_id = record.get("session_id") or "SESSION_ID"
+        run_ref = record.get("run_id") or "RUN_ID"
+        revision = record.get("session_revision")
+        if revision is None:  # 显式判 None:revision 是 int,or 链会把 0 误判成缺键
+            revision = "REVISION"
         lines.append(
-            "训练完成只说明产出了模型；效果要用同一套开发题与基座对照来判断，请看对照报告。"
+            f"训练完成只说明产出了模型；效果要用同一套开发题与基座对照来判断，"
+            f"可运行 eval-compare {session_id} {run_ref} --revision {revision} 生成对照报告"
+            "（改进轮次的子训练加 --iteration-id）。"
         )
     # 方案快照的工具核查轨迹(plan_trace):不经方案的直接启动为空,不渲染轨迹行。
     lines.extend(summarize_tool_trace(record.get("plan_trace"), "训练方案"))
