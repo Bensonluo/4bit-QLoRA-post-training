@@ -474,6 +474,91 @@ def test_zero_key_needs_labels_journey_via_answer_sheet(monkeypatch, capsys, tmp
     assert "review_preview" in rerun.err, "补齐并重跑后应回到待核对预览"
 
 
+def test_zero_key_review_preview_journey_via_contrast_check(monkeypatch, capsys, tmp_path):
+    """review_preview 的零密钥闭环(R84):基础分析出预览 → contrast-check 抽两道
+    配对题 → contrast-check-submit 按预览正确配对 → 第二轮(二连对) → confirm
+    确认 → awaiting_full_data。尾行点名的每一步零密钥真实可走,配对核验不是
+    页面专属动作;正确答案取自预览单一来源,测试不另算一套。"""
+    sample = tmp_path / "sample.csv"
+    sample.write_bytes(CSV)
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "create",
+            "--input",
+            str(sample),
+            "--goal",
+            "根据客户描述判断售后问题类型",
+        )
+        == 0
+    )
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "baseline-analyze",
+            session_id,
+            "--target",
+            "类别",
+            "--group",
+            "编号",
+        )
+        == 0
+    )
+    first = capsys.readouterr()
+    assert "review_preview（样例转换含义待确认" in first.err, "干净样例必须落到待核对预览态"
+    assert "contrast-check" in first.err, "尾行必须点名配对入口(R84),不能只说完成对比核验"
+    service = IntakeService(tmp_path / "intake")
+    revision = service.load(session_id).revision
+    # 两轮配对:正确答案每轮从当前预览读取(单一来源)。轮次感知抽样使多行
+    # 场景每轮换题(防背题);本夹具仅 2 行、两轮可能同题——换题断言不在此
+    # 假钉(与 test_label_verification.py「数据行太少时两轮可能同题」口径一致)。
+    for round_no, expected in ((1, "还需再连续配对正确一轮（二连对）"), (2, "二连对达标")):
+        assert (
+            _run(
+                monkeypatch,
+                capsys,
+                tmp_path / "intake",
+                "contrast-check",
+                session_id,
+                "--revision",
+                str(revision),
+            )
+            == 0
+        )
+        pending = json.loads(capsys.readouterr().out)
+        correct = {r.row_id: r.target for r in service.load(session_id).preview.rows}
+        argv = ["contrast-check-submit", session_id, "--check-id", pending["check_id"]]
+        for item in pending["items"]:
+            argv += ["--answer", f"{item['row_id']}={correct[item['row_id']]}"]
+        assert _run(monkeypatch, capsys, tmp_path / "intake", *argv) == 0
+        submitted = capsys.readouterr()
+        verdict = json.loads(submitted.out)["verdict"]
+        assert verdict == "verified", f"第 {round_no} 轮按预览正确配对必须判 verified"
+        assert expected in submitted.err, f"第 {round_no} 轮的连胜口径必须在场"
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "confirm",
+            session_id,
+            "--revision",
+            str(revision),
+        )
+        == 0
+    )
+    confirmed = capsys.readouterr()
+    assert "已连续 2 轮配对正确（二连对达标）" in confirmed.err, (
+        "confirm 的 stderr 必须如实报告已达标,软门禁状态不静默"
+    )
+    assert "awaiting_full_data" in confirmed.err, "确认后应进入待全量数据态"
+
+
 @pytest.mark.parametrize(
     "command",
     ["create", "baseline-analyze"],

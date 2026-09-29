@@ -58,7 +58,7 @@ python scripts/data_intake.py analyze SESSION_ID --answer '质检类别才是需
 python scripts/data_intake.py show SESSION_ID
 ```
 
-凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。awaiting_analysis 的尾行同时点名两条路径——配置了 Agent 的 `analyze` 与零密钥的 `baseline-analyze`（与页面「没有 Agent 服务？用基础分析开始」入口同词汇），零密钥用户不会被指去配置密钥才能跑的命令。needs_data_revision 的尾行同样点名两条重分析路径——配置了 Agent 的 `analyze` 与「此前的基础分析可调整字段重跑 baseline-analyze」，零密钥用户在问题行修复后不会走进死胡同。needs_labels 的尾行点名零密钥修复工具链——`answer-sheet` 导出待补清单、补齐后「替换原文件重新分析（基础分析可重跑 baseline-analyze）」，「补齐标注」不是一句没有出口的提醒。
+凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。awaiting_analysis 的尾行同时点名两条路径——配置了 Agent 的 `analyze` 与零密钥的 `baseline-analyze`（与页面「没有 Agent 服务？用基础分析开始」入口同词汇），零密钥用户不会被指去配置密钥才能跑的命令。needs_data_revision 的尾行同样点名两条重分析路径——配置了 Agent 的 `analyze` 与「此前的基础分析可调整字段重跑 baseline-analyze」，零密钥用户在问题行修复后不会走进死胡同。needs_labels 的尾行点名零密钥修复工具链——`answer-sheet` 导出待补清单、补齐后「替换原文件重新分析（基础分析可重跑 baseline-analyze）」，「补齐标注」不是一句没有出口的提醒。review_preview 的尾行点名配对工具链——`contrast-check` 抽两道配对题、`contrast-check-submit` 提交配对（二连对）、之后 `confirm` 确认，「完成对比核验」不是页面专属动作。
 
 五个清单命令（`train-list`、`plan-list`、`iteration-list`、`acceptance-list`、`scoring-list`）同样在 stderr 追加一行清单尾行（`summarize_listing` 单一来源）：空清单点名该走的第一步入口——用户分不清「还没有」和「查错了任务」；非空给计数，不逐条灌业务人话。
 

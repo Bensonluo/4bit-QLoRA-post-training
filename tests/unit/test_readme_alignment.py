@@ -147,6 +147,11 @@ def test_next_action_tail_docs_pinned():
     )
     assert "`answer-sheet` 导出待补清单" in section, "R83 工具链必须点名 answer-sheet"
     assert "补齐标注」不是一句没有出口的提醒" in section, "R83 诚实定位句必须在场"
+    assert "review_preview 的尾行点名配对工具链" in section, (
+        "配对工具链进尾行必须在场(R84):review_preview 不能只说完成对比核验不给入口"
+    )
+    assert "`contrast-check` 抽两道配对题" in section, "R84 工具链必须点名 contrast-check"
+    assert "「完成对比核验」不是页面专属动作" in section, "R84 平权定位句必须在场"
     assert "零密钥用户在问题行修复后不会走进死胡同" in section, "R82 死胡同根治的诚实边界必须写明"
     assert "不会被指去配置密钥才能跑的命令" in section, "零密钥诚实边界必须写明"
     assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"
