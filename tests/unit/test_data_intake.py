@@ -485,6 +485,10 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
         "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；"
         "此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。"
     ), "零密钥死胡同根治(R82):重分析指引必须点名基础分析可重跑的出口"
+    assert next_action_phrase("needs_labels") == (
+        "样例缺少可学习的答案：先用 answer-sheet 导出待补清单（零密钥）交填写人补齐，"
+        "替换原文件后重新分析——配置了 Agent 运行 analyze；基础分析可调整字段重跑 baseline-analyze。"
+    ), "零密钥修复工具链必须点名(R83):needs_labels 不只是提醒,还要给出出口"
     assert next_action_phrase("awaiting_full_data") == (
         "样例转换含义已确认，请提供全量数据并验证覆盖、冲突与独立分组。"
     )

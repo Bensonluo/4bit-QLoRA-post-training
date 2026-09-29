@@ -142,6 +142,11 @@ def test_next_action_tail_docs_pinned():
     assert "needs_data_revision 的尾行同样点名两条重分析路径" in section, (
         "重分析路径进尾行必须在场(R82):needs_data_revision 不只指需密钥的 analyze"
     )
+    assert "needs_labels 的尾行点名零密钥修复工具链" in section, (
+        "缺标签出口进尾行必须在场(R83):needs_labels 不只是提醒,还给零密钥工具"
+    )
+    assert "`answer-sheet` 导出待补清单" in section, "R83 工具链必须点名 answer-sheet"
+    assert "补齐标注」不是一句没有出口的提醒" in section, "R83 诚实定位句必须在场"
     assert "零密钥用户在问题行修复后不会走进死胡同" in section, "R82 死胡同根治的诚实边界必须写明"
     assert "不会被指去配置密钥才能跑的命令" in section, "零密钥诚实边界必须写明"
     assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"

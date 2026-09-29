@@ -371,6 +371,109 @@ def test_zero_key_demo_cli_journey_reaches_preview(tmp_path, monkeypatch, capsys
     assert json.loads(capsys.readouterr().out)["preview"] is not None
 
 
+def test_zero_key_needs_labels_journey_via_answer_sheet(monkeypatch, capsys, tmp_path):
+    """needs_labels 的零密钥闭环(R83):缺标签样例 → answer-sheet 导出待补清单 →
+    填写后 add-source 替换原文件 → 基础分析重跑 → 干净预览。尾行指的每一步
+    都真实可走,零密钥用户不会停在「补齐标注」这句没有出口的提醒上。"""
+    sample = tmp_path / "sample.csv"
+    sample.write_bytes(
+        "编号,客户描述,类别,处理结果\n001,杯子破损,质量,补发\n002,物流未更新,,补发\n".encode()
+    )
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "create",
+            "--input",
+            str(sample),
+            "--goal",
+            "根据客户描述判断售后问题类型",
+        )
+        == 0
+    )
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "baseline-analyze",
+            session_id,
+            "--target",
+            "类别",
+            "--group",
+            "编号",
+        )
+        == 0
+    )
+    first = capsys.readouterr()
+    assert "needs_labels（样例缺少可学习的答案" in first.err, "缺标签样例必须落入 needs_labels"
+    assert "answer-sheet" in first.err, "尾行必须点名零密钥出口(R83),不能只说补齐标注"
+    # 待补清单真实导出:只含缺答案行,带按字段命名的待填列
+    sheet = tmp_path / "sheet.csv"
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "answer-sheet",
+            session_id,
+            "--export-csv",
+            str(sheet),
+        )
+        == 0
+    )
+    assert "清单口径：样例转换预览，待补 1 行。" in capsys.readouterr().err
+    sheet_text = sheet.read_text(encoding="utf-8-sig")
+    assert sheet_text.startswith("行ID"), "填写表首列必须是行ID(对号回填的键)"
+    assert "待填答案（类别）" in sheet_text, "待填列按答案字段命名,填写人不猜格式"
+    # 清单内容两侧:缺答案行的题目输入在场,已有答案的行不混入——
+    # 与「待补 1 行」stderr 同一份 missing 列表,堵清单口径分歧的口。
+    assert "物流未更新" in sheet_text, "缺答案行的题目输入必须在清单里"
+    assert "杯子破损" not in sheet_text, "已有答案的行不得混入待补清单"
+    # 填写人补齐后替换原文件:分析随之失效,基础分析重跑放行(analysis=None)
+    fixed = tmp_path / "fixed.csv"
+    fixed.write_bytes(
+        "编号,客户描述,类别,处理结果\n001,杯子破损,质量,补发\n002,物流未更新,物流,补发\n".encode()
+    )
+    revision = IntakeService(tmp_path / "intake").load(session_id).revision
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "add-source",
+            session_id,
+            "--revision",
+            str(revision),
+            "--alias",
+            "main",
+            "--input",
+            str(fixed),
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert (
+        _run(
+            monkeypatch,
+            capsys,
+            tmp_path / "intake",
+            "baseline-analyze",
+            session_id,
+            "--target",
+            "类别",
+            "--group",
+            "编号",
+        )
+        == 0
+    )
+    rerun = capsys.readouterr()
+    assert "needs_labels" not in rerun.err, "补齐后不应再停在缺标签态"
+    assert "review_preview" in rerun.err, "补齐并重跑后应回到待核对预览"
+
+
 @pytest.mark.parametrize(
     "command",
     ["create", "baseline-analyze"],

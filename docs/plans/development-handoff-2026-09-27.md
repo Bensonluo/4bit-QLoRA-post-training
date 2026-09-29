@@ -2784,3 +2784,23 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **独立审查五维结论**：A 诚实红线 PASS（条件式指代不构成虚假陈述；降级真拦住；无覆盖口子）；B 正确性 PASS（失效清单逐行核对与 Agent 重分析一致；agent_model 持久化重载钉死；stderr 顺序与 docs 一致）；C 爆炸半径 PASS（旧短语零残留；COLUMNS=240 无副作用）；D 一致性 PASS（四方逐字同源；should-fix 措辞矛盾已修复）；E 遗漏 PASS（两个触发源都覆盖；--temporal 替换同一路径；README 无需同步）。
 - **审查发现（不阻塞，登记待办）**：① nit——training_plans.py:263 对 needs_data_revision 另有一套存量措辞（readiness 清单面，不在本轮单一来源集合内），后续轮可评估归并；② nit——字节级相同字段的重复重跑会让旧对比核验连胜按绑定键继续挂着（同预览=旧证据仍有效，caption 在该角落轻微过度声明，可接受）。
 - 北极星缺口①②仍开放（均待外部资源）。**待用户授权（沿 R78，未决）**：① 刷新线上部署；② 分支领先 origin 61 commits，push 受 Zed review hook 门控。成本钩子读数 $131.46（CRITICAL；不计成本授权下继续，逐轮如实上报）。
+
+## 第 83 轮 = needs_labels 的零密钥出口（短语点名工具链 + CLI 全链路行为证明）
+
+**日期**：2026-09-29（审查者 r83-reviewer 独立五维审查，结论见「回归与错误修复」）。
+
+**选点**：13 态短语表零密钥出口系统性收尾审计（R81 awaiting_analysis、R82 needs_data_revision 之后的延续）——`needs_labels`（样例预览存在缺答案行，intake_service.py:63-67，与「交给填写人的清单」共用 `missing_answer_rows` 单一来源）是**零密钥可达状态**：baseline 预览的行同样会缺答案，但旧短语「样例缺少可学习的答案，补齐标注后才能核对预览。」只说**什么**不说**怎么补**——零密钥修复工具链其实完整在场（answer-sheet 导出待补清单零密钥、add-source 替换原文件后 analysis 归 None、baseline-analyze 无分析态放行重跑），短语却把用户留在一句没有出口的提醒上。页面侧 `show_missing_label_next_step`（07_Data_Intake.py:141+）已有导出按钮与「替换对应原始文件后重新分析」指引，缺口纯在 CLI 尾行短语——本轮补齐并加行为级证明。
+
+**实现**（5 文件）：
+- **短语点名工具链**：`_NEXT_ACTION_PHRASES["needs_labels"]` 改为「样例缺少可学习的答案：先用 answer-sheet 导出待补清单（零密钥）交填写人补齐，替换原文件后重新分析——配置了 Agent 运行 analyze；基础分析可调整字段重跑 baseline-analyze。」——双路径句式与 R81/R82 同构；「可调整字段」同时覆盖「未指定答案列」子场景（该子场景 answer-sheet 按字段缺省诚实降级「答案列待业务确认」，修复动作正是调整字段指定答案列）。
+- **文档同步**：agent-setup.md 尾行段补「needs_labels 的尾行点名零密钥修复工具链——`answer-sheet` 导出待补清单、补齐后『替换原文件重新分析（基础分析可重跑 baseline-analyze）』，『补齐标注』不是一句没有出口的提醒。」
+- **CLI 全链路行为证明**：test_demo_cli.py 新增 `test_zero_key_needs_labels_journey_via_answer_sheet`——create（一行缺 类别）→ baseline-analyze → 尾行 needs_labels 且点名 answer-sheet → answer-sheet --export-csv 真实落盘（首列 行ID、待填列按字段命名「待填答案（类别）」、清单口径行「待补 1 行」）→ add-source --alias main 替换补齐后文件 → baseline-analyze 重跑 → 尾行 review_preview、needs_labels 消失。短语指的每一步零密钥真实可走。
+- **钉死**：test_data_intake.py 逐字钉新 needs_labels 短语（13 态覆盖集不变）；test_readme_alignment.py 尾行段加 3 pin（「needs_labels 的尾行点名零密钥修复工具链」「`answer-sheet` 导出待补清单」「补齐标注』不是一句没有出口的提醒」）。
+- **明确不做**：页面侧零改动（导出按钮 + 替换重分析指引已在场）；R82 登记的 nit-①（training_plans.py:263 readiness 措辞）不并入——那是方案门控面而非用户指引面，留独立评估。
+
+**测试**：定向门禁 test_data_intake / test_demo_cli / test_readme_alignment **107 passed**（2.50s）+ test_answer_sheet **4 passed** + ruff All checks passed。新增 1 行为测试 + 3 文档 pin + 1 短语逐字 pin；审查后采纳 nit-② 补清单内容两侧断言，复跑同三件套 **107 passed**（0.93s）+ ruff 全绿。
+
+**回归与错误修复**：
+- **独立审查五维结论（r83-reviewer，2026-09-29）**：**5/5 PASS，0 must-fix，0 should-fix，2 nit**——A 正确性 PASS（add_source 置空 analysis 后 baseline-analyze 守卫 :1490 放行，add-source 写入与 add_source 失效语义一致）；B 单一来源一致性 PASS（needs_labels 判定、页面清单、CLI answer-sheet 三方同用 missing_answer_rows；短语唯一消费者是 CLI 尾行，页面按状态枚举分支）；C 测试充分性 PASS（旅程测试逐步断言 + revision 自盘重载验证持久化；审查者独立复跑三件套 107 passed 1.37s + ruff）；D 诚实边界 PASS（短语每个claim 审查者逐条以 file:line 核实；旧短语仓库级零残留）；E 回归风险 PASS（改动面 1 短语 + 2 测试文件 + 1 文档段，无行为面变更）。nit-① 未指定答案列子场景「导出待补清单」措辞与诚实降级存在轻微张力（该子场景不产 CSV）——登记待办，候选措辞「导出待补清单或确认答案列」；nit-②（清单内容两侧断言）已当场采纳并复跑全绿。
+- **非全量回归轮**（R82 基线 1964 passed / 471.16s / 93%；下一全量回归边界约 R84/R85）：定向四套件全绿，无失败无跳过。
+- 北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：① 刷新线上部署；② 分支领先 origin 63 commits（本轮提交后），push 受 Zed review hook 门控，待用户决定。成本钩子读数 $137.41（CRITICAL；不计成本授权下继续，逐轮如实上报）。
