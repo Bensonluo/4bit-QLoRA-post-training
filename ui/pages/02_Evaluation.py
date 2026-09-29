@@ -20,8 +20,8 @@ from ui.config import DOMAINS_DIR, MLFLOW_TRACKING_URI
 
 logger = logging.getLogger("qlora")
 
-st.set_page_config(page_title="Evaluation", page_icon="🎯", layout="wide")
-st.title("🎯 Evaluation Results")
+st.set_page_config(page_title="评测结果", page_icon="🎯", layout="wide")
+st.title("🎯 评测结果")
 
 # ── Domain Selector ─────────────────────────────────────────────
 
@@ -31,13 +31,13 @@ if not domains and DOMAINS_DIR.exists():
 
 if not domains:
     st.info(
-        "No evaluation domains found.\n\n"
-        "**Get started:**\n"
-        "1. Run a domain evaluation script (e.g. `domains/medical_entity/evaluate.py`)\n"
-        "2. Or import existing results below"
+        "暂无评测领域。\n\n"
+        "**开始使用：**\n"
+        "1. 运行领域评测脚本（如 `domains/medical_entity/evaluate.py`）\n"
+        "2. 或在下方导入历史评测结果"
     )
-    with st.expander("📥 Import Historical Results"):
-        if st.button("Scan & Import to MLflow"):
+    with st.expander("📥 导入历史评测结果"):
+        if st.button("扫描并导入 MLflow"):
             from src.tracking.eval_logger import log_eval_to_mlflow
 
             imported = 0
@@ -53,15 +53,15 @@ if not domains:
                             log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
                             imported += 1
                         except Exception as e:
-                            st.warning(f"Failed to import {json_file.name}: {e}")
+                            st.warning(f"导入 {json_file.name} 失败：{e}")
             if imported:
-                st.success(f"Imported {imported} file(s).")
+                st.success(f"已导入 {imported} 个评测结果文件到 MLflow。")
             else:
-                st.info("No evaluation files found.")
+                st.info("未发现可导入的评测结果文件。")
     st.stop()
 
 selected_domain = st.selectbox(
-    "Domain",
+    "领域",
     domains,
     format_func=lambda x: get_domain_display_name(x) if get_adapter(x) else x,
 )
@@ -103,12 +103,12 @@ if not data and mlflow_data:
     data = mlflow_data
 
 if not data:
-    st.warning("No evaluation data for this domain yet.")
-    st.markdown("**Options:**")
-    st.markdown("1. Run the domain evaluation script")
-    st.markdown("2. Import historical results below")
-    with st.expander("📥 Import Historical Results"):
-        if st.button("Scan & Import"):
+    st.warning("该领域暂无评测数据。")
+    st.markdown("**可选操作：**")
+    st.markdown("1. 运行领域评测脚本")
+    st.markdown("2. 在下方导入历史评测结果")
+    with st.expander("📥 导入历史评测结果"):
+        if st.button("扫描并导入 MLflow"):
             from src.tracking.eval_logger import log_eval_to_mlflow
 
             imported = 0
@@ -120,19 +120,19 @@ if not data:
                             log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
                             imported += 1
                         except Exception as e:
-                            st.warning(f"Failed: {e}")
+                            st.warning(f"导入 {json_file.name} 失败：{e}")
             if imported:
-                st.success(f"Imported {imported} file(s).")
+                st.success(f"已导入 {imported} 个评测结果文件到 MLflow。")
                 st.rerun()
             else:
-                st.info("No files found.")
+                st.info("未发现可导入的评测结果文件。")
     st.stop()
 
 adapter = get_adapter(selected_domain)
 
 # ── Overview ────────────────────────────────────────────────────
 
-st.subheader("Overview")
+st.subheader("总览")
 
 if adapter:
     adapter.render_summary(data)
@@ -142,7 +142,7 @@ else:
         with cols[i]:
             acc = model_data.get("overall_accuracy", 0)
             st.metric(
-                label=model_data.get("model", f"Model {i + 1}"),
+                label=model_data.get("model", f"模型 {i + 1}"),
                 value=f"{acc:.1%}" if acc else "N/A",
             )
 
@@ -150,31 +150,31 @@ st.divider()
 
 # ── Detailed Charts ─────────────────────────────────────────────
 
-st.subheader("Detailed Analysis")
+st.subheader("详细分析")
 
 if adapter:
     adapter.render_detail(data)
 else:
-    st.info("Install domain adapter for detailed charts.")
+    st.info("安装领域适配器后可查看详细图表。")
 
 st.divider()
 
 # ── Error Analysis ──────────────────────────────────────────────
 
 if adapter:
-    with st.expander("🔍 Error Analysis", expanded=False):
+    with st.expander("🔍 错误分析", expanded=False):
         adapter.render_error_analysis(data)
 
 st.divider()
 
 # ── Import ──────────────────────────────────────────────────────
 
-with st.expander("📥 Import Historical Results to MLflow"):
-    if st.button("Scan & Import"):
+with st.expander("📥 导入历史评测结果到 MLflow"):
+    if st.button("扫描并导入 MLflow"):
         from src.tracking.eval_logger import log_eval_to_mlflow
 
         imported = 0
-        # 同一「Scan & Import」操作在本页有三处入口(无域分支/无数据分支/此处),
+        # 同一「扫描并导入」操作在本页有三处入口(无域分支/无数据分支/此处),
         # 反馈三处同在——只包一处会让最常到达的入口反而裸跑。
         with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):
             for domain_dir in DOMAINS_DIR.iterdir():
@@ -188,8 +188,8 @@ with st.expander("📥 Import Historical Results to MLflow"):
                         log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
                         imported += 1
                     except Exception as e:
-                        st.warning(f"Failed to import {json_file.name}: {e}")
+                        st.warning(f"导入 {json_file.name} 失败：{e}")
         if imported:
-            st.success(f"Imported {imported} evaluation result file(s) to MLflow.")
+            st.success(f"已导入 {imported} 个评测结果文件到 MLflow。")
         else:
-            st.info("No new evaluation files found to import.")
+            st.info("未发现可导入的评测结果文件。")

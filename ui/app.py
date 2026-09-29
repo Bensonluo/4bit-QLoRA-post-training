@@ -12,14 +12,14 @@ import streamlit as st
 from ui.config import MLFLOW_TRACKING_URI, PROJECT_ROOT
 
 st.set_page_config(
-    page_title="TuneSmith — Post-Training Lab",
+    page_title="TuneSmith — 训练工作台",
     page_icon="🔨",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 st.title("🔨 TuneSmith")
-st.caption("Configure, train, evaluate, and compare models — all in one place.")
+st.caption("配置、训练、评测、对比模型——一站式完成。")
 
 st.subheader("先说业务目标，再看数据")
 st.write("提供一份 CSV 样例，让 Agent 帮你判断数据是否适合、还缺什么，并预览真实处理结果。")
@@ -74,7 +74,7 @@ with status_cols[3]:
 
 with status_cols[4]:
     st.markdown(
-        f"<div style='text-align:right;color:#94A3B8;font-size:0.85rem'>Project: {PROJECT_ROOT.name}</div>",
+        f"<div style='text-align:right;color:#94A3B8;font-size:0.85rem'>项目：{PROJECT_ROOT.name}</div>",
         unsafe_allow_html=True,
     )
 
@@ -105,48 +105,48 @@ except Exception:
 
 stat_cols = st.columns(5)
 with stat_cols[0]:
-    st.metric("Total Runs", total)
+    st.metric("运行总数", total)
 with stat_cols[1]:
-    st.metric("Completed", finished, delta=None)
+    st.metric("已完成", finished, delta=None)
 with stat_cols[2]:
-    st.metric("Running", running)
+    st.metric("运行中", running)
 with stat_cols[3]:
-    st.metric("Failed", failed, delta=f"-{failed}" if failed else None)
+    st.metric("失败", failed, delta=f"-{failed}" if failed else None)
 with stat_cols[4]:
     try:
         from src.tracking.runner import TrainingRunner
 
         runner = TrainingRunner(project_root=str(PROJECT_ROOT))
         active = runner.list_active()
-        st.metric("Active Jobs", len(active))
+        st.metric("进行中的任务", len(active))
     except Exception:
-        st.metric("Active Jobs", 0)
+        st.metric("进行中的任务", 0)
 
 st.divider()
 
 # ── Quick Actions ───────────────────────────────────────────────
 
-st.subheader("Quick Actions")
+st.subheader("快捷操作")
 
 qa_cols = st.columns(4)
 with qa_cols[0]:
-    if st.button("🏋️ New Training", width="stretch", type="primary"):
+    if st.button("🏋️ 发起训练", width="stretch", type="primary"):
         st.switch_page("pages/00_Training_Lab.py")
 with qa_cols[1]:
-    if st.button("📊 View Experiments", width="stretch"):
+    if st.button("📊 查看实验", width="stretch"):
         st.switch_page("pages/01_Experiments.py")
 with qa_cols[2]:
-    if st.button("🎯 Evaluation", width="stretch"):
+    if st.button("🎯 评测结果", width="stretch"):
         st.switch_page("pages/02_Evaluation.py")
 with qa_cols[3]:
-    if st.button("⚖️ Compare Models", width="stretch"):
+    if st.button("⚖️ 对比模型", width="stretch"):
         st.switch_page("pages/03_Model_Comparison.py")
 
 st.divider()
 
 # ── Recent Activity ─────────────────────────────────────────────
 
-st.subheader("Recent Activity")
+st.subheader("最近动态")
 
 try:
     import pandas as pd
@@ -168,7 +168,7 @@ try:
             )
 
             status_emoji = {"FINISHED": "✅", "RUNNING": "🟢", "FAILED": "🔴"}.get(status, "⚪")
-            loss_str = f" | Loss: {loss:.3f}" if loss is not None else ""
+            loss_str = f" | 损失: {loss:.3f}" if loss is not None else ""
 
             st.markdown(
                 f"<div style='padding:0.5rem 0;border-bottom:1px solid #334155;'>"
@@ -178,6 +178,6 @@ try:
                 unsafe_allow_html=True,
             )
     else:
-        st.info("No training runs yet. Start your first experiment from the Training Lab.")
+        st.info("暂无训练记录。去训练实验室发起第一个实验吧。")
 except Exception as e:
-    st.info(f"Could not load activity: {e}")
+    st.info(f"加载最近动态失败：{e}")
