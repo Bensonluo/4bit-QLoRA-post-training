@@ -3191,3 +3191,24 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地将领先 17 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。事故披露：R108 feat commit 消息中 StreamlitAPIException 误拼为「StreamlinkAPIException」——按禁 amend 规则以本轮报正名，代码与测试零影响。
 
 **成本**：主会话成本钩子持续 CRITICAL：$81.92→$84.40→$86.73；r108-scout 转达 $84.10；r108-reviewer 审查期间 $86.40→$86.69（会话级共享口径）。按不计成本授权如实登记，未中断。
+## 第 109 轮（2026-09-30）——空态死端族清尾（app 首页 + 01 实验页）
+
+**选点**：r109-scout 审计（承接 R108 登记候选首）裁决双切片：①app:181 空态 st.info「暂无训练记录。去训练实验室发起第一个实验吧。」纯文字无按钮——与 R108 修的 05:124 幽灵按钮句同型（指路句自己不接线），程度轻于 06（首页视线内有 hero CTA+四个快捷按钮，但空态语境下最近动态区自己就该给出下一步）②01:38-40 空态 info+st.stop() 封整页——比 app.py 更死（01 无 hero，封页后用户只能靠侧栏导航自救）。一轮清完「空态死端」族（app 首页+01+06 三页全闭环），04_Registry 空态指路质量登记 R110。
+
+**证据核实**：①switch 机制双实证（r109-scout /tmp 四场景，streamlit 1.57.0）：app.py 自身是入口——from_file(ui/app.py) 直跑点页内 switch 按钮即切页零异常（与 R108 页文件坑相反：ui/pages/ 下无嵌套 pages/，01 页内按钮必须入口锚定 from_file(app.py)→at.switch_page）；②空态钉打桩时序：本机 outputs/mlruns 非空，不 patch 则空态分支不渲染（跨机不稳）——app.py 在 run() 期间才运行时导入 fetch_runs（:86/:154 两处 try 内），run 前 setattr ui.queries.fetch_runs→空 DF 即生效，app 双调用点（指标卡+最近动态）同桩自洽；01 还需补 fetch_experiments→[]。scout 已逐行核实 app:159-168 全 row.get 带默认值——非空特征化钉最小列集 {run_id, status} 可跑通。
+
+**实现**：app.py:180-184 else 分支 info 后新增「🏋️ 发起第一个实验」primary 按钮→st.switch_page("pages/00_Training_Lab.py")（按钮名与 info「发起第一个实验吧」逐字对齐）；01_Experiments.py:38-43 空态 st.stop 前新增「🏋️ 去训练实验室」按钮→00 页（R108 06 页范式）。两页各 +3 行，非空路径零触碰。
+
+**测试 RED→GREEN**：净 7。新 test_home_empty_state_ui.py 三钉：空态指路钉（info+主按钮在场）、switch 旅程钉（app.py 入口直跑，点按钮树切 00 标题）、非空特征化钉（最小 DF 空态退场+正向 markdown 断言堵 try/except 吞异常盲区——r109-reviewer nit-2 采纳）；新 test_experiments_empty_state_ui.py 四钉：空态指路钉、switch 旅程钉（入口锚定）、非空结构源码钉（btn_pos<stop_pos<switch_pos 顺序锁）、非空旅程特征化钉（r109-reviewer nit-1 采纳升级：原「最小假 DF 碎在下游列依赖」论据被探针证伪——01 非空路径全程列守卫，最小 DF 完整跑通 KPI/筛选/表格；docstring 论据同步修正）。RED 口径如实：5 行为钉对 HEAD 正确理由失败，2 特征化钉生而绿（docstring 披露）。门禁定向 27 passed（home 3+experiments 4+chat 3+loading 10+localization 7）+ ruff 双净，采纳后复跑一致（含 ruff format 一轮修正后复验）。
+
+**审查**：r109-reviewer（opus 只读五维度）verdict **PASS-with-findings**：0 should-fix / 2 nit / 2 observation。独立实证：非空路径与 HEAD byte-identical 对照；01 ImportError 分支与新按钮交互合理（mlflow 缺失时 error+stop 在按钮之前，不冲突）；按钮名全库零冲突（app:133「🏋️ 发起训练」与本轮 app:181「🏋️ 发起第一个实验」不同块不撞名）；空态钉打桩自洽性复核（双调用点同桩）。审查者探针证伪主会话论据：最小 1-row DF 实测完整跑通 01 非空路径——nit-1 据此升级。裁决：nit-1 采纳升级（01 非空源码钉→旅程特征化钉+论据修正）；nit-2 采纳（home 非空补正向断言「最近动态列表必须真渲染」）；2 observation 登记（app except 分支无按钮——错误报告≠指路句，错误态加按钮反而文案失实，裁决保留；app 同页双同目的地按钮——既定 hero+空态布局，不动）。
+
+**增量复核**：两项采纳落地后定向门禁 27 passed（5 套件）、ruff 双净；格式修正后复验 4/4 一致。
+
+**登记对账与 R110 选点**：全量对账轮兑现——2056 passed / 0 failed（212.41s），2038+6+6+6=2056 三轮逐轮精确吻合（R107 净 6、R108 净 6、R109 净 6+采纳 nit-1 升级 +1 已含在实测内——实测基线+净增口径全对）。注意：本轮收口后采纳新增的旅程钉 +1 在实测之后落地，下次全量预期 2057（R104 先例口径）。R110 候选首 = 04_Registry.py:37-42 空态指路（专家语域 CLI-register 指路，非专家画像失配，需 00 页同款接线+语域校准）；backlog：02 入口2 rerun 不对称、R104 nit-3 registry race、read_recent_logs seek-tail、07 IA 史诗（独立轮次）、05→00 交接全 AppTest 旅程（登记不做）。
+
+**边界**：全量回归已跑（对账轮义务）：2056 passed / 0 failed / 155 warnings。采纳增量 +1 钉发生在实测之后——已如实登记，下次全量基线 2057。
+
+**待授权**：①push origin（本地将领先 19 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
+
+**成本**：主会话成本钩子持续 CRITICAL：$86.73→$88.33→$90.38（破 $90）；r109-reviewer 转达 $89.92→$90.22，并明确建议向用户转达：如希望收敛成本可减少并行 agent 数量。按不计成本授权如实登记未中断，收敛建议已转达用户。
