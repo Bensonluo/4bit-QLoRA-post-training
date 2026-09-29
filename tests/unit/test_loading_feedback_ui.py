@@ -144,3 +144,31 @@ def test_wizard_demo_button_journey_still_loads_table(tmp_path, monkeypatch):
     demo.click().run()
     assert not page.exception, [e.message for e in page.exception]
     assert any("已加载" in s.value for s in page.success), [s.value for s in page.success]
+
+
+def test_wizard_entry_pointer_names_real_buttons():
+    """05 空态指路句必须点名真实存在的按钮(r108-scout 发现):旧句点名
+    「试试演示数据」,实际按钮是「🧪 医疗演示数据」「🏭 主数据演示数据」
+    ——与 R106 轮 00:189 预设按钮失配同类(指路牌指向不存在的门,
+    非专家照指路找按钮找不到)。"""
+    source = _source(PAGE_WIZARD)
+    assert "或点两个演示数据按钮之一" in source, "指路句必须点名真实按钮"
+    assert "「试试演示数据」" not in source, "幽灵按钮名必须退场"
+
+
+def test_wizard_handoff_send_side_wired():
+    """05→00 页内交接·发送侧源码钉(R107 审查发现零覆盖):预填
+    dataset_input + 写 wizard_handoff + switch_page 三件套缺一不可,
+    少一样交接横幅/预填静默失效。"""
+    source = _source(PAGE_WIZARD)
+    assert 'st.session_state["dataset_input"] = str(train_path)' in source
+    assert 'st.session_state["wizard_handoff"]' in source
+    assert 'st.switch_page("pages/00_Training_Lab.py")' in source
+
+
+def test_wizard_handoff_receive_side_wired():
+    """交接·接收侧源码钉:00 页必须 pop 横幅数据并渲染已预填说明——
+    发送侧三件套与接收侧 pop/渲染两端钉合,才是完整契约。"""
+    source = _source(PAGE_LAB)
+    assert 'st.session_state.pop("wizard_handoff", None)' in source
+    assert "已从 **Data Wizard** 预填" in source

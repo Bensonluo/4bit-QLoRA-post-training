@@ -121,7 +121,10 @@ with demo_col:
 
 table: RawTable | None = st.session_state.get("wizard_table")
 if table is None:
-    st.info("👆 上传文件、填路径、或点「试试演示数据」开始。向导不会写任何文件，直到第④步点生成。")
+    st.info(
+        "👆 上传文件、填路径、或点两个演示数据按钮之一（🧪 医疗演示数据 / 🏭 主数据演示数据）"
+        "开始。向导不会写任何文件，直到第④步点生成。"
+    )
     st.stop()
 
 st.success(

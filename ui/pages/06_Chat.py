@@ -110,7 +110,19 @@ with clear_col:
         st.rerun()
 
 if not loaded_base:
-    st.info("在左侧选择模型并点 **⚡ 加载模型**，然后开始对话。")
+    # options 由页首 discover_chat_models(PROJECT_ROOT) 算出：空态时选择器只有「自定义」，不能再说
+    # 「在左侧选择模型」——指向没有模型的列表。改指 00 页训练，并如实
+    # 披露自定义底座逃生门（专家路径不封死，侧栏控件本就先于 st.stop 渲染）
+    if not options:
+        st.info(
+            "本机还没有可对话的训练产物（🔧 LoRA adapter 或 📦 已合并模型）——"
+            "先训练一个模型，回来这里就能和它对话。急着体验的话，"
+            "也可以在左侧「⌨️ 自定义」填底座名（如 Qwen/Qwen2.5-0.5B-Instruct）直接聊。"
+        )
+        if st.button("🏋️ 去训练一个模型", type="primary"):
+            st.switch_page("pages/00_Training_Lab.py")
+    else:
+        st.info("在左侧选择模型并点 **⚡ 加载模型**，然后开始对话。")
     st.stop()
 
 where = f"`{loaded_base}`" + (f" + adapter `{loaded_adapter}`" if loaded_adapter else "")
