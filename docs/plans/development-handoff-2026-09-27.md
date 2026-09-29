@@ -3119,3 +3119,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**（不变）：①push origin（本地领先 11 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
 
 **成本**：主会话成本钩子反复触发（$50.93→$53.19→$53.35→$61.71，COST CRITICAL）；审查员会话另行转达其钩子水位 $61.20。项目累计口径：R104 轮报 ≈$312+R105 增量（主会话+审查员+scout 三 agent 会话），具体数字以账单为准，本轮如实登记钩子观测值。
+
+---
+
+## 第 106 轮（2026-09-30）——语域收尾 + Stop 确认族（feat(m-polish): b3c477a）
+
+**选点**：承接 R105 轮报登记与等待窗口一手侦察：①00 页是中英混排最重页（79/453 已中文，预设按钮三件套/配置表单六 section 头/三滑杆/Activity 骨架全英文），且 01:39 已用「训练实验室(Training Lab)」括注指路、00:189 中文句指名英文按钮「Start Training」——指路牌与目的地语言不一致；②00:593 ⏹ Stop 与 07:1526「停止本轮后台执行」均为裸按钮直发，中断在途训练/agent 执行无确认；③domain_adapters.py 组件文案约 20 串英文在 02/03 页内渲染，难度/实体类型枚举跨页显示层不统一（R105 有意保留登记本轮）；④06 页两滑杆随轮。
+
+**证据核实**：标签-逻辑耦合三处逐一定位并绕开——00:211 技术单选标签经 `.lower()` 进 SCRIPTS 查表（选项值 SFT/DPO/GRPO 不动）、00:198 平台控件 "CUDA" 成员测试驱动量化门（NVIDIA (CUDA) 等值不动）、00:354 量化单选标签即逻辑值（`quant_bits = 4 if quant_choice == "4-bit QLoRA"`，标签不动只译 help）；Registry 子块 R105 已中文，编织绕行。AppTest/popover 实证（/tmp/popcheck 合成应用）：popover 内按钮直在 `page.button` 且可点（触发器本身不是 button）——为邻接钉维护提供一手证据。stop_training 源码级核实：对已结束进程是静默 no-op（runner.py:203-210）。CLAUDE.md 核实为 gitignore 文件（.gitignore:96），nit-2 修复本地落盘不入 git。
+
+**实现**：五文件约 60 串——00 页全骨架（页标题/预设三件套+help/配置六 section 头与控件标签/三滑杆/Activity 骨架含 Status 枚举显示映射 `_run_status_zh` 对齐 01 页 `_STATUS_ZH`）；⏹ Stop 与 07「停止本轮后台执行」popover 化（caption 如实：终止进程/不可断点续跑/产物保留；07 caption 为审查窗口内自查强化，一手证据 execution_service docstring「further starts are refused」）；domain_adapters.py 组件文案中文化+公开 helper `difficulty_label()`/`entity_type_label()`（开放词表 fallback，03 页共用，`diff.title()`/`etype.title()` 显示退场，筛选 options 仍是英文枚举、format_func 只动显示层）；03 页标签同源化；06 页两滑杆。术语边界承 R105：LoRA/SFT/DPO/GRPO/MLflow/MRR 等术语与数据枚举值不译。
+
+**测试 RED→GREEN**：新增 test_lab_localization_ui.py 九钉（RED 8 failed→采纳后 9 passed）：00 头部与预设/配置六 section/Activity 骨架三组逐字+按调用形态退场、Stop 控制流钉（确认按钮在 popover 内先于 stop_training+全文件唯一）、07 Stop 同族、adapter 文案+helper 公开性、03 同源断言、06 滑杆。审查 should-fix-1 采纳后新增门紧邻钉（`status == "running"` 门距 popover ≤4 行）。
+
+**审查**：r106-reviewer（opus，只读，五维度+CLAUDE.md 陈旧度新维度）verdict **PASS·1 should-fix·4 nit**。should-fix-1（真行为缺陷，采纳）：popover 化时无声丢掉 HEAD 原有 `status == "running"` 门——无条件渲染令 caption「将终止该运行的训练进程」对已完成/失败/未知 run 说谎；采纳=门恢复+紧邻钉。nit-1（采纳）：`_run_status_zh` 缺 unknown→未知；nit-2（采纳）：CLAUDE.md 00 页 bullet「3 tabs」陈旧（R104 起实为 2 tabs）——本地落盘；nit-3（登记）：测试 docstring 引 HEAD 相对行号（00:593/07:1526）会漂移，保留；nit-4（登记）：`"format_func=" in source` 存在性断言弱但与调用形态钉互补。审查员独立复跑定向门一致（14 passed）。
+
+**增量复核**：定向 5 套件 34 passed（iteration_execution+lab_localization+activity_autorefresh+loading_feedback+register_unification）；ruff check/format 双净。**全量回归（节奏到点：R104 后第 2 轮）抓到定向门未覆盖的邻接钉事故**：test_iteration_execution_ui.py 停止旅程按裸按钮形态找「停止本轮后台执行」（现为 popover 标签非 button）→StopIteration。修复=钉随控制形态维护为「确认停止」（R104 先例），修复前先跑 /tmp/popcheck AppTest 实证再动手（执行协议：不猜）。事故披露：预登记的钉迁移条款只盘点了 R104 两钉同步，漏盘邻接既有测试——全量回归正是为此存在，memory「回归节奏 2-3 轮」再次验证价值。
+
+**登记对账与 R107 选点**：R105 登记三件（00 页整页英文/domain_adapters 文案+难度枚举/06 滑杆）本轮全闭环✓；R104 nit-3（注册表理论竞态）继续登记。**边界对账修正**：R105 轮报「预期 2028（2020+8）」沿用 R104 采纳前口径——R104 采纳 +1 钉后真基线 2021，故 2021+8+9=2038 与实测精确吻合；R106 轮起对账一律用「实测基线+净增」双录。**R107 选点**（待 fresh ux-scout 对全中文基线复核）：候选=07 页 57 expander 信息架构、00 配置表单渐进披露、06 Chat 可发现性；登记项=02 入口2 rerun 不对称、R104 nit-3、read_recent_logs seek-tail。
+
+**边界**：全量回归 2038 passed / 0 failed（215.69s）精确对账（R104 真基线 2021+R105 净 8+R106 净 9=2038；修钉前一轮为 2037 passed+1 failed=2038 总数一致）。下一预期边界：R106 实测 2038+R107 净增。
+
+**待授权**（不变）：①push origin（本地领先 13 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
+
+**成本**：主会话成本钩子持续 CRITICAL（$61.71→$70.36→$70.57），审查员会话另行转达其钩子水位 $70.36；SCOPE WARNING 33 files（R103-R106 多轮同会话预期内）。项目累计口径：R104 轮报 ≈$312+R105/R106 增量（主会话+双审查员+scout 多 agent 会话），具体数字以账单为准，钩子观测值如实登记。
