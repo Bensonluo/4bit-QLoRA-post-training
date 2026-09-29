@@ -3233,3 +3233,24 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地将领先 21 commits）；②benluo.art 部署；③venv 重建（mypy shebang）。
 
 **成本**：主会话成本钩子持续 CRITICAL：$90.38→$92.17→$92.56→$94.66；r110-scout 期间 $90.38→$92.33；r110-reviewer 期间 $94.86→$95.03（已破 $95）。两轮审查者均明确建议向用户转达收敛建议（减少并行 agent）。按不计成本授权如实登记未中断，收敛建议已再次转达。
+## 第 111 轮（2026-09-30）——03 对比页空态死端指路 + 0/1 双语义分化
+
+**选点**：r111-scout 审计（R110 登记候选经重大改写）：03「双空态」实为「一活一幽灵」——state#1（03:34-36「暂无包含评测数据的领域」）是幽灵：list_domains() 返回 adapter registry keys，而 register_adapter(MedicalEntityAdapter()) 在 domain_adapters.py:222 模块导入时无条件执行 → 生产上永远返回 ["medical_entity"]，state#1 仅双重打桩下可达（scout 探针 A），其前 fallback（03:31-32 扫 DOMAINS_DIR）同为死代码——登记不动（若未来 registry 改动态注册需重评）。唯一活空态 state#2（03:41-43 len(data)<2）一个分支吞两种语义：len==0（全新克隆零评测）与 len==1（单模型）共用「请先完成更多评测」——对 len==0 用户失实（需要的是第一个，不是更多）。**出口裁决 00 不去 02**（scout 全读核实）：02 页是「看结果+导入已有文件」页，无任何发起评测的 UI 能力；len==0 用户指去 02 会落 02:106 自己的空态（建议跑终端脚本+导入返回「未发现可导入的评测结果文件」）= 空→空死端接力；00 是家族统一出口（三先例）+训练表单永在场。**诚实红线**：00 的「下一步」评测命令（scripts/evaluate.py）不写 domains/<domain>/data/results/（reviewer 独立核实 03 数据源 eval_detail_*.json 全仓唯一生产者是 domains/medical_entity/eval/report.py:166）——指路句不得宣称「跑完命令结果会出现在本页」，只停在「训练出（下一个）模型」这一 00 真实能力上。跨页断点（训练→评测→对比链路缺 in-UI 评测发起）属 IA 级，登记不修。落选登记：R109 experiments 钉3 同名误称顺手改名（+0 净增零风险，随轮携带）；07 IA 史诗维持独立轮次（3562 行、grep 无页级 st.stop 空态，无小切）；02 入口3 rerun（钉贵修廉维持）；02:45 守卫（不可达）。
+
+**证据核实**：①scout /tmp 五场景实证（入口锚定 from_file(app.py)→switch 03）：A 幽灵双桩可渲染、B/C len0/len1 同句（本轮要修点）、D 真实数据 4 subheaders 15 metrics、E **最小 2-dict fixture 完整渲染**（fmt_pct/fmt_num/delta 全 None-safe）——非空特征化钉可行性预验证（R109/R110 教训兑现）。②打桩机制：monkeypatch.setattr(ui.components.domain_adapters, "load_eval_data", ...)——03 顶层 from-import 在 switch 时执行读源模块已替换属性（R109 ui.queries 同机制）；本机数据源非空（17 份 eval_detail，最新 3 模型）→ 空态钉必须打桩。③03 现场一手核实：len(data)<2 单锚、非空路径 d.get 迭代契约、len1 f-string 回退「模型 0」与既有 f"模型 {i}" 语域一致。
+
+**实现**：03:41-56 活空态分支：len0/len1 warning 文案分化（len1 点名唯一模型名）；指路 info（去 00 训练+已有结果在「评测结果」页查看——「评测结果」页名与 02:23 实际标题逐字一致）；「🏋️ 去训练实验室」primary 按钮→st.switch_page(00 页) 插在 st.stop 前。state#1 与 03:31-32 死 fallback 不动。共 +13−1 行。
+
+**测试 RED→GREEN**：净 5（新 test_comparison_empty_state_ui.py）+改名 +0。len0 指路钉（「还没有任何模型的评测结果」如实文案+info+主按钮）；switch 旅程钉（入口锚定→00 真标题）；len1 语义分化钉（正向点名「甲模型」在前+负向防 len0 文案/双文案混装——无 R109 nit-2 盲区）；空态分支出路结构钉（len(data)<2 锚，btn<stop+switch 接线）；非空旅程特征化钉（最小 2-dict，断言锚「指标对比」subheader 避开读真实目录的执行摘要分支——跨机稳定；生而绿 docstring 披露）。RED 4 失败理由正确（旧文案未分化/无按钮/源码无钮），1 特征化钉生而绿。门禁定向 36 passed（comparison 5+experiments 4+registry 4+register_unification 8+home 3+chat 3+loading 9）+ ruff 双净；reviewer 独立 8 套件（+lab_localization 9）45 passed。
+
+**审查**：r111-reviewer（opus 只读五维度）verdict **PASS-with-findings**：0 should-fix / 0 nit / 3 observation。独立实证：git diff 单 hunk 非空路径 byte 零触碰；改名全仓唯一引用即 def 本身（grep 含 .md）；lab_localization 的 03 钉只查源码导入在场零影响（实跑确认）；诚实红线独立核实（report.py:166 唯一生产者+evaluate.py 默认不写盘）；源码钉锚点正确（ghost 分支 st.stop 在锚前被 split 排除）。scout 两项关键裁决（幽灵/出口 00）独立复核均成立。3 observation 全登记：obs-1 源码钉缺 switch_pos<stop_pos 断言（旅程钉运行时兜底；与 R110 兄弟钉逐字节同形，单边补齐会分叉——将来一轮批量同步两处）；obs-2 len0 时 info 第二句「已有结果可在评测结果页查看」空虚为真（单文案服务双分支合理取舍）；obs-3 空态按钮家族三变体（去训练实验室 01/04/03·去训练一个模型 06·发起第一个实验 app）各呼应所在页 info 是有意设计（R109 先例）。
+
+**增量复核**：无采纳编辑（0 should-fix/0nit）；主会话定向 36 与 reviewer 独立 45 两跑一致（口径差=lab_localization 9）。
+
+**登记对账与 R112 选点**：全量对账轮兑现——**2066 passed / 0 failed（212.28s）与预测 2061+5 精确命中，零漂移（连续第三次）**。R112 候选（待 scout 裁决）：①obs-1 兄弟钉批量同步（registry+experiments 源码钉补 switch_pos<stop_pos，+0 净增纯加强）；②03:31-32 死 fallback + state#1 幽灵分支清理（小切片，删死代码+钉退化保护）；③07 IA 史诗可行性预研（3562 行，next_action_phrase CLI 语域——R108 已判独立轮次，先侦察有无更小可切）；④00 评测命令→03 数据断点（IA 级，需设计 in-UI 评测发起或至少打通命令→落盘路径）；⑤venv shebang 断（指向旧仓名 4bit-QLoRA-post-training，R110「skipped=未跑」根因，低成本修法 python -m venv venv --upgrade——涉环境改动待授权）。backlog 维持：02 入口3 rerun、02:45 守卫、R104 nit-3。
+
+**边界**：全量已跑（对账轮义务）：2066 passed / 0 failed / 155 warnings（mlflow FutureWarning 存量噪音）。R112 若纯 +0 净增则全量可跳，预测基线维持 2066。
+
+**待授权**：①push origin（本地将领先 23 commits）；②benluo.art 部署；③venv 重建/修复 shebang（mypy shebang + pytest shebang 指旧仓路径，可一并 python -m venv venv --upgrade 处理）。
+
+**成本**：主会话成本钩子持续 CRITICAL：$94.66→$96.44（scout）→$96.53；r111-reviewer 审查期间 $96.53→**$98.10**（连破 $95/$98）。三轮审查者均建议转达收敛建议；r111-reviewer 本轮已自觉控成本（全定向、零全量、单次合并跑 8 套件）。按不计成本授权如实登记未中断。
