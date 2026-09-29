@@ -605,8 +605,8 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
     ), "全量验证入口必须点名(R85):awaiting_full_data 不能只说提供全量数据不给命令"
     assert next_action_phrase("awaiting_full_validation") == (
         "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查"
-        "（已声明全量可省略 --input）。"
-    ), "已声明全量任务的验证入口必须点名(R85),省略 --input 的复用条件一并写明"
+        "（已声明全量可省略 --input；多资料任务用 full-sources）。"
+    ), "已声明全量任务的验证入口必须点名(R85),复用条件与多资料变体一并写明(R90 收口 nit-②)"
     assert next_action_phrase("needs_full_data_revision") == (
         "全量报告仍有阻断问题，修正资料或规则后重跑 full-validate（多资料任务用 full-sources）。"
     ), "阻断态的重验出口必须点名(R85):修正后不是没有下一步的重验"

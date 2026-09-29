@@ -129,6 +129,48 @@ def test_cli_does_not_promote_sample_to_full(tmp_path):
     assert "不能将样例自动当作全量" in result.stderr
 
 
+def test_awaiting_full_validation_tail_notes_full_sources_and_delegated_validate_walks(tmp_path):
+    """已声明全量态的尾行带上 full-sources 变体注(R90 收口 R85 nit-②),且该态出口
+    实际走通(R89 同款「点名→走通」标准):组合任务要停在 awaiting_full_validation,
+    每份来源必须都已声明全量(compose_sources 只在全部来源 scope=full 时才给组合源
+    full,composition.py:488)——full-validate 省略 --input 委托组合校验,直接复用
+    每份已声明全量来源,直达 review_full_data;同态带 --input 上传组合结果会被拒并
+    指路按别名提供,这正是变体注的契约依据(此前无 pin)。样例混入的组合会话停在
+    awaiting_full_data,那态的 full-sources 出口另有测试,不在此重复证明。
+    """
+    from src.workbench.intake_service import next_action, next_action_phrase
+
+    service = IntakeService(tmp_path / "intake")
+    session = composition_session(service, scope="full")
+    assert next_action(session) == "awaiting_full_validation"
+    # 尾行短语(单一来源)三要素齐:点名 full-validate、写明省略 --input 的复用条件、
+    # 带上多资料变体注。
+    phrase = next_action_phrase("awaiting_full_validation")
+    assert "full-validate" in phrase and "省略 --input" in phrase and "full-sources" in phrase
+    # 变体注的契约依据:组合任务 full-validate 带 --input 上传组合结果被拒,按别名
+    # 提供才是正路(组合分支的拒收信息,此前全仓无 pin)。
+    combined_path = tmp_path / "combined.csv"
+    combined_path.write_bytes("ticket,text,label_category\n10,新杯子损坏,质量\n".encode())
+    result = invoke(
+        service,
+        "full-validate",
+        session.session_id,
+        "--revision",
+        session.revision,
+        "--input",
+        combined_path,
+    )
+    assert result.returncode == 2
+    assert "不能把组合结果当原始来源上传" in result.stderr
+    # 走通:省略 --input 委托组合校验,复用每份已声明全量来源,直达 review_full_data。
+    result = invoke(service, "full-validate", session.session_id, "--revision", session.revision)
+    assert result.returncode == 0, result.stderr
+    assert "review_full_data" in result.stderr
+    session = service.load(session.session_id)
+    assert next_action(session) == "review_full_data"
+    assert set(session.full_data.sources) == {"main", "labels"}
+
+
 @pytest.mark.parametrize("source_args", [["broken"], ["main=FILE", "main=FILE"], ["main=FILE"]])
 def test_cli_invalid_full_source_arguments_leave_session_unchanged(tmp_path, source_args):
     service = IntakeService(tmp_path / "intake")

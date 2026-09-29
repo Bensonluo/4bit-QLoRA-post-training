@@ -2319,7 +2319,7 @@ if session.preview:
     elif status == "awaiting_full_validation":
         st.info(
             "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查"
-            "（已声明全量可省略 --input）。"
+            "（已声明全量可省略 --input；多资料任务用 full-sources）。"
         )
     elif status == "needs_data_revision":
         st.warning(

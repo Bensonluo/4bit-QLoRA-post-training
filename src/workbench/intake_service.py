@@ -97,7 +97,7 @@ _NEXT_ACTION_PHRASES: dict[str, str] = {
     "ready_for_training_preflight": "数据已就绪，可运行 preflight 做训练前检查（尚未开始训练）。",
     "awaiting_dataset_split": "可以准备独立训练与评测分区（运行 materialize；尚未认定可以正式训练）。",
     "awaiting_full_data": "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组（多资料任务用 full-sources）。",
-    "awaiting_full_validation": "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查（已声明全量可省略 --input）。",
+    "awaiting_full_validation": "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查（已声明全量可省略 --input；多资料任务用 full-sources）。",
 }
 
 
