@@ -36,9 +36,13 @@ versions_df = fetch_model_versions(MLFLOW_TRACKING_URI)
 
 if versions_df.empty:
     st.info(
-        "暂无已注册的模型。可在训练配置 LoggingConfig 中设置 `register_model=True`，"
-        "或运行 `python scripts/registry_cli.py register` 手动注册。"
+        "暂无已注册的模型。最省事的路：去训练实验室，在配置页展开「高级参数」→"
+        "「模型注册表」区勾选「训练后自动注册」，训练完成后模型会自动登记到这里。"
+        "已训练好的模型也可用命令手动登记：`python scripts/registry_cli.py register`。"
     )
+    # st.stop 封页前给出最后一条出路（R108/R109 空态死端范式）：否则用户只能靠侧栏自救
+    if st.button("🏋️ 去训练实验室", type="primary"):
+        st.switch_page("pages/00_Training_Lab.py")
     st.stop()
 
 # ── Model selector + KPI cards ──────────────────────────────────
