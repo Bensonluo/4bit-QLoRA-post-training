@@ -72,7 +72,7 @@ notebook = [
 
 ui = [
     "mlflow>=2.10.0",
-    "streamlit>=1.36.0",
+    "streamlit>=1.37.0",
     "plotly>=5.18.0",
     "pandas>=2.1.0",
 ]

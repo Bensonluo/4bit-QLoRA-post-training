@@ -550,7 +550,12 @@ with tab_configure:
 
 # ── Activity Tab ────────────────────────────────────────────────
 
-with tab_activity:
+
+def _render_activity() -> None:
+    """Activity 全量渲染体(R104 自动刷新的 fragment 边界):边界必须包含
+    runner 构造与 run 列表读取——每 tick 重读 .run_meta.json,新启动/新删除
+    的 run 在 fragment 节拍内也可见;页面容器(container/columns)在函数体内
+    创建(fragment 体内建的容器才随节拍更新)。"""
     from src.tracking.runner import TrainingRunner
 
     runner = TrainingRunner(project_root=str(PROJECT_ROOT))
@@ -631,3 +636,17 @@ with tab_activity:
                 # 训练完成后的下一步引导（LlamaBoard Chat/Evaluate/Export 式收尾）
                 if status == "finished" and info:
                     _render_next_steps(run_id, info)
+
+
+with tab_activity:
+    # 条件应用(R104):仅当存在活跃训练时挂 30s 节拍(与 ui/queries.py 的
+    # 30s TTL 缓存对齐,更短只会放大 TTL 过期时的整段重查卡顿);run_every
+    # 无数据驱动的停止条件,活跃与否只能在全量重跑时探测。Stop/Delete/刷新
+    # 保持全应用 st.rerun() 不变(scope="fragment" 会让它们只重跑局部)。
+    from src.tracking.runner import TrainingRunner
+
+    _probe = TrainingRunner(project_root=str(PROJECT_ROOT))
+    if _probe.list_active():
+        st.fragment(run_every="30s")(_render_activity)()
+    else:
+        _render_activity()

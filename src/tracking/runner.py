@@ -68,12 +68,19 @@ def _metadata_lock(path: Path):
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
+# 进程级 Popen 注册表(按 project_root 分组):Streamlit 每次重跑都新建
+# TrainingRunner,实例级 _active 在页面第一次重跑后即丢失句柄——退出码
+# 永远无人记录(get_status 走 running→unknown,finished 门控的面板不出现),
+# stop_training 跨实例静默 no-op。句柄存活于注册表,实例 _active 只是视图。
+_ACTIVE_PROCS_BY_ROOT: dict[str, dict[str, subprocess.Popen]] = {}
+
+
 class TrainingRunner:
     """Launch and monitor training runs from the Streamlit UI."""
 
     def __init__(self, project_root: str | None = None):
         self.project_root = Path(project_root or ".")
-        self._active: dict[str, subprocess.Popen] = {}
+        self._active = _ACTIVE_PROCS_BY_ROOT.setdefault(str(self.project_root.resolve()), {})
         self._configs_dir = self.project_root / "outputs" / "configs"
         self._configs_dir.mkdir(parents=True, exist_ok=True)
         self._meta_file = self.project_root / "outputs" / ".run_meta.json"
