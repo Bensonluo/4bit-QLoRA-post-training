@@ -563,6 +563,7 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
         "review_full_data",
         "needs_full_data_revision",
         "ready_for_training_preflight",
+        "preflight_passed",
         "awaiting_dataset_split",
         "awaiting_full_data",
         "awaiting_full_validation",
@@ -619,4 +620,8 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
     assert next_action_phrase("ready_for_training_preflight") == (
         "数据已就绪，可运行 preflight 做训练前检查（尚未开始训练）。"
     )
+    assert next_action_phrase("preflight_passed") == (
+        "训练前检查已通过：可运行 plan-recommend 获得推荐方案，"
+        "或直接 train-prepare 准备训练（尚未启动训练）。"
+    ), "预检通过态的两个出口必须点名(R94):不再回环指向已完成的 preflight"
     assert next_action_phrase("not_a_real_state") == "", "未知状态不编造人话"

@@ -28,6 +28,7 @@ ALL_NEXT_ACTIONS = [
     "review_full_data",
     "awaiting_dataset_split",
     "ready_for_training_preflight",
+    "preflight_passed",
 ]
 
 
@@ -48,13 +49,13 @@ def test_build_funnel_maps_every_next_action_to_its_journey_stage():
         iteration_decisions=[],
     )
     assert report["sessions"] == {
-        "total": 13,
+        "total": 14,
         "stages": {
             "analysis": 6,
             "preview_confirm": 1,
             "full_validation": 4,
             "split": 1,
-            "preflight_ready": 1,
+            "preflight_ready": 2,
         },
         "unmapped": [],
     }

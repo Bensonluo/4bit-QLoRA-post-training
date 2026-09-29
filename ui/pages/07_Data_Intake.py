@@ -27,6 +27,7 @@ from src.workbench.intake_service import (
     IntakeService,
     agreement_evidence_note,
     next_action,
+    next_action_phrase,
     wilson_lower_bound,
 )
 from src.workbench.iterations import IterationService
@@ -2554,7 +2555,11 @@ if session.confirmed_revision is not None or session.full_data is not None:
                         st.rerun()
                     except ValueError as exc:
                         st.error(str(exc))
-        if next_action(session) in {"awaiting_dataset_split", "ready_for_training_preflight"}:
+        if next_action(session) in {
+            "awaiting_dataset_split",
+            "ready_for_training_preflight",
+            "preflight_passed",
+        }:
             st.subheader("盲标核验（训练前的语义安全关卡）")
             st.caption(
                 "系统随机抽取几条已标注行并隐藏答案，请仅根据输入给出你的答案；"
@@ -2795,7 +2800,7 @@ if dataset is not None:
         st.info(
             f"本轮沿用固定题集 {fixed_suite['suite_id'][:12]}：开发 {fixed_suite['case_counts']['validation']} 题，独立测试 {fixed_suite['case_counts']['test']} 题。"
         )
-    elif next_action(session) == "ready_for_training_preflight":
+    elif next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
         st.caption("需要进行多轮改进时，先固定当前开发与测试题目，使后续提升可在同一题集上验证。")
         if st.button("固定当前开发与测试题集"):
             try:
@@ -2809,8 +2814,13 @@ if dataset is not None:
             st.success(
                 f"已固定题集 {frozen_id[:12]}，后续轮次使用这组题目；当前训练版本保持原记录。"
             )
-    if next_action(session) == "ready_for_training_preflight":
-        st.success("独立数据分区已生成，可继续训练前检查；分区就绪不代表模型效果已验收。")
+    if next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
+        # 就绪句分两态(R94):预检通过后的出口句直接渲染单一来源短语(与 CLI 尾行、
+        # 短语表同词汇),不再回环指向已完成的 preflight;未通过仍指向预检入口。
+        if next_action(session) == "preflight_passed":
+            st.success(next_action_phrase("preflight_passed"))
+        else:
+            st.success("独立数据分区已生成，可继续训练前检查；分区就绪不代表模型效果已验收。")
         with st.expander("📋 任务规约投影（训练启动前对齐「我们在教模型什么」）"):
             # ADR-1 只读投影:由既有确认记录汇编,不新增状态;与 CLI task-spec-show 同源同词汇。
             from src.workbench.task_spec_projection import summarize_task_spec
@@ -2935,19 +2945,19 @@ if session.training_preflight is not None:
         st.dataframe(preflight["rows"], hide_index=True, width="stretch")
         st.json(preflight["tokenizer"])
 
-if next_action(session) == "ready_for_training_preflight":
+if next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
     show_business_scoring()
 
 training_service = TrainingRunService(
     PROJECT_ROOT / "outputs/workbench/training", project_root=PROJECT_ROOT
 )
 training_runs = training_service.list_runs(session_id=session.session_id)
-if next_action(session) == "ready_for_training_preflight" or training_runs:
+if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} or training_runs:
     st.subheader("用当前数据微调模型")
     st.caption(
         "使用已确认的数据版本和独立分区。选择本地基础模型后重新检查对应 tokenizer，再启动训练。"
     )
-    if next_action(session) == "ready_for_training_preflight":
+    if next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
         show_training_recommendations()
         with st.expander("高级：手工配置训练参数"):
             from src.workbench.training_guidance import manual_training_parameter_lines

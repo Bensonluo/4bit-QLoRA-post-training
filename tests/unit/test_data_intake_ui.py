@@ -232,7 +232,7 @@ def test_plan_expander_renders_tool_trace_line(data_page):
     from tests.unit.test_full_data import FULL, approved
 
     service, _, page = data_page
-    # 方案区只在 ready_for_training_preflight 渲染：走既有夹具链
+    # 方案区在 ready_for_training_preflight / preflight_passed 双态渲染(R94)：走既有夹具链
     # 分析→确认→全量校验→确认全量→物化 (同 test_preflight_only_loads_tokenizer…)。
     session = approved(service)
     session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
@@ -286,6 +286,11 @@ def test_plan_expander_renders_tool_trace_line(data_page):
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert not page.exception
+    # 旧就绪句在场钉(r94-reviewer nit-2):未跑预检的 ready 态走 else 分支渲染原句,
+    # 回归成两态同句时此钉先红——与新态的退场钉(test_preflight_passed…:1385)互为对偶。
+    assert any(
+        "独立数据分区已生成，可继续训练前检查" in message.value for message in page.success
+    ), "ready_for_training_preflight 态的旧就绪句必须在场"
     assert any(expander.label.startswith("方案 ") for expander in page.expander), [
         item.label for item in page.expander
     ]
@@ -1339,3 +1344,57 @@ def test_demo_task_module_degrades_honestly_when_files_absent(tmp_path):
     assert demo_sample(tmp_path) is None
     assert demo_full(tmp_path) is None
     assert not is_demo_session("0" * 64, tmp_path)
+
+
+def test_preflight_passed_state_moves_page_exits_forward(data_page, monkeypatch):
+    """预检通过后页面就绪句与方案区出口前移(R94):状态机新增 preflight_passed 态,
+    页面成功行改渲染单一来源短语(与 CLI 尾行同词汇),不再回环指向已完成的预检;
+    盲标核验/固定题集/业务评分/微调方案各区块在该态继续可见(可重跑、可多轮改进)。"""
+    import src.workbench.training_preflight as preflight
+    from tests.unit.test_full_data import FULL, approved
+
+    service, _, page = data_page
+    session = approved(service)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
+    assert next_action(session) == "ready_for_training_preflight"
+
+    def report(current, tokenizer, max_length):
+        return {
+            "status": "passed",
+            "scope_note": "UI protocol fixture",
+            "issues": [],
+            "splits": {"train": {"answer_lost_rows": 0}},
+            "rows": [],
+            "tokenizer": {"name_or_path": "local-fixture"},
+        }
+
+    monkeypatch.setattr(
+        preflight, "load_local_tokenizer", lambda path, *, local_files_only: object()
+    )
+    monkeypatch.setattr(preflight, "preflight_dataset", report)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(t for t in page.text_input if t.label == "本地 tokenizer 目录或已缓存标识").input(
+        "/tmp/local-fixture"
+    )
+    next(n for n in page.number_input if n.label == "训练最大 token 长度").set_value(32)
+    button(page, "检查实际截断与答案保留").click().run()
+    assert not page.exception
+    assert next_action(service.load(session.session_id)) == "preflight_passed"
+    # 就绪句前移:单一来源短语在场,旧的「可继续训练前检查」回环句退场
+    assert any(
+        "训练前检查已通过：可运行 plan-recommend" in message.value for message in page.success
+    )
+    assert not any("可继续训练前检查" in message.value for message in page.success)
+    # 方案区与盲标核验在该态继续渲染:通过预检不是终点,是训练侧入口
+    assert any("用当前数据微调模型" in header.value for header in page.subheader)
+    assert any("盲标核验" in header.value for header in page.subheader)
+    # 固定题集 caption 在该态渲染(r94-reviewer nit-3):新测试数据集未冻结题集,
+    # elif 分支的静态引导文案不因状态前移而消失。
+    assert any("先固定当前开发与测试题目" in cap.value for cap in page.caption), (
+        "preflight_passed 态的固定题集引导 caption 必须在场"
+    )
+    page.run()
+    assert not page.exception

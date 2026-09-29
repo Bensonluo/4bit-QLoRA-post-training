@@ -76,6 +76,11 @@ def next_action(session: IntakeSession) -> str:
             return "review_full_data"
         if session.full_data.status == "confirmed":
             if dataset_is_current(session):
+                # 预检通过是独立停点(R94):dataset_is_current 成立时 training_preflight
+                # 未被任何数据变更入口清除即为当前结果;warnings/blocked 仍回预检态——
+                # 修参数或换 tokenizer 后重跑预检就是下一步,不换停点、不假装已通过。
+                if (session.training_preflight or {}).get("status") == "passed":
+                    return "preflight_passed"
                 return "ready_for_training_preflight"
             return "awaiting_dataset_split"
     return "awaiting_full_data" if session.source.scope == "sample" else "awaiting_full_validation"
@@ -95,6 +100,8 @@ _NEXT_ACTION_PHRASES: dict[str, str] = {
     "review_full_data": "全量报告待核对：核对覆盖与问题处理后运行 full-confirm 确认。",
     "needs_full_data_revision": "全量报告仍有阻断问题，修正资料或规则后重跑 full-validate（多资料任务用 full-sources）。",
     "ready_for_training_preflight": "数据已就绪，可运行 preflight 做训练前检查（尚未开始训练）。",
+    "preflight_passed": "训练前检查已通过：可运行 plan-recommend 获得推荐方案，"
+    "或直接 train-prepare 准备训练（尚未启动训练）。",
     "awaiting_dataset_split": "可以准备独立训练与评测分区（运行 materialize；尚未认定可以正式训练）。",
     "awaiting_full_data": "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组（多资料任务用 full-sources）。",
     "awaiting_full_validation": "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查（已声明全量可省略 --input；多资料任务用 full-sources）。",

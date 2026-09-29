@@ -83,3 +83,31 @@ def test_preflight_cli_prints_plain_language_advice(tmp_path, capsys):
     assert "训练前检查" in err
     # 截断场景必然出现具体建议(长度或答案说明)
     assert ("最长一条记录需要" in err) or ("没有内容因长度超限被截断" in err) or ("答案" in err)
+
+
+def test_cli_preflight_passed_tail_points_forward_not_back_to_preflight(
+    exported, tokenizer, tmp_path
+):
+    """预检通过后的 CLI 尾行不再回环指向 preflight(R94 出口链断点修复):
+    下一步状态转为 preflight_passed,短语点名 plan-recommend 与 train-prepare
+    两个真实出口;此前尾行让用户重跑刚完成的 preflight,旅程在此死循环。"""
+    service, session = exported
+    directory = tmp_path / "tokenizer"
+    tokenizer.save_pretrained(directory)
+    result = invoke(
+        service,
+        "preflight",
+        session.session_id,
+        "--revision",
+        session.revision,
+        "--tokenizer",
+        directory,
+        "--max-length",
+        "32",
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["training_preflight"]["status"] == "passed"
+    assert "下一步状态: preflight_passed（训练前检查已通过：可运行 plan-recommend" in result.stderr
+    assert "train-prepare" in result.stderr
+    # 回环断言:通过态尾行不再出现「可运行 preflight 做训练前检查」的旧出口句
+    assert "可运行 preflight 做训练前检查" not in result.stderr

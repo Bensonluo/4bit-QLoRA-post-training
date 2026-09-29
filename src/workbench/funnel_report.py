@@ -37,6 +37,9 @@ _NEXT_ACTION_STAGES: dict[str, str] = {
     "review_full_data": "full_validation",
     "awaiting_dataset_split": "split",
     "ready_for_training_preflight": "preflight_ready",
+    # 预检通过仍计入预检就绪段(R94):漏斗统计的是数据旅程停点,训练侧进度
+    # 由训练/评测/轮次各段单独计数,不在此重复分层。
+    "preflight_passed": "preflight_ready",
 }
 
 # 训练/验收/轮次状态与决策的人话对照（与各 summarize_* 同风格）。
