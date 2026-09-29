@@ -58,7 +58,11 @@ python scripts/data_intake.py analyze SESSION_ID --answer '质检类别才是需
 python scripts/data_intake.py show SESSION_ID
 ```
 
-凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。awaiting_analysis 的尾行同时点名两条路径——配置了 Agent 的 `analyze` 与零密钥的 `baseline-analyze`（与页面「没有 Agent 服务？用基础分析开始」入口同词汇），零密钥用户不会被指去配置密钥才能跑的命令。needs_data_revision 的尾行同样点名两条重分析路径——配置了 Agent 的 `analyze` 与「此前的基础分析可调整字段重跑 baseline-analyze」，零密钥用户在问题行修复后不会走进死胡同。needs_labels 的尾行点名零密钥修复工具链——`answer-sheet` 导出待补清单、补齐后「替换原文件重新分析（基础分析可重跑 baseline-analyze）」，「补齐标注」不是一句没有出口的提醒。review_preview 的尾行点名配对工具链——`contrast-check` 抽两道配对题、`contrast-check-submit` 提交配对（二连对）、之后 `confirm` 确认，「完成对比核验」不是页面专属动作。awaiting_full_data／awaiting_full_validation 的尾行点名 `full-validate`（多资料任务用 `full-sources`；已声明全量可省略 `--input`）、review_full_data 的尾行点名 `full-confirm`、needs_full_data_revision 的尾行点名修正后重跑——全量数据段每一步都有可照抄的命令入口。
+凡返回任务记录的命令（`show`、`create`、`add-source`、`analyze`、`confirm`、`full-*`、`materialize`）在 stderr 尾行输出「下一步状态: 枚举（人话对照）」——枚举保留供脚本解析，人话由 `next_action_phrase` 单一来源翻译（13 个状态全覆盖，未知状态只显枚举不编造），与页面提示同词汇。awaiting_analysis 的尾行同时点名两条路径——配置了 Agent 的 `analyze` 与零密钥的 `baseline-analyze`（与页面「没有 Agent 服务？用基础分析开始」入口同词汇），零密钥用户不会被指去配置密钥才能跑的命令。Agent 产物三态同样点名出口——needs_business_answers 用 `analyze --answer` 一次完成回答与重新分析（与页面「回答问题或修正理解」同一动作，不是页面专属），needs_capability 如实说明资料侧出口——调整目标或 `add-source` 补充资料后重新 `analyze`，不伪造零密钥兜底，needs_recipe 点名重新 `analyze` 生成处理规则。
+
+needs_data_revision 的尾行同样点名两条重分析路径——配置了 Agent 的 `analyze` 与「此前的基础分析可调整字段重跑 baseline-analyze」，零密钥用户在问题行修复后不会走进死胡同。needs_labels 的尾行点名零密钥修复工具链——`answer-sheet` 导出待补清单、补齐后「替换原文件重新分析（基础分析可重跑 baseline-analyze）」，「补齐标注」不是一句没有出口的提醒。review_preview 的尾行点名配对工具链——`contrast-check` 抽两道配对题、`contrast-check-submit` 提交配对（二连对）、之后 `confirm` 确认，「完成对比核验」不是页面专属动作。
+
+awaiting_full_data／awaiting_full_validation 的尾行点名 `full-validate`（多资料任务用 `full-sources`；已声明全量可省略 `--input`）、review_full_data 的尾行点名 `full-confirm`、needs_full_data_revision 的尾行点名修正后重跑——全量数据段每一步都有可照抄的命令入口。至此 13 个状态的尾行全部有出口或如实边界。
 
 五个清单命令（`train-list`、`plan-list`、`iteration-list`、`acceptance-list`、`scoring-list`）同样在 stderr 追加一行清单尾行（`summarize_listing` 单一来源）：空清单点名该走的第一步入口——用户分不清「还没有」和「查错了任务」；非空给计数，不逐条灌业务人话。
 

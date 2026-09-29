@@ -163,6 +163,19 @@ def test_next_action_tail_docs_pinned():
         "R85 阻断态重验出口必须点名"
     )
     assert "全量数据段每一步都有可照抄的命令入口" in section, "R85 平权定位句必须在场"
+    assert "Agent 产物三态同样点名出口" in section, (
+        "Agent 产物三态出口进尾行必须在场(R86):三态不能只描述不给命令"
+    )
+    assert "`analyze --answer` 一次完成回答与重新分析" in section, (
+        "R86 回答出口必须点名 analyze --answer"
+    )
+    assert "不伪造零密钥兜底" in section, "R86 能力缺口诚实边界必须在场"
+    assert "needs_recipe 点名重新 `analyze` 生成处理规则" in section, (
+        "R86 缺方案出口必须点名重新分析"
+    )
+    assert "至此 13 个状态的尾行全部有出口或如实边界" in section, (
+        "R86 收尾定位句必须在场:13 态审计到此全覆盖"
+    )
     assert "零密钥用户在问题行修复后不会走进死胡同" in section, "R82 死胡同根治的诚实边界必须写明"
     assert "不会被指去配置密钥才能跑的命令" in section, "零密钥诚实边界必须写明"
     assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"

@@ -163,6 +163,69 @@ def test_analyze_cli_appends_analysis_summary_to_stderr(
     assert "不代表业务效果达标。" in captured.err
 
 
+def test_agent_product_state_tails_name_exits_and_answer_reanalyze_completes(
+    monkeypatch, capsys, tmp_path, service, session
+):
+    """Agent 产物三态尾行点名真实出口(R86):needs_business_answers 点名 analyze --answer
+    且该出口一次调用实际走通(回答后重新分析直达 review_preview);needs_capability 点名
+    资料侧出口(调整目标/add-source)而不伪造零密钥兜底;needs_recipe 点名重新 analyze。
+    Agent 分析在场时 baseline-analyze 会被拒绝,后两态尾行不得点名它。"""
+    import sys
+
+    from scripts import data_intake
+
+    def run_cli(*argv):
+        monkeypatch.setattr(
+            sys, "argv", ["data_intake.py", "--store", str(tmp_path / "intake"), *argv]
+        )
+        assert data_intake.main() == 0
+        captured = capsys.readouterr()
+        return next(
+            line for line in captured.err.splitlines() if line.startswith("下一步状态")
+        )
+
+    holder = {}
+    monkeypatch.setattr(data_intake, "_client", lambda args, probe=False: holder["model"])
+
+    # leg A: 业务问题态点名 --answer 出口,且该出口一次调用实际走通。
+    questioning = analysis(
+        recipe=None,
+        questions=[
+            {
+                "question_id": "q-label-source",
+                "question": "类别以哪次审核为准？",
+                "why": "同一工单存在两次审核记录。",
+            }
+        ],
+    )
+    holder["model"] = model_for(questioning)
+    tail = run_cli("analyze", session.session_id)
+    assert tail.startswith("下一步状态: needs_business_answers（"), tail
+    assert "analyze --answer" in tail and "--answer '你的回答'" in tail
+    assert "baseline-analyze" not in tail
+    holder["model"] = model_for(analysis())
+    tail = run_cli("analyze", session.session_id, "--answer", "以人工审核为准")
+    assert tail.startswith("下一步状态: review_preview（"), tail
+
+    # leg B: 能力缺口态点名资料侧出口,不把 baseline-analyze 伪造成兜底。
+    holder["model"] = model_for(
+        analysis(recipe=None, capability_gaps=["任务需要多源组合，当前入口未配置。"])
+    )
+    session_b = service.create("合并多表做预测", "工单.csv", CSV)
+    tail = run_cli("analyze", session_b.session_id)
+    assert tail.startswith("下一步状态: needs_capability（"), tail
+    assert "add-source" in tail and "调整目标" in tail
+    assert "baseline-analyze" not in tail
+
+    # leg C: 缺方案态点名重新分析;Agent 分析在场,baseline-analyze 不在出口里。
+    holder["model"] = model_for(analysis(recipe=None))
+    session_c = service.create("判断工单类别", "工单.csv", CSV)
+    tail = run_cli("analyze", session_c.session_id)
+    assert tail.startswith("下一步状态: needs_recipe（"), tail
+    assert "analyze" in tail
+    assert "baseline-analyze" not in tail
+
+
 def test_materialize_cli_prints_split_guidance_and_small_test_caution(
     monkeypatch, capsys, tmp_path, service, session
 ):
@@ -481,6 +544,17 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
     assert next_action_phrase("awaiting_analysis") == (
         "尚未分析：配置了 Agent 运行 analyze；没有 Agent 服务用 baseline-analyze 零密钥开始。"
     ), "零密钥用户的尾行必须点名 baseline-analyze,不能只指需密钥的 analyze"
+    assert next_action_phrase("needs_business_answers") == (
+        "Agent 有业务问题待回答：运行 analyze --answer '你的回答'，一次命令完成回答与重新分析；"
+        "阻断确认的问题全部解除后才能确认方案。"
+    ), "回答出口必须点名(R86):needs_business_answers 不能只说待回答不给命令"
+    assert next_action_phrase("needs_capability") == (
+        "Agent 记录了能力缺口，当前资料做不了这个任务：调整目标或用 add-source 补充资料后"
+        "运行 analyze 重新分析；重跑同一命令不能消除缺口。"
+    ), "能力缺口态必须给资料侧出口且不伪造零密钥兜底(R86)"
+    assert next_action_phrase("needs_recipe") == (
+        "还没有转换方案：运行 analyze 重新分析生成处理规则；Agent 再提出业务问题时用 --answer 回答。"
+    ), "缺方案态必须点名重新分析(R86):Agent 分析在场时 baseline-analyze 会被拒绝,不点名它"
     assert next_action_phrase("needs_data_revision") == (
         "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；"
         "此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。"

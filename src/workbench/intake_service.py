@@ -83,9 +83,12 @@ def next_action(session: IntakeSession) -> str:
 
 _NEXT_ACTION_PHRASES: dict[str, str] = {
     "awaiting_analysis": "尚未分析：配置了 Agent 运行 analyze；没有 Agent 服务用 baseline-analyze 零密钥开始。",
-    "needs_business_answers": "Agent 还有业务问题待回答，回答后重新分析才能生成方案。",
-    "needs_capability": "当前资料不足以支撑任务目标，请调整目标或补充资料。",
-    "needs_recipe": "还没有转换方案，请完成分析生成处理规则。",
+    "needs_business_answers": "Agent 有业务问题待回答：运行 analyze --answer '你的回答'，"
+    "一次命令完成回答与重新分析；阻断确认的问题全部解除后才能确认方案。",
+    "needs_capability": "Agent 记录了能力缺口，当前资料做不了这个任务：调整目标或用 "
+    "add-source 补充资料后运行 analyze 重新分析；重跑同一命令不能消除缺口。",
+    "needs_recipe": "还没有转换方案：运行 analyze 重新分析生成处理规则；"
+    "Agent 再提出业务问题时用 --answer 回答。",
     "needs_data_revision": "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。",
     "needs_labels": "样例缺少可学习的答案：先用 answer-sheet 导出待补清单（零密钥）交填写人补齐，替换原文件后重新分析——配置了 Agent 运行 analyze；基础分析可调整字段重跑 baseline-analyze。",
     "review_preview": "样例转换含义待确认：核对预览，用 contrast-check 配对、contrast-check-submit 提交（二连对），之后运行 confirm 确认。",
