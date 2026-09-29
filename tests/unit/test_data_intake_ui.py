@@ -693,6 +693,18 @@ def test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failure
     assert not page.exception
     assert calls == [("/tmp/local-fixture", True)]
     assert any("答案被截断" in entry.value for entry in page.error)
+    # 三态横幅单一来源(R95):blocked 状态句与 CLI summarize_preflight 同源,
+    # 手抄短句「存在阻断问题，请先修正数据或训练长度」退场;边界句同源渲染。
+    assert any("训练前检查发现阻断问题，训练不能开始" in entry.value for entry in page.error), (
+        "blocked 横幅必须渲染单源状态句"
+    )
+    assert not any("存在阻断问题，请先修正数据或训练长度" in entry.value for entry in page.error)
+    assert any("不代表训练效果或业务达标" in entry.value for entry in page.caption)
+    # 中段建议行同源铺出(r95-reviewer nit-1 采纳):丢答案引导在场,问题行不重复铺
+    assert any("有 1 行的答案在截断后完全丢失" in entry.value for entry in page.markdown), (
+        "blocked 报告的建议行必须在场"
+    )
+    assert not any("[blocking]" in entry.value for entry in page.markdown), "问题行走分级告警"
     assert any("r000001" in entry.value for entry in page.caption)
     page.run()
     assert len(calls) == 1
@@ -1388,6 +1400,17 @@ def test_preflight_passed_state_moves_page_exits_forward(data_page, monkeypatch)
         "训练前检查已通过：可运行 plan-recommend" in message.value for message in page.success
     )
     assert not any("可继续训练前检查" in message.value for message in page.success)
+    # 报告横幅与 CLI 同源(R95):状态句来自 summarize_preflight(「训练前检查通过：」,
+    # 区别于就绪行的「已通过」),手抄短句「当前数据与 token 消费检查通过」退场。
+    assert any("训练前检查通过：" in message.value for message in page.success), (
+        "preflight_passed 态的报告横幅必须渲染单源状态句"
+    )
+    assert not any("当前数据与 token 消费检查通过" in message.value for message in page.success)
+    assert any("不代表训练效果或业务达标" in cap.value for cap in page.caption)
+    # 中段建议行同源铺出(r95-reviewer nit-1 采纳):无截断确认行在场
+    assert any("没有内容因长度超限被截断" in entry.value for entry in page.markdown), (
+        "passed 报告的无截断确认行必须在场"
+    )
     # 方案区与盲标核验在该态继续渲染:通过预检不是终点,是训练侧入口
     assert any("用当前数据微调模型" in header.value for header in page.subheader)
     assert any("盲标核验" in header.value for header in page.subheader)

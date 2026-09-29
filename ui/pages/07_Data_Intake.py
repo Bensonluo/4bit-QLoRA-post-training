@@ -2925,14 +2925,22 @@ if dataset is not None:
 if session.training_preflight is not None:
     preflight = session.training_preflight
     st.subheader("训练前检查报告")
+    # 三态横幅单一来源(R95):首行与 CLI preflight/plan-recommend/train-prepare 同一句
+    # summarize_preflight 状态句,不再手抄第二套三态短句;中段建议行(截断明细/建议长度/
+    # 丢答案)同源铺出——r95-reviewer nit-1 采纳:建议长度行此前 CLI-only,页面用户恰是
+    # 最需要「下一步怎么办」的人;[severity] 问题行不铺,下方分级告警带 row_ids 更富;
+    # 末行边界句以 caption 同源渲染。
+    from src.workbench.report_summary import summarize_preflight
+
+    summary = summarize_preflight(preflight)
     {"blocked": st.error, "warnings": st.warning, "passed": st.success}[preflight["status"]](
-        {
-            "blocked": "存在阻断问题，请先修正数据或训练长度。",
-            "warnings": "检查完成，有需要核对的风险。",
-            "passed": "当前数据与 token 消费检查通过。",
-        }[preflight["status"]]
+        summary[0]
     )
     st.caption(preflight["scope_note"])
+    for line in summary[1:-1]:
+        if not line.startswith("["):
+            st.markdown(f"- {line}")
+    st.caption(summary[-1])
     for issue in preflight["issues"]:
         {"blocking": st.error, "warning": st.warning, "info": st.info}[issue["severity"]](
             issue["message"]

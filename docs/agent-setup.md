@@ -248,7 +248,7 @@ python scripts/data_intake.py preflight SESSION_ID --revision CURRENT_REVISION \
 
 本地目录缺少文件或缓存不存在时，先准备对应基础模型的 tokenizer，再执行检查。`2048` 仅为命令示例，应根据实际模型和业务上下文选取。
 
-报告保存为 `training_preflight`，状态包括 `blocked`（存在阻断问题）、`warnings`（需核对风险）、`passed`（当前数据与 token 消费检查通过）。报告列出各分区的截断和答案丢失统计、问题行以及实际 token 消费；答案完全丢失会阻断。tokenizer 无法提供答案边界时明确标记未验证。检查依据当前训练模板、因果位移和 padding 屏蔽方式，不据此声称业务效果已验收或硬件足以训练。
+报告保存为 `training_preflight`，状态包括 `blocked`（存在阻断问题）、`warnings`（需核对风险）、`passed`（训练前检查通过）。人话状态句由 `summarize_preflight` 单一来源产出（CLI 与页面同句，R95 起页面不再手抄第二套）。报告列出各分区的截断和答案丢失统计、问题行以及实际 token 消费；答案完全丢失会阻断。tokenizer 无法提供答案边界时明确标记未验证。检查依据当前训练模板、因果位移和 padding 屏蔽方式，不据此声称业务效果已验收或硬件足以训练。
 
 ## 准备本地基础模型
 
