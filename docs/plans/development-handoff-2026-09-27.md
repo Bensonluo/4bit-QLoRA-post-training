@@ -3254,3 +3254,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地将领先 23 commits）；②benluo.art 部署；③venv 重建/修复 shebang（mypy shebang + pytest shebang 指旧仓路径，可一并 python -m venv venv --upgrade 处理）。
 
 **成本**：主会话成本钩子持续 CRITICAL：$94.66→$96.44（scout）→$96.53；r111-reviewer 审查期间 $96.53→**$98.10**（连破 $95/$98）。三轮审查者均建议转达收敛建议；r111-reviewer 本轮已自觉控成本（全定向、零全量、单次合并跑 8 套件）。按不计成本授权如实登记未中断。
+
+---
+
+## R112（2026-09-30）00 下一步评测坏命令修正 + 诚实限界 + 兄弟钉批量同步
+
+**选点**：r112-scout 五候选裁决采纳——R112 = ①obs-1 兄弟钉批量同步（registry/experiments/comparison 三结构钉补 switch_pos<stop_pos，+0 净增纯加强）+ ④微切（00「🧭 下一步」评测命令诚实限界说明）；④完整按钮式桥接（页内生成评测文件）测评 MEDIUM 登记独立轮。落选登记：②03:31-32 死 fallback+幽灵分支清理（master_data 演进可预见，R111 刚裁决维持）；③07 IA 史诗独立轮（无页级空态死端，1323-1387 无任务分支是完整表单+主按钮，线性向导）；⑤venv shebang 涉环境改动待授权维持。**轮中重大升级（reviewer 抓真 bug）**：初审 teaser 即发现原推荐命令 `--test-file` 根本不是 scripts/evaluate.py 合法选项——非「能跑但只进终端」的假朋友，是 argparse 即死的坏命令（该命令 R108 引入以来从未可跑，scout/主会话两轮「诚实性」核实都只验证了「输出不落页」没验证「可跑性」——审查环节独立价值实证）。
+
+**证据核实**：①r112-scout 成本档案：候选④ save_results(reports) 可复用但 EvalReport 输入需真推理，桥接为 MEDIUM；TrainingRunner Popen 注册表是页内子进程既定范式；eval_detail 文件 gitignored（UI 生成结果不入版本控制）。②主会话一手复核（不抄 scout）：scripts/evaluate.py 全读——typer CLI 合法选项仅 --model-path/-m、--dataset/-d、--max-samples/-n、--num-generations/-g、--compare-with、--output/-o；`--dataset` 吃本地 Alpaca JSON（loaders.py:100-105 HF 失败回落 load_dataset("json")）；实证 `--model-path /tmp/__nonexistent__ --dataset /tmp/x.json` 过解析死在路径检查（选项全被接受）。③领域命令链三环节直读：evaluate.py:119 --model-path 在场；eval/models.py:427-438 底座自动解析（读 adapter_config.json/config.json 的 base_model_name_or_path，解析不出 ValueError）；evaluate.py:194 无条件 save_results → report.py:12/166 eval_detail_*.json 落 DOMAIN_ROOT/data/results/（02/03 唯一数据源）。④不诚实桥接避坑：Wizard Alpaca test.json 不符 run_evaluation 候选 schema（runner.py:206-209 需 query/standard_name/code/candidates），领域命令不挂数 --test-file。⑤CLAUDE.md:86 存在同款坏命令（git check-ignore -v 证实 .gitignore:96 忽略 CLAUDE.md——本地文件不入库）。
+
+**实现**：00 `_render_next_steps` 评测块：命令修正为 `--dataset {arts.eval_sets['test']}`（+披露注释：坏旗标发现与合法选项清单）；命令块后新增诚实限界 st.caption——「上面命令的结果只在终端显示，不会出现在「评测结果」或「模型对比」页」+ 指路 `python -m domains.medical_entity.evaluate --model-path {arts.output_dir}`（用领域自带测试集；底座自动从 adapter 配置读取）。①三结构钉各 +1 断言 `switch_pos < stop_pos`。CLAUDE.md:86 同步一行修正（本地不入库）。
+
+**测试 RED→GREEN**：净 3（新 test_next_steps_panel_ui.py 源码钉——面板渲染需 runs 状态+adapter+eval_sets 三重 fixture，与一段 caption 保障不成比例，R111 obs-1 同裁量）：caption 钉（评测命令块与注册段之间区间锚+「只在终端显示/不会出现在」极性逐字锚——reviewer nit-2 采纳，token 在场≠方向对+两页点名+领域命令指路+**面板区间禁 --test-file 回归**）；命令块特征化钉（生而绿披露：--model-path/--dataset 插值在场防锚点脱落）；CLI 契约钉（reviewer E 项建议随轮采纳：UI st.code 推荐旗标 ⊆ scripts/evaluate.py 真实选项面，ast 提取 typer.Option("--xxx") 位置字符串免重依赖导入，torch 链不进测试——**本钉在 R111 就能当场抓住 --test-file bug**）。RED 精确（1 failed：caption 缺席）；①三断言与特征化钉生而绿 docstring 披露。中途修正后全量重跑：11 套件 64 passed（next_steps_panel 3+registry 4+experiments 4+comparison 5+next_steps 5+lab_localization 9+progressive 7+activity_autorefresh 6+loading 9+chat_empty 3+tracking_runner_shared 9）+ ruff 双净。
+
+**审查**：r112-reviewer（opus 只读五维度）初审 teaser 抓出坏命令 → 主会话一手复核采纳修正 → verdict **PASS-with-findings：0 should-fix / 2 nit / 4 observation**（对修正后树）。独立实证：typer 选项面/loaders 回落/领域链三环节/02/03 数据源 domain_adapters.py:209-214/FinanceDataset 同 loader 子类不崩/--dataset 修正「SOUND and honestly captioned」；坏命令 git 考古（7a60350 引入，脚本史从未存在 --test-file）。2nit 全采纳：nit-1 面板级 --test-file 禁令与领域 CLI 自有合法 --test-file 的未来冲突（docstring 条款登记：未来合法提及时连断言一起改）；nit-2 极性洞（「不会出现在」逐字锚当场落地）。4obs 全登记：obs-1 caption 门在 arts.eval_sets（预存在门，messages-format SFT 提交已拦截故低可达）；obs-2 ①登记范围 registry+experiments 实含 comparison（scope-plus 披露良性）；obs-3 R113 ④范围因旗标修正落地简化为仅页内评测按钮；obs-4 CLAUDE.md 修正本地不入库（.gitignore:96 预存在仓库属性）。reviewer 补强建议：跨文件 CLI 契约钉（随轮采纳落地）；reviewer-scope trimming 决策建议登记 R113。
+
+**增量复核**：verdict 后两采纳编辑（极性锚+CLI 契约钉+nit-1 docstring 条款）→ 11 套件重跑 64 passed + ruff 双净 + collect-only 2069 复核一致。
+
+**登记对账与 R113 选点**：全量跳过（节奏 2-3 大轮，R111 刚跑 2066；本轮 ui/+tests/ 无 src/ 改动，全部触及代码套件定向跑齐）；**collect-only 2069 = 2066+3 精确命中（连续第四次 collect 级、第六次总体对账精确）**。scout 预估 +5~7（2071-2073）实际 +3——偏差已披露：①加断言不加测试函数，scout 把 ① 误计 +3。R113 选点（已定）：④主切——00 下一步面板页内「⚡ 生成评测文件」按钮（Popen 子进程 + TrainingRunner 式状态跟踪；旗标修正已落地，范围简化为仅按钮；轮报预估 MEDIUM）；R113 全量对账轮义务（预测基线 2069）。R113+ backlog：finance-in-path 路由 FinanceDataset 边缘（路径含 "finance" 字样误过滤非金融数据——scripts/evaluate.py:92 启发式，src/ 改动）；02 入口3 rerun；02:45 守卫；R104 nit-3；②③维持。
+
+**边界**：全量未跑（见上）；collect-only 精确对账替代。R113 必跑全量。
+
+**待授权**：①push origin（本地将领先 24 commits）；②benluo.art 部署；③venv 重建/修复 shebang（mypy+pytest shebang 指旧仓路径 4bit-QLoRA-post-training，可 python -m venv venv --upgrade 一并处理）。
+
+**成本**：主会话成本钩子持续 CRITICAL：$99.47→$102.92（reviewer 中段亦触发）→$105.05（裁决采纳编辑后）；r112-reviewer 自报审查期间 ~$104.62、复验轮自觉控本（5 tool calls）。轮成本趋势 $95→$98→$104——reviewer 连续三轮建议收敛建议转达（如收窄 reviewer 范围/轮内少并行），待用户裁决；按不计成本授权如实登记未中断。
