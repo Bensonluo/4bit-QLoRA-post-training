@@ -76,9 +76,9 @@ with st.sidebar:
     )
     p1, p2 = st.columns(2)
     with p1:
-        max_new_tokens = st.slider("Max new tokens", 16, 1024, 256, 16)
+        max_new_tokens = st.slider("最大生成 token 数", 16, 1024, 256, 16)
     with p2:
-        temperature = st.slider("Temperature", 0.0, 1.5, 0.7, 0.05)
+        temperature = st.slider("采样温度", 0.0, 1.5, 0.7, 0.05)
     thinking = st.checkbox("思考模式（Qwen3）", value=False, help="开启后允许模型先推理再作答")
 
     if st.button("⚡ 加载模型", type="primary", use_container_width=True):

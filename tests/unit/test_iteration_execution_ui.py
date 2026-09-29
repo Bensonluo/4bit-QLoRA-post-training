@@ -110,7 +110,9 @@ def test_running_execution_can_be_stopped_from_the_page(execution_page):
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     button(page, "按确认方案执行到开发集对照").click().run()
-    stop = next(b for b in page.button if b.label == "停止本轮后台执行")
+    # R106 起停止为 popover 二次确认：AppTest 元素树直含 popover 内按钮
+    # （popover 触发器本身不是 button）——旅程钉随控制形态维护（R104 先例）。
+    stop = next(b for b in page.button if b.label == "确认停止")
     stop.click().run()
     assert not page.exception
     assert [call[:2] for call in calls] == [("start", IDENTITY), ("stop", IDENTITY)]

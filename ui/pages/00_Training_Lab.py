@@ -19,7 +19,7 @@ from ui.config import CONFIGS_DIR, MLFLOW_TRACKING_URI, MODEL_OPTIONS, PROJECT_R
 
 logger = logging.getLogger("qlora")
 
-st.set_page_config(page_title="Training Lab", page_icon="🏋️", layout="wide")
+st.set_page_config(page_title="训练实验室", page_icon="🏋️", layout="wide")
 
 
 def _validate_run_name(name: str) -> str | None:
@@ -117,20 +117,20 @@ else:
 
 col_title, col_presets = st.columns([2, 3])
 with col_title:
-    st.title("🏋️ Training Lab")
+    st.title("🏋️ 训练实验室")
 with col_presets:
     st.markdown("<div style='padding-top:0.8rem'></div>", unsafe_allow_html=True)
     pcols = st.columns(3)
     with pcols[0]:
-        if st.button("⚡ Quick Test", width="stretch", help="Small model, 100 samples, 1 epoch"):
+        if st.button("⚡ 快速测试", width="stretch", help="小模型，100 条样本，1 轮"):
             st.session_state["preset"] = "quick"
             st.rerun()
     with pcols[1]:
-        if st.button("🔥 Standard", width="stretch", help="Full model, 1K samples, 3 epochs"):
+        if st.button("🔥 标准", width="stretch", help="完整模型，1,000 条样本，3 轮"):
             st.session_state["preset"] = "standard"
             st.rerun()
     with pcols[2]:
-        if st.button("🚀 Full Run", width="stretch", help="Full model, 10K samples, 5 epochs"):
+        if st.button("🚀 完整运行", width="stretch", help="完整模型，10,000 条样本，5 轮"):
             st.session_state["preset"] = "full"
             st.rerun()
 
@@ -175,7 +175,7 @@ else:
 
 # ── Tabs ────────────────────────────────────────────────────────
 
-tab_configure, tab_activity = st.tabs(["⚙️ Configure", "📋 Activity"])
+tab_configure, tab_activity = st.tabs(["⚙️ 配置", "📋 训练动态"])
 
 # ── Configure Tab ───────────────────────────────────────────────
 
@@ -186,7 +186,7 @@ with tab_configure:
         st.success(
             f"数据集已从 **Data Wizard** 预填：`{handoff['path']}`"
             f"（train {handoff['samples']} 条，已通过 7 项数据体检）。"
-            f"确认下方参数后点 Start Training 即可。"
+            f"确认下方参数后点「开始训练」即可。"
         )
 
     col_form, col_preview = st.columns([2, 1])
@@ -194,10 +194,10 @@ with tab_configure:
     with col_form:
         platform_choice = (
             st.segmented_control(
-                "Platform",
+                "运行平台",
                 ["Apple Silicon (MPS)", "NVIDIA (CUDA)", "CPU"],
                 default=default_platform,
-                help="Select hardware. 4-bit quantization only on NVIDIA CUDA.",
+                help="选择硬件。4-bit 量化仅在 NVIDIA CUDA 可用。",
             )
             or default_platform
         )
@@ -205,14 +205,13 @@ with tab_configure:
 
         # Radio lives OUTSIDE the form so switching technique re-renders the
         # form (technique-specific sections) immediately, without a submit.
-        st.subheader("Technique")
+        st.subheader("技术")
         technique_label = st.radio(
-            "Post-training technique",
+            "训练后技术",
             ["SFT", "DPO", "GRPO"],
             index=0,
             horizontal=True,
-            help="DPO expects a preference dataset (prompt/chosen/rejected); "
-            "GRPO expects prompt+answer data.",
+            help="DPO 需要偏好数据集（prompt/chosen/rejected）；GRPO 需要 prompt+答案数据。",
         )
         technique = technique_label.lower()
 
@@ -223,12 +222,12 @@ with tab_configure:
         merge_before_register = True
 
         with st.form("training_config"):
-            st.subheader("Model & Data")
+            st.subheader("模型与数据")
             c1, c2 = st.columns([3, 1])
             with c1:
                 model_options_list = list(MODEL_OPTIONS.keys())
                 model_name = st.selectbox(
-                    "Base Model",
+                    "底座模型",
                     model_options_list,
                     index=model_options_list.index(p_model) if p_model in model_options_list else 0,
                     format_func=lambda x: f"{x} ({MODEL_OPTIONS[x]})",
@@ -236,58 +235,58 @@ with tab_configure:
             with c2:
                 st.markdown("<div style='padding-top:1.8rem'></div>", unsafe_allow_html=True)
                 if not is_cuda:
-                    st.badge("Full Precision", color="blue")
+                    st.badge("全精度", color="blue")
                 else:
                     st.badge("4-bit QLoRA", color="green")
 
             # key 模式：Data Wizard 交接时可从 session_state 预填（见 05_Data_Wizard 收尾）
             dataset = st.text_input(
-                "Dataset (HF name or local path)",
+                "数据集（HF 名称或本地路径）",
                 value="yahma/alpaca-cleaned",
                 key="dataset_input",
             )
             ds1, ds2, ds3 = st.columns(3)
             with ds1:
-                max_samples = st.number_input("Max Samples", 10, 100000, p_samples, 100)
+                max_samples = st.number_input("最大样本数", 10, 100000, p_samples, 100)
             with ds2:
-                validation_split = st.slider("Validation Split", 0.05, 0.3, 0.1, 0.05)
+                validation_split = st.slider("验证集比例", 0.05, 0.3, 0.1, 0.05)
             with ds3:
                 max_length = st.number_input(
-                    "Max Length", 128, 8192, 512, 64, help="Sequence length budget (tokens)"
+                    "最大长度", 128, 8192, 512, 64, help="序列长度预算（token）"
                 )
 
-            st.subheader("Training")
+            st.subheader("训练参数")
             t1, t2, t3, t4 = st.columns(4)
             with t1:
-                epochs = st.number_input("Epochs", 1, 50, p_epochs)
+                epochs = st.number_input("轮数", 1, 50, p_epochs)
             with t2:
-                learning_rate = st.text_input("LR", p_lr)
+                learning_rate = st.text_input("学习率", p_lr)
             with t3:
-                batch_size = st.number_input("Batch", 1, 8, 1)
+                batch_size = st.number_input("批大小", 1, 8, 1)
             with t4:
-                grad_accum = st.number_input("Grad Accum", 1, 32, p_grad_accum)
+                grad_accum = st.number_input("梯度累积", 1, 32, p_grad_accum)
 
             effective_bs = batch_size * grad_accum
-            st.caption(f"Effective batch size: **{effective_bs}**")
+            st.caption(f"实际批大小：**{effective_bs}**")
 
             st.subheader("LoRA")
             l1, l2, l3 = st.columns(3)
             with l1:
-                lora_r = st.slider("Rank (r)", 4, 64, p_r, 4)
+                lora_r = st.slider("LoRA 秩（r）", 4, 64, p_r, 4)
             with l2:
-                lora_alpha = st.number_input("Alpha", value=lora_r * 2)
+                lora_alpha = st.number_input("LoRA Alpha", value=lora_r * 2)
             with l3:
-                lora_dropout = st.slider("Dropout", 0.0, 0.3, 0.05, 0.01)
+                lora_dropout = st.slider("Dropout 比例", 0.0, 0.3, 0.05, 0.01)
 
             run_name = st.text_input(
-                "Run Name",
+                "运行名",
                 # 模型名里的 "." 换成 "-"：默认值必须能通过 _validate_run_name
                 # （字母数字下划线连字符），否则用户不改任何参数首跑就报错。
                 value=f"{model_name.split('/')[-1].lower().replace('.', '-')}-{epochs}ep",
             )
 
             if technique != "grpo":
-                st.subheader("Registry")
+                st.subheader("模型注册表")
                 reg1, reg2 = st.columns([1, 2])
                 with reg1:
                     register_model = st.checkbox(
@@ -313,60 +312,60 @@ with tab_configure:
                 d1, d2 = st.columns(2)
                 with d1:
                     dpo_beta = st.slider(
-                        "Beta (β)",
+                        "Beta（β）",
                         0.01,
                         0.5,
                         0.1,
                         0.01,
-                        help="Preference strength — lower stays closer to the reference model",
+                        help="偏好强度——越低越贴近参考模型",
                     )
                 with d2:
                     ref_model = st.selectbox(
-                        "Reference Model",
+                        "参考模型",
                         model_options_list,
                         index=0,
                         format_func=lambda x: f"{x} ({MODEL_OPTIONS[x]})",
-                        help="Frozen model for preference anchoring — a smaller one saves VRAM",
+                        help="偏好锚定用的冻结模型——选小的省显存",
                     )
             elif technique == "grpo":
                 st.subheader("GRPO")
                 g1, g2, g3 = st.columns(3)
                 with g1:
                     grpo_beta = st.slider(
-                        "Beta (β)",
+                        "Beta（β）",
                         0.0,
                         0.2,
                         0.04,
                         0.01,
-                        help="KL penalty strength (0 disables the penalty)",
+                        help="KL 惩罚强度（0 = 关闭惩罚）",
                     )
                 with g2:
-                    num_generations = st.number_input("Generations per prompt", 2, 16, 4)
+                    num_generations = st.number_input("每提示词生成数", 2, 16, 4)
                 with g3:
                     reward_funcs = st.multiselect(
-                        "Reward Functions",
+                        "奖励函数",
                         ["format", "accuracy", "length", "cosine", "llm_judge"],
                         default=["format", "accuracy"],
-                        help="Registered rewards (src/training/reward_engine.py)",
+                        help="已注册奖励（src/training/reward_engine.py）",
                     )
 
             if is_cuda:
-                st.subheader("Quantization")
+                st.subheader("量化")
                 quant_choice = st.radio(
-                    "Mode",
-                    ["Full Precision (LoRA)", "4-bit QLoRA"],
+                    "模式",
+                    ["全精度（LoRA）", "4-bit QLoRA"],
                     index=1,
                     horizontal=True,
                 )
                 quant_bits = 4 if quant_choice == "4-bit QLoRA" else None
             else:
                 quant_bits = None
-                st.info("Full Precision LoRA — 4-bit requires NVIDIA CUDA", icon="💡")
+                st.info("全精度 LoRA——4-bit 量化仅在 NVIDIA CUDA 可用", icon="💡")
 
-            submitted = st.form_submit_button("🚀 Start Training", type="primary", width="stretch")
+            submitted = st.form_submit_button("🚀 开始训练", type="primary", width="stretch")
 
     with col_preview:
-        st.subheader("Config Preview")
+        st.subheader("配置预览")
         # Technique-specific sections consumed by each script's --config loader.
         # Built conditionally: the other techniques' widgets don't exist.
         if technique == "dpo":
@@ -388,7 +387,7 @@ with tab_configure:
             lr_error: str | None = None
         except ValueError:
             lr_value = 2e-4
-            lr_error = f"Invalid LR {learning_rate!r} — use a number like 2e-4 or 0.0002"
+            lr_error = f"学习率无效 {learning_rate!r}——请填数字，如 2e-4 或 0.0002"
         if lr_error:
             st.warning(lr_error)
 
@@ -432,7 +431,7 @@ with tab_configure:
         vram_gb = float(vram_match.group(1)) if vram_match else 2.3
         if quant_bits != 4:
             vram_gb /= 0.35
-        st.caption(f"Estimated VRAM: **~{vram_gb:.1f} GB**")
+        st.caption(f"显存估算：**~{vram_gb:.1f} GB**")
 
     # ── 数据集体检与预览（LLaMA-Board「Preview dataset」式，提交前可主动查看）────
     with st.expander("🔍 数据集体检与预览", expanded=False):
@@ -506,7 +505,7 @@ with tab_configure:
         if not error and lr_error:
             error = lr_error
         if not error and technique == "grpo" and not reward_funcs:
-            error = "GRPO needs at least one reward function."
+            error = "GRPO 至少需要一个奖励函数。"
         if not error and register_model and not registry_name.strip():
             error = "Registry 模型名不能为空（或取消勾选自动注册）。"
         if error:
@@ -542,10 +541,10 @@ with tab_configure:
                 config_dict=config_dict,
                 run_name=run_name,
             )
-            st.success(f"Training started: `{rid}`")
-            st.info("Switch to the **Activity** tab to monitor.")
+            st.success(f"训练已启动：`{rid}`")
+            st.info("切换到**训练动态**标签页查看进度。")
         except Exception as e:
-            st.error(f"Failed: {e}")
+            st.error(f"启动失败：{e}")
 
 
 # ── Activity Tab ────────────────────────────────────────────────
@@ -564,13 +563,22 @@ def _render_activity() -> None:
     # Header with refresh
     h1, h2 = st.columns([4, 1])
     with h1:
-        st.subheader("Training Activity")
+        st.subheader("训练动态")
     with h2:
-        if st.button("🔄 Refresh", width="stretch"):
+        if st.button("🔄 刷新", width="stretch"):
             st.rerun()
 
+    # 运行状态枚举 → 中文显示(与 01 页 _STATUS_ZH 对齐;状态值本身不动;
+    # unknown 也不裸显枚举——r106-reviewer nit-1:旧 .title() 显 "Unknown")
+    _run_status_zh = {
+        "running": "运行中",
+        "finished": "已完成",
+        "failed": "失败",
+        "unknown": "未知",
+    }
+
     if not all_runs:
-        st.info("No training runs yet. Start one from the Configure tab.")
+        st.info("暂无训练运行记录。可在「配置」标签页发起第一次训练。")
     else:
         for run_id in reversed(all_runs[-10:]):
             info = runner.get_run_info(run_id)
@@ -582,22 +590,27 @@ def _render_activity() -> None:
                     st.markdown(f"**{run_id}**")
                     if info:
                         st.caption(
-                            f"Technique: {info.get('technique', '?')} | PID: {info.get('pid', '?')}"
+                            f"技术：{info.get('technique', '?')} | PID：{info.get('pid', '?')}"
                         )
                 with c2:
                     status_color = {"running": "🟢", "finished": "✅", "failed": "🔴"}.get(
                         status, "⚪"
                     )
-                    st.metric("Status", f"{status_color} {status.title()}")
+                    st.metric("状态", f"{status_color} {_run_status_zh.get(status, status)}")
                 with c3:
-                    if status == "running" and st.button("⏹ Stop", key=f"stop_{run_id}"):
-                        runner.stop_training(run_id)
-                        st.rerun()
-                with c4, st.popover("🗑 Delete", key=f"del_{run_id}", use_container_width=True):
-                    st.caption(
-                        "Removes the local run record. Config, logs, and MLflow data are kept."
-                    )
-                    if st.button("Confirm delete", key=f"del_confirm_{run_id}", type="primary"):
+                    # 停止只面向运行中的 run(r106-reviewer should-fix-1):
+                    # stop_training 对已结束进程是静默 no-op,无条件渲染面板
+                    # 会让 caption 对已完成/失败的 run 说谎。恢复 HEAD 原有门。
+                    if status == "running":
+                        with st.popover("⏹ 停止", key=f"stop_{run_id}", use_container_width=True):
+                            # 停止=杀掉在途训练进程,高代价误触面——popover 二次确认
+                            st.caption("将终止该运行的训练进程；已保存的 checkpoint 与日志保留。")
+                            if st.button("确认停止", key=f"stop_confirm_{run_id}", type="primary"):
+                                runner.stop_training(run_id)
+                                st.rerun()
+                with c4, st.popover("🗑 删除", key=f"del_{run_id}", use_container_width=True):
+                    st.caption("移除本地运行记录；config、日志与 MLflow 数据保留。")
+                    if st.button("确认删除", key=f"del_confirm_{run_id}", type="primary"):
                         with suppress(KeyError):
                             runner.delete_run(run_id)  # already gone → nothing left to do
                         st.rerun()
@@ -630,7 +643,7 @@ def _render_activity() -> None:
 
                 logs = runner.read_recent_logs(run_id, tail=15)
                 if logs:
-                    with st.expander("Recent Logs"):
+                    with st.expander("最近日志"):
                         st.code(logs, language="log")
 
                 # 训练完成后的下一步引导（LlamaBoard Chat/Evaluate/Export 式收尾）

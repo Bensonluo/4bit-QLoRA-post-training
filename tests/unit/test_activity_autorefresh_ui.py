@@ -149,8 +149,9 @@ def test_lab_page_boots_with_empty_activity(tmp_path, monkeypatch):
     page = AppTest.from_file(str(PAGE_LAB), default_timeout=30)
     page.run()
     assert not page.exception, [e.message for e in page.exception]
-    assert any("No training runs yet" in i.value for i in page.info), (
-        "空活动态必须如实渲染『No training runs yet』提示(裸调分支真实执行)"
+    assert any("暂无训练运行记录" in i.value for i in page.info), (
+        "空活动态必须如实渲染『暂无训练运行记录』提示(裸调分支真实执行;"
+        "文案 R106 中文化,钉随文案同步维护)"
     )
 
 
@@ -193,7 +194,7 @@ def test_lab_page_renders_fragment_branch_with_active_run(tmp_path, monkeypatch)
         assert any("probe-live" in w.value for w in page.markdown), (
             "活跃 run 必须在真页 fragment 应用分支中渲染出来"
         )
-        assert any("Running" in m.value for m in page.metric), (
+        assert any("运行中" in m.value for m in page.metric), (
             "活 pid(无 returncode)必须呈现 🟢 Running(UI 重启恢复路径)"
         )
     finally:

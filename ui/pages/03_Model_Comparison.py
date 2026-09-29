@@ -10,7 +10,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import pandas as pd
 import streamlit as st
 
-from ui.components.domain_adapters import get_domain_display_name, list_domains, load_eval_data
+from ui.components.domain_adapters import (
+    difficulty_label,
+    entity_type_label,
+    get_domain_display_name,
+    list_domains,
+    load_eval_data,
+)
 from ui.components.format import delta as _delta
 from ui.components.format import fmt_num as _fmt_num
 from ui.components.format import fmt_pct as _fmt_pct
@@ -109,7 +115,7 @@ with b1:
         with diff_cols[i]:
             acc_a = model_a.get("accuracy_by_difficulty", {}).get(diff)
             acc_b = model_b.get("accuracy_by_difficulty", {}).get(diff)
-            st.metric(f"{diff.title()}", _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True))
+            st.metric(difficulty_label(diff), _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True))
 
 with b2:
     st.markdown("**按实体类型分组的准确率**")
@@ -119,7 +125,9 @@ with b2:
         with ent_cols[i]:
             acc_a = model_a.get("accuracy_by_type", {}).get(etype)
             acc_b = model_b.get("accuracy_by_type", {}).get(etype)
-            st.metric(f"{etype.title()}", _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True))
+            st.metric(
+                entity_type_label(etype), _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True)
+            )
 
 st.divider()
 

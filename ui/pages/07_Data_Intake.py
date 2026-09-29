@@ -1523,14 +1523,20 @@ if iterations:
                             st.rerun()
                         except (ValueError, RuntimeError, OSError, ImportError) as exc:
                             st.error(str(exc))
-                if execution_managed and st.button(
-                    "停止本轮后台执行", key=f"stop_execution_{identity}"
-                ):
-                    try:
-                        execution_service.stop(identity)
-                        st.rerun()
-                    except (ValueError, RuntimeError, OSError) as exc:
-                        st.error(str(exc))
+                if execution_managed:
+                    # 停止=中断在途后台执行,丢弃在途工作——popover 二次确认
+                    # (00 页 Stop/Delete 同范式)。
+                    with st.popover("停止本轮后台执行", key=f"stop_popover_{identity}"):
+                        st.caption(
+                            "将中断本轮在途执行，且不可从断点续跑（需重新发起）；"
+                            "已完成阶段的产物与记录保留。"
+                        )
+                        if st.button("确认停止", key=f"stop_confirm_{identity}", type="primary"):
+                            try:
+                                execution_service.stop(identity)
+                                st.rerun()
+                            except (ValueError, RuntimeError, OSError) as exc:
+                                st.error(str(exc))
             if iteration["status"] == "confirmed" and execution is None:
                 data_confirmed = bool(
                     session.full_data
