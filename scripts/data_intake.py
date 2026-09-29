@@ -1899,7 +1899,9 @@ def main() -> int:
 
             session = service.load(args.session_id)
             if session.preview is None:
-                raise ValueError("当前任务还没有真实转换预览，先运行 analyze 生成方案。")
+                raise ValueError(
+                    "当前任务还没有真实转换预览，先运行 analyze（或零密钥的 baseline-analyze）生成方案。"
+                )
             recipe = session.analysis.recipe if session.analysis else None
             policy = recipe.temporal_split if recipe else None
             # 清单口径与页面提示一致:全量预览存在且未失效时按全量清单,否则按样例

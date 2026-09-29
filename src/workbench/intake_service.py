@@ -82,7 +82,7 @@ def next_action(session: IntakeSession) -> str:
 
 
 _NEXT_ACTION_PHRASES: dict[str, str] = {
-    "awaiting_analysis": "尚未分析，先运行 analyze 生成业务理解与转换方案。",
+    "awaiting_analysis": "尚未分析：配置了 Agent 运行 analyze；没有 Agent 服务用 baseline-analyze 零密钥开始。",
     "needs_business_answers": "Agent 还有业务问题待回答，回答后重新分析才能生成方案。",
     "needs_capability": "当前资料不足以支撑任务目标，请调整目标或补充资料。",
     "needs_recipe": "还没有转换方案，请完成分析生成处理规则。",

@@ -46,6 +46,9 @@ def test_create_demo_matches_ui_path_and_digest(monkeypatch, capsys, tmp_path):
     assert "baseline-analyze SESSION_ID --target 类别 --group 编号 --exclude 处理结果" in (
         captured.err
     ), "零密钥下一步指引必须在场"
+    assert "没有 Agent 服务用 baseline-analyze 零密钥开始" in captured.err, (
+        "共享尾行(awaiting_analysis)必须与零密钥指引同方向,不再把用户指去需密钥的 analyze 单一路径"
+    )
 
 
 def test_create_demo_conflict_and_missing_args_exit_2(monkeypatch, capsys, tmp_path):

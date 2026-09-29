@@ -2739,3 +2739,22 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 - **独立审查**：r80-reviewer（oh-my-claudecode:code-reviewer，sonnet）五维。正向：同源核实无平行实现、错误路径全诚实（未知任务/坏 --target 列出可用列/--group==--target 拦截）、stdout 纯 JSON 可解析、analyze 可覆盖且错误消息正确指向、digest 检查「超出预期」。FAIL 项：temporal 键名 must-fix（实测复现 pydantic 双验证错）+ --demo 静默丢弃 `--description/--encoding/--delimiter/--sheet/--scope full`（should-fix，主会话在报告到达前已抢先修复并主动披露）+ temporal 成功路径缺测试。修复后复核：**增量 PASS + R80 整体 PASS**（目标门禁 78/78、邻近五套件 130/130、mktemp 隔离目录逐一 smoke 七个互斥 flag）。
 - **延后 nit（reviewer 建议留后续轮）**：`create --demo` stderr 零密钥指引与共享尾行「下一步状态： awaiting_analysis（…先运行 analyze…）」打架——触及 `next_action_phrase` 单一来源（intake_service.py:101），全局爆炸半径，单独一轮处理。
 - 北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：① 刷新线上部署（含目标与数据主线与演示任务，之后撤 Option 2 定界句并同步 pin）；② 分支领先 origin 60 commits，push 受 Zed review hook 门控，待用户决定。成本钩子读数 $107.41（CRITICAL；不计成本授权下继续，逐轮如实上报）。
+
+## 第 81 轮 = 下一步指引的零密钥平权（awaiting_analysis 尾行与 answer-sheet 报错）
+
+**日期**：2026-09-29（子代理 r81-reviewer 独立审查：一轮 PASS——无 must-fix；1 should-fix 列为后续轮前瞻项、1 nit 留后续润色）
+
+**选点**：R80 延后 nit 的根治。`create --demo` 的 stderr 同时输出两条方向相反的指引——专属提示「零密钥继续：baseline-analyze…」与共享尾行「下一步状态: awaiting_analysis（…先运行 analyze…）」；后者只指需配置 Agent 的 `analyze`，零密钥用户被指去一条配置密钥才能跑的命令。同类位点：`answer-sheet` 无预览报错同样只点名 `analyze`，但零密钥的 `baseline-analyze` 一样能生成真实转换预览（R80 已落地）。选点前 grep 证实爆炸半径收敛：旧措辞全仓恰两处显示位点（短语 map + answer-sheet 报错），另两处 docs pin 与一处测试 pin 随改；页面零密钥 expander（07_Data_Intake.py:2009「没有 Agent 服务？用基础分析开始（产品内置判断，无需任何密钥）」）独立渲染、不受影响；其余 12 态短语经逐态核对均如实（needs_business_answers / needs_capability 构造上 agent-only——baseline_analysis.py 硬编码 questions=[]、capability_gaps=[]）。
+
+**实现**（9 处编辑 / 7 文件，最小改动）：
+- **单一来源 1 行**（intake_service.py:85）：`"awaiting_analysis": "尚未分析：配置了 Agent 运行 analyze；没有 Agent 服务用 baseline-analyze 零密钥开始。"`——两条路径按有无 Agent 条件分列、不暗示等价（对 baseline 只说「开始」），词汇与页面入口同构。13 态 map 其余 12 态原样；map 与 `next_action()` 输出的精确覆盖 pin 既有测试继续兜底。
+- **answer-sheet 同类报错**（data_intake.py:1903）：无预览时 ValueError 双路径点名「先运行 analyze（或零密钥的 baseline-analyze）生成方案」。
+- **agent-setup.md 两句**：尾行段（awaiting_analysis 同时点名两条路径、零密钥用户不会被指去配置密钥才能跑的命令）+ answer-sheet 段（「或零密钥的 baseline-analyze」）。
+
+**测试**（4 个行为级 pin，全部逐字）：test_data_intake.py 精确短语 pin（「零密钥用户的尾行必须点名 baseline-analyze,不能只指需密钥的 analyze」）＋ 既有 13 态覆盖/未知态空串 pin 原样；test_answer_sheet_cli.py `baseline-analyze in stderr` 断言（「零密钥路径同样能生成预览,必须一并点名」）；test_demo_cli.py 尾行同向断言（create --demo 的 stderr 必须含新短语——R80 打架点行为级钉死）；test_readme_alignment.py 两个 docs pin（尾行段双路径句 + answer-sheet 段零密钥点名）。
+
+**回归与错误修复**：
+- **非全量回归轮**（R80 刚跑过基线 1963 passed / 317.24s / 93%；下一全量回归约 R82/R83 边界到期）：定向门禁四套件 **109 passed**（1.55s）+ `ruff format` 六文件 unchanged + `ruff check` All checks passed。r81-reviewer 复核另补跑尾行相邻 test_full_data_cli / test_funnel_report / test_full_data 共 35 passed（合计 144）。
+- **独立审查五维结论**：A 诚实红线 PASS（不暗示等价；能力边界在它该在的位置——baseline-analyze help「按字段选择生成确定性方案」/页面 caption/summarize_analysis，一行尾行不塞边界说明是合理节制）；B 正确性 PASS（109+144、ruff 双绿、in-process smoke `create --demo` 两行指引同向不矛盾）；C 爆炸半径 PASS（旧句全仓零残留——仅本计划文档历史记载属正常；README/README_EN 干净；test_answer_sheet_cli.py:86 旧断言「先运行 analyze」恰为新报错真实前缀，非子串碰巧）；D 一致性 PASS（doc 括号引用与页面 2009 行逐字一致）。
+- **审查发现（不阻塞，登记待办）**：① should-fix（后续轮前瞻项）——`needs_data_revision` 短语（intake_service.py:89「…补充业务规则后重新分析」）是零密钥可达状态（baseline 预览同样可能出 invalid/conflict 行），但零密钥用户无法重跑 baseline-analyze（已有分析即拦，data_intake.py:1488-1492）；短语未点名需密钥命令且与页面 2317 逐字同源，修复需页面+CLI 协同（补零密钥出口或明示边界），建议独立一轮决策；② nit——总述「与页面提示同词汇」对此条是近似（页面「无需任何密钥」vs CLI 既定词汇「零密钥」，同一事实不同表层词），doc 定点引用准确、不构成不诚实，可留后续润色。
+- 北极星缺口①②仍开放（均待外部资源）；介入点清单剩余：12（现场发现）。**待用户授权（沿 R78，未决）**：① 刷新线上部署（含目标与数据主线与演示任务，之后撤 Option 2 定界句并同步 pin）；② 分支领先 origin 61 commits，push 受 Zed review hook 门控，待用户决定。成本钩子读数 $124.91（CRITICAL；不计成本授权下继续，逐轮如实上报）。

@@ -136,6 +136,10 @@ def test_next_action_tail_docs_pinned():
     assert "下一步状态: 枚举（人话对照）" in section, "尾行格式必须写明"
     assert "`next_action_phrase` 单一来源" in section, "人话对照单一来源必须写明"
     assert "13 个状态全覆盖" in section and "未知状态只显枚举不编造" in section
+    assert "awaiting_analysis 的尾行同时点名两条路径" in section, (
+        "零密钥路径进尾行必须在场(R81):awaiting_analysis 不只指 analyze"
+    )
+    assert "不会被指去配置密钥才能跑的命令" in section, "零密钥诚实边界必须写明"
     assert "与页面提示同词汇" in section, "页面与 CLI 同源必须写明"
     for command in ("show", "create", "analyze", "confirm", "materialize"):
         assert f"`{command}`" in section, "尾行命令清单必须列明"
@@ -1314,6 +1318,7 @@ def test_answer_sheet_docs_pinned():
     assert "结构上不可能泄露监督标签" in section, "防泄露边界必须写明"
     assert "当前没有缺答案的行，无需导出清单" in section, "空态诚实降级必须写明"
     assert "先运行 analyze" in section, "无预览降级必须写明"
+    assert "或零密钥的 baseline-analyze" in section, "零密钥路径必须一并点名"
     assert "交接物不是回传文件" in section, "回传通道边界必须写明"
     assert "`missing_answer_rows`" in section, "行筛选与判定共用必须写明"
     assert "既定保留" in section, "未成熟标签不混入必须写明"

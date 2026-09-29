@@ -84,6 +84,7 @@ def test_answer_sheet_cli_requires_analysis_first(tmp_path):
     done = invoke(service, "answer-sheet", session.session_id)
     assert done.returncode == 2
     assert "先运行 analyze" in done.stderr
+    assert "baseline-analyze" in done.stderr, "零密钥路径同样能生成预览,必须一并点名"
 
 
 def test_answer_sheet_cli_uses_current_full_preview_when_available(tmp_path):

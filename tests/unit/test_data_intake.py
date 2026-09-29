@@ -477,7 +477,10 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
     for status in every_state:
         phrase = next_action_phrase(status)
         assert phrase and not phrase.isascii(), f"状态 {status} 必须有人话翻译"
-    # 页面词汇同源锚点:这三句与 07_Data_Intake.py 的提示语逐字一致方向。
+    # 页面词汇同源锚点:这几句与 07_Data_Intake.py 的提示语逐字一致方向。
+    assert next_action_phrase("awaiting_analysis") == (
+        "尚未分析：配置了 Agent 运行 analyze；没有 Agent 服务用 baseline-analyze 零密钥开始。"
+    ), "零密钥用户的尾行必须点名 baseline-analyze,不能只指需密钥的 analyze"
     assert next_action_phrase("awaiting_full_data") == (
         "样例转换含义已确认，请提供全量数据并验证覆盖、冲突与独立分组。"
     )
