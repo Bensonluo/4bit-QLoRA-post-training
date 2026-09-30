@@ -3533,3 +3533,22 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（不变）**：①push origin——TuneSmith 本轮 +1=**44 commits**；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（R122 镜像改动已就绪待部署；R123 旅程网格属新产品能力，演示页 Home 尚未镜像，候选后续轮）。
 
 **成本**：主会话钩子 $183.44→**$189.59**（CRITICAL，已如实转达，用户以「不计成本」继续）。
+
+## R124 轮报——失败 run 非专家急救包 + 全量义务轮（2156 passed）
+
+**日期**：2026-09-30　**基线**：fb43577（R123 落地后）
+
+**选点**：失败时刻的死胡同——00 页训练动态的下步引导面板门 `status == "finished"`，失败 run 只有红徽章「🔴 失败」+「最近日志」expander（原始 traceback 裸给非专家），无「为什么失败/怎么办」。训练失败是非专家最需要帮助的时刻，产品在此刻沉默；「从失败恢复 → 重试」是完整旅程的合法一环，此前完全缺失（成功态有 🧭 下一步、评测态有 R120 闭环、失败态零指引）。
+
+**实现**（00 页 +67 行，1 新测试文件 5 钉）：
+1. `ui/pages/00_Training_Lab.py` 模块级新增签名表 `_FAILURE_TRIAGE`（四类通用训练失败：显存/内存不足、文件/数据路径问题、依赖/环境问题、模型下载/网络问题——各带小写签名元组 + 中文诊断 + 可执行对策）与纯函数 `_diagnose_failure(log_text)`（签名小写匹配，按表序返回 (诊断, 对策) 列表，空/无命中返回空）。对策口径与 CLAUDE.md OOM 恢复一致（降 max_length / 降 LoRA r / 换小模型），不绑任何域。
+2. `_render_activity` 内 failed 态渲染「🩹 失败诊断与重试」expander：命中 → 「从最近日志匹配到可能原因」+ 就地 🔴 诊断 → 对策；未命中 → 通用三步（看日志尾 → 对照四类清单 → 配置页重试）。评测行（medical_eval/entity_eval 技术值）重试指路回「🧭 下一步」重新发起评测，不指配置页。数据源是已有的 `read_recent_logs(run_id, tail=15)`，无新 I/O。
+3. `tests/unit/test_failed_run_triage_ui.py`（新增 5 钉）：①OOM 签名大小写不敏感钉；②数据路径签名 + 多命中按表序钉 + 四类不得静默增删；③空/正常日志返回空钉（无日志文件 → read_recent_logs 返回 ""）→ 走通用三步；④接线实证（AppTest 造 failed run：returncode 1 + OOM traceback 日志 → 急救包 markdown 带出匹配诊断 + 重试指路——复刻 test_next_steps_eval_button_ui 的 tmp staging 法）；⑤极性钉（finished run 不渲染急救包）+ expander 标签与 `if status == "failed":` 门控源码钉。提取器用 ast 沙箱只 exec 两个顶层定义（00 页模块级 `with tab_activity:` 会真渲染整页，不能整模块 exec）；首版提取器漏 `ast.AnnAssign` 分支（`_FAILURE_TRIAGE` 是带注解赋值非 Assign）当场 RED 修正。
+
+**全量义务轮兑现**：一轮全量 **2156 passed / 0 failed（215.21s）**——定向 29 绿后直接全绿，本轮无潜伏红（对照 R121 义务轮抓到 5 个潜伏红：R122/R123 均已按 R121 规则 grep 全测试目录查受影响钉再收口，规则生效的实证）。collect 2147→**2156**（+5 精确）；全仓 ruff check + format 双绿。
+
+**边界如实**：①签名表是启发式非穷举（四类覆盖 8GB 消费卡场景的高频失败；未命中走通用三步兜底，不给假诊断）；②诊断读的是 tail=15 的最近日志——超长 traceback 把签名行顶出窗口时会漏诊（走通用三步，不误诊）；③`read_recent_logs` 的 tail 参数按调用点传 15，与上方「最近日志」expander 同源同窗——用户看到什么，诊断就基于什么，口径一致。
+
+**待授权（不变）**：①push origin——TuneSmith 本轮 +1=**45 commits**；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（R122 镜像改动已就绪待部署；R123 旅程网格 / R124 失败急救包尚未镜像进演示页，候选后续轮）。
+
+**成本**：主会话钩子 $189.59→**$192.42**（CRITICAL，已如实转达，用户以「不计成本」继续）。

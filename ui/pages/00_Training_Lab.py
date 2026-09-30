@@ -35,6 +35,44 @@ def _validate_run_name(name: str) -> str | None:
     return None
 
 
+# ── 失败 run 非专家急救包（R124）──────────────────────────────────
+# 红徽章之后不能是死胡同：「为什么失败 / 怎么重试」在卡片内就地回答。
+# 签名→对策按通用训练失败设计（OOM 恢复口径与 CLAUDE.md 一致），不绑任何域。
+
+_FAILURE_TRIAGE: list[tuple[tuple[str, ...], str, str]] = [
+    (
+        ("out of memory", "outofmemoryerror", "cuda oom"),
+        "显存/内存不足",
+        "配置页降一档再启动：max_length 1024→512、LoRA r 16→8，或换更小模型（如 Qwen 0.5B/0.6B）。",
+    ),
+    (
+        ("filenotfounderror", "no such file", "jsondecodeerror"),
+        "文件/数据路径问题",
+        "确认数据集路径存在且为合法 JSON（Alpaca 格式）；提交前用配置页「🩺 数据集体检与预览」预检。",
+    ),
+    (
+        ("importerror", "modulenotfounderror", "bitsandbytes"),
+        "依赖/环境问题",
+        '4-bit 量化仅 CUDA 可用（MPS/CPU 会自动切 bf16）；缺依赖用 `pip install -e ".[ui]"` 补齐。',
+    ),
+    (
+        ("connectionerror", "timed out", "huggingface.co", "hf-mirror"),
+        "模型下载/网络问题",
+        "国内网络先设 `export HF_ENDPOINT=https://hf-mirror.com` 再启动。",
+    ),
+]
+
+
+def _diagnose_failure(log_text: str) -> list[tuple[str, str]]:
+    """按签名从最近日志匹配失败原因，返回 (诊断, 对策) 列表——无命中返回空。
+
+    签名统一小写匹配（大小写不敏感）；日志为空（无日志文件/未写盘）同样
+    返回空，由调用侧走未命中分支的通用三步。
+    """
+    lowered = log_text.lower()
+    return [(diag, fix) for sigs, diag, fix in _FAILURE_TRIAGE if any(s in lowered for s in sigs)]
+
+
 def _render_next_steps(run_id: str, info: dict) -> None:
     """训练完成 ≠ 终点：定位产物，给出评测/注册/导出的下一步动作。"""
     from src.tracking.next_steps import summarize_run_artifacts
@@ -767,6 +805,35 @@ def _render_activity() -> None:
                 if logs:
                     with st.expander("最近日志"):
                         st.code(logs, language="log")
+
+                # 失败 run 的非专家急救包（R124）：红徽章之后不能是死胡同。
+                # 签名命中 → 就地给「疑似原因 → 对策」；未命中 → 通用三步
+                # （看日志尾 → 对照清单 → 配置页重试）。评测行（R113/R120
+                # 技术值）的失败重试点回下一步面板，不指配置页。
+                if status == "failed":
+                    hits = _diagnose_failure(logs)
+                    with st.expander("🩹 失败诊断与重试"):
+                        if hits:
+                            st.markdown("**从最近日志匹配到可能原因：**")
+                            for diag, fix in hits:
+                                st.markdown(f"- 🔴 **{diag}** → {fix}")
+                        else:
+                            st.markdown(
+                                "**未匹配到已知签名**——先展开「最近日志」看最后几行，"
+                                "多数失败原因在最后一条 traceback 里。常见对照："
+                            )
+                            for _, diag, fix in _FAILURE_TRIAGE:
+                                st.markdown(f"- **{diag}**：{fix}")
+                        if info and info.get("technique") in ("medical_eval", "entity_eval"):
+                            st.markdown(
+                                "检查 --test-file 路径后，到已完成训练的「🧭 下一步」重新发起评测；"
+                                "本条记录可 🗑 删除，日志保留可查。"
+                            )
+                        else:
+                            st.markdown(
+                                "改完参数回到「配置」标签页即可重新启动；本条运行记录可 🗑 删除，"
+                                "config 与日志保留可查。"
+                            )
 
                 # 训练完成后的下一步引导（LlamaBoard Chat/Evaluate/Export 式收尾）。
                 # medical_eval 行除外（R113）：评测行没有「训练下一步」可言，
