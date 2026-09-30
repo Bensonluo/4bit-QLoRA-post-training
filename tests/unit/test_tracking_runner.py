@@ -142,6 +142,71 @@ class TestLaunchTraining:
         assert saved["logging"]["use_mlflow"] is True
 
 
+class TestLaunchEval:
+    """页内评测启动器(R113):launch_eval 走领域评测子进程,与训练同池
+    (.run_meta.json)——eval 行进 Activity 列表,30s fragment 门
+    (list_active)免费看见评测进度。Popen 依旧全打桩(R104 教义)。"""
+
+    @patch("src.tracking.runner.subprocess.Popen")
+    def test_cmd_shape_no_config_flag_cwd_root(
+        self, mock_popen: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("HF_ENDPOINT", raising=False)
+        mock_popen.return_value = _fake_proc(pid=888)
+        runner = TrainingRunner(project_root=str(tmp_path))
+        runner._run_meta["src-run"] = {"config_path": "/x/src.yaml", "pid": 1, "returncode": 0}
+
+        rid = runner.launch_eval("src-run", "/models/adapter")
+
+        assert rid == "eval-src-run"
+        cmd = mock_popen.call_args.args[0]
+        assert cmd[0] == sys.executable
+        assert cmd[1:3] == ["-m", "domains.medical_entity.evaluate"]
+        assert "--model-path" in cmd and "/models/adapter" in cmd
+        # domain evaluate.py 是 argparse,无 --config 选项——挂了即死
+        assert "--config" not in cmd
+        # 评测脚本以相对路径读 domains/medical_entity/data/(evaluate.py:72),
+        # cwd 必须是项目根,否则 seen/unseen 分析静默退化
+        assert mock_popen.call_args.kwargs["cwd"] == str(tmp_path)
+        # env 惯例与训练一致:unbuffered + 国内镜像默认(用户环境未设时)
+        env = mock_popen.call_args.kwargs["env"]
+        assert env["PYTHONUNBUFFERED"] == "1"
+        assert env["HF_ENDPOINT"] == "https://hf-mirror.com"
+
+    @patch("src.tracking.runner.subprocess.Popen")
+    def test_meta_shape_technique_lineage_and_log(
+        self, mock_popen: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_popen.return_value = _fake_proc(pid=888)
+        runner = TrainingRunner(project_root=str(tmp_path))
+        runner._run_meta["src-run"] = {"config_path": "/x/src.yaml", "pid": 1, "returncode": 0}
+
+        runner.launch_eval("src-run", "/models/adapter")
+
+        meta = runner._run_meta["eval-src-run"]
+        assert meta["technique"] == "medical_eval"
+        # lineage:eval 行拷贝源训练 run 的 config 路径(面板/审计兜底)
+        assert meta["config_path"] == "/x/src.yaml"
+        assert meta["model_path"] == "/models/adapter"
+        assert meta["log_path"].endswith("eval-src-run.log")
+        assert meta["pid"] == 888
+        persisted = json.loads((tmp_path / "outputs" / ".run_meta.json").read_text())
+        assert persisted["eval-src-run"]["technique"] == "medical_eval"
+
+    def test_eval_run_status_transitions_and_fragment_gate_visibility(self, tmp_path: Path) -> None:
+        """eval 行与训练同池:running 时 list_active 可见(fragment 30s 节拍
+        门的探测口径),退出后落 finished——评测进度的自动刷新不另造机制。"""
+        runner = TrainingRunner(project_root=str(tmp_path))
+        runner._active["eval-src"] = _fake_proc(poll_value=None)
+        runner._run_meta["eval-src"] = {"pid": 1, "technique": "medical_eval"}
+        assert runner.get_status("eval-src") == "running"
+        assert runner.list_active() == ["eval-src"]
+
+        runner._active["eval-src"] = _fake_proc(poll_value=0, returncode=0)
+        assert runner.get_status("eval-src") == "finished"
+        assert runner.list_active() == []
+
+
 class TestGetStatus:
     def _runner(self, tmp_path: Path) -> TrainingRunner:
         return TrainingRunner(project_root=str(tmp_path))

@@ -48,6 +48,50 @@ def _render_next_steps(run_id: str, info: dict) -> None:
         if arts.has_adapter and arts.output_dir is not None:
             st.success(f"Adapter 就绪：`{arts.output_dir}`")
             st.markdown(f"想先直观感受效果？到 **💬 Chat** 页选 `{arts.output_dir}` 直接对话。")
+            # 页内评测（R113）：后台跑领域评测，产物含 baseline + 微调两模型，
+            # 直接点亮「评测结果 / 模型对比」两页（load_eval_data 每 rerun
+            # glob 取最新，无需导入）；终端回退命令留在下方 wizard test 门内
+            from src.tracking.runner import TrainingRunner
+
+            _eval_runner = TrainingRunner(project_root=str(PROJECT_ROOT))
+            _eval_rid = f"eval-{run_id}"
+            _eval_status = _eval_runner.get_status(_eval_rid)
+            if _eval_status == "running":
+                st.info(
+                    "⏳ 评测运行中（后台）——本页每 30 秒自动刷新；"
+                    "完成后到「评测结果」「模型对比」页查看。"
+                )
+                _eval_logs = _eval_runner.read_recent_logs(_eval_rid, tail=15)
+                if _eval_logs:
+                    with st.expander("评测日志（最近 15 行）"):
+                        st.code(_eval_logs, language="log")
+            elif _eval_status == "finished":
+                st.success(
+                    "✅ 评测完成——到「评测结果」「模型对比」页查看"
+                    "（两页自动取最新结果，无需导入）。"
+                )
+            else:
+                if _eval_status == "failed":
+                    st.error(
+                        "评测失败（退出码非 0）——日志见「训练动态」里的 eval 行"
+                        "（最近 15 行，完整文件在 outputs/logs/）；"
+                        "若「评测结果」页已有新结果，以页面为准"
+                        "（结果先落盘、收尾后置）。"
+                    )
+                else:
+                    st.markdown("**页内评测**（领域自带测试集）")
+                    st.caption(
+                        "后台评测刚训练的 adapter：领域自带测试集基线全量 3,136 条 + "
+                        "你的模型采样 500 条，完成后「评测结果」「模型对比」两页自动可看。"
+                        "Apple Silicon 约需数分钟到数十分钟。"
+                    )
+                if st.button("⚡ 生成评测文件", key=f"eval_btn_{run_id}", type="primary"):
+                    try:
+                        _rid = _eval_runner.launch_eval(run_id, str(arts.output_dir))
+                        st.toast(f"评测已启动：{_rid}")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"评测启动失败：{exc or exc!r}")
             if arts.eval_sets.get("test"):
                 st.markdown("**评测**（Data Wizard 已备好 test 集）")
                 # r112-reviewer 发现采纳：原推荐 --test-file 不是该脚本合法选项
@@ -626,9 +670,10 @@ def _render_activity() -> None:
                 with c1:
                     st.markdown(f"**{run_id}**")
                     if info:
-                        st.caption(
-                            f"技术：{info.get('technique', '?')} | PID：{info.get('pid', '?')}"
-                        )
+                        # medical_eval 行显示中文名（R113）：领域评测与训练同池
+                        _tech = info.get("technique", "?")
+                        _tech = "领域评测" if _tech == "medical_eval" else _tech
+                        st.caption(f"技术：{_tech} | PID：{info.get('pid', '?')}")
                 with c2:
                     status_color = {"running": "🟢", "finished": "✅", "failed": "🔴"}.get(
                         status, "⚪"
@@ -683,8 +728,10 @@ def _render_activity() -> None:
                     with st.expander("最近日志"):
                         st.code(logs, language="log")
 
-                # 训练完成后的下一步引导（LlamaBoard Chat/Evaluate/Export 式收尾）
-                if status == "finished" and info:
+                # 训练完成后的下一步引导（LlamaBoard Chat/Evaluate/Export 式收尾）。
+                # medical_eval 行除外（R113）：评测行没有「训练下一步」可言，
+                # 渲染面板会出现 eval-of-eval 嵌套按钮
+                if status == "finished" and info and info.get("technique") != "medical_eval":
                     _render_next_steps(run_id, info)
 
 

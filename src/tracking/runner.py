@@ -131,13 +131,7 @@ class TrainingRunner:
             raise ValueError(f"Unknown technique: {technique!r}. Supported: {sorted(SCRIPTS)}")
         script_path = self.project_root / script
 
-        env = os.environ.copy()
-        for name in env_remove or []:
-            env.pop(name, None)
-        env["PYTHONUNBUFFERED"] = "1"
-        if "HF_ENDPOINT" not in env:
-            env["HF_ENDPOINT"] = "https://hf-mirror.com"
-
+        env = self._child_env(env_remove)
         cmd = [python_executable or sys.executable, str(script_path), "--config", str(config_path)]
 
         log_path = self.project_root / "outputs" / "logs" / f"{run_name}.log"
@@ -164,6 +158,70 @@ class TrainingRunner:
         }
         self._save_meta(changed={run_name})
         return run_name
+
+    def _child_env(self, env_remove: list[str] | None = None) -> dict[str, str]:
+        """Child-process env shared by training and eval launchers."""
+        env = os.environ.copy()
+        for name in env_remove or []:
+            env.pop(name, None)
+        env["PYTHONUNBUFFERED"] = "1"
+        if "HF_ENDPOINT" not in env:
+            env["HF_ENDPOINT"] = "https://hf-mirror.com"
+        return env
+
+    def launch_eval(
+        self,
+        source_run_id: str,
+        model_path: str,
+        *,
+        python_executable: str | None = None,
+    ) -> str:
+        """Start a domain-evaluation subprocess for a finished run's adapter.
+
+        Runs `python -m domains.medical_entity.evaluate --model-path <adapter>`
+        (argparse CLI — no --config option) with cwd=project_root: the script
+        reads its train/test data via relative paths (evaluate.py:72), so a
+        wrong cwd silently degrades the seen/unseen analysis. The eval job is
+        tracked in the same .run_meta.json pool as training runs (rid
+        `eval-<source_run_id>`), so the Activity tab's list_active-gated 30s
+        auto-refresh, Stop and Delete cover evaluation too. config_path is
+        copied from the source training run for lineage/panel fallback.
+        """
+        run_id = f"eval-{source_run_id}"
+        self._cleanup_finished()
+
+        env = self._child_env()
+        cmd = [
+            python_executable or sys.executable,
+            "-m",
+            "domains.medical_entity.evaluate",
+            "--model-path",
+            model_path,
+        ]
+
+        log_path = self.project_root / "outputs" / "logs" / f"{run_id}.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(log_path, "w") as log_file:
+            proc = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(self.project_root),
+            )
+
+        self._active[run_id] = proc
+        self._run_meta[run_id] = {
+            "technique": "medical_eval",
+            "config_path": self._run_meta.get(source_run_id, {}).get("config_path", ""),
+            "log_path": str(log_path),
+            "model_path": model_path,
+            "pid": proc.pid,
+            "start_time": time.time(),
+        }
+        self._save_meta(changed={run_id})
+        return run_id
 
     def get_status(self, run_id: str) -> str:
         """Check subprocess status: 'running' | 'finished' | 'failed' | 'unknown'."""
