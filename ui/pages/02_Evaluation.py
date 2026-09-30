@@ -111,7 +111,7 @@ if not data:
         st.markdown(
             "1. **页内一键**：**训练实验室** → 📋 训练动态 → 已完成训练的"
             "「🧭 下一步」→ **⚡ 用我的 test 集评测**"
-            "（用你 Data Wizard 导出的 test.json，任意领域通用）"
+            "（用你数据向导（Data Wizard）导出的 test.json，任意领域通用）"
         )
         st.code(
             "python scripts/eval_entity_match.py "

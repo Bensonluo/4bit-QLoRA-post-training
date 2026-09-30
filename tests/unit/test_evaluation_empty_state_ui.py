@@ -50,6 +50,7 @@ def test_entity_matching_empty_state_guides_back_to_lab():
     )
     assert "⚡ 用我的 test 集评测" in block, "必须点名与 00 页一致的按钮文案"
     assert "Data Wizard" in block, "必须说明 test.json 的来源（Data Wizard 导出）"
+    assert "数据向导" in block, "R135：来源指引必须带中文名（首页/页面标题均以数据向导为主名）"
     assert "scripts/eval_entity_match.py" in block and "--test-file" in block, (
         "终端等价命令必须在场（与 00 页下一步面板的双路惯例一致）"
     )

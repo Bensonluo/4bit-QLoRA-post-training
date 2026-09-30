@@ -182,4 +182,4 @@ def test_wizard_handoff_receive_side_wired():
     发送侧三件套与接收侧 pop/渲染两端钉合,才是完整契约。"""
     source = _source(PAGE_LAB)
     assert 'st.session_state.pop("wizard_handoff", None)' in source
-    assert "已从 **Data Wizard** 预填" in source
+    assert "已从 **数据向导（Data Wizard）** 预填" in source

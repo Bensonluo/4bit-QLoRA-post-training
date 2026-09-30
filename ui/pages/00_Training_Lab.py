@@ -313,7 +313,7 @@ with tab_configure:
     handoff = st.session_state.pop("wizard_handoff", None)
     if handoff:
         st.success(
-            f"数据集已从 **Data Wizard** 预填：`{handoff['path']}`"
+            f"数据集已从 **数据向导（Data Wizard）** 预填：`{handoff['path']}`"
             f"（train {handoff['samples']} 条，已通过 7 项数据体检）。"
             f"确认下方参数后点「开始训练」即可。"
         )
@@ -374,7 +374,7 @@ with tab_configure:
         # 原始表格的用户从这页看不到两扇数据门的存在（00/05 对 07 零提及，审计证
         # 实）。表单内禁普通按钮，路牌置于表单开始前。
         st.caption(
-            "数据还没准备好？Data Wizard 把一张原始表格转成训练集；"
+            "数据还没准备好？数据向导（Data Wizard）把一张原始表格转成训练集；"
             "数据入口从业务目标出发，引导完成准备→训练→评测全流程。"
         )
         if st.button("🚪 去数据入口"):

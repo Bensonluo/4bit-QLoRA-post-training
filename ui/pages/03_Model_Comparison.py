@@ -64,11 +64,11 @@ if len(data) < 2:
         # eval_detail_*.json = load_eval_data 所读目录
         st.markdown("**怎么让这里出现对比结果？**")
         st.markdown(
-            "1. **训练（下一个）模型**：去训练实验室发起训练（数据可先用 Data Wizard 从一张表生成）"
+            "1. **训练（下一个）模型**：去训练实验室发起训练（数据可先用数据向导（Data Wizard）从一张表生成）"
         )
         st.markdown(
             "2. **评测它**：训练完成后在 📋 训练动态 → 「🧭 下一步」→"
-            "**⚡ 用我的 test 集评测**（用你 Data Wizard 导出的 test.json，"
+            "**⚡ 用我的 test 集评测**（用你数据向导（Data Wizard）导出的 test.json，"
             "结果自动进入本页数据源）"
         )
         st.markdown("3. **换一个模型重复 1–2**（比如基座 vs 微调），凑满 2 个评测结果")

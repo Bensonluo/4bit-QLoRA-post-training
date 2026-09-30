@@ -145,6 +145,7 @@ def test_comparison_flagship_guidance_names_real_controls():
         "必须指路 00 页下一步面板的页内评测按钮(与 00 页文案一致)"
     )
     assert "Data Wizard" in block, "必须说明数据与 test.json 的来源(Data Wizard)"
+    assert "数据向导" in block, "R135：来源指引必须带中文名（首页/页面标题均以数据向导为主名）"
     assert "scripts/eval_entity_match.py" in block and "--test-file" in block, (
         "终端等价命令必须在场(与 00 页双路惯例一致)"
     )
