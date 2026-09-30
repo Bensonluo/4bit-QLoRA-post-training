@@ -6,6 +6,7 @@
 import random
 
 from domains.medical_entity.eval.runner import BaseModel
+from src.utils.hf_refs import expand_user_ref
 
 
 def resolve_adapter_base(model_path: str, base_model: str | None = None) -> str | None:
@@ -13,14 +14,15 @@ def resolve_adapter_base(model_path: str, base_model: str | None = None) -> str 
 
     显式 base_model 优先；否则依序读 adapter_config.json / config.json 的
     base_model_name_or_path（回落 _name_or_path），第一个存在的文件即止。
-    ~ 展开：HF 把 ~/... 当 repo id 拒收（同 src/models/merger.py:38-44
-    先例，R114 obs-1）；解析不出返回 None，ValueError 留给调用方。
-    纯 stdlib（json/pathlib），可免重依赖单测。
+    ~ 展开：HF 把 ~/... 当 repo id 拒收（src/utils/hf_refs.py 的
+    expand_user_ref，R114 obs-1 → R115 模式类收口；HF 名逐字节透传，
+    不过 Path()——Windows 下 / 会被换成 \\ 毁 repo id）；解析不出返回
+    None，ValueError 留给调用方。纯 stdlib（json/pathlib），可免重依赖单测。
     """
     import json as _json
     from pathlib import Path
 
-    base = str(Path(base_model).expanduser()) if base_model else None
+    base = expand_user_ref(base_model) if base_model else None
     if not base:
         adapter_dir = Path(model_path).expanduser()
         for candidate in ["adapter_config.json", "config.json"]:
@@ -32,7 +34,7 @@ def resolve_adapter_base(model_path: str, base_model: str | None = None) -> str 
                 break
     if not base:
         return None
-    return str(Path(base).expanduser())
+    return expand_user_ref(base)
 
 
 class RandomBaseline(BaseModel):

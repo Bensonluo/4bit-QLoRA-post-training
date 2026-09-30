@@ -21,16 +21,16 @@ from typing import Any
 
 
 def load_chat_model(base_model: str, adapter_path: str | None = None) -> tuple[Any, Any]:
-    """加载底座（不量化，方便合并）+ 可选 adapter，返回 (model, tokenizer)。"""
-    from pathlib import Path
-
+    """加载底座（不量化，方便合并）+ 可选 adapter，返回 (model, tokenizer）。"""
     from peft import PeftModel
 
     from config.base import ModelConfig
     from src.models.loader import load_model_and_tokenizer
+    from src.utils.hf_refs import expand_user_ref
 
-    # 本地路径里的 ~ 展开成 home；HF 名不含 ~，展开后原样返回
-    base_ref = str(Path(base_model).expanduser())
+    # ~ 展开成 home；HF 名逐字节透传（不过 Path()——Windows 下 / 会被换成 \
+    # 毁 repo id，R115 expand_user_ref）
+    base_ref = expand_user_ref(base_model)
     config = ModelConfig(name=base_ref, quantization_bits=None)
     model, tokenizer = load_model_and_tokenizer(config)
 

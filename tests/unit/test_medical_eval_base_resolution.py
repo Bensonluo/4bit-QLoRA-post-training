@@ -4,7 +4,7 @@
 domains/medical_entity/eval/models.py 的 RealFinetunedModel._load() 从
 adapter_config.json/config.json 读出 base_model_name_or_path 后**不展开 ~**
 直传 AutoTokenizer/AutoModelForCausalLM.from_pretrained——HF 把 ~/... 当
-repo id 拒收(先例:src/models/merger.py:38-44 注释原文「HF treats them as
+repo id 拒收(先例:src/models/merger.py 注释原文「HF treats them as
 repo ids and rejects them」;src/inference/chat_engine.py:33、
 src/tracking/registry.py:190 亦全部展开;grep 全仓 expanduser 在 domains/
 零命中——eval/models.py 是唯一未展开的 from_pretrained 喂入点)。可达性:

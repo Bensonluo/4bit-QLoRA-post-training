@@ -6,6 +6,7 @@ from typing import Any
 from peft import PeftModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
+from src.utils.hf_refs import expand_user_ref
 from src.utils.logging import console
 
 
@@ -37,11 +38,12 @@ def merge_adapter_to_dir(
 
     # `~` paths arrive straight from UI text inputs — HF treats them as repo ids
     # and rejects them ("Repo id must be in the form 'name/repo_name'"), so expand
-    # before anything touches from_pretrained.
+    # before anything touches from_pretrained. HF 名本身不过 Path()——Windows 下
+    # str(Path("Qwen/X")) 会把 / 换成 \ 毁掉 repo id(R115 expand_user_ref)。
     adapter_dir = str(Path(adapter_dir).expanduser())
     output_dir = str(Path(output_dir).expanduser())
     if base_model_name:
-        base_model_name = str(Path(base_model_name).expanduser())
+        base_model_name = expand_user_ref(base_model_name)
 
     console.print("\n[bold cyan]Merging LoRA adapter into base model[/bold cyan]")
     console.print(f"  Adapter: {adapter_dir}")
