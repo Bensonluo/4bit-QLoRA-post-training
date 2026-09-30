@@ -1290,7 +1290,14 @@ def excel_sheet_input(upload, *, key: str) -> str | None:
 
 with st.sidebar:
     st.subheader("已有数据任务")
-    sessions = service.list_sessions()
+    # 容错列举（R131）：一行坏快照不得打崩侧栏（它在任何内容前执行）——跳过坏行
+    # 并如实计数，其余任务与新建流程不受影响。读不到 ≠ 没有：不落回「无任务」空态。
+    sessions, corrupt_sessions = service.list_sessions_tolerant()
+    if corrupt_sessions:
+        st.warning(
+            f"有 {corrupt_sessions} 个任务的数据快照损坏，已从列表跳过；其余任务和"
+            "新建任务不受影响。多半是存储写入被中途打断。"
+        )
     labels = {s.session_id: f"{s.goal[:35]} · {s.session_id[:6]}" for s in sessions}
     st.selectbox(
         "选择任务",
@@ -1306,15 +1313,22 @@ with st.sidebar:
         # (单一来源,页面与 CLI 不各说各话)。
         from src.workbench.funnel_report import collect_funnel, summarize_funnel
 
-        report = collect_funnel(
-            PROJECT_ROOT / "outputs" / "workbench" / "intake",
-            PROJECT_ROOT / "outputs" / "workbench" / "training",
-            PROJECT_ROOT / "outputs" / "workbench" / "evaluations",
-            PROJECT_ROOT / "outputs" / "workbench" / "acceptance",
-            PROJECT_ROOT / "outputs" / "workbench" / "iterations",
-        )
-        for line in summarize_funnel(report):
-            st.write(line)
+        report = None
+        try:
+            report = collect_funnel(
+                PROJECT_ROOT / "outputs" / "workbench" / "intake",
+                PROJECT_ROOT / "outputs" / "workbench" / "training",
+                PROJECT_ROOT / "outputs" / "workbench" / "evaluations",
+                PROJECT_ROOT / "outputs" / "workbench" / "acceptance",
+                PROJECT_ROOT / "outputs" / "workbench" / "iterations",
+            )
+        except Exception as exc:
+            # 侧栏漏斗读取守卫（R131）：collect_funnel 内部走严格 list_sessions，
+            # 任一存储坏行不得经此 expander 打崩整页——降级如实告知
+            st.warning(f"停点快照读取失败，已先隐藏（原因：{exc}）。")
+        if report is not None:
+            for line in summarize_funnel(report):
+                st.write(line)
 
 base_url, model, api_key, allow_remote = render_agent_settings(
     PROJECT_ROOT / "outputs" / "workbench" / "agent-settings.json"
@@ -1394,13 +1408,28 @@ if "intake_id" not in st.session_state:
     )
     st.stop()
 
-session = service.load(st.session_state["intake_id"])
+try:
+    session = service.load(st.session_state["intake_id"])
+except Exception as exc:
+    # 页载入读取守卫（R131）：选中任务行被删/快照损坏不得打崩整页——如实报错 +
+    # 页内出口（此前只能靠侧栏自救）。读不到 ≠ 没有：不落回「暂无任务」失实空态。
+    st.error(
+        f"读取任务失败：{exc}。这个任务的存储可能已损坏或已被删除——其他任务不受影响，"
+        "可用侧栏切换，或新建一个任务。"
+    )
+    st.button("🆕 新建数据任务", on_click=new_task)
+    st.stop()
 iteration_service = IterationService(
     PROJECT_ROOT / "outputs/workbench/iterations",
     PROJECT_ROOT / "outputs/workbench/training",
     PROJECT_ROOT / "outputs/workbench/evaluations",
 )
-iterations = iteration_service.list_iterations(session_id=session.session_id)
+try:
+    iterations = iteration_service.list_iterations(session_id=session.session_id)
+except Exception as exc:
+    # 页载入读取守卫（R131）：iterations 表一行坏 JSON 不得打崩任务视图
+    st.warning(f"历史迭代记录读取失败，已先隐藏（原因：{exc}）。不影响当前任务的继续使用。")
+    iterations = []
 execution_service = None
 execution_records = {}
 execution_managed_states = {
@@ -1431,7 +1460,12 @@ if iterations:
             execution_records[item["iteration_id"]] = {"status": "unavailable", "message": str(exc)}
 active_iteration = next((item for item in iterations if item["status"] == "confirmed"), None)
 suite_service = EvalSuiteService(PROJECT_ROOT / "outputs/workbench/evaluation-suites")
-available_suites = {ref["suite_id"]: ref for ref in suite_service.list_suites()}
+try:
+    available_suites = {ref["suite_id"]: ref for ref in suite_service.list_suites()}
+except Exception as exc:
+    # 页载入读取守卫（R131）：一个坏套件文件不得打崩任务视图
+    st.warning(f"评测套件列表读取失败，已先隐藏（原因：{exc}）。不影响当前任务的继续使用。")
+    available_suites = {}
 if active_iteration:
     available_suites[active_iteration["evaluation_suite"]["suite_id"]] = active_iteration[
         "evaluation_suite"
@@ -2980,7 +3014,12 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
 training_service = TrainingRunService(
     PROJECT_ROOT / "outputs/workbench/training", project_root=PROJECT_ROOT
 )
-training_runs = training_service.list_runs(session_id=session.session_id)
+try:
+    training_runs = training_service.list_runs(session_id=session.session_id)
+except Exception as exc:
+    # 页载入读取守卫（R131）：训练运行记录读取失败不得打崩任务视图
+    st.warning(f"训练运行记录读取失败，已先隐藏（原因：{exc}）。不影响当前任务的继续使用。")
+    training_runs = []
 if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} or training_runs:
     st.subheader("用当前数据微调模型")
     st.caption(

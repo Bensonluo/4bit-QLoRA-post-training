@@ -405,6 +405,25 @@ class IntakeService:
             ).fetchall()
         return [IntakeSession.model_validate_json(row[0]) for row in rows]
 
+    def list_sessions_tolerant(self) -> tuple[list[IntakeSession], int]:
+        """List valid sessions and count corrupt rows instead of raising (R131).
+
+        单行坏快照不再打崩整个任务列表；坏行计数交还调用方如实告知（读不到 ≠ 没有）。
+        ``list_sessions`` 保持严格语义供 funnel 等 CLI 诊断使用。
+        """
+        with sqlite3.connect(self.database) as connection:
+            rows = connection.execute(
+                "SELECT snapshot FROM sessions ORDER BY rowid DESC"
+            ).fetchall()
+        sessions: list[IntakeSession] = []
+        corrupt = 0
+        for row in rows:
+            try:
+                sessions.append(IntakeSession.model_validate_json(row[0]))
+            except ValueError:  # 含 pydantic ValidationError 与 json 解析错
+                corrupt += 1
+        return sessions, corrupt
+
     def dataset_snapshot(self, session_id: str, dataset_version: str) -> IntakeSession:
         """Find the recorded context used by a historical report, never relabel current rows."""
         self.load(session_id)

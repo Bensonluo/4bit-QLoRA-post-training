@@ -3673,3 +3673,21 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试证据**：tests/unit/test_baseline_analysis_ui.py 追加 3 钉：①`test_zero_state_names_keyless_path_before_any_task`（AppTest 零态：路牌点名折叠器标签 + 不需要任何密钥 + 创建任务后限定）②`test_primary_analyze_error_without_model_points_to_baseline`（AppTest 点主 CTA 无模型：报错含基础分析指路 + 主 CTA 旁零密钥入口 caption 同屏）③`test_agent_settings_panel_demoted_to_optional_and_collapsed`（源码钉——AppTest 不暴露 expander 展开态，probe 实测裁决；断言标签含「可选」+ `expanded=False` + 无 `expanded=not` 回归）。定向回归 71 绿：test_baseline_analysis_ui + test_data_intake_ui 50 passed（30.47s）+ test_workbench_training_ui + test_training_plan_ui + test_business_scoring_ui 21 passed（24.59s）；ruff format 3 files unchanged + check 全过。
 
 **状态更新**：07 零密钥路径从「fallback 框架」升为「与 Agent 路径并列可见的起点」；北极星「无密钥可走通」在门面层兑现。审计登记候选余量：①07 页载入级裸读未守卫（`service.load` 07:1389、`list_sessions` 07:1293、`list_iterations`/`list_suites`/`list_runs`——SQLite 一行坏快照可打崩整页，R129 同族）②tokenizer 目录手填无解释（07:2882）③CLI 命令名当 UI 指引（analyze/baseline-analyze/plan-recommend）④物化等术语无白话注释⑤00/05 与 07 双数据门缺互指路牌（IA 级，前轮已登记）。待授权不变：push（本地 3 commits 待推）、benluo.art 部署、venv 重建（本轮 pytest shebang 又指向旧仓路径，`python -m pytest` 绕过）、mypy 368 存量债排期。
+
+## R131 轮报——07 页载入级守卫：一行坏快照不再打崩数据入口整页
+
+**日期**：2026-09-30　**基线**：ad1b0c4（R130 后）
+
+**本轮性质**：定向轮（下一轮 R132 按节奏跑全量义务轮）。
+
+**选点依据**：R130 审计登记候选第一位。07 是首页推荐首步，但有五处**页载入级裸读**：侧栏 `list_sessions`（1293，最先执行——一行坏快照直接打崩整页含新建任务逃生口）、`service.load`（1397，选中任务行被删/快照损坏 = 整页裸栈，审计指明「唯一恢复手段是侧栏」且无页内指路）、`list_iterations`（1403，iterations 表一行坏 JSON，且先 `json.loads` 全表再按 session 过滤——别人任务的坏行也打崩你的视图）、`list_suites`（1434，坏套件文件）、`list_runs`（2983）。与 R129（load_eval_data / 04 注册表）同族：非专家用户遇到的是 Streamlit 全页 traceback——最恶劣的失败形态。
+
+**实现核实（改前验证的载荷事实）**：sessions/iterations 均为 SQLite 表（id, revision, snapshot），snapshot 列 pydantic/json 逐行校验；suites 为目录内 `<64hex>.json`；`list_sessions` 消费方 = 07 侧栏 + funnel_report.py:146（CLI）——**改语义会静默漏计 CLI 诊断，故保留严格版**，新增 `list_sessions_tolerant()` 返回 (完好列表, 坏行数)。关键连带发现：侧栏「全部任务停点快照」expander 调 `collect_funnel` → 内部走**严格版** `list_sessions`——坏行会从这条路再次打崩页面，expander 守卫因此是载荷必需而非锦上添花。
+
+**改动**：
+1. `src/workbench/intake_service.py`：新增 `list_sessions_tolerant()`（逐行抢救：坏行计数跳过、好行照常返回）；`list_sessions` 严格语义不动。
+2. `ui/pages/07_Data_Intake.py` 六处守卫：①侧栏改容错列举 + 坏行如实 warning（结论→为什么→不影响面）②漏斗 expander try/except 降级③`service.load` 失败 → 如实 st.error + 页内「🆕 新建数据任务」出口（复用 `new_task` 清理逻辑）+ st.stop——读不到 ≠ 没有，不落回「暂无任务」失实空态④⑤⑥iterations/suites/runs 三处读取失败 → warning + 空值降级，任务视图主结构照常渲染。
+
+**测试证据**：tests/unit/test_data_intake_ui.py 追加 4 钉（AppTest，sqlite3 直注坏行/坏文件）：①侧栏抢救——坏行 warning + 完好任务按显示串（goal · id[:6]，format_func 层级坑首跑修正）保留 + 新建表单活②选中任务坏快照——如实 error + 页内出口点击回新建表单③iterations 坏行——任务视图 subheader 照常 + 降级 warning④suites 坏文件——同③。回归：07 主套件 + 零密钥套件 54 passed（31.01s）；test_data_intake.py 42 passed；test_funnel_report.py 14 passed；ruff format/check 全过。
+
+**状态更新**：07 从「任一存储坏行 = 整页裸栈」升为 R129 同族的降级范式（如实告知 + 功能面保留 + 页内出路）。北极星旗舰路径的健壮性缺口清零。候选池更新：①tokenizer 目录手填无解释（07:2882 一带）②CLI 命令名当 UI 指引③物化等术语白话注释④00/05↔07 双数据门互指路牌（IA 级）。待授权不变：push（本地 4 commits）、benluo.art 部署、venv 重建、mypy 存量债排期。

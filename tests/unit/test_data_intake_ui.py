@@ -1448,3 +1448,114 @@ def test_acceptance_and_plan_names_source_from_report_summary_constants():
     assert "达到运行前冻结的验收标准" not in source
     # 方案三态标签的字面量定义只剩 report_summary.py 一处,页面不再留第二份
     assert '"方案可供确认"' not in source
+
+
+def test_sidebar_listing_survives_corrupt_session_row(tmp_path, monkeypatch):
+    """侧栏任务列表守卫钉（R131）：一行坏快照不再打崩整页——完好任务照常列出、
+    新建表单可用、损坏如实 warning（结论→为什么），不落回「无任务」失实空态。"""
+    import sqlite3
+
+    import ui.config
+
+    for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
+        monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+    service = IntakeService(tmp_path / "outputs/workbench/intake")
+    session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
+    with sqlite3.connect(service.database) as connection:
+        connection.execute(
+            "INSERT INTO sessions (id, revision, snapshot) VALUES (?, 1, ?)",
+            ("f" * 32, "{ 这不是 JSON"),
+        )
+    page = AppTest.from_file(str(PAGE), default_timeout=20)
+    page.run()
+    assert not page.exception
+    assert any(area.label == "希望模型完成什么业务工作？" for area in page.text_area), (
+        "侧栏读取失败不得打崩新建任务表单"
+    )
+    assert any("损坏" in w.value and "跳过" in w.value for w in page.warning)
+    # options 走 format_func（goal · id[:6] 显示串），按显示串断言
+    assert (
+        f"{session.goal[:35]} · {session.session_id[:6]}"
+        in page.selectbox(key="intake_select").options
+    ), "完好任务必须保留在列表里（逐行抢救，不是整列丢弃）"
+
+
+def test_corrupt_selected_task_recovers_with_in_content_exit(tmp_path, monkeypatch):
+    """选中任务读取守卫钉（R131）：快照损坏的任务不再裸栈整页——如实报错 +
+    页内「新建数据任务」出口（复用 new_task 清理逻辑），点击后回到新建表单。"""
+    import sqlite3
+
+    import ui.config
+
+    for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
+        monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+    service = IntakeService(tmp_path / "outputs/workbench/intake")
+    session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
+    with sqlite3.connect(service.database) as connection:
+        connection.execute(
+            "UPDATE sessions SET snapshot=? WHERE id=?", ("{ 坏的", session.session_id)
+        )
+    page = AppTest.from_file(str(PAGE), default_timeout=20)
+    page.session_state["intake_id"] = session.session_id
+    page.run()
+    assert not page.exception
+    assert any("读取任务失败" in e.value for e in page.error), "损坏必须如实报错，不裸栈"
+    assert not any("暂无" in w.value for w in page.warning), "读不到 ≠ 没有：不得失实空态"
+    next(b for b in page.button if b.label == "🆕 新建数据任务").click().run()
+    assert not page.exception
+    assert any(area.label == "希望模型完成什么业务工作？" for area in page.text_area), (
+        "页内出口必须回到新建任务表单"
+    )
+
+
+def test_task_view_survives_corrupt_iterations_row(tmp_path, monkeypatch):
+    """迭代记录读取守卫钉（R131）：iterations 表一行坏 JSON 不再打崩任务视图——
+    页面主结构照常渲染，降级如实 warning。"""
+    import sqlite3
+
+    import ui.config
+    from src.workbench.iterations import IterationService
+
+    for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
+        monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+    service = IntakeService(tmp_path / "outputs/workbench/intake")
+    session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
+    iteration_service = IterationService(
+        tmp_path / "outputs/workbench/iterations",
+        tmp_path / "outputs/workbench/training",
+        tmp_path / "outputs/workbench/evaluations",
+    )
+    with sqlite3.connect(iteration_service.database) as connection:
+        connection.execute(
+            "INSERT INTO iterations (id, revision, snapshot) VALUES (?, 1, ?)",
+            ("e" * 32, "{ 坏的"),
+        )
+    page = AppTest.from_file(str(PAGE), default_timeout=20)
+    page.session_state["intake_id"] = session.session_id
+    page.run()
+    assert not page.exception
+    assert any(h.value == session.goal for h in page.subheader), "任务视图主结构必须照常渲染"
+    assert any("迭代记录读取失败" in w.value for w in page.warning)
+
+
+def test_task_view_survives_corrupt_suite_file(tmp_path, monkeypatch):
+    """评测套件读取守卫钉（R131）：evaluation-suites 目录一个坏 JSON 不再打崩任务视图。"""
+    import ui.config
+
+    for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
+        monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+    service = IntakeService(tmp_path / "outputs/workbench/intake")
+    session = service.create("根据客户首次描述预测类别", "工单.csv", CSV)
+    suites_dir = tmp_path / "outputs/workbench/evaluation-suites"
+    suites_dir.mkdir(parents=True)
+    (suites_dir / f"{'a' * 64}.json").write_text("{ 坏的", encoding="utf-8")
+    page = AppTest.from_file(str(PAGE), default_timeout=20)
+    page.session_state["intake_id"] = session.session_id
+    page.run()
+    assert not page.exception
+    assert any(h.value == session.goal for h in page.subheader)
+    assert any("评测套件列表读取失败" in w.value for w in page.warning)
