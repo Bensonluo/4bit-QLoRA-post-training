@@ -261,8 +261,10 @@ def test_agent_settings_panel_demoted_to_optional_and_collapsed():
     source = (Path(intake_ui.PAGE).parents[1] / "components" / "agent_settings.py").read_text(
         encoding="utf-8"
     )
-    label_pos = source.find('st.expander("分析模型设置')
-    assert label_pos != -1, "设置面板 expander 必须在场"
+    label_pos = source.find("分析模型设置（Agent 服务")
+    assert label_pos != -1, "设置面板标签必须在场（R136 起含「Agent 服务」桥接词）"
+    before = source[max(0, label_pos - 60) : label_pos]
+    assert "st.expander(" in before, "标签必须是 st.expander 的标题"
     block = source[label_pos : label_pos + 200]
     assert "可选" in block, "面板标签必须自陈可选"
     assert "expanded=False" in block, "面板必须默认折叠（不再 agent-first 展开）"

@@ -50,7 +50,11 @@ def render_agent_settings(path: Path) -> tuple[str, str, str, bool]:
     # 面板降位（R130）：默认折叠 + 标签自陈可选。此前 expanded=not model 让无配置
     # 新用户第一屏直面供应商/URL/Key 表单——把「先配 Agent」框定成第 0 步，与北极星
     # 「无密钥可走通基础路径」的门面承诺相悖（07 为首页推荐首步）。
-    with st.expander("分析模型设置（可选——不配置也能用零密钥的基础分析）", expanded=False):
+    # 桥接词（R136）：页面 ~28 处用户可见文案与首页 hero 都说「Agent」，但控制
+    # 面板名不含该词——授权路径被一个对不上号的折叠面板卡住。标签补「Agent 服务」。
+    with st.expander(
+        "分析模型设置（Agent 服务，可选——不配置也能用零密钥的基础分析）", expanded=False
+    ):
         provider = st.selectbox(
             "Agent 供应商",
             list(PROVIDERS),
