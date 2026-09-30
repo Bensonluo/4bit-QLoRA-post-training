@@ -3299,6 +3299,6 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 
 **边界**：obs-5 双发竞态不修（预存在类，两标签页场景边缘）；obs-2 仅登记不改本源——按钮承诺技术上为真（reviewer 定性「not false advertising」）。
 
-**待授权**：①push origin（本地将领先 25 commits）；②benluo.art 部署；③venv 重建/修复 shebang（mypy+pytest 指旧仓路径）。
+**待授权**：①push origin（本地已领先 28 commits，git log origin/main..HEAD 实测）；②benluo.art 部署；③venv 重建/修复 shebang（mypy+pytest 指旧仓路径）。
 
 **成本**：主会话成本钩子持续 CRITICAL：$105.05→$108.17→**$113.81**（连破 $105/$108/$113）；r113-reviewer 亦独立转达其会话钩子 ~$113。轮成本趋势 $98→$104→$113+——reviewer 连续四轮建议收敛建议转达（收窄 reviewer 范围/轮内少并行），待用户裁决；按不计成本授权如实登记未中断。
