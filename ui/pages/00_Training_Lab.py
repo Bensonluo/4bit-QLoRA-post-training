@@ -370,6 +370,15 @@ with tab_configure:
         lr_value = float(p_lr)  # 预设值是代码常量，解析不可能失败
         quant_bits = 4 if is_cuda else None  # 平台默认：CUDA 上 4-bit QLoRA
 
+        # 双数据门路牌（R133）：dataset 输入在表单内、且预填演示数据集——手上有
+        # 原始表格的用户从这页看不到两扇数据门的存在（00/05 对 07 零提及，审计证
+        # 实）。表单内禁普通按钮，路牌置于表单开始前。
+        st.caption(
+            "数据还没准备好？Data Wizard 把一张原始表格转成训练集；"
+            "数据入口从业务目标出发，引导完成准备→训练→评测全流程。"
+        )
+        if st.button("🚪 去数据入口"):
+            st.switch_page("pages/07_Data_Intake.py")
         with st.form("training_config"):
             st.subheader("模型与数据")
             c1, c2 = st.columns([3, 1])

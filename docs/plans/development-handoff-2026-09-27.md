@@ -3707,3 +3707,26 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试证据**：+1 源码钉 `test_tokenizer_input_explains_what_to_type`（placeholder 示例 + 分词器/不自动下载 + 报错示例三面在场）；两个既有 label 钉的运行时测试（test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failures / test_preflight_passed_state_moves_page_exits_forward）+ 新钉 = 3 passed；ruff 过。**义务全量**：2176 passed / 0 failed / 218.54s（基线 2169 + R130×3 + R131×4，精确对账；R132 新钉因收集后追加不计入，已单跑绿）——第四个连续全绿义务轮（R124/R127/R129/R132）。
 
 **状态更新**：训练前检查的最后一个裸术语交互面消项。候选池更新：①物化等术语白话注释（次小）②00/05↔07 双数据门互指路牌（IA 级）③CLI 词汇的浏览器路径补充（需重新审视 R92 裁决，非一轮可完）。待授权不变：push（本地 5 commits）、benluo.art 部署、venv 重建、mypy 存量债排期。
+
+## R133 轮报——双数据门互指路牌：00/05 → 07 接线
+
+**日期**：2026-09-30　**基线**：0d3f59c（R132 轮报后）
+
+**本轮性质**：定向轮（R132 义务轮后第 1 轮）。
+
+**选点依据（前置审计事实）**：07 是首页推荐的旅程首步（hero 按钮 + 旅程格），但 grep 证实 00_Training_Lab 与 05_Data_Wizard 对 07 **零提及**——习惯直回这两页的用户（书签/肌肉记忆）永远看不到引导式路径的存在。00 的 dataset 输入在 `st.form` 内且预填无关演示数据集（yahma/alpaca-cleaned），手上有原始表格的用户在「数据集填什么」的困惑现场得不到任何指路。补的是路径发现性，与 R128-R132 的空态/守卫/白话化同一主题带：北极星「新用户能不能找到并走通」。
+
+**改动（2 文件，均在真实控件约束内）**：
+- `00_Training_Lab.py`（配置表单前，表单内禁普通按钮故置于 form 开始前）：caption「数据还没准备好？Data Wizard 把一张原始表格转成训练集；数据入口从业务目标出发，引导完成准备→训练→评测全流程。」+ `🚪 去数据入口` 按钮 → `st.switch_page("pages/07_Data_Intake.py")`。
+- `05_Data_Wizard.py`（顶部 caption 后、依赖导入守卫前——无依赖时路牌仍可见）：caption「有原始表格、想直接转成训练集——你找对了。想从业务目标出发、由产品引导完成分析→核对→训练→评测？去数据入口。」+ 同按钮同接线。措辞先确认用户没走错门（有表直转就是 05 的定位），再指另一扇门——不做「这页不对」式的错误暗示。
+- 选 button+switch_page 而非 st.page_link：无仓库先例且 AppTest 无 accessor，测试性优先（与 R128 幽灵分支接线同一验证过的范式）。
+
+**测试证据**：新增 `tests/unit/test_data_door_signage_ui.py`（2 枚入口锚定导航钉）：AppTest 从 app.py 入口导航到 00/05 → 断言 caption 关键词（00：数据还没准备好/数据入口/Data Wizard；05：你找对了/数据入口）→ 点击 `🚪 去数据入口` → 断言 title 切到「从业务目标和数据开始」。2 passed 首跑即绿；邻近回归 test_lab_progressive_disclosure_ui + test_wizard_sample_preview_ui + test_loading_feedback_ui 共 21 passed；ruff format 无变化、check 全过。
+
+**诚实边界**：路牌只在 00 的配置 tab 渲染（训练动态 tab 不受影响）；07 侧未加反向指路（07 内部漏斗已覆盖 Wizard 交接，R108 已钉）——本轮只补审计证实的缺失方向。文案未称任何页面「更好」，只区分两扇门的定位差异。
+
+**状态更新**：本地累计 5 个未推送 commit（ad1b0c4…本轮）。义务轮节奏：R132 刚过，R134/R135 定向，~R136 全量。
+
+**候选池（下轮从中选）**：① 07 任务视图「改进轮次」区对非专家的步骤语言（iteration_states 标签 vs 漏斗短名分层的词汇一致性核查）；② 首页旅程格与 07 实际漏斗停点的口径对齐审计；③ 02 Evaluation 页与 07 内嵌对照的重复渲染面核查。
+
+**待授权（不擅自执行）**：push origin；benluo.art 部署；venv 重建（shebang 仍指向旧路径）；mypy 368 遗留债排期。

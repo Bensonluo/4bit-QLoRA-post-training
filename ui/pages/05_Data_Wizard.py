@@ -19,6 +19,14 @@ import streamlit as st
 st.set_page_config(page_title="Data Wizard", page_icon="🧙", layout="wide")
 st.title("🧙 Data Wizard")
 st.caption("原始表格 → 训练集：字段映射 · 候选构造 · 数据体检 · 防泄漏切分，全流程引导。")
+# 双数据门路牌（R133）：有表直转是本页定位；从业务目标出发的引导式全流程在数据
+# 入口页——00/05 此前对它零提及（审计证实），两扇数据门互不指路。
+st.caption(
+    "有原始表格、想直接转成训练集——你找对了。想从业务目标出发、由产品引导完成"
+    "分析→核对→训练→评测？去数据入口。"
+)
+if st.button("🚪 去数据入口"):
+    st.switch_page("pages/07_Data_Intake.py")
 
 try:
     import pandas as pd
