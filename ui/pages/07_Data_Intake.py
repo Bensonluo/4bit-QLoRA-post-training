@@ -1651,6 +1651,11 @@ if iterations:
                             )
                             and allow_remote
                         )
+                    if not model.strip():
+                        st.caption(
+                            "此功能需要 Agent 服务，尚未配置模型：在左侧边栏「分析模型设置（Agent 服务）」"
+                            "填写后，勾选上方发送授权即可使用。"
+                        )
                     if st.button(
                         "让 Agent 按确认方向修改数据方案",
                         key=f"revise_iteration_{identity}",

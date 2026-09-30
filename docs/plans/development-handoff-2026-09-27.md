@@ -3911,3 +3911,36 @@ consent 门不一致。逐一核实后处置。
 
 **结构改进登记（不本轮做）**：把下一轮假设表单本体搬进 decided+continue 现场
 （真正的就地闭环），需处理 assessments 建议与 current_report 门语义，属结构轮。
+
+## R140 轮报——修订按钮补第三处指路 + 义务轮全量 2184 绿；方案门裁决不动
+
+**日期**：2026-09-30　**基线**：2ab9bc5（R139 轮报后）
+
+**本轮性质**：义务轮（R136 全量后第 4 轮，全量套件随轮执行）。
+
+**选点依据（r137-audit 余部三处，主会话逐一核实）**：
+1. **~1655 修订按钮漏指路（本轮落地）**：confirmed+data_change 分支的「让 Agent 按确认
+   方向修改数据方案」（07:1658）与 R137 修过的两处完全同构（Agent-only、报错只说缺
+   模型不说位置），且该分支零测试覆盖——R137 家族第三处，caption 同文案落地，钉
+   计数 2→3。
+2. **~830 方案门 consent 不一致（裁决：不动）**：方案确认门是四个 Agent 流中唯一不
+   要求面板级 allow_remote 的——但 test_training_plan_ui.py:124
+   `test_remote_training_summary_needs_specific_consent` 钉住了现状（测试名自述
+   「specific consent」枚举式专项授权即可）。这是被测试文档化的设计决策而非漂移；
+   改授权语义属密钥/授权纪律相邻的策略题，登记候选池待用户裁决。
+3. **blocked 态（登记，R141 主选点）**：无专属渲染分支，成因双源
+   （iterations.py:283 training_run 非 prepared / :292 prepare 异常写 failure）；
+   页面 07:1846-1847 渲染裸 failure 错误——理由可见但无「结论→为什么→修法」式
+   恢复指引。需完整摸清阻断成因谱系再设计。
+
+**改动**：
+1. `ui/pages/07_Data_Intake.py`：修订按钮上方补未配置指路 caption（R137 同文案）。
+2. `tests/unit/test_baseline_analysis_ui.py`：R137 钉扩至三处（count==3）。
+
+**验证**：test_baseline_analysis_ui 9 绿（含更新钉）+ 07 本体 test_data_intake_ui
+47 绿 + ruff 双清；义务全量 `pytest --no-cov -q` **2184 passed**（R136 基线 2181 +
+R137/R138/R139 各 1 新钉），exit 0。**覆盖披露**：全量套件启动于 R140 编辑落盘前，
+其绿灯验证的是 HEAD 2ab9bc5（R139 止）；R140 增量由定向 56 绿验证。
+
+**过程披露**：本轮套件在多 session 负载下跑了 ~13 分钟（历史 ~4 分钟），期间用
+ps/sample 确认进程活跃（训练模拟重子进程 90% CPU）非挂死，未误杀重启。

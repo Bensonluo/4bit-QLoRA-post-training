@@ -272,14 +272,15 @@ def test_agent_settings_panel_demoted_to_optional_and_collapsed():
 
 
 def test_agent_only_features_point_to_settings_panel_when_unconfigured():
-    """Agent-only 功能未配置指路钉（R137，源码钉）：主分析路径有 R130 就地零密钥
-    指路，业务评分/训练方案两个 Agent-only 功能是仅剩现场——报错只说「缺模型」
-    不说在哪配。未配置时按钮旁必须指路侧栏「分析模型设置（Agent 服务）」面板
-    （R136 桥接名），且两处同文案（一个词表，不是两套指路话术）。"""
+    """Agent-only 功能未配置指路钉（R137，源码钉；R140 扩至第三处）：主分析路径
+    有 R130 就地零密钥指路，Agent-only 功能现场——业务评分/训练方案/数据方案修订
+    （r137-audit 补充的漏点）——报错只说「缺模型」不说在哪配。未配置时按钮旁必须
+    指路侧栏「分析模型设置（Agent 服务）」面板（R136 桥接名），三处同文案（一个
+    词表，不是两套指路话术）。"""
     source = Path(intake_ui.PAGE).read_text(encoding="utf-8")
-    assert source.count("此功能需要 Agent 服务，尚未配置模型") == 2, (
-        "业务评分/训练方案两处按钮旁必须各有一条未配置指路 caption"
+    assert source.count("此功能需要 Agent 服务，尚未配置模型") == 3, (
+        "业务评分/训练方案/数据方案修订三处按钮旁必须各有未配置指路 caption"
     )
-    assert source.count("在左侧边栏「分析模型设置（Agent 服务）」") == 2, (
+    assert source.count("在左侧边栏「分析模型设置（Agent 服务）」") == 3, (
         "指路必须落到 R136 桥接名的面板全名"
     )
