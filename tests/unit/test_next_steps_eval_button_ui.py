@@ -88,8 +88,12 @@ def test_eval_button_honest_state_copy():
     """诚实文案钉(四态):成功态两页点名+「无需导入」为真(load_eval_data
     每 rerun glob 取最新);失败态含「以页面为准」兜底(report.py:184-190
     MLflow 后写洞:退出码非 0 但 eval_detail 可能已落盘)与重试出路;
-    running 态声明 30s 自动刷新(同池 fragment 门兑现);idle 态文案明说
-    「领域自带测试集」——不得暗示吃用户 Wizard 测试集(schema 不符)。"""
+    running 态声明 30s 自动刷新(同池 fragment 门兑现);idle 态文案
+    R114 起显式命名「医疗实体匹配」+「与你本次训练使用的数据无关」——
+    r114-scout 裁决 obs-2 软化:finance/wizard 用户会把「领域自带测试集」
+    误读成「我的领域」,显式命名同时服务两类受众;硬门落选(医疗训练
+    不入 .run_meta.json 池,门=按钮对所有人隐身)。仍不得暗示吃用户
+    Wizard 测试集(schema 不符)。"""
     source = _source(PAGE_LAB)
     # 四态分支骨架在场
     assert source.count("_eval_status ==") >= 3, (
@@ -102,9 +106,50 @@ def test_eval_button_honest_state_copy():
     assert "以页面为准" in source
     # running 态:30s 自动刷新声明(与 fragment 门同拍)
     assert "30 秒自动刷新" in source
-    # idle 态:领域自带测试集(不吃 Wizard test.json)
-    assert "领域自带测试集" in source
-    assert "3,136" in source and "500" in source, "规模数字与实测一致(基线全量 3,136+采样 500)"
+    # idle 态(R114):显式命名评测任务 + 与训练数据无关的诚实锚。
+    # 区间钉(r114-reviewer nit-3 采纳):锚定 idle 分支区间(页内评测标题
+    # 到 eval_sets 门),不再全文级——防锚漂到其他分支后钉仍绿
+    idle_start = source.find('st.markdown("**页内评测**')
+    idle_end = source.find('if arts.eval_sets.get("test"):')
+    assert idle_start != -1 and idle_end != -1 and idle_start < idle_end, (
+        "idle 分支区间锚(页内评测标题 → eval_sets 门)必须在场"
+    )
+    idle_block = source[idle_start:idle_end]
+    assert "医疗实体匹配" in idle_block, "idle 文案必须显式命名「医疗实体匹配」领域"
+    assert "与你本次训练使用的数据无关" in idle_block, (
+        "idle 文案必须声明评测用领域测试集、与用户本次训练数据无关"
+    )
+    assert "自带测试集" in idle_block  # 仍是领域自带集,不是用户 Wizard test.json
+    assert "3,136" in idle_block and "500" in idle_block, (
+        "规模数字与实测一致(基线全量 3,136+采样 500)"
+    )
+
+
+def test_stop_popover_copy_matches_row_technique():
+    """obs-6 源码钉(R114 顺带):Stop popover 的确认文案按行类型分支——
+    eval 行(technique=medical_eval)不得再说「训练进程/checkpoint」
+    (评测进程无 checkpoint,错误名词诱导用户担心不存在的产物)。
+    锚定 popover 区间:⏹ 停止 popover 起点与 🗑 删除 popover 起点之间,
+    与 R113 Activity 门钉同型的区间钉。"""
+    source = _source(PAGE_LAB)
+    start = source.find('with st.popover("⏹ 停止"')
+    end = source.find('st.popover("🗑 删除"')
+    assert start != -1 and end != -1 and start < end, "Stop/Delete popover 锚必须在场"
+    popover_block = source[start:end]
+    # 分支在场:eval 行走专用文案
+    assert 'info.get("technique") == "medical_eval"' in popover_block, (
+        "Stop popover 必须按 medical_eval 分支文案"
+    )
+    assert "将终止该运行的评测进程" in popover_block, "eval 行文案必须说「评测进程」"
+    assert "已写入的日志保留" in popover_block, "eval 行只承诺日志保留(无 checkpoint)"
+    # 训练行原文案保留在另一分支;极性钉(r114-reviewer nit-3 采纳):
+    # 条件 → eval 文案 → 训练文案的顺序锁死 if/else 极性,反转仍绿即红
+    cond_pos = popover_block.find('info.get("technique") == "medical_eval"')
+    eval_pos = popover_block.find("将终止该运行的评测进程")
+    train_pos = popover_block.find("将终止该运行的训练进程")
+    assert -1 < cond_pos < eval_pos < train_pos, (
+        "分支极性:medical_eval 条件在先,eval 文案居 if 体,训练文案居 else 体"
+    )
 
 
 def test_runner_eval_flags_match_domain_cli_surface():

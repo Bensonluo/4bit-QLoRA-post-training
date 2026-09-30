@@ -8,6 +8,33 @@ import random
 from domains.medical_entity.eval.runner import BaseModel
 
 
+def resolve_adapter_base(model_path: str, base_model: str | None = None) -> str | None:
+    """adapter 目录 → 底座引用（~ 已展开）。
+
+    显式 base_model 优先；否则依序读 adapter_config.json / config.json 的
+    base_model_name_or_path（回落 _name_or_path），第一个存在的文件即止。
+    ~ 展开：HF 把 ~/... 当 repo id 拒收（同 src/models/merger.py:38-44
+    先例，R114 obs-1）；解析不出返回 None，ValueError 留给调用方。
+    纯 stdlib（json/pathlib），可免重依赖单测。
+    """
+    import json as _json
+    from pathlib import Path
+
+    base = str(Path(base_model).expanduser()) if base_model else None
+    if not base:
+        adapter_dir = Path(model_path).expanduser()
+        for candidate in ["adapter_config.json", "config.json"]:
+            p = adapter_dir / candidate
+            if p.exists():
+                with open(p) as f:
+                    cfg = _json.load(f)
+                base = cfg.get("base_model_name_or_path", cfg.get("_name_or_path"))
+                break
+    if not base:
+        return None
+    return str(Path(base).expanduser())
+
+
 class RandomBaseline(BaseModel):
     """随机基线 - 从候选中随机选一个"""
 
@@ -411,7 +438,6 @@ class RealFinetunedModel(BaseModel):
     def _load(self):
         if self._loaded:
             return
-        import json as _json
         import pathlib
 
         import torch
@@ -424,16 +450,8 @@ class RealFinetunedModel(BaseModel):
             platform = detect_platform()
             self._device = platform.device
 
-        # 尝试从 adapter config 读取 base model
-        base = self.base_model
-        if not base:
-            for candidate in ["adapter_config.json", "config.json"]:
-                p = pathlib.Path(self.model_path) / candidate
-                if p.exists():
-                    with open(p) as f:
-                        cfg = _json.load(f)
-                    base = cfg.get("base_model_name_or_path", cfg.get("_name_or_path"))
-                    break
+        # 底座引用经 resolve_adapter_base 解析（~ 已展开，R114 obs-1）
+        base = resolve_adapter_base(self.model_path, self.base_model)
         if not base:
             raise ValueError("无法确定 base model，请通过 base_model 参数指定")
 
@@ -448,7 +466,9 @@ class RealFinetunedModel(BaseModel):
             model_kwargs["device_map"] = {"": "cpu"}
 
         base_m = AutoModelForCausalLM.from_pretrained(base, **model_kwargs)
-        self._model = PeftModel.from_pretrained(base_m, self.model_path)
+        # adapter 路径同款 ~ 展开（R114 obs-1）：HF 对 ~/... 同样按 repo id 拒收
+        adapter_path = str(pathlib.Path(self.model_path).expanduser())
+        self._model = PeftModel.from_pretrained(base_m, adapter_path)
         self._model.eval()
         self._loaded = True
 

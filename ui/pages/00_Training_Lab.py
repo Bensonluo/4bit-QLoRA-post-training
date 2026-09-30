@@ -79,10 +79,12 @@ def _render_next_steps(run_id: str, info: dict) -> None:
                         "（结果先落盘、收尾后置）。"
                     )
                 else:
-                    st.markdown("**页内评测**（领域自带测试集）")
+                    st.markdown("**页内评测**（内置医疗实体匹配领域）")
                     st.caption(
-                        "后台评测刚训练的 adapter：领域自带测试集基线全量 3,136 条 + "
-                        "你的模型采样 500 条，完成后「评测结果」「模型对比」两页自动可看。"
+                        "后台用内置**医疗实体匹配**领域的自带测试集评测刚训练的 adapter："
+                        "基线全量 3,136 条 + 你的模型采样 500 条"
+                        "（**与你本次训练使用的数据无关**）；"
+                        "完成后「评测结果」「模型对比」两页自动可看。"
                         "Apple Silicon 约需数分钟到数十分钟。"
                     )
                 if st.button("⚡ 生成评测文件", key=f"eval_btn_{run_id}", type="primary"):
@@ -107,7 +109,7 @@ def _render_next_steps(run_id: str, info: dict) -> None:
                 # domains/*/data/results/——用户回「评测结果 / 模型对比」页
                 # 仍空会以为训练白做。点亮两页的路是领域评测（evaluate.py:194
                 # 无条件 save_results → 02/03 的数据源）；底座自动从
-                # adapter_config.json 解析（eval/models.py:427-438），无需
+                # adapter_config.json 解析（eval/models.py 的 resolve_adapter_base），无需
                 # --base-model；Wizard test.json 不符领域候选 schema，不挂数
                 st.caption(
                     "注：上面命令的结果只在终端显示，不会出现在「评测结果」或"
@@ -685,8 +687,14 @@ def _render_activity() -> None:
                     # 会让 caption 对已完成/失败的 run 说谎。恢复 HEAD 原有门。
                     if status == "running":
                         with st.popover("⏹ 停止", key=f"stop_{run_id}", use_container_width=True):
-                            # 停止=杀掉在途训练进程,高代价误触面——popover 二次确认
-                            st.caption("将终止该运行的训练进程；已保存的 checkpoint 与日志保留。")
+                            # 停止=杀掉在途进程,高代价误触面——popover 二次确认;
+                            # 文案按行类型分支(R114 obs-6):eval 行无 checkpoint
+                            if info.get("technique") == "medical_eval":
+                                st.caption("将终止该运行的评测进程；已写入的日志保留。")
+                            else:
+                                st.caption(
+                                    "将终止该运行的训练进程；已保存的 checkpoint 与日志保留。"
+                                )
                             if st.button("确认停止", key=f"stop_confirm_{run_id}", type="primary"):
                                 runner.stop_training(run_id)
                                 st.rerun()

@@ -17,8 +17,8 @@ Alpaca JSON,loaders.py:100-105 HF 回落 load_dataset("json");实证
 
 领域命令形态一手核实(本轮直读,非抄 scout):
 - domains/medical_entity/evaluate.py:119 `--model-path` 在场;
-- 底座自动解析:eval/models.py:427-438 RealFinetunedModel._load() 未传
-  --base-model 时读 adapter 目录 adapter_config.json/config.json 的
+- 底座自动解析:eval/models.py 的 resolve_adapter_base()（RealFinetunedModel._load
+  调用）未传 --base-model 时读 adapter 目录 adapter_config.json/config.json 的
   base_model_name_or_path,解析不出才 ValueError——命令无需配底座;
 - 结果确实落页:evaluate.py:194 无条件 save_results(reports) →
   report.py:166 写 eval_detail_*.json 进 DOMAIN_ROOT/data/results/
