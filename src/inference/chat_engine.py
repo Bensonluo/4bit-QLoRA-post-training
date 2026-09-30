@@ -22,11 +22,39 @@ from typing import Any
 
 def load_chat_model(base_model: str, adapter_path: str | None = None) -> tuple[Any, Any]:
     """加载底座（不量化，方便合并）+ 可选 adapter，返回 (model, tokenizer）。"""
+    from pathlib import Path
+
     from peft import PeftModel
 
     from config.base import ModelConfig
     from src.models.loader import load_model_and_tokenizer
     from src.utils.hf_refs import expand_user_ref
+
+    adapter_ref: str | None = None
+    if adapter_path:
+        # adapter 路径 ~ 展开（R115 obs-2 → R116 收口；先例
+        # domains/medical_entity/eval/models.py RealFinetunedModel._load）：
+        # 手输 ~/... 不展开会被 PeftModel 当 repo id 拒收；HF 名逐字节透传无损。
+        adapter_ref = expand_user_ref(adapter_path)
+        # 绝对路径 = 本机目录引用 → 预检 fail-fast（R117）：底座下载/加载是
+        # 分钟级等待，坏 adapter 路径必须在它之前报错（st.cache_resource 不
+        # 缓存失败，重试每次重付等待）。仅用 Path 做谓词（is_absolute/is_dir/
+        # exists），不做字符串变异——R115 教训：str(Path(x)) 会毁 HF repo id。
+        # 非绝对路径（HF repo id/相对路径）透传不检查，迟到报错维持。
+        local_ref = Path(adapter_ref)
+        if local_ref.is_absolute():
+            if not local_ref.is_dir():
+                # 「或不是目录」：用户可能粘贴的是文件(如 adapter_model.safetensors)
+                # 而非 adapter 目录——r117-reviewer nit-2 文案精确性采纳
+                raise FileNotFoundError(
+                    f"LoRA adapter 路径不存在或不是目录：{adapter_path}"
+                    " —— 请检查手输路径，或回到上方列表选择本机训练产物。"
+                )
+            if not (local_ref / "adapter_config.json").exists():
+                raise ValueError(
+                    f"该目录不是 LoRA adapter（缺 adapter_config.json）：{adapter_path}"
+                    " —— 已合并的完整模型请改填「底座模型」框，不填 adapter。"
+                )
 
     # ~ 展开成 home；HF 名逐字节透传（不过 Path()——Windows 下 / 会被换成 \
     # 毁 repo id，R115 expand_user_ref）
@@ -34,11 +62,7 @@ def load_chat_model(base_model: str, adapter_path: str | None = None) -> tuple[A
     config = ModelConfig(name=base_ref, quantization_bits=None)
     model, tokenizer = load_model_and_tokenizer(config)
 
-    if adapter_path:
-        # adapter 路径同款 ~ 展开（R115 obs-2 → R116 收口；先例
-        # domains/medical_entity/eval/models.py RealFinetunedModel._load）：
-        # 手输 ~/... 不展开会被 PeftModel 当 repo id 拒收；HF 名逐字节透传无损。
-        adapter_ref = expand_user_ref(adapter_path)
+    if adapter_ref:
         peft_model: Any = PeftModel.from_pretrained(model, adapter_ref)
         model = peft_model.merge_and_unload()
 

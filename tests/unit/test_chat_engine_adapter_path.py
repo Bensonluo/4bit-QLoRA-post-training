@@ -72,6 +72,10 @@ def test_tilde_adapter_expanded_before_peft(
     """RED 主钉:手输 ~/... 必须先展开再喂 PeftModel——未展开即 repo-id
     拒收,06 Chat 页加载按钮每次重试都收到同一个 ~ 路径,救不了。"""
     monkeypatch.setenv("HOME", str(tmp_path))
+    # R117 setup 更新:展开后的绝对路径如今过预检,须真实存在且含 marker
+    adapter_dir = tmp_path / "my-adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
 
     load_chat_model("Qwen/Qwen2.5-0.5B-Instruct", "~/my-adapter")
 
@@ -94,6 +98,10 @@ def test_base_and_adapter_both_tilde(
     """合并旅程:底座与 adapter 双 ~/... 同轮双展开——底座侧是 R115 已修
     表达式,本钉同时守两侧(底座回退也会让此钉变红)。"""
     monkeypatch.setenv("HOME", str(tmp_path))
+    # R117 setup 更新:展开后的绝对路径如今过预检,须真实存在且含 marker
+    adapter_dir = tmp_path / "my-adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
 
     load_chat_model("~/.cache/base", "~/my-adapter")
 
