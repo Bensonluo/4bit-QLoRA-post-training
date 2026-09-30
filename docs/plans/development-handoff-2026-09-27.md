@@ -3378,3 +3378,29 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地已领先 35 commits）；②benluo.art 部署；③venv 重建。
 
 **成本**：主会话钩子 $128.89→**$134.95**（CRITICAL 连续升级）；reviewer 自报无独立口径。收敛建议连续多轮转达（reviewer×2 + 主会话每轮），cron 提示无用户回音，按不计成本授权如实登记未中断。
+
+---
+
+## R117 轮报——06 Chat 手输 adapter 预检 fail-fast（chat_engine 单点上提守卫）
+
+**日期**：2026-09-30　**feat**：`916362b`　**基线**：ed1383b → 916362b
+
+**选点**：r117-scout 裁决候选 A 采纳（R116 obs 登记 → 本轮收口），**价值故事修正**：r116-scout「难懂错误」被一手实测推翻——peft 对坏输入（不存在绝对路径/无 config 目录/HF 名）统一抛 `ValueError: Can't find 'adapter_config.json' at '<原路径>'`，离线快失败、并不 cryptic。真实价值 = ① **fail-fast 时序**（底座下载/加载分钟级在前；`st.cache_resource` 不缓存失败 → 重试重付等待）② 中文修法文案 ③ merged 目录误填指引。可达性诚实：picker-陈旧不可达（discover 每次 rerun 先于 handler 重扫），真实受众 = CUSTOM 手输者（同事分发型旅程）。scout 同轮建议 **R118 = 全量义务轮 + 收敛宣布**。
+
+**证据核实**（scout 断言主会话一手复核全过）：错误形状矩阵 ×3 实测（`/nonexistent/xyz`、HF 名 `Qwen/no-such-adapter`、空目录 → 同一 ValueError 离线快失败，顺带证明 **is_absolute() 判别器必要**——HF 名不得进预检）；时序断言（底座加载 :36 先于 peft :42）源码直读确认；hoist 需求与守卫设计逐条核过。
+
+**实现**：chat_engine.py 单点 ~15 行——adapter 分支上提至 `load_model_and_tokenizer` 之前；`adapter_ref = expand_user_ref(adapter_path)`（R116 表达式保留，接线锚不动）后仅对**绝对路径**预检（Path 纯谓词零字符串变异，R115 教训）：非目录 → FileNotFoundError「路径不存在或不是目录」+ 回上方列表指引；缺 adapter_config.json → ValueError + 改填底座框指引；非绝对（HF 名/相对路径）透传不检查（HF 名极性不破坏，相对路径迟到报错维持=修复面如实披露）。页面零改动。
+
+**测试**：RED 2 → GREEN 52（6 套件）。净 +6：新 `test_chat_engine_adapter_precheck.py` 6 钉（recorder 同 R116 錯形；**fail-fast 本体以 `bases == []` 钉死**——底座加载器不得被调用）：RED2（不存在绝对路径 + 缺 marker 目录）+ HF 名/相对路径极性（绿披露）+ 真 adapter 目录防误伤 + **nit-1 组合钉**（`~/不存在` → 展开→绝对→预检，回显原始 ~ 形态，{绝对,~}×{存在,缺失}矩阵收口）+ obs-4 折叠（pin2 match 扩至修法文案）。**R116 setup 更新 ×2 披露**（tilde 主钉 + 双 ~ 钉 mkdir+touch marker，断言原文不动——预检上线后展开结果须真实存在；中途双 ~ 钉一度红 = 守卫正确拒绝不存在目录，属预报内演化）。
+
+**审查**：r117-reviewer **PASS-with-findings（0 should-fix · 2 nit · 3 obs）**，五维度全 PASS，全门禁一手复现（41 passed 四套件 + 全仓 ruff 绿 + **stash 法 RED-on-HEAD 复现** shasum 还原 + collect 2102 精确 + mypy scoped 零新增）。处置：nit-1（组合钉缺失）采纳、nit-2（「路径不存在」对文件粘贴形态不实）采纳=文案「路径不存在**或不是目录**」+ pin1 match 同步、obs-4（指引文案未钉）折叠采纳、obs-3（任务书 49 计数错误，实际 41=5+4+9+23）勘误入轮报、obs-5（mypy 口径沿用）维持。**审查交付异常如实入册**：reviewer 完成但 mailbox 只传一行 idle；追讨消息因 **opus 桶 5h 配额 429（11:45–14:45）** 无法处理（主会话同窗阻塞，~90 条 cron 积压一次性送达）；裁决从 reviewer 落盘 transcript **逐字节回收**（reviewer 曾自发双重全文交付保终态），非转述重构。配额 14:45:43 重置后链路恢复。
+
+**增量复核**：采纳后 52 passed（六套件）/ reviewer 41（四套件，双口径如实）；`ruff check .` 全仓绿；format 净（采纳补丁触发一次 format 修正后复验）；collect **2103 = 2102+1 精确**（第 12 轮零漂移）；mypy scoped 7 错全预存在（sft_collator/runner/sft_trainer），改动文件零新增。
+
+**登记对账**：2103 = 2097+6。全量按节奏跳过（R115 已兑现 2084 passed）·基线 2103。**R118 = 全量义务轮 + 收敛宣布**（scout 建议）：预期 2103 collected → **2095 passed = 2084+5+6**；可选 rider = R116 obs-1（merger `merge_adapters_weighted` base 覆盖展开，CLI 收尾小切）或登记已知限制。
+
+**边界**：相对路径迟到报错=有意保留（绿极性钉披露）；B（merger weighted base 覆盖）维持 backlog/R118 rider；02 页 obs-3/4 知悉级不动；`expand_user_ref` 家族 + 预检至此收口。
+
+**待授权**：①push origin（本地领先 38 commits，feat+docs 后实测口径）；②benluo.art 部署；③venv 重建。
+
+**成本**：主会话钩子 $136.94→**$140.27**（CRITICAL）；**配额事故**：opus 桶 5h 上限致 3 小时停摆（11:45–14:45），事后恢复零数据丢失（transcript 回收）。收敛建议再转达：R117 已按 scout 计划落完上一切片，R118 全量回归后即收敛，待用户裁决。
