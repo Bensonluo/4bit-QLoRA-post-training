@@ -3375,6 +3375,6 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 
 **边界**：B 候选「非缺陷」定性已入册（勿再列为候选——scout 明示）；02 死分支不动（obs-3 知悉级）；`expand_user_ref` 家族站点至此收口完毕（B 维度 6 站点全核）。
 
-**待授权**：①push origin（本地已领先 34 commits）；②benluo.art 部署；③venv 重建。
+**待授权**：①push origin（本地已领先 35 commits）；②benluo.art 部署；③venv 重建。
 
 **成本**：主会话钩子 $128.89→**$134.95**（CRITICAL 连续升级）；reviewer 自报无独立口径。收敛建议连续多轮转达（reviewer×2 + 主会话每轮），cron 提示无用户回音，按不计成本授权如实登记未中断。
