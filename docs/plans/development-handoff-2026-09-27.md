@@ -3496,3 +3496,22 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（不变）**：①push origin——TuneSmith 本轮 +1=**42 commits**；portfolio-fe `0619885`+`205feb4` 未推；②venv 重建；③benluo.art 部署逐次授权（演示页尚未镜像 R120/R121 能力，候选后续轮）。
 
 **成本**：主会话钩子 $170.97→**$179.93**（CRITICAL，已如实转达，用户以「不计成本」继续）。
+
+## R122 轮报——演示页镜像 R120/R121：通用评测闭环进 benluo.art 静态演示
+
+**日期**：2026-09-30　**基线**：fd7aa8b（R121 落地后）
+
+**选点**：演示页/产品门面漂移——TuneSmith 产品端 R120 落地「⚡ 用我的 test 集评测」页内通用评测闭环、R121 补 02 空态闭环指引后，benluo.art/qlora-dashboard 静态演示页的训练动态·下一步面板仍是 R112 时代的终端-only 评测块（推荐已退役的 `scripts/evaluate.py` 坏命令，且宣称「结果只进终端」——在产品新世界是谎言而非诚实）。演示页是求职门面，漂移即「线上讲故事落后于产品两轮」。R120 轮报已登记「演示页尚未镜像 R120/R121 能力，候选后续轮」，本轮兑现。
+
+**实现**（portfolio-fe 3 文件，+90/−7，本地 commit `e419470`，**部署未授权不自动部署**）：
+1. `components/dashboard/pages/TrainingLab.tsx`：`NextSteps` 组件新增 props（`evaluating/evalDone/wizardTestFile/onEval`），旧「🎯 评测命令」静态段替换为交互式「⚡ 页内评测」卡片三态——✅ 完成态（评测结果页/模型对比页两导航钮，复用 onNavigate 闭环）→ ⏳ 运行中（真实页面约数分钟 + 30 秒自动刷新的诚实声明）→ idle（test.json 芯片 + 蓝色主按钮 + 终端等价命令）；终端等价命令换真 CLI `scripts/eval_entity_match.py --model-path … --test-file …`（与产品 00 页逐字同款）。父组件 `runEval` 复刻 mergeExport 既有模式（state Record + setTimeout 2200ms 完成）；门控 `dataset.startsWith('entity_matching')`——alpaca run 不显示评测段（比产品医疗回退更干净的通用门面取舍）。
+2. `components/dashboard/mock-data.ts`：`EVALUATED_RUNS` 预置映射（`a1b2c3d4 → outputs/wizard/demo_suppliers/test.json`，注释注明镜像产品 enteval- 行），旗舰 run sft-qwen3-4b-entity-poc 开箱即 ✅ 态。
+3. `components/dashboard/pages/Evaluation.tsx`：导入区路径保真修正「outputs/eval/entity_matching/」→「domains/entity_matching/data/results/」（产品 02 页实际 glob 目录）。
+
+**验证**：`npx tsc --noEmit` components/dashboard 范围 0 错误（lib/__tests__ 预存在 jest 类型噪音与本次无关，照旧过滤）；Playwright 对现有 dev server（端口 3002，Turbopack 热更）交互级四验证全过——①GRPO run（entity_matching_grpo）展开：idle 态完整（说明文案 + test.json 芯片 + 按钮 + 正确终端命令）；②点击按钮：⏳ 2200ms 后转 ✅ + 两导航钮，点「评测结果页 →」实落地 `#/evaluation`；③预置 a1b2c3d4 展开即 ✅（EVALUATED_RUNS 生效，无 idle 按钮）；④alpaca run（yahma/alpaca-cleaned）无任何评测段（门控生效）；⑤评测结果页折叠区路径文案与产品一致。TuneSmith 产品侧本轮零改动（纯镜像轮，2147 基线不动）。
+
+**边界如实**：①演示为静态 mock——runEval 是 setTimeout 模拟，与 mergeExport 同款既有演示约定（✅ 态文案已声明「真实页面约需数分钟」）；②门控按 dataset 前缀而非产品的 wizard eval_sets 探测——演示数据集无 run_meta 血缘，前缀是演示层的诚实近似；③部署未授权——线上 benluo.art 仍为 R118 形态，镜像改动只在本地 commit `e419470`，等用户逐次授权部署。
+
+**待授权（不变）**：①push origin——TuneSmith 仍 **42 commits**（本轮产品零 commit）；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（本轮镜像改动已就绪待部署）。
+
+**成本**：主会话钩子 $179.93→**$183.44**（CRITICAL，已如实转达，用户以「不计成本」继续）。
