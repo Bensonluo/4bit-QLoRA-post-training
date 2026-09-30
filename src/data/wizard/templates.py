@@ -1,8 +1,9 @@
 """垂类模板：把归一化表格变成「实体匹配选择题」样本。
 
-模板是向导里沉淀专家判断的地方。医疗实体匹配模板移植了
-domains/medical_entity/prepare_data.py 验证过的生成逻辑：
+模板是向导里沉淀专家判断的地方。通用实体名归一化模板移植了
+domains/medical_entity/prepare_data.py 验证过的生成逻辑（机制与领域无关）：
 难度按编辑距离分层、前缀硬负例 + 随机负例、候选随机打乱（防位置捷径）。
+医疗药品名 / 主数据是这套机制的两个已验证案例，以案例模板形式注册。
 
 新垂类通过 register_template() 注册，向导的其余环节（体检/切分/导出）复用。
 """
@@ -113,17 +114,22 @@ def classify_difficulty(query: str, standard: str) -> str:
     return "hard"
 
 
-# ─── 医疗实体匹配模板 ───────────────────────────────────────────────
+# ─── 实体名归一化模板（通用，默认） ─────────────────────────────────
 
 
 class EntityMatchingTemplate(DomainTemplate):
-    """医疗实体匹配：别名/变体 → 标准名+编码 的候选列表选择题。"""
+    """实体名归一化（通用）：别名/变体 → 标准名+编码 的候选列表选择题。
 
-    name = "medical_entity"
+    机制与领域无关：供应商、药品、机构、零件……任何「乱写法 → 标准名」
+    的表格都适用。医疗药品名是这套机制的已验证案例（见下方案例注册）。
+    """
+
+    name = "entity_matching"
 
     def describe(self) -> str:
         return (
-            "医疗实体匹配模板：把「查询/别名 → 标准名+编码」表格变成候选列表选择题。\n"
+            "实体名归一化模板（通用）：把「查询/别名 → 标准名+编码」表格变成候选列表选择题，\n"
+            "供应商、药品、机构、零件等任意领域通用。\n"
             "默认按标准实体切分 train/val/test（防答案泄漏），候选随机打乱（防位置偏差），\n"
             "难度按编辑距离自动分层（easy/medium/hard）。\n"
             "需要列：标准名（必填）；查询、编码、变体、类型（可选）。"
@@ -247,6 +253,19 @@ class EntityMatchingTemplate(DomainTemplate):
         }
 
 
+class MedicalEntityCaseTemplate(EntityMatchingTemplate):
+    """已验证案例·医疗实体匹配：与通用模板同机制，领域为药品/机构名。"""
+
+    name = "medical_entity"
+
+    def describe(self) -> str:
+        return (
+            "案例模板·医疗实体匹配：与通用实体名归一化模板同机制（候选随机打乱、\n"
+            "按标准实体切分防答案泄漏），领域为药品/机构名，已用真实数据验证。\n"
+            "需要列：标准名（必填）；查询、编码、变体、类型（可选）。"
+        )
+
+
 # ─── 模板注册表（与 ui/components/domain_adapters.py 同款模式）────────
 
 
@@ -271,3 +290,4 @@ def available_templates() -> list[str]:
 
 
 register_template(EntityMatchingTemplate())
+register_template(MedicalEntityCaseTemplate())

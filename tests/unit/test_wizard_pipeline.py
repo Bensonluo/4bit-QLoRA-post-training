@@ -65,11 +65,11 @@ class TestHappyPath:
     def test_summary_lines_and_to_dict(self, tmp_path) -> None:
         report = WizardPipeline(make_spec()).run(make_table(DRUG_ROWS, DRUG_COLUMNS), tmp_path)
         lines = "\n".join(report.summary_lines())
-        assert "模板: medical_entity" in lines
+        assert "模板: entity_matching" in lines
         assert "切分: " in lines
         assert "已导出" in lines
         d = report.to_dict()
-        assert d["template"] == "medical_entity"
+        assert d["template"] == "entity_matching"
         assert d["export"] is not None
         assert len(d["checks"]) == 7
 

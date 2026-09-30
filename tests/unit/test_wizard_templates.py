@@ -253,8 +253,15 @@ class TestFormatRecord:
 
 class TestRegistry:
     def test_default_template_registered(self) -> None:
+        assert "entity_matching" in available_templates()
+        assert get_template("entity_matching").name == "entity_matching"
+        assert "通用" in get_template("entity_matching").describe()
+
+    def test_medical_case_template_kept(self) -> None:
+        # 案例模板与通用模板同机制（子类关系钉住，非复制粘贴分叉）
         assert "medical_entity" in available_templates()
         assert get_template("medical_entity").name == "medical_entity"
+        assert isinstance(get_template("medical_entity"), EntityMatchingTemplate)
 
     def test_unknown_template(self) -> None:
         with pytest.raises(WizardError, match="未知模板"):

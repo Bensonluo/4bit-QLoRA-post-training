@@ -3422,3 +3422,30 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（不变，收敛后仍开放）**：①push origin（38 commits）；②benluo.art 部署；③venv 重建（mypy/pytest shebang）。
 
 **成本**：主会话钩子 $140.27→**$144.31**（CRITICAL）；全程成本如实逐轮转达，用户未回应 cron 提示；收敛即停损。
+
+---
+
+## R119 轮报——通用产品纪元第一轮：真实 ui/ + wizard 模板层 generic-first 镜像
+
+**日期**：2026-09-30　**基线**：84f523d（R118 收敛后净树）
+
+**背景**：用户两次纠偏确立 generic-first 铁律（北极星无医疗特例，医疗/主数据只能当标注案例）；本日演示页（portfolio-fe `205feb4`）已通用化并部署验证，但**真实产品 ui/ 仍医疗默认**——演示与产品门面漂移。本日循环按修订版北极星重启（job 89d4740f），本轮选点即消漂移。
+
+**选点**：generic-first 落到产品本体（价值最高且方向唯一正确：默认模板、演示数据、门面文案三层全是医疗）。
+
+**证据**：grep 一手核实——05_Data_Wizard 默认模板 `medical_entity`（L95/L148）、演示按钮只有医疗/主数据、help 文案「医疗=…」；00_Training_Lab「页内评测（内置医疗实体匹配领域）」；spec.py/CLI `--template` 默认 `medical_entity`；INSTRUCTION_TEXT 本就领域无关（无需动）；Chat 默认系统提示词为空（无需动）。
+
+**实现**（8 文件，机制零改动、命名与默认值转向）：
+1. `templates.py`：`EntityMatchingTemplate.name` → `entity_matching`（通用 describe，明确「供应商、药品、机构、零件任意领域」）；新增 `MedicalEntityCaseTemplate(EntityMatchingTemplate)`（name=`medical_entity`，案例 describe，**子类复用同机制非复制分叉**）；双注册。
+2. `spec.py` 默认模板 → `entity_matching`；`scripts/data_wizard.py --template` 默认同步 + help 更新。
+3. `05_Data_Wizard.py`：新增 `DEMO_CSV_GENERIC`（供应商名归一化虚构 10 行，与前端演示同词表）；演示按钮三枚——🗂️ 通用演示（供应商名，默认旅程）+ 💊 案例：药品名 + 🏭 案例：主数据；模板下拉默认/help/空态文案通用化。
+4. `00_Training_Lab.py`：「页内评测」文案 → 内置实体匹配案例（药品名归一化），评测命令不动（真实命令如实）。
+5. 测试对账：test_wizard_spec/pipeline 默认值断言更新（RED→GREEN 机械迁移）；test_wizard_templates 新增 `test_medical_case_template_kept`（available + name + isinstance 子类钉）+ 默认模板 describe 含「通用」钉。
+
+**验证**：ruff 8 文件全绿；定向套件 **123 passed**（7 个 wizard 文件）；scoped mypy Success；collect **2104 = 2103+1 精确**（第 14 轮零漂移口径延续）；**E2E 冒烟**：真实 `WizardPipeline` 跑供应商演示表 passed=True——实体组切分 train=8/val=0/test=2、难度 hard=5/easy=3、前缀硬负例（华信北京查询候选含蓝星系）、输出 JSON 契约不变。
+
+**边界如实**：①`模板: entity_matching` 出现在新导出报告，历史报告 JSON 不受影响；②val=0 是 5 实体小演示表在 0.8/0.1/0.1 下的诚实结果（真实数据不会如此小）；③master_data 模板与 02_Evaluation 领域适配器（唯一真实评测实现）不动——它们本就是标注案例层。
+
+**待授权（更新）**：①push origin（TuneSmith 本轮 +1=40 commits；portfolio-fe `0619885`+`205feb4` 未推）；②venv 重建——本轮再次实证 shebang 腐蚀（`venv/bin/pytest` bad interpreter，须 `venv/bin/python3 -m pytest` 绕行）；③后续部署 benluo.art 仍需逐次授权（今日两次部署均已获授权并验证）。
+
+**成本**：主会话钩子 $144.31→**$165.84**（CRITICAL，含演示页通用化+部署+本轮）；已多轮如实转达，用户以「不计成本」继续。

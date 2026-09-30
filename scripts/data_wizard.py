@@ -42,7 +42,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--input", required=True, help="原始表格路径 (.csv/.xlsx/.xls/.jsonl)")
     parser.add_argument("--out-dir", default=None, help="输出目录（默认 outputs/wizard/<文件名>）")
-    parser.add_argument("--template", default="medical_entity", help="垂类模板名")
+    parser.add_argument(
+        "--template",
+        default="entity_matching",
+        help="垂类模板名（entity_matching=通用 / medical_entity、master_data=已验证案例）",
+    )
     parser.add_argument("--suggest", action="store_true", help="只打印列映射建议与模板说明，不生成")
     parser.add_argument("--standard-col", default=None, help="标准名列（默认自动识别）")
     parser.add_argument("--query-col", default=None, help="查询/别名列（默认自动识别）")

@@ -59,7 +59,7 @@ class WizardSpec:
     """一次向导运行的完整参数。"""
 
     mapping: FieldMapping = field(default_factory=FieldMapping)
-    template: str = "medical_entity"
+    template: str = "entity_matching"
     split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1)
     n_candidates: int = 8
     noise_augment: bool = False

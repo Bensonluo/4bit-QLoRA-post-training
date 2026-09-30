@@ -47,6 +47,20 @@ DEMO_CSV = """标准名,别名,编码
 左氧氟沙星片,可乐必妥,Z10
 """
 
+# 通用演示：供应商名归一化（虚构数据）——generic-first 的默认门面
+DEMO_CSV_GENERIC = """标准名,别名,编码
+蓝星智能科技（深圳）有限公司,蓝星科技,SUP-0001
+蓝星智能科技（深圳）有限公司,蓝星智能,SUP-0001
+蓝星精密制造（苏州）有限公司,蓝星精密,SUP-0002
+蓝星精密制造（苏州）有限公司,蓝星苏州精密,SUP-0002
+云岭数据技术（杭州）有限公司,云岭 DT,SUP-0003
+云岭数据技术（杭州）有限公司,云岭数据,SUP-0003
+长风物流（上海）有限公司,长风货运,SUP-0004
+长风物流（上海）有限公司,长风物流上海,SUP-0004
+华信电气（北京）有限公司,华信电气,SUP-0005
+华信电气（北京）有限公司,华信北京,SUP-0005
+"""
+
 DEMO_CSV_MD = """标准名,别名,编码,类型,规格
 保和堂(昌平区光明路店),保和堂大药房,P000001,机构,
 益民堂(海淀区中关村店),益民堂药房,P000002,机构,
@@ -92,7 +106,7 @@ with up_col:
         _load_bytes(
             upload.name,
             upload.getvalue(),
-            template_hint=st.session_state.get("wizard_template", "medical_entity"),
+            template_hint=st.session_state.get("wizard_template", "entity_matching"),
         )
 with path_col:
     server_path = st.text_input(
@@ -112,9 +126,13 @@ with path_col:
             st.session_state.pop("wizard_report", None)
             st.rerun()
 with demo_col:
-    if st.button("🧪 医疗演示数据"):
+    if st.button("🗂️ 通用演示（供应商名）"):
+        _load_bytes(
+            "demo_suppliers.csv", DEMO_CSV_GENERIC.encode("utf-8"), template_hint="entity_matching"
+        )
+    if st.button("💊 案例：药品名（医疗）"):
         _load_bytes("demo_drugs.csv", DEMO_CSV.encode("utf-8"), template_hint="medical_entity")
-    if st.button("🏭 主数据演示数据"):
+    if st.button("🏭 案例：主数据"):
         _load_bytes(
             "demo_master_data.csv", DEMO_CSV_MD.encode("utf-8"), template_hint="master_data"
         )
@@ -122,7 +140,7 @@ with demo_col:
 table: RawTable | None = st.session_state.get("wizard_table")
 if table is None:
     st.info(
-        "👆 上传文件、填路径、或点两个演示数据按钮之一（🧪 医疗演示数据 / 🏭 主数据演示数据）"
+        "👆 上传文件、填路径、或点演示数据按钮（🗂️ 通用演示为默认旅程；💊/🏭 为已验证案例）"
         "开始。向导不会写任何文件，直到第④步点生成。"
     )
     st.stop()
@@ -145,13 +163,13 @@ except WizardError:
     suggested = FieldMapping(standard_name=table.columns[0] if table.columns else "")
 
 template_names = available_templates()
-default_template = "medical_entity" if "medical_entity" in template_names else template_names[0]
+default_template = "entity_matching" if "entity_matching" in template_names else template_names[0]
 template_name = st.selectbox(
     "垂类模板",
     template_names,
     index=template_names.index(default_template),
     key="wizard_template",
-    help="医疗=Alpaca 选择题格式；主数据=机构+产品双任务 messages 格式。",
+    help="entity_matching=通用 Alpaca 选择题（默认）；医疗/主数据=已验证案例模板。",
 )
 template = get_template(template_name)
 with st.expander("模板说明"):

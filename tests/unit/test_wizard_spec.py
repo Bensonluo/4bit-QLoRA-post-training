@@ -27,7 +27,7 @@ class TestFieldMappingValidate:
 class TestWizardSpecValidation:
     def test_defaults_valid(self) -> None:
         spec = WizardSpec()
-        assert spec.template == "medical_entity"
+        assert spec.template == "entity_matching"
         assert spec.n_candidates == 8
 
     def test_empty_template_rejected(self) -> None:
