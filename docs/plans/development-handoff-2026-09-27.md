@@ -3404,3 +3404,21 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地领先 38 commits，feat+docs 后实测口径）；②benluo.art 部署；③venv 重建。
 
 **成本**：主会话钩子 $136.94→**$140.27**（CRITICAL）；**配额事故**：opus 桶 5h 上限致 3 小时停摆（11:45–14:45），事后恢复零数据丢失（transcript 回收）。收敛建议再转达：R117 已按 scout 计划落完上一切片，R118 全量回归后即收敛，待用户裁决。
+
+---
+
+## R118 轮报——全量义务轮 + 收敛宣布（无代码切片）
+
+**日期**：2026-09-30　**基线**：bc2b2f8（净树，零改动）
+
+**全量对账**：`pytest --no-cov -q` 全量 **2103 passed / 0 failed / 0 error，219.41s，exit 0**——2103 collected 全通过零跳过。预报 2095 = 2084+11 的 **+8 差额勘误**：R115 基线为 2092 collected / 2084 passed（缺口 8 = 当时 skip），本轮该 8 个全部实跑通过，故实际 = 2084+5(R116)+6(R117)+8(基线 skip 转通过) = 2103。零失败为最强口径。
+
+**登记对账**：collect 口径 2103 = 2102+1（R117）与全量 passed 2103 双双对齐；连续 13 轮（R106→R118）collect 零漂移，全量每 2-3 大轮兑现一次（R114 全量→R115 全量 2084→R118 全量 2103）。
+
+**已知限制登记（R116 obs-1 维持 backlog 不切片）**：merger.py `merge_adapters_weighted` 的 `--base-model-name` 覆盖 `base_id` 未经 `expand_user_ref`（R115 恰修兄弟函数同款分支；CLI-only、带引号 ~ argv 才触发、失败干净即报错，非 UI 链路）。收敛轮按 scout 建议登记为已知限制而非再切片。
+
+**收敛宣布**：按 r117-scout 裁决「做完 A 后 R118（全量义务轮）即宣布收敛」。R101→R118 共 18 轮打磨：UI/UX 前端聚焦（R103 起非专家画像）17 个功能切片 + 1 全量轮，全部 TDD RED→GREEN + 独立五维度审查 + 十要素轮报；测试基线 2084→2103（净 +19 行为/接线/极性钉）；collect 13 轮零漂移；R114-R117 `expand_user_ref` 家族（Windows 分隔符腐蚀 + ~ 展开）四轮收口；R115 起 obs 登记制运转。会话 cron 循环（/loop 2m）随收敛停止，用户可随时 `/loop 2m <北极星指令>` 重启。
+
+**待授权（不变，收敛后仍开放）**：①push origin（38 commits）；②benluo.art 部署；③venv 重建（mypy/pytest shebang）。
+
+**成本**：主会话钩子 $140.27→**$144.31**（CRITICAL）；全程成本如实逐轮转达，用户未回应 cron 提示；收敛即停损。
