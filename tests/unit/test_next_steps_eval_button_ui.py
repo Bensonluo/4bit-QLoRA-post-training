@@ -57,20 +57,25 @@ def _source(path: Path) -> str:
 
 
 def test_eval_button_block_wiring_and_placement():
-    """接线钉:⚡ 主按钮(key=eval_btn_{run_id})调 launch_eval(run_id,
-    output_dir);按钮块位置在 Chat 指路之后、eval_sets 门之前(不依赖
-    wizard test 集存在);running 态按钮退场防双发;Activity 循环对
-    medical_eval 行不渲染训练下一步面板(防 eval-of-eval 嵌套)。"""
+    """接线钉(R120 更新锚区):Chat 指路 → wizard test 门(通用评测主路,
+    ⚡ 用我的 test 集评测 → launch_entity_eval)→ 无 test 集回退医疗案例
+    评测(R113 路径,⚡ 生成评测文件 → launch_eval)。旧锚
+    `if arts.eval_sets.get("test"):` 的独立 CLI 块已被通用评测块取代
+    (R112 「结果只进终端」限界就此退场)。"""
     source = _source(PAGE_LAB)
-    # 按钮块位置:Chat 指路 < 按钮 < eval_sets 门(R112 两钉锚区零破坏)
+    # 按钮块位置:Chat 指路 < wizard test 门 < 通用按钮 < 医疗回退按钮
     chat_pos = source.find("想先直观感受效果")
-    btn_pos = source.find('st.button("⚡ 生成评测文件"')
-    gate_pos = source.find('if arts.eval_sets.get("test"):')
+    gate_pos = source.find('_wizard_test = arts.eval_sets.get("test")')
+    generic_btn_pos = source.find('st.button("⚡ 用我的 test 集评测"')
+    medical_btn_pos = source.find('st.button("⚡ 生成评测文件"')
     assert chat_pos != -1, "Chat 指路锚必须在场"
-    assert btn_pos != -1, "页内评测主按钮必须在场"
-    assert gate_pos != -1, "eval_sets 门锚必须在场"
-    assert chat_pos < btn_pos < gate_pos, "按钮块必须在 Chat 指路后、wizard test 门前"
-    # 接线:launch_eval 以 (run_id, output_dir) 被调,主按钮形态
+    assert gate_pos != -1, "wizard test 门锚必须在场"
+    assert generic_btn_pos != -1, "通用评测主按钮必须在场"
+    assert medical_btn_pos != -1, "医疗案例回退按钮必须在场"
+    assert (
+        chat_pos < gate_pos < generic_btn_pos < medical_btn_pos
+    ), "通用评测必须是主路（wizard test 门内），医疗案例退为回退分支"
+    # 接线:launch_eval 以 (run_id, output_dir) 被调,主按钮形态(医疗回退支)
     assert "launch_eval(run_id, str(arts.output_dir))" in source
     assert 'key=f"eval_btn_{run_id}", type="primary"' in source
     # running 态按钮退场防双发:running 分支体内不得再有 st.button
@@ -92,10 +97,12 @@ def test_eval_button_honest_state_copy():
     R114 起显式命名「医疗实体匹配」+「与你本次训练使用的数据无关」——
     r114-scout 裁决 obs-2 软化:finance/wizard 用户会把「领域自带测试集」
     误读成「我的领域」,显式命名同时服务两类受众;硬门落选(医疗训练
-    不入 .run_meta.json 池,门=按钮对所有人隐身)。仍不得暗示吃用户
-    Wizard 测试集(schema 不符)。"""
+    不入 .run_meta.json 池,门=按钮对所有人隐身)。R120 起此块为无
+    wizard test 集时的回退支——有 test 集的用户走「用我的 test 集评测」
+    (launch_entity_eval,schema 原生匹配,旧的「仍不得暗示吃用户 Wizard
+    测试集」限界就此退场)。"""
     source = _source(PAGE_LAB)
-    # 四态分支骨架在场
+    # 四态分支骨架在场(通用支 + 医疗回退支各一套,>=3 恒成立)
     assert source.count("_eval_status ==") >= 3, (
         "评测四态分支(running/finished/failed/idle)必须在场"
     )
@@ -106,16 +113,19 @@ def test_eval_button_honest_state_copy():
     assert "以页面为准" in source
     # running 态:30s 自动刷新声明(与 fragment 门同拍)
     assert "30 秒自动刷新" in source
-    # idle 态(R114):显式命名评测任务 + 与训练数据无关的诚实锚。
-    # 区间钉(r114-reviewer nit-3 采纳):锚定 idle 分支区间(页内评测标题
-    # 到 eval_sets 门),不再全文级——防锚漂到其他分支后钉仍绿
-    idle_start = source.find('st.markdown("**页内评测**')
-    idle_end = source.find('if arts.eval_sets.get("test"):')
+    # idle 态(R114,R120 锚区更新):显式命名评测任务 + 与训练数据无关的
+    # 诚实锚。区间钉锚定医疗回退支(内置案例标题 → 注册段门),防锚漂到
+    # 通用支(其 idle 文案是「用你自己导出的 test 集」,语义不同)
+    idle_start = source.find('st.markdown("**页内评测**（内置实体匹配案例）")')
+    idle_end = source.find("if arts.registered_name:")
     assert idle_start != -1 and idle_end != -1 and idle_start < idle_end, (
-        "idle 分支区间锚(页内评测标题 → eval_sets 门)必须在场"
+        "idle 分支区间锚(内置案例标题 → 注册段门)必须在场"
     )
     idle_block = source[idle_start:idle_end]
-    assert "医疗实体匹配" in idle_block, "idle 文案必须显式命名「医疗实体匹配」领域"
+    # R119 起 idle 文案以「内置实体匹配案例（药品名归一化）」显式命名案例
+    # 领域(R119 改了标题未跑本文件——潜伏红,R120 收口时换锚)
+    assert "内置实体匹配案例" in idle_block, "idle 文案必须显式命名案例（内置实体匹配）"
+    assert "药品名归一化" in idle_block, "idle 文案必须点名案例领域（药品名）"
     assert "与你本次训练使用的数据无关" in idle_block, (
         "idle 文案必须声明评测用领域测试集、与用户本次训练数据无关"
     )
@@ -244,3 +254,105 @@ def test_eval_button_click_launches_eval(tmp_path, monkeypatch):
     assert calls == [("run-x", str(out.resolve()))], (
         "点击必须以(源 run_id, 绝对 output_dir) 调 launch_eval,恰一次"
     )
+
+
+# ═══ R120 通用评测闭环:wizard test 集成为页内评测主路 ═════════════
+
+
+def test_generic_eval_wiring_pins():
+    """R120 源码钉:wizard test 门 → launch_entity_eval(自己的数据评自己
+    的模型);entity_eval 行与 medical_eval 同门排除(Activity 下一步面板
+    防 eval-of-eval 嵌套、Stop popover eval 文案、行名中文化)。"""
+    source = _source(PAGE_LAB)
+    assert "launch_entity_eval(" in source, "通用评测必须接线 launch_entity_eval"
+    assert 'f"enteval-{run_id}"' in source, "通用评测行 rid 前缀 enteval-(与 eval- 分池)"
+    # Activity 门:entity_eval 行不渲染训练下一步面板(与 medical_eval 同门)
+    assert 'info.get("technique") != "entity_eval"' in source, (
+        "00 页 Activity 循环必须排除 entity_eval 行(防 eval-of-eval 嵌套面板)"
+    )
+    # Stop popover:eval 文案分支覆盖 entity_eval(评测进程,无 checkpoint)
+    assert 'info.get("technique") == "entity_eval"' in source, (
+        "Stop popover 的 eval 文案分支必须覆盖 entity_eval 行"
+    )
+    # 行名中文化:两类评测行同显「领域评测」
+    assert '_tech in ("medical_eval", "entity_eval")' in source
+    # 终端等价命令在场(按钮主、命令辅——与 R112/R113 双路惯例一致)
+    assert "scripts/eval_entity_match.py" in source
+
+
+def test_generic_eval_button_click_launches_entity_eval(tmp_path, monkeypatch):
+    """R120 旅程钉:真实 AppTest 渲染 00 页(finished run + adapter 产物 +
+    wizard test.json 兄弟文件),下一步面板出现「⚡ 用我的 test 集评测」;
+    点按 → TrainingRunner.launch_entity_eval 以 (run_id, output_dir,
+    test 路径)被调。fixture 与 R113 旅程钉同构,唯 dataset 换成本地
+    train.json + test.json 兄弟(summarize_run_artifacts 的 eval_sets 门)。
+    """
+    from streamlit.testing.v1 import AppTest
+
+    import ui.config
+    from src.tracking.runner import TrainingRunner
+
+    out = tmp_path / "outputs" / "run-x"
+    out.mkdir(parents=True)
+    (out / "adapter_config.json").write_text("{}", encoding="utf-8")
+    (out / "adapter_model.safetensors").write_bytes(b"x")
+
+    wizard_dir = tmp_path / "outputs" / "wizard" / "demo_suppliers"
+    wizard_dir.mkdir(parents=True)
+    (wizard_dir / "train.json").write_text("[]", encoding="utf-8")
+    (wizard_dir / "test.json").write_text("[]", encoding="utf-8")
+
+    cfg_dir = tmp_path / "outputs" / "configs"
+    cfg_dir.mkdir(parents=True)
+    cfg = cfg_dir / "run-x.yaml"
+    cfg.write_text(
+        "model:\n"
+        "  name: Qwen/Qwen2.5-1.5B-Instruct\n"
+        "training:\n"
+        f"  output_dir: {out}\n"
+        "data:\n"
+        f"  dataset_name: {wizard_dir / 'train.json'}\n"
+        "logging:\n"
+        "  use_mlflow: true\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "outputs" / ".run_meta.json").write_text(
+        json.dumps(
+            {
+                "run-x": {
+                    "technique": "sft",
+                    "config_path": str(cfg),
+                    "log_path": str(tmp_path / "outputs" / "logs" / "run-x.log"),
+                    "pid": 123,
+                    "start_time": 0.0,
+                    "returncode": 0,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls: list[tuple[str, str, str]] = []
+
+    def _fake_launch(
+        self: TrainingRunner, source_run_id: str, model_path: str, test_file: str, **_: object
+    ) -> str:
+        calls.append((source_run_id, model_path, test_file))
+        return f"enteval-{source_run_id}"
+
+    monkeypatch.setattr(TrainingRunner, "launch_entity_eval", _fake_launch)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+
+    page = AppTest.from_file(str(PAGE_LAB), default_timeout=30)
+    page.run()
+    assert not page.exception, [e.message for e in page.exception]
+    btn = next((b for b in page.button if b.label == "⚡ 用我的 test 集评测"), None)
+    assert btn is not None, "wizard test 集在场的 finished run 必须渲染通用评测按钮"
+    # 医疗回退按钮不得同时出现(一旅程一按钮,防选择过载)
+    assert all(b.label != "⚡ 生成评测文件" for b in page.button)
+    btn.click().run()
+    assert not page.exception, [e.message for e in page.exception]
+    assert len(calls) == 1, "点击必须恰调一次 launch_entity_eval"
+    assert calls[0][0] == "run-x"
+    assert calls[0][1] == str(out.resolve())
+    assert calls[0][2].endswith("test.json"), f"必须传 wizard test.json 路径: {calls[0][2]}"

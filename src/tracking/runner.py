@@ -223,6 +223,62 @@ class TrainingRunner:
         self._save_meta(changed={run_id})
         return run_id
 
+    def launch_entity_eval(
+        self,
+        source_run_id: str,
+        model_path: str,
+        test_file: str,
+        *,
+        python_executable: str | None = None,
+    ) -> str:
+        """Start a generic entity-matching eval subprocess (R120 评测闭环).
+
+        Runs `python scripts/eval_entity_match.py --model-path <adapter>
+        --test-file <wizard test.json>` with cwd=project_root: the script
+        resolves imports relative to the repo root and writes results to
+        domains/entity_matching/data/results/ (02/03 页面数据源)。rid
+        `enteval-<source_run_id>`、technique "entity_eval"——与训练/medical
+        评测同池（.run_meta.json），Activity 列表、Stop、Delete、30s 自动
+        刷新免费覆盖。config_path 沿源训练 run 拷贝（lineage）。
+        """
+        run_id = f"enteval-{source_run_id}"
+        self._cleanup_finished()
+
+        env = self._child_env()
+        cmd = [
+            python_executable or sys.executable,
+            str(self.project_root / "scripts" / "eval_entity_match.py"),
+            "--model-path",
+            model_path,
+            "--test-file",
+            test_file,
+        ]
+
+        log_path = self.project_root / "outputs" / "logs" / f"{run_id}.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(log_path, "w") as log_file:
+            proc = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(self.project_root),
+            )
+
+        self._active[run_id] = proc
+        self._run_meta[run_id] = {
+            "technique": "entity_eval",
+            "config_path": self._run_meta.get(source_run_id, {}).get("config_path", ""),
+            "log_path": str(log_path),
+            "model_path": model_path,
+            "test_file": test_file,
+            "pid": proc.pid,
+            "start_time": time.time(),
+        }
+        self._save_meta(changed={run_id})
+        return run_id
+
     def get_status(self, run_id: str) -> str:
         """Check subprocess status: 'running' | 'finished' | 'failed' | 'unknown'."""
         proc = self._active.get(run_id)

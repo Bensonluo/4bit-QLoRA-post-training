@@ -189,6 +189,18 @@ class MedicalEntityAdapter(DomainChartAdapter):
 _REGISTRY: dict[str, DomainChartAdapter] = {}
 
 
+class EntityMatchingAdapter(MedicalEntityAdapter):
+    """通用实体匹配域（R120 评测闭环）：任意领域向导 test 集的评测结果。
+
+    图表逻辑与 medical 案例完全同构（子类复用，非复制分叉）——评测页消费
+    的 eval_detail 契约对两者一致。registered 在 medical 之前 → 02/03 域
+    选择器默认落通用域（generic-first 门面）。
+    """
+
+    domain_name = "entity_matching"
+    display_name = "实体匹配（通用）"
+
+
 def register_adapter(adapter: DomainChartAdapter) -> None:
     _REGISTRY[adapter.domain_name] = adapter
 
@@ -218,5 +230,6 @@ def load_eval_data(domain: str) -> list[dict]:
         return json.load(f)
 
 
-# Register built-in adapters
+# Register built-in adapters（顺序即 02/03 选择器默认项：通用域在前）
+register_adapter(EntityMatchingAdapter())
 register_adapter(MedicalEntityAdapter())

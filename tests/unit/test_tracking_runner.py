@@ -396,3 +396,56 @@ class TestListAndMeta:
         assert "run-00" not in runner._active
         assert "run-01" not in runner._active
         assert len(runner._active) == 20
+
+
+class TestLaunchEntityEval:
+    """通用评测启动器(R120 评测闭环):launch_entity_eval 走
+    scripts/eval_entity_match.py 子进程,评用户自己的 wizard test 集。
+    与 launch_eval 同池(.run_meta.json)——rid 前缀 enteval- 区分,
+    technique entity_eval 进 Activity 门。Popen 全打桩(R104 教义)。"""
+
+    @patch("src.tracking.runner.subprocess.Popen")
+    def test_cmd_shape_script_path_and_cwd_root(
+        self, mock_popen: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("HF_ENDPOINT", raising=False)
+        mock_popen.return_value = _fake_proc(pid=999)
+        runner = TrainingRunner(project_root=str(tmp_path))
+        runner._run_meta["src-run"] = {"config_path": "/x/src.yaml", "pid": 1, "returncode": 0}
+
+        rid = runner.launch_entity_eval(
+            "src-run", "/models/adapter", "/data/wizard/demo/test.json"
+        )
+
+        assert rid == "enteval-src-run"
+        cmd = mock_popen.call_args.args[0]
+        assert cmd[0] == sys.executable
+        assert cmd[1].endswith("scripts/eval_entity_match.py"), "必须走脚本路径而非 -m"
+        assert "--model-path" in cmd and "/models/adapter" in cmd
+        assert "--test-file" in cmd and "/data/wizard/demo/test.json" in cmd
+        assert "--config" not in cmd, "eval_entity_match 是 argparse,无 --config 选项"
+        # cwd=项目根:脚本按相对路径写 domains/entity_matching/data/results/
+        assert mock_popen.call_args.kwargs["cwd"] == str(tmp_path)
+        env = mock_popen.call_args.kwargs["env"]
+        assert env["PYTHONUNBUFFERED"] == "1"
+        assert env["HF_ENDPOINT"] == "https://hf-mirror.com"
+
+    @patch("src.tracking.runner.subprocess.Popen")
+    def test_meta_shape_technique_and_lineage(
+        self, mock_popen: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_popen.return_value = _fake_proc(pid=999)
+        runner = TrainingRunner(project_root=str(tmp_path))
+        runner._run_meta["src-run"] = {"config_path": "/x/src.yaml", "pid": 1, "returncode": 0}
+
+        runner.launch_entity_eval("src-run", "/models/adapter", "/data/t.json")
+
+        meta = runner._run_meta["enteval-src-run"]
+        assert meta["technique"] == "entity_eval"
+        assert meta["config_path"] == "/x/src.yaml"  # lineage:拷贝源训练 run 配置
+        assert meta["model_path"] == "/models/adapter"
+        assert meta["test_file"] == "/data/t.json"
+        assert meta["log_path"].endswith("enteval-src-run.log")
+        assert meta["pid"] == 999
+        persisted = json.loads((tmp_path / "outputs" / ".run_meta.json").read_text())
+        assert persisted["enteval-src-run"]["technique"] == "entity_eval"

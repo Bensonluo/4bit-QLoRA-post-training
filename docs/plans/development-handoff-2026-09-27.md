@@ -3449,3 +3449,28 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（更新）**：①push origin（TuneSmith 本轮 +1=40 commits；portfolio-fe `0619885`+`205feb4` 未推）；②venv 重建——本轮再次实证 shebang 腐蚀（`venv/bin/pytest` bad interpreter，须 `venv/bin/python3 -m pytest` 绕行）；③后续部署 benluo.art 仍需逐次授权（今日两次部署均已获授权并验证）。
 
 **成本**：主会话钩子 $144.31→**$165.84**（CRITICAL，含演示页通用化+部署+本轮）；已多轮如实转达，用户以「不计成本」继续。
+
+## R120 轮报——通用评测闭环：wizard test 集页内评测点亮 02/03 两页
+
+**日期**：2026-09-30　**基线**：e952338（R119 落地后）
+
+**选点**：通用旅程最后一个 load-bearing 医疗特例退场——R113 页内评测按钮硬绑 `domains.medical_entity.evaluate`（领域测试集，与用户本次训练数据无关），Wizard 用户训出的 adapter 无法用自己的数据页内评测，R112 轮报登记的「结果只进终端」限界在通用旅程上一直未还。本轮把评测闭环接到用户自己的 test.json 上（任意「乱写法→标准名」领域通用），结果落 `domains/entity_matching/data/results/eval_detail_*.json`，02 评测结果 / 03 模型对比两页直接点亮。
+
+**证据**：一手核实三层——①页面消费契约：02/03 页 `load_eval_data(domain)` glob `domains/<domain>/data/results/eval_detail_*.json` sorted-reverse 取最新，模型条目只认 `model/total/correct/overall_accuracy/mrr/accuracy_by_difficulty/accuracy_by_type/avg_latency_ms/per_sample`（per_sample 认 `query/ground_truth/ground_truth_code/predicted_name/predicted_code/confidence/difficulty/entity_type/correct/latency_ms/error`），`fmt_num/fmt_pct` 对 None 渲染「—」；②wizard 输出契约：`EntityMatchingTemplate` 的 input 含编号候选列表 + 「输入实体:」行，output 是紧凑 JSON `{"match_index": N, "code": "Z"}`；③训练同款 prompt：`format_instruction(..., "alpaca")` 与 SFT 训练模板逐字一致。
+
+**实现**（5 文件改动 + 3 文件新增）：
+1. `src/evaluation/entity_eval.py`（新增，纯 stdlib，判分/聚合/落盘与 UI 解耦）：`normalize_text`（剥代码围栏/包裹引号/结尾标点+空白尾串）；`parse_numbered_candidates`/`extract_query`；`judge` 双层判分——双方均可解析为 JSON → 比 `match_index`（语义判分，code 不一致不推翻——选对实体是答案本体）；否则归一化字符串精确相等（非 entity_matching 模板的自由文本答案照常可评，通用性所在）；`build_rows`/`summarize` 产出与 `save_results` 同构契约（`mrr=overall_accuracy` 单答案贪心任务的注记在码内；`confidence=None`）；`write_report` 落 `eval_detail_<时间戳>.json`（ensure_ascii=False）。
+2. `scripts/eval_entity_match.py`（新增，懒 torch CLI）：adapter 目录（读 adapter_config 底座）/ merged 目录自动分辨；贪心逐条生成（prompt 与训练同款），进度每 20 条；中文 fail-fast 校验（评测集不存在/非数组/缺 input 字段）。
+3. `ui/components/domain_adapters.py`：`EntityMatchingAdapter(MedicalEntityAdapter)` 子类复用案例图表（零复制分叉，R119 范式），注册序通用在前 → 02/03 域选择器默认「实体匹配（通用）」，医疗案例标签不动。
+4. `src/tracking/runner.py`：`launch_entity_eval`（rid `enteval-<run_id>`、technique `entity_eval`，与 launch_eval 同池同模式——.run_meta.json/_ACTIVE_PROCS_BY_ROOT/日志/env 镜像/config 血缘）。
+5. `ui/pages/00_Training_Lab.py`：下一步面板 `_wizard_test` 门 → 「⚡ 用我的 test 集评测」主路（running/finished/failed/idle 四态 + 终端等价命令）；R113 医疗路径原样降为无 test 集回退支（内容零改动仅重缩进）；Activity 三门扩 `entity_eval`（行名「领域评测」/Stop popover 评测文案/下一步面板排除防 eval-of-eval）；R112 旧 wizard CLI 块删除（「结果只进终端」限界就此退场）。
+
+**测试**：净 +38（collect 2104→**2142** 精确：entity_eval 30 + adapter 4 + runner 2 + next_steps 2）。`test_entity_eval.py` 30 钉覆盖归一化边界（围栏/引号/标点+空格尾串）、match_index 语义判分（int 强转/缺 code 不推翻/垃圾 vs JSON）、行契约（错 index 解析到长风物流/解析失败回退原文/元数据缺省/长度截齐）、聚合（空集 None 安全/无元数据分组）、落盘（排序取最新）；`test_entity_matching_adapter.py` 4 钉（通用域注册第一/子类 isinstance/两域标签/未知域回退）；runner 2 钉（cmd 形状 cwd/env 镜像 + meta 血缘 rid 前缀日志名）；next_steps 2 钉（源码接线五锚 + AppTest 旅程：wizard test.json 在场 → 通用按钮渲染、医疗按钮不在场、点击恰一次以 (run_id, 绝对 output_dir, test 路径) 调 launch_entity_eval）。定向 **103 passed**（7 文件含 test_activity_autorefresh_ui/test_lab_localization_ui/test_comparison_empty_state_ui）；ruff 全绿；2 新文件 ruff format 收口；scoped mypy 仅 7 条预存在（本轮新增的 unused type:ignore 已删，entity_eval.py 零错误）。
+
+**披露（潜伏红收口）**：`test_next_steps_eval_button_ui.py` 的 idle 文案钉断言「医疗实体匹配」——R119 改了页内评测标题（「内置实体匹配案例（药品名归一化）」）未跑本文件，潜伏一红；本轮收口时换锚为「内置实体匹配案例」+「药品名归一化」并注记（RED 一手复现于 HEAD grep：源码仅剩注释 L51 与旧块标题，断言字面已不在 idle 区间）。同文件 placement/idle 两个锚区随结构演化更新（wizard 门/通用按钮/医疗回退按钮三锚，旧 `if arts.eval_sets.get("test"):` 独立 CLI 块锚已随块删除退场）。全量义务轮按节奏（R118 已兑现 2103 passed）：本轮定向，**R121 到全量节奏点**（2142 基线）。
+
+**边界如实**：①贪心解码无校准置信度 → `confidence=None`，页面渲染「—」（诚实不造数）；②mrr=overall_accuracy（单答案贪心任务命中即 RR=1，码内注记，不谎报 MRR 能力）；③评测子进程在 Apple Silicon 数分钟起（页面 idle caption 已声明）；④02_Evaluation 页 L36 示例文案仍是「如：医疗实体匹配…」的「如」式示例（示例非默认，非特例通道，留待后续轮次）。
+
+**待授权（不变）**：①push origin——TuneSmith 本轮 +1=**41 commits**（`git rev-list origin/main..HEAD` 实测 40+1）；portfolio-fe `0619885`+`205feb4` 未推；②TuneSmith venv 重建（shebang 腐蚀持续，本轮仍以 `venv/bin/python3 -m` 绕行）；③benluo.art 部署逐次授权（循环内不自动部署；演示页镜像同步本轮未动——通用评测能力尚未镜像到演示页，候选下轮）。
+
+**成本**：主会话钩子 $165.84→**$170.97**（CRITICAL，已多轮如实转达，用户以「不计成本」继续）。
