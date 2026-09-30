@@ -281,6 +281,8 @@ def test_agent_only_features_point_to_settings_panel_when_unconfigured():
     assert source.count("此功能需要 Agent 服务，尚未配置模型") == 3, (
         "业务评分/训练方案/数据方案修订三处按钮旁必须各有未配置指路 caption"
     )
-    assert source.count("在左侧边栏「分析模型设置（Agent 服务）」") == 3, (
-        "指路必须落到 R136 桥接名的面板全名"
+    assert source.count("在左侧边栏「分析模型设置（Agent 服务）」") >= 3, (
+        "指路必须落到 R136 桥接名的面板全名（≥三处未配置指路 + R141 面板级授权"
+        "指路等同词表；不得再出现「上方」等陈旧方位词）"
     )
+    assert "上方「分析模型设置」" not in source, "R141：面板在侧栏，不得残留「上方」方位词"

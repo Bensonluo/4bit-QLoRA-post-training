@@ -1142,7 +1142,9 @@ def show_business_comparison(report, *, key: str) -> None:
             and allow_remote
         )
         if not allow_remote:
-            st.caption("请先在上方「分析模型设置」允许向所选服务发送业务资料。")
+            # 面板在左侧边栏（07:1303 st.sidebar），旧文案「上方」是面板搬侧栏前的
+            # 陈旧方位词（R141 修正）；面板名用 R136 桥接全名，与三处未配置指路同词表。
+            st.caption("请先在左侧边栏「分析模型设置（Agent 服务）」里允许向所选服务发送业务资料。")
     if st.button(
         "让 Agent 分析结果与下一步",
         key=f"assess_{key}_{report.evaluation_id}",
