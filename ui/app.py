@@ -22,7 +22,10 @@ st.title("🔨 TuneSmith")
 st.caption("配置、训练、评测、对比模型——一站式完成。")
 
 st.subheader("先说业务目标，再看数据")
-st.write("提供一份 CSV 样例，让 Agent 帮你判断数据是否适合、还缺什么，并预览真实处理结果。")
+st.write(
+    "提供一份样例数据（CSV / Excel / JSONL），"
+    "让 Agent 帮你判断数据是否适合、还缺什么，并预览真实处理结果。"
+)
 if st.button("🧩 分析我的目标与数据", type="primary"):
     st.switch_page("pages/07_Data_Intake.py")
 
@@ -136,7 +139,7 @@ st.caption(
 
 # (按钮文案, 一步说明, 跳转目标, 是否主按钮)
 _JOURNEY_STEPS = [
-    ("🧙 数据向导", "乱写法表格 → 带质检的训练集", "pages/05_Data_Wizard.py", False),
+    ("🧙 数据向导", "原始表格 → 带质检的训练集", "pages/05_Data_Wizard.py", False),
     ("🏋️ 发起训练", "配置 → 预检 → 启动 → 监控", "pages/00_Training_Lab.py", True),
     ("📊 查看实验", "全部运行的历史台账", "pages/01_Experiments.py", False),
     ("🎯 评测结果", "test 集判分 · 难度分层", "pages/02_Evaluation.py", False),
@@ -210,7 +213,7 @@ _progress = _journey_progress(PROJECT_ROOT)
 _ready = sum(1 for _, ok, _ in _progress if ok)
 if _ready == len(_progress):
     st.success(
-        "全链路已跑通 🎉——从乱写法表格到可对话模型。继续迭代数据集，或到 💬 Chat 体验你的模型。"
+        "全链路已跑通 🎉——从原始表格到可对话模型。继续迭代数据集，或到 💬 Chat 体验你的模型。"
     )
 else:
     st.markdown(

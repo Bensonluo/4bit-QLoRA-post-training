@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import streamlit as st
 
 st.set_page_config(page_title="Data Wizard", page_icon="🧙", layout="wide")
-st.title("🧙 Data Wizard")
+st.title("🧙 数据向导 · Data Wizard")
 st.caption("原始表格 → 训练集：字段映射 · 候选构造 · 数据体检 · 防泄漏切分，全流程引导。")
 # 双数据门路牌（R133）：有表直转是本页定位；从业务目标出发的引导式全流程在数据
 # 入口页——00/05 此前对它零提及（审计证实），两扇数据门互不指路。

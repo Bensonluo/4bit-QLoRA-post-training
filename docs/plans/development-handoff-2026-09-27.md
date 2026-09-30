@@ -3730,3 +3730,26 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **候选池（下轮从中选）**：① 07 任务视图「改进轮次」区对非专家的步骤语言（iteration_states 标签 vs 漏斗短名分层的词汇一致性核查）；② 首页旅程格与 07 实际漏斗停点的口径对齐审计；③ 02 Evaluation 页与 07 内嵌对照的重复渲染面核查。
 
 **待授权（不擅自执行）**：push origin；benluo.art 部署；venv 重建（shebang 仍指向旧路径）；mypy 368 遗留债排期。
+
+## R134 轮报——首页承诺口径审计 + 数据向导命名统一
+
+**日期**：2026-09-30　**基线**：7246107（R133 轮报后）
+
+**本轮性质**：定向轮。选点：R133 轮报候选池②「首页旅程格与 07 漏斗口径对齐审计」——诚实红线类（首页命名的必须是目标页能兑现的控件）。
+
+**诚实核实（Explore subagent 全读审计，inline 报告）**：hero + 8 钮旅程格 + 4 步旅程进度逐条对照目标页源码验证。**无诚实红线违规**——全部功能性承诺（预检/监控/难度分层/并排差值/champion-challenger/和自训模型对话/Agent 判断数据）都有目标页真实控件背书。7 项缺口：1 中度 + 3 轻度 + 3 cosmetic。漏斗词汇（首页 4 步 vs funnel_report 5 停点）粒度不同但零共享冲突标签，by design 一致。generic-first 框定完好：首页零医疗/主数据提及，领域只出现在 05 模板帮助文本（授权的案例框定）。
+
+**改动（审计中度项 #1 + 同文件顺手项）**：
+- `05_Data_Wizard.py:20`：标题 `🧙 Data Wizard` → `🧙 数据向导 · Data Wizard`——首页 3 处「数据向导」指针（旅程钮/空态指路/引导 caption）落地的第一站终于对得上名字。这是空态用户被指到的第一站，审计证实的唯一入门边命名断裂。
+- `app.py` 两处 `乱写法表格` → `原始表格`：与 05 页自有词汇统一（`乱写法` 在目标页零命中，是首页独有的第二套词汇）。
+- `app.py:25` hero：`提供一份 CSV 样例` → `提供一份样例数据（CSV / Excel / JSONL）`——如实拓宽至 07 上传器实际接受面（低报覆盖面让有多格式数据的用户误以为进不去）。
+
+**明确不做（审计轻度项 #2/#3/#4）**：查看实验/对比模型/对话验证的动作式钮标 vs 名词式页标题——这是全网格一致的「钮名动作、页名事物」模式，非缺陷，不逐个改。
+
+**测试证据**：更新既有钉 1 枚（`test_journey_button_navigates_to_wizard` 的标题断言同步为新双语标题）；新增 2 钉：`test_wizard_name_unified_across_beginner_path`（05 标题自带中文名 + 首页零 `乱写法` 回归钉）、`test_hero_acceptance_claim_covers_real_uploaders`（hero 三格式在场）。回归 28 passed（journey map 6 + progress + empty state + door signage + wizard preview + loading feedback）；ruff 全过。
+
+**状态更新**：本地累计 7 个未推送 commit。义务轮节奏不变：~R136 全量（预期 2178+2=2180）。
+
+**候选池（下轮）**：① 07「改进轮次」区 iteration_states 标签与漏斗短名的词汇一致性（R133 池①遗留）；② 02/03 空态中 "Data Wizard" 引用是否也需补「数据向导」双语名（本 轮只统一了 05 页与首页，02/03 空态的指引文本用哪个名待核）；③ 06 Chat 页空态对新导出模型的发现引导。
+
+**待授权（不擅自执行）**：push origin（7 个 commit）；benluo.art 部署；venv 重建；mypy 368 遗留债排期。

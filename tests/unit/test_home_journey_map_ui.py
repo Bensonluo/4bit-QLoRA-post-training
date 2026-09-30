@@ -85,13 +85,13 @@ def test_journey_order_and_lead_caption_pinned():
 
 
 def test_journey_button_navigates_to_wizard(monkeypatch):
-    """接线实证钉：点「🧙 数据向导」元素树切到 05（标题「🧙 Data
-    Wizard」）——新增四钮真接线，不是只指不发的幽灵按钮。"""
+    """接线实证钉：点「🧙 数据向导」元素树切到 05（标题「🧙 数据向导 ·
+    Data Wizard」，R134 统一命名）——新增四钮真接线，不是只指不发的幽灵按钮。"""
     page = _boot_home(monkeypatch)
     btn = next(b for b in page.button if b.label == "🧙 数据向导")
     btn.click().run()
     assert not page.exception, [e.message for e in page.exception]
-    assert any(t.value == "🧙 Data Wizard" for t in page.title), "必须切到 05 数据向导"
+    assert any(t.value == "🧙 数据向导 · Data Wizard" for t in page.title), "必须切到 05 数据向导"
 
 
 def test_legacy_labels_and_hero_kept_alive():
@@ -103,3 +103,22 @@ def test_legacy_labels_and_hero_kept_alive():
         assert legacy in source, f"旧快捷操作字面不得删:{legacy}"
     assert "先说业务目标，再看数据" in source, "hero 文案不得动"
     assert 'st.button("🧩 分析我的目标与数据", type="primary")' in source, "hero 主按钮不得动"
+
+
+def test_wizard_name_unified_across_beginner_path():
+    """命名统一钉（R134）：首页 3 处「数据向导」指针落地的 05 页标题必须自带
+    同名（此前首页叫数据向导、页面自称 Data Wizard——空态用户被指到的第一站
+    就对不上名字）；「乱写法表格」退场，首页表格词汇与 05 页「原始表格」统一，
+    不再有目标页不认识的第二套词汇。"""
+    wizard_source = (ROOT / "ui" / "pages" / "05_Data_Wizard.py").read_text(encoding="utf-8")
+    assert "🧙 数据向导 · Data Wizard" in wizard_source, "05 标题必须自带首页所用的中文名"
+    assert "乱写法" not in _source(), "首页不得再有 05 页不认识的第二套表格词汇"
+
+
+def test_hero_acceptance_claim_covers_real_uploaders():
+    """hero 覆盖面钉（R134）：首页宣称的样例格式不得窄于 07 上传器实际接受面
+    （CSV/Excel/JSONL）——低报覆盖面让有多格式数据的用户误以为进不去。"""
+    source = _source()
+    hero_intro = source.split("让 Agent")[0]
+    for fmt in ("CSV", "Excel", "JSONL"):
+        assert fmt in hero_intro, f"hero 样例格式宣称缺 {fmt}（07 上传器实际接受）"
