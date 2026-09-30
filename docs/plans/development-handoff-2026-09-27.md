@@ -3326,3 +3326,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地已领先 31 commits）；②benluo.art 部署；③venv 重建（mypy/pytest shebang 指旧仓路径）。
 
 **成本**：主会话钩子 $117.02→**$121.12**（CRITICAL 持续）；r114-reviewer 独立转达其会话 $121.01；r114-scout 亦转达 $116。两轮连升 $113.81→$121+，reviewer 收敛建议（收窄审查维度/轮内少并行/scout-reviewer 可合并以省一跳）已多轮转达，**待用户裁决**；按不计成本授权如实登记未中断。
+
+---
+
+## R115（2026-09-30）Windows 路径分隔符模式类收口：expand_user_ref 守卫
+
+**选点**：r115-scout 裁决候选 A 重切（报告追讨后送达——**idle 通知≠报告送达两轮连发**：r114/r115 scout 均只带一行，SendMessage 追回全文；结构性教训登记）。一手复核**修正 R114「四站点」框架**：registry.py:190 实为本地目录消费者（`.is_dir()` 喂 MLflow artifacts，Windows 反斜杠对本地路径正确），仅为 ~ 先例不在腐蚀类——真腐蚀类 = **3 站点 4 表达式**（chat_engine.py:33·merger.py 显式底座分支·eval resolve_adapter_base 双返回路径）。诚实定性（入轮报）：**非用户机器活 bug**（config/windows.md:14 载 Windows=WSL2，POSIX 路径不可达）；价值 = 文档声明 native Windows 支持面正确性（CLAUDE.md 明文 Windows 脚本入库）+ 06 Chat 页（非专家收尾步）在 native Windows 对每个 adapter 对话硬死。B 项全弱排除：02 入口3 rerun 不对称（真缺陷一手复核 :126 有 rerun vs :191-193 无，但钉贵 UX 影响小，维持登记）/finance-in-path（terminal-only，R112 已定论）/R104 nit-3（纯理论维持）/baseline-only（tertiary）。
+
+**证据核实**：主会话一手复核 scout 全部载重断言通过——merger None 分支 peft 自读不经 Path、loader 直收字符串（:33 = 06 链唯一腐蚀点）、**macOS 病理输入实测**（`'a/./b'→'a/b'`、`'Qwen//Qwen'→'Qwen/Qwen'`、`'models/'→'models'`——逐字节钉无需模拟 Windows 即可区分新旧实现）、既有 merger 钉（字节级 `"Qwen/Qwen2.5-0.5B"`）与 R114 钉兼容性逐条读、business_evaluation.py:131-137 参照架构直读。scout 与主会话**各自独立**得出 registry 排除——互证。
+
+**实现**：新 `src/utils/hf_refs.py::expand_user_ref(ref)`（stdlib-only：非 `~` 起头**逐字节透传不过 Path()**，仅 `~` 起头 expanduser）+ 三站点重接（chat_engine 删函数内 Path import；merger 注释点名 helper；eval docstring 引用卫生）+ 不动清单全核实（merger:41-42/eval:25/:470 本地路径 Windows 反斜杠正确、registry/workbench/agent）。
+
+**测试 RED→GREEN**：RED 8（集合级 ImportError）→GREEN 8→should-fix/nit 后复验 41。净 +8：parametrize 逐字节钉 4（HF 名极性基线披露生而绿 + 3 病理输入旧实现下真红——reviewer E 维独立复现）+ tilde 展开 1（HOME monkeypatch）+ 接线钉 3（子串锚不引行号=R104 nit-3 教训；各带旧表达式负极性防重内联）。
+
+**审查**：r115-reviewer（opus 只读五维度）verdict **PASS-with-findings：1 should-fix / 1 nit / 4 obs**。五维度全 PASS；**should-fix-1 抓出主会话真失误**：ruff 门禁路径收窄（src/+新测试）漏 domains/，新 docstring `\ 毁` 为 W605 无效转义致全仓 `ruff check .` 红——修 `\\` 转义后全仓绿（**过程教训：lint 门禁禁路径收窄，必须 `ruff check .`**）；nit-2 = R114 钉文件 docstring 行号引用 `merger.py:38-44` 改函数名引用（R113/R114 行号卫生同型）——全采纳。4obs 全登记：obs-1 eval/models.py 模块头经 src.utils 包 `__init__` 传递拉重依赖（一手证实 `__init__` 批量 re-export execution/logging/…；经验无害 venv 有 torch 全绿，R114「免重依赖单测」理据结构性弱化登记）；obs-2 **06_Chat.py:58 手输 adapter ~ 路径未展开传 PeftModel（R114 同款形态）→ R116 backlog 候选**；obs-3 空串返回 `""` 严于旧 `"."`（三调用点皆前置守卫）；obs-4 轮报历史行号引用不重写。reviewer 复跑：8/8+33+37/37 精确+collect 2092 精确+mypy 7 错全预存在。成本 reviewer 转达其会话读数 $128.79。
+
+**增量复核**：should-fix/nit 编辑后 41 passed（3 套件）+ `ruff check .` 全仓绿 + 6 文件 format 净 + collect 2092 稳定。
+
+**登记对账与 R116 选点**：collect **2092 = 2084+8 精确命中 scout 预测 2092**（区间 2091-2093）；**全量义务轮已于切片前净树兑现：2084 passed / 211.73s**（回溯补验 R114 的 collect-only 跳过——全集从未真跑过的缺口补上，连续对账零漂移）。R116 候选：obs-2 06_Chat 手输 adapter ~ 展开（R114/R115 同族收口，小切）/02 入口3 rerun 搭车/backlog 各项——待 scout；R116 全量按节奏可跳（R115 刚跑全量）。
+
+**边界**：WSL2 不可达定性维持（不夸大为活 bug）；不动清单全核实；obs-1 登记不修（重依赖拆包非本轮范围）。
+
+**待授权**：①push origin（本地已领先 33 commits）；②benluo.art 部署；③venv 重建。
+
+**成本**：主会话钩子 $124.88→**$128.89**（CRITICAL）；reviewer 转达 $128.79。两 scout 报告追讨事件登记（idle 通知≠报告送达，后续 scout 指令已内联要求终消息带全文）。收敛建议多轮转达待用户裁决，按不计成本授权如实登记未中断。
