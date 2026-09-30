@@ -43,9 +43,12 @@ _NEXT_ACTION_STAGES: dict[str, str] = {
 }
 
 # 训练/验收/轮次状态与决策的人话对照（与各 summarize_* 同风格）。
+# 词汇单源（R138）：prepared/running 与 07 页迭代芯片是同一底层事实（iteration
+# 状态派生自训练运行），两侧同名——待启动训练 / 等待训练与同题评测。历史曾用
+# 已准备未启动 / 训练中 各说各话，侧栏与任务视图同屏互不认识（R136 审计 Q1）。
 _TRAINING_NAMES: dict[str, str] = {
-    "prepared": "已准备未启动",
-    "running": "训练中",
+    "prepared": "待启动训练",
+    "running": "等待训练与同题评测",
     "stopping": "停止中",
     "succeeded": "成功",
     "failed": "失败",

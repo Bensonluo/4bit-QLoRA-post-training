@@ -3843,3 +3843,36 @@ ruff format/check 双清。改动为条件渲染 caption，对既有 disabled �
 
 **过程披露**：钉设计吸取 R136 教训——锚 caption 文本与面板名 count 而非调用形态，
 不锚 ruff 折行细节。
+
+## R138 轮报——状态词汇单源收口：漏斗侧栏镜像任务视图（Q1 落地）
+
+**日期**：2026-09-30　**基线**：37153c2（R137 轮报后）
+
+**本轮性质**：定向轮。R136 审计 Q1 候选落地——候选池最后一处已知词汇分裂收口，
+R134-R138 命名一致性线程闭环。
+
+**产品取向（本轮作出，取代审计的「待产品决策」）**：iteration 的 prepared/running
+派生自训练运行（iterations.py:283/309/315），漏斗侧栏与 07 任务视图同屏描述同一
+事实却用两套名（待启动训练 vs 已准备未启动；等待训练与同题评测 vs 训练中）。取向：
+**侧栏镜像主视图**——任务视图是用户行动的主表面；07 名信息量严格更大（待启动训练
+= 动作导向，非专家知道该干什么；等待训练与同题评测 = 防「训练完为何还在跑」误解，
+而 训练中 在评测另计数的漏斗里反而误导）。执行子步骤标签（07:1527 正在训练，
+queued→materializing→training→evaluating 细粒度）经核实属合理分层，不在统一范围。
+
+**消费方核实**：_TRAINING_NAMES 模块私有、唯一渲染点 funnel_report.py:221；钉仅
+test_funnel_report.py:133 一条（R121 规则允许随有意改名同步更新）；README/docs 无
+旧名记录（仅轮报历史日志，保留）。
+
+**改动**：
+1. `src/workbench/funnel_report.py:47-48`：已准备未启动→待启动训练；训练中→等待
+   训练与同题评测（+ 词汇单源注释）。
+2. `tests/unit/test_funnel_report.py:133` 既有钉同步更新为新渲染行。
+3. 新增跨文件词汇单源钉 `test_training_names_unified_with_page_iteration_chips`：
+   公共面（build_funnel/summarize_funnel）输出 + 07 源码 canonical 名双侧锁——未来
+   任一侧改名另一侧必须跟上。
+
+**验证**：test_funnel_report 15 绿（含新钉）+ 07 本体 test_data_intake_ui 47 绿 +
+ruff 双清。首跑新钉红（build_funnel 六 kwargs 必填，预期中的签名坑），补全后绿。
+
+**候选池更新**：r137-audit（07 迭代闭环：决策→下一轮接线）报告待交付处置（R139
+主选点）。已知词汇分裂清零。

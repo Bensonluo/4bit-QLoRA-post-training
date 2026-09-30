@@ -130,7 +130,7 @@ def test_summarize_funnel_renders_each_segment_with_human_names_and_verbatim_unk
         iteration_decisions=["adopt"],
     )
     lines = summarize_funnel(report)
-    assert "训练运行共 2 个：已准备未启动 1、成功 1。" in lines
+    assert "训练运行共 2 个：待启动训练 1、成功 1。" in lines
     assert "对照评测共 2 份：开发集对照 1、最终验收测试 1。" in lines
     assert "最终业务验收共 1 次：通过 1。" in lines
     assert "改进轮次共 2 轮，已决策 1 轮（采用 1）。" in lines
@@ -294,3 +294,27 @@ def test_ui_sidebar_funnel_snapshot_matches_cli_wording(tmp_path, monkeypatch):
         "共 1 个数据任务，当前停点：分析与方案 1。" in block.value for block in page.markdown
     )
     assert any("停得最多的是「分析与方案」" in block.value for block in page.markdown)
+
+
+def test_training_names_unified_with_page_iteration_chips():
+    """词汇单源钉（R138）：训练运行状态在漏斗侧栏与 07 任务视图是同一底层事实
+    （iteration 的 prepared/running 派生自训练运行），两侧必须同名——待启动训练 /
+    等待训练与同题评测。历史曾用 已准备未启动/训练中 各说各话（R136 审计 Q1，
+    R138 产品取向：侧栏镜像主视图，主视图名信息量严格更大——动作导向 +
+    「与同题评测」防「训练完为何还在跑」误解）。"""
+    page = Path(__file__).resolve().parents[2] / "ui" / "pages" / "07_Data_Intake.py"
+    source = page.read_text(encoding="utf-8")
+    assert '"prepared": "待启动训练"' in source, "07 迭代芯片 canonical 名必须在场"
+    assert '"running": "等待训练与同题评测"' in source
+    report = build_funnel(
+        session_next_actions=[],
+        training_statuses=["prepared", "running"],
+        evaluation_purposes=[],
+        acceptance_decisions=[],
+        iteration_statuses=[],
+        iteration_decisions=[],
+    )
+    lines = summarize_funnel(report)
+    assert any("待启动训练 1" in line and "等待训练与同题评测 1" in line for line in lines), (
+        "漏斗侧栏必须用与 07 任务视图相同的两个状态名"
+    )
