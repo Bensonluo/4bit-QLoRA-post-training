@@ -88,6 +88,7 @@ def _load_bytes(name: str, data: bytes, template_hint: str) -> None:
     st.session_state["wizard_source"] = name
     st.session_state["wizard_template"] = template_hint  # 演示数据自动切换对应模板
     st.session_state.pop("wizard_report", None)  # 新数据让旧报告失效
+    st.session_state.pop("wizard_preview", None)  # 新数据让旧样本预览失效（R126）
     st.rerun()
 
 
@@ -124,6 +125,7 @@ with path_col:
             st.session_state["wizard_table"] = table
             st.session_state["wizard_source"] = Path(server_path.strip()).name
             st.session_state.pop("wizard_report", None)
+            st.session_state.pop("wizard_preview", None)  # 同上演示/上传路径（R126）
             st.rerun()
 with demo_col:
     if st.button("🗂️ 通用演示（供应商名）"):
@@ -193,14 +195,15 @@ for col, (role, label, default) in zip(cols, roles):
     picked = col.selectbox(label, options, index=default_idx, key=f"role_{role}")
     selected[role] = None if picked == NONE_OPTION else picked
 
-mapping_errors = FieldMapping(
+current_mapping = FieldMapping(
     standard_name=selected["standard_name"] or "",  # type: ignore[arg-type]
     query=selected["query"],
     code=selected["code"],
     variants=selected["variants"],
     entity_type=selected["entity_type"],
     spec=selected["spec"],
-).validate(table.columns)
+)
+mapping_errors = current_mapping.validate(table.columns)
 
 st.divider()
 
@@ -232,6 +235,77 @@ ready = not mapping_errors and ratios_ok
 if mapping_errors:
     st.warning("；".join(mapping_errors))
 
+# ── 样本预览（R126）：生成前用真实数据验证映射 ──────────────────────
+# 映射错了（非专家最常见错误）旧世界要等第④步生成完才发现，甚至带着错
+# 数据去训练。第③步末就地试生成：前 3 行真实数据 + 当前映射/参数 →
+# 2 条样本长什么样。按需计算（按钮触发 + 指纹缓存），大表不在每次
+# rerun 全量 build；指纹一变旧预览自然失效。
+preview_fp = (
+    table.source,
+    template_name,
+    selected["standard_name"],
+    selected["query"],
+    selected["code"],
+    selected["variants"],
+    selected["entity_type"],
+    selected["spec"],
+    int(n_candidates),
+    int(seed),
+)
+if st.button(
+    "👀 试生成前 2 条样本",
+    disabled=not ready,
+    help="用前 3 行真实数据 + 当前映射/参数试跑模板——生成前确认样本长什么样、映射没接错列。",
+):
+    try:
+        _slice = RawTable(source=table.source, columns=table.columns, rows=table.rows[:3])
+        _spec = WizardSpec(
+            mapping=current_mapping,
+            template=template_name,
+            split_ratios=(0.8, 0.1, 0.1),
+            n_candidates=int(n_candidates),
+            dedup=True,
+            seed=int(seed),
+        )
+        with st.spinner("正在试生成…"):
+            _built = template.build_samples(_slice, current_mapping, _spec)
+        st.session_state["wizard_preview"] = {
+            "key": preview_fp,
+            "records": [template.format_record(s) for s in _built.samples[:2]],
+            "dropped": _built.dropped,
+        }
+    except Exception as exc:  # 预览失败不阻断主流程，如实报错即可
+        st.error(f"试生成失败：{exc}")
+        st.session_state.pop("wizard_preview", None)
+
+_pv = st.session_state.get("wizard_preview")
+if _pv is not None and _pv["key"] != preview_fp:
+    _pv = None  # 映射/参数已变，旧预览不再代表当前配置
+if _pv is not None:
+    st.caption("预览基于前 3 行真实数据（负例池小，候选数可能少于设置值）——完整生成以第④步为准。")
+    for _i, _rec in enumerate(_pv["records"], 1):
+        with st.expander(f"样本 {_i}（试生成）"):
+            if "messages" in _rec:
+                for msg in _rec["messages"]:
+                    label = {"system": "🧭 system", "user": "👤 user"}.get(
+                        msg["role"], "🤖 assistant"
+                    )
+                    st.markdown(f"**{label}**")
+                    st.code(str(msg["content"]), language=None)
+            else:
+                st.markdown(f"**instruction**\n\n{_rec['instruction']}")
+                st.markdown(f"**input**\n\n```\n{_rec['input']}\n```")
+                st.markdown(f"**output**\n\n```\n{_rec['output']}\n```")
+    if not _pv["records"]:
+        if _pv["dropped"]:
+            st.warning(
+                "前 3 行全部被跳过："
+                + "；".join(f"第 {d.row} 行 {d.reason}" for d in _pv["dropped"])
+                + "——检查列映射后重试。"
+            )
+        else:
+            st.info("前 3 行没有生成任何样本——检查列映射后重试。")
+
 st.divider()
 
 # ═══ 第 4 步 · 生成 + 数据体检 ════════════════════════════════════
@@ -246,14 +320,7 @@ out_dir_text = out_col.text_input(
 if gen_col.button("🚀 生成训练集", type="primary", disabled=not ready):
     try:
         spec = WizardSpec(
-            mapping=FieldMapping(
-                standard_name=selected["standard_name"] or "",  # type: ignore[arg-type]
-                query=selected["query"],
-                code=selected["code"],
-                variants=selected["variants"],
-                entity_type=selected["entity_type"],
-                spec=selected["spec"],
-            ),
+            mapping=current_mapping,
             template=template_name,
             split_ratios=(float(r_train), float(r_val), float(r_test)),
             n_candidates=int(n_candidates),

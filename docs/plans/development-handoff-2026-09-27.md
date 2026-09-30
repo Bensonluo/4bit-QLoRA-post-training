@@ -3571,3 +3571,24 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（不变）**：①push origin——TuneSmith 本轮 +1=**46 commits**；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（镜像欠账：R123 旅程网格 / R124 失败急救包 / R125 旅程进度，候选一次镜像轮）。
 
 **成本**：主会话钩子 $192.42→**$195.36**（CRITICAL，已如实转达，用户以「不计成本」继续）。
+
+## R126 轮报——数据向导「试生成」预览：生成前用真实数据验证列映射
+
+**日期**：2026-09-30　**基线**：d390a93（R125 落地后）
+
+**选点**：05 页全量侦察后的最大缺口——列映射接错（非专家最常见错误）的发现时机。旧世界映射确认（②）→ 参数（③）→ 生成+体检（④）→ 预览（⑤），样本长什么样只能在④之后看到；映射接错列（如标准名选成编码列）生成照样成功、体检照样过（格式合法），错误一直潜伏到训练甚至上线。LLaMA-Board 式「生成前预览」缺位。
+
+**实现**（05_Data_Wizard.py +75 行，1 新测试文件 4 钉）：
+1. 第③步末新增「👀 试生成前 2 条样本」按钮（与生成按钮同 `disabled=not ready` 门控）：前 3 行真实数据切片 + 当前映射/参数 → `template.build_samples() + format_record()` 即时试跑模板 → 就地渲染 2 条真实样本（Alpaca 三段式 / messages 逐角色，与⑤同款渲染）；前 3 行全被跳过时给行号+原因（如「标准名为空」）——映射错误在生成前当场暴露。
+2. 指纹缓存（`preview_fp` 十元组：source+模板+6 列映射+候选数+种子）：按需计算（按钮触发），大表不在每次 rerun 全量 build；映射/参数一变指纹失配 → 旧预览自动退场（防旧预览冒充当前配置）；上传/路径两条载入路径 + 试生成失败路径均 pop 旧预览。
+3. 诚实性：预览局限 caption 如实声明「负例池小，候选数可能少于设置值——完整生成以第④步为准」；预览 spec 用固定 split 比例（split 不影响 build 阶段，仅③参数页可见项进入指纹）。
+4. 内联 FieldMapping 提为 `current_mapping` 复用（②校验 + 预览 + ④生成三处一源，消除三份重复构造）。
+5. `tests/unit/test_wizard_sample_preview_ui.py`（4 钉）：①极性（无表格时按钮不存在）；②接线+缓存（demo→点试生成→真实样本渲染 + plain rerun 仍在）；③指纹失效（改 role_code → 旧预览退场）；④诚实性源码钉（局限 caption / ready 门控 / 三处 pop）。修 bug 一处：`build_samples(table, mapping, spec)` 三参签名首版漏传 mapping——AppTest 的 page.error 直接暴露，行为测试先红后修的实证。
+
+**测试**：定向 189 passed（新 4 钉 + 全部 wizard 命名套件 + test_loading_feedback_ui——按 R121 规则 grep 后跑齐全部 05 页锚）；ruff check + format 双绿（format 后复跑）。collect 2160→**2164**（+4 精确）。全量义务轮按节奏 R127（下一轮）。
+
+**边界如实**：①预览只取前 3 行（负例池小）——结构验证用，非规模代表性样本，caption 已声明；②master_data 模板 messages 记录渲染覆盖（format_record 返回 messages 键即走逐角色分支），但其 build_samples 行为分支未在测试里单走（demo 测试走 entity_matching 默认模板）——模板层各有自己的单测；③指纹不含表格内容哈希（大表哈希不便宜）——同表同列名同参数的编辑不会失效预览，新表载入靠 pop 兜底；④st.session_state 里的 wizard_preview 存 dict（含 records 列表），跨会话不持久——刷新页面预览消失，符合「按需重算」的预期。
+
+**待授权（不变）**：①push origin——TuneSmith 本轮 +1=**47 commits**；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（镜像欠账：R123 旅程网格 / R124 失败急救包 / R125 旅程进度 / R126 试生成预览，候选一次镜像轮）。
+
+**成本**：主会话钩子 $195.36→**$197.11**（CRITICAL，已如实转达，用户以「不计成本」继续）。
