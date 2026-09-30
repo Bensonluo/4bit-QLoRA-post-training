@@ -3350,3 +3350,31 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地已领先 33 commits）；②benluo.art 部署；③venv 重建。
 
 **成本**：主会话钩子 $124.88→**$128.89**（CRITICAL）；reviewer 转达 $128.79。两 scout 报告追讨事件登记（idle 通知≠报告送达，后续 scout 指令已内联要求终消息带全文）。收敛建议多轮转达待用户裁决，按不计成本授权如实登记未中断。
+
+---
+
+## R116 轮报——06 Chat 手输 adapter ~ 展开（chat_engine 单点收口）
+
+**日期**：2026-09-30　**feat**：`58af555`　**基线**：c97c666 → 58af555
+
+**选点**：r116-scout 裁决候选 A（R115 obs-2 家族收口：06_Chat 手输 adapter `~` 路径在 chat_engine 单点展开）。**候选 B（02 入口3 rerun 不对称）被推翻为非缺陷**——scout 一手复核推翻 R115 scout 的「real defect」定性，主会话复核确认并带两处修正（见证据）。R116 全量按节奏跳过（R115 刚兑现 2084 passed）。
+
+**证据核实**（scout 报告全载荷断言主会话一手复核，含 B 推翻三链）：
+- A 链：死点唯一 = chat_engine.py `load_chat_model` 的 `PeftModel.from_pretrained(model, adapter_path)` 原样透传；唯一 `~` 入口 = 06_Chat 手输框（页面零校验）；picker 路径 discovery `.resolve()` 绝对无 `~`（:73/:87 一手核实）；底座侧 R115 已覆盖（:33）；家族先例 = eval/models.py `RealFinetunedModel._load` 的 adapter 同款展开（:472，本 segment 直读确认）；页面不动 = cache key/session_state/展示原串口径（R115 reviewer 已裁定）。
+- B 推翻链（三条全一手证实）：① 入口 1 = **更强死代码**——`list_domains()` 读 `_REGISTRY`，模块底 `register_adapter(MedicalEntityAdapter())` 恒注册 → domains 永非空 → 02:32 无域分支整体不可达（比 scout 的过滤矛盾论证更强）；② 入口 2 机制修正——最新文件空数组案例 rerun 确实 no-op（`log_eval_to_mlflow` 空数组零 run），但混布案例（最新空+旧有料）下旧文件真落 run → rerun 取到 → :102 切显示 = **有真功能**（scout「纯 no-op」不精确，结论方向不变）；③ 入口 3 不 rerun 正确——本地文件优先（:102），import 只写 MLflow，rerun 是 no-op，「对称性钉」会把 no-op 钉成规范。**教训入册：文本不对称 ≠ 行为缺陷，裁决前须核可达性与数据流。**
+
+**实现**：chat_engine.py adapter 分支 3 行——`adapter_ref = expand_user_ref(adapter_path)` 后喂 `PeftModel.from_pretrained`（helper 已在函数内 :29 导入，零新 import；06_Chat.py 整页零改动）。
+
+**测试**：RED 3 → GREEN 65（5 套件）。净 +5：新 `test_chat_engine_adapter_path.py` 4 行为钉（monkeypatch recorder：patch `src.models.loader.load_model_and_tokenizer` + `peft.PeftModel`，函数级 from-import 调用时解析到 patch；tilde 展开主钉/HF repo id 逐字节极性（绿披露）/双 ~ 合并旅程（兼守底座回退）/None 分支保活极性）+ `test_hf_refs.py` TestWiring 1 接线钉（正锚 `expand_user_ref(adapter_path)` + 负极性旧表达式防重内联）。RED 失败形态 `['~/my-adapter'] == ['<tmp>/my-adapter']` = 拦截机制真实有效 + 行为真红双证。
+
+**审查**：r116-reviewer **PASS-with-findings（0 should-fix · 1 nit · 4 obs）**，五维度全 PASS，RED/GREEN/collect/mypy 集合级全独立复现（temp worktree 复现 RED 3+2 精确）。nit-1 采纳：测试 docstring 两处「页 :58」行号引用改元素锚「06_Chat 手输框 `.strip() or None`」（R104 nit-3/R113/R115 行号漂移同型），采纳后复验 13 passed + 全仓 ruff 绿 + collect 2097 稳定。obs 全登记：obs-1 merger.py `merge_adapters_weighted` 的 `--base-model-name` 覆盖 `base_id` 未经 expand_user_ref（R115 恰修兄弟函数同款分支；CLI-only、失败干净、backlog 候选）/ obs-2 mypy 口径申报精度（定向 7 错 = scoped 口径，全仓 `mypy src/` = 368 且 HEAD/工作树集合级 diff 空 = 新增为零已钉死；轮报引用须带口径）/ obs-3 02 无域分支死代码知悉级 / obs-4 02 可达导入按钮按文件计数非按 run（空文件也计 1，「已导入 N 个」可虚饰，cosmetic 切片外）。
+
+**增量复核**：定向 5 套件 65 passed；`ruff check .` 全仓绿（R115 教训执行）；format 净；collect **2097 = 2092+5 精确**（第 10 轮零漂移）；mypy 双口径核：定向 7 错（=R115 预存在）+ 全仓 368 中 chat_engine/hf_refs 零命中 + HEAD/工作树错误集 diff 空（reviewer 独立复现同结论）。
+
+**登记对账**：2097 = 2092+5 精确命中 scout 预测 +5。R116 全量跳过（R115 刚跑 2084）·基线 2097。**R117 候选**：① 06_Chat adapter 预检 fail-fast（r116-scout 新发现——手输不存在路径要先下完底座才报错，需页面改动+UI 钉，独立切片）② obs-1 merge_adapters_weighted base 覆盖展开（同族 CLI 收尾小切）③ backlog 各项待 scout。R117 全量可跳（2 轮节奏内），R118 义务轮。
+
+**边界**：B 候选「非缺陷」定性已入册（勿再列为候选——scout 明示）；02 死分支不动（obs-3 知悉级）；`expand_user_ref` 家族站点至此收口完毕（B 维度 6 站点全核）。
+
+**待授权**：①push origin（本地已领先 34 commits）；②benluo.art 部署；③venv 重建。
+
+**成本**：主会话钩子 $128.89→**$134.95**（CRITICAL 连续升级）；reviewer 自报无独立口径。收敛建议连续多轮转达（reviewer×2 + 主会话每轮），cron 提示无用户回音，按不计成本授权如实登记未中断。
