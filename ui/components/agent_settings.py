@@ -47,7 +47,10 @@ def render_agent_settings(path: Path) -> tuple[str, str, str, bool]:
             agent_env_identity=_endpoint_identity(settings.provider, settings.base_url),
             agent_env_key=environment_key,
         )
-    with st.expander("分析模型设置", expanded=not st.session_state["agent_model"]):
+    # 面板降位（R130）：默认折叠 + 标签自陈可选。此前 expanded=not model 让无配置
+    # 新用户第一屏直面供应商/URL/Key 表单——把「先配 Agent」框定成第 0 步，与北极星
+    # 「无密钥可走通基础路径」的门面承诺相悖（07 为首页推荐首步）。
+    with st.expander("分析模型设置（可选——不配置也能用零密钥的基础分析）", expanded=False):
         provider = st.selectbox(
             "Agent 供应商",
             list(PROVIDERS),

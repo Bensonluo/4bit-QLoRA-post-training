@@ -1,5 +1,7 @@
 """A new user without any Agent key can start the core path via baseline analysis."""
 
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("streamlit")
@@ -213,3 +215,55 @@ def test_materialized_temporal_dataset_card_restates_policy_and_plain_summary(te
     assert any("共纳入 4 条（全量 5 条）" in value for value in markdown)
     assert any("另有 1 条" in value and "没有随机补数" in value for value in markdown)
     assert any("分区就绪只说明数据已按规则隔离" in value for value in markdown)
+
+
+def test_zero_state_names_keyless_path_before_any_task(tmp_path, monkeypatch):
+    """零态零密钥路牌钉（R130）：基础分析入口在任务创建后才渲染（st.stop 之下），
+    此前无任务首屏只有 Agent 配置面板——北极星契约「无密钥可走通基础路径」必须
+    在第一屏可见，不能等用户碰壁后才发现。"""
+    from streamlit.testing.v1 import AppTest
+
+    import ui.config
+
+    for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
+        monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
+    monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
+    page = AppTest.from_file(str(intake_ui.PAGE), default_timeout=20)
+    page.run()
+    assert not page.exception
+    captions = " ".join(c.value for c in page.caption)
+    assert "没有 Agent 服务" in captions, "路牌必须点名真实折叠器标签（指真实控件）"
+    assert "不需要任何密钥" in captions
+    assert "创建任务后" in captions, "指路必须如实：入口在创建任务之后才出现"
+
+
+def test_primary_analyze_error_without_model_points_to_baseline(data_page):
+    """主 CTA 无模型报错指路钉（R130）：点「联合分析目标与数据」未配置模型时，
+    报错必须就地提到零密钥基础分析入口，而非只令「去填模型名称」。"""
+    service, session, page = data_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    next(b for b in page.button if b.label == "联合分析目标与数据").click().run()
+    assert not page.exception
+    errors = " ".join(e.value for e in page.error)
+    assert "请填写支持工具调用的模型名称" in errors
+    assert "基础分析" in errors, "无模型报错必须就地指路零密钥替代入口"
+    # 主 CTA 正下方的指路句同屏在场（不必滚动发现折叠器标签才发现这条路）
+    captions = " ".join(c.value for c in page.caption)
+    assert "零密钥入口" in captions
+
+
+def test_agent_settings_panel_demoted_to_optional_and_collapsed():
+    """Agent 设置面板降位钉（R130，源码钉——AppTest 不暴露 expander 的展开态）：
+    面板必须默认折叠且标签自陈可选，无配置新用户第一屏不再直面供应商/URL/Key
+    表单（agent-first 框定与北极星门面承诺相悖）。"""
+    source = (Path(intake_ui.PAGE).parents[1] / "components" / "agent_settings.py").read_text(
+        encoding="utf-8"
+    )
+    label_pos = source.find('st.expander("分析模型设置')
+    assert label_pos != -1, "设置面板 expander 必须在场"
+    block = source[label_pos : label_pos + 200]
+    assert "可选" in block, "面板标签必须自陈可选"
+    assert "expanded=False" in block, "面板必须默认折叠（不再 agent-first 展开）"
+    assert "expanded=not " not in block, "不得回归「无配置即展开」的旧逻辑"

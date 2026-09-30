@@ -3649,3 +3649,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **义务轮全量**：**2169 passed / 0 failed（348.56s，机器负载下长于 R127 的 229s）**，与 R127 基线 2164 + R128 两钉 + R129 三钉 = 2169 精确吻合，零潜伏红——连续第三个义务/定向纪律周期零红（R124/R127/R129）。
 
 **待授权（不变）**：benluo.art 部署；mypy 368 存量债排期；venv 重建（非阻塞）。push：R128+R129 本地待推。
+
+## R130 轮报——07 数据入口零密钥路径可见化：零态路牌 + 报错指路 + Agent 面板降位
+
+**日期**：2026-09-30　**基线**：1e3f041（R129 后）
+
+**本轮性质**：定向轮（R129 全量义务轮后第 1 轮，下一义务轮候选 R132）。
+
+**选点依据（subagent 审计裁决采纳）**：Explore agent 全读审计 `ui/pages/07_Data_Intake.py`（3563 行）+ `src/workbench/` 服务（报告经落盘 transcript 回收，inline 交付预案生效）。07 是首页推荐首步（hero 按钮 app.py:26-27 + 旅程格 :146），但零密钥基础路径「机器完备、门面不可见」：①入口折叠器（07:1976）在 `st.stop()`（07:1387）之下——任务创建前完全不可见；②任务视图中折叠在主 CTA 下方，标签自带 fallback 框架；③新用户第一屏直面的是默认展开的 Agent 供应商/URL/模型/Key 面板（agent_settings.py:50 `expanded=not agent_model`）——把「先配 Agent」框定成第 0 步；④点主按钮无模型时报错「请填写支持工具调用的模型名称。」（intake.py:129）从不提零密钥替代。与北极星契约「无密钥可走通基础路径」直接相悖。审计排名第一建议 = 三处协同的可见化改造，两文件改动、可被既有钉子体系直接验证——摩擦移除/投入比最高。
+
+**诚实核实（改前逐条验证）**：
+- 零态路牌文案「产品内置规则判断，不需要任何密钥，也不向任何外部服务发送数据」——审计证实 `propose_baseline_analysis`（model="baseline-deterministic"）完全不构造 client，纯本地规则判断。
+- 路牌点名「没有 Agent 服务？用基础分析开始」= 折叠器标签逐字前缀（test_baseline_analysis_ui.py:43 既有钉 `startswith("没有 Agent 服务")`）——指真实控件，非虚构入口。
+- 「创建任务后」限定词如实：入口确实只在任务创建后渲染，路牌不得暗示第一屏就能点。
+- 报错增补只匹配 intake.py:129 的精确文案（grep 核实唯一来源），不重写其他错误。
+
+**改动**：
+1. `ui/components/agent_settings.py`：面板降位——标签改「分析模型设置（可选——不配置也能用零密钥的基础分析）」+ `expanded=False`（原 `expanded=not agent_model` 无配置即展开）。单消费方（仅 07 import，grep 核实）；AppTest 下折叠器内容照常执行，无功能影响。
+2. `ui/pages/07_Data_Intake.py` 零态：`st.stop()` 前加零密钥路牌 caption（点名折叠器标签 + 「不需要任何密钥」+「创建任务后」如实限定）。
+3. 同页主 CTA 报错：except 块内匹配「请填写支持工具调用的模型名称」时追加「也可以不配置模型服务：展开下方…零密钥用产品内置判断分析」。
+4. 同页主 CTA 正下方：`session.analysis is None or baseline` 分支内、折叠器前加一句 caption「不想配置 Agent？下一个折叠项…就是零密钥入口」。
+
+**测试证据**：tests/unit/test_baseline_analysis_ui.py 追加 3 钉：①`test_zero_state_names_keyless_path_before_any_task`（AppTest 零态：路牌点名折叠器标签 + 不需要任何密钥 + 创建任务后限定）②`test_primary_analyze_error_without_model_points_to_baseline`（AppTest 点主 CTA 无模型：报错含基础分析指路 + 主 CTA 旁零密钥入口 caption 同屏）③`test_agent_settings_panel_demoted_to_optional_and_collapsed`（源码钉——AppTest 不暴露 expander 展开态，probe 实测裁决；断言标签含「可选」+ `expanded=False` + 无 `expanded=not` 回归）。定向回归 71 绿：test_baseline_analysis_ui + test_data_intake_ui 50 passed（30.47s）+ test_workbench_training_ui + test_training_plan_ui + test_business_scoring_ui 21 passed（24.59s）；ruff format 3 files unchanged + check 全过。
+
+**状态更新**：07 零密钥路径从「fallback 框架」升为「与 Agent 路径并列可见的起点」；北极星「无密钥可走通」在门面层兑现。审计登记候选余量：①07 页载入级裸读未守卫（`service.load` 07:1389、`list_sessions` 07:1293、`list_iterations`/`list_suites`/`list_runs`——SQLite 一行坏快照可打崩整页，R129 同族）②tokenizer 目录手填无解释（07:2882）③CLI 命令名当 UI 指引（analyze/baseline-analyze/plan-recommend）④物化等术语无白话注释⑤00/05 与 07 双数据门缺互指路牌（IA 级，前轮已登记）。待授权不变：push（本地 3 commits 待推）、benluo.art 部署、venv 重建（本轮 pytest shebang 又指向旧仓路径，`python -m pytest` 绕过）、mypy 368 存量债排期。

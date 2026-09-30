@@ -1384,6 +1384,14 @@ if "intake_id" not in st.session_state:
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
+    # 零密钥路牌（R130）：基础分析入口在任务创建后才渲染（本 st.stop 之下），新用户
+    # 第一屏若不知道这条路存在，页面读起来是「先配 Agent 才能用」——北极星契约
+    # 「无密钥可走通基础路径」必须在第一屏可见，不能等碰壁后才发现。
+    st.caption(
+        "没有模型服务的 API Key 也能开始：创建任务后展开"
+        "「没有 Agent 服务？用基础分析开始」——产品内置规则判断，"
+        "不需要任何密钥，也不向任何外部服务发送数据。"
+    )
     st.stop()
 
 session = service.load(st.session_state["intake_id"])
@@ -1970,9 +1978,20 @@ if st.button(
             session = service.analyze(session.session_id, client)
         st.rerun()
     except (ValueError, RuntimeError, OSError) as exc:
-        st.error(str(exc))
+        message = str(exc)
+        if "请填写支持工具调用的模型名称" in message:
+            # 无模型报错就地指路零密钥替代（R130）：报错不得只说「去填模型名称」，
+            # 基础分析是北极星契约内的等效起点
+            message += (
+                "也可以不配置模型服务：展开下方「没有 Agent 服务？用基础分析开始」，"
+                "零密钥用产品内置判断分析。"
+            )
+        st.error(message)
 
 if session.analysis is None or session.agent_model == "baseline-deterministic":
+    # 主 CTA 旁的零密钥指路（R130）：折叠器标签再响也压不过上方主按钮的视觉
+    # 权重——一句话把「不配 Agent 也行」说在主按钮正下方。
+    st.caption("不想配置 Agent？下一个折叠项「没有 Agent 服务？用基础分析开始」就是零密钥入口。")
     with st.expander("没有 Agent 服务？用基础分析开始（产品内置判断，无需任何密钥）"):
         st.caption(
             "基础分析只依据你的字段选择和数据事实生成方案：不判断业务含义，"
