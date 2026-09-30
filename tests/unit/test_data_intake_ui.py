@@ -1559,3 +1559,13 @@ def test_task_view_survives_corrupt_suite_file(tmp_path, monkeypatch):
     assert not page.exception
     assert any(h.value == session.goal for h in page.subheader)
     assert any("评测套件列表读取失败" in w.value for w in page.warning)
+
+
+def test_tokenizer_input_explains_what_to_type():
+    """tokenizer 输入白话解释钉（R132）：训练前检查的 tokenizer 输入必须自带
+    可照抄的示例（placeholder）+ 帮助说明（help）——非专家不看文档也应知道
+    填什么；空值报错同样给示例，不再只说「请填写」。"""
+    source = PAGE.read_text(encoding="utf-8")
+    assert 'placeholder="例如 Qwen/Qwen3-1.7B' in source, "输入框必须带可照抄示例"
+    assert "分词器" in source and "不自动下载" in source, "help 必须白话解释是什么+边界"
+    assert "如 Qwen/Qwen3-1.7B" in source, "空值报错必须给可照抄示例"

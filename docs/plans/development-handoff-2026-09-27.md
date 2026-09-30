@@ -3691,3 +3691,19 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **测试证据**：tests/unit/test_data_intake_ui.py 追加 4 钉（AppTest，sqlite3 直注坏行/坏文件）：①侧栏抢救——坏行 warning + 完好任务按显示串（goal · id[:6]，format_func 层级坑首跑修正）保留 + 新建表单活②选中任务坏快照——如实 error + 页内出口点击回新建表单③iterations 坏行——任务视图 subheader 照常 + 降级 warning④suites 坏文件——同③。回归：07 主套件 + 零密钥套件 54 passed（31.01s）；test_data_intake.py 42 passed；test_funnel_report.py 14 passed；ruff format/check 全过。
 
 **状态更新**：07 从「任一存储坏行 = 整页裸栈」升为 R129 同族的降级范式（如实告知 + 功能面保留 + 页内出路）。北极星旗舰路径的健壮性缺口清零。候选池更新：①tokenizer 目录手填无解释（07:2882 一带）②CLI 命令名当 UI 指引③物化等术语白话注释④00/05↔07 双数据门互指路牌（IA 级）。待授权不变：push（本地 4 commits）、benluo.art 部署、venv 重建、mypy 存量债排期。
+
+## R132 轮报——tokenizer 输入白话化（义务全量轮：2176 绿）
+
+**日期**：2026-09-30　**基线**：9abf03b（R131 后）
+
+**本轮性质**：全量义务轮（R129 后第 3 轮，按 2-3 大轮节奏）。后台全量与打磨点并行执行。
+
+**选点依据**：R131 轮报登记候选池择①。训练前检查的 tokenizer 输入（07:2935）是零帮助文本的裸 text_input——非专家在「检查实际截断与答案保留」前撞上硬术语墙：不知道 tokenizer 是什么、不知道填什么格式、报错「请填写已准备好的本地 tokenizer 目录或缓存标识」同样无示例。审计排位第 1 的行话（tokenizer，07 页内出现 6 处，此为唯一无任何解释的交互面）。②CLI 词汇（full-validate 等）不动：R92 单一词汇源设计已被测试钉住（test_baseline_next_steps_bullet_renders_canonical_vocabulary），是已裁设计而非缺陷。
+
+**诚实核实（改前验证）**：`load_local_tokenizer`（training_preflight.py:13）= `AutoTokenizer.from_pretrained(path, local_files_only=True, trust_remote_code=False)`——接受值实证为：①含 tokenizer 文件的本地目录；②已在本机 HF 缓存的模型名（如 Qwen/Qwen3-1.7B）。「基础模型目录里就有 tokenizer 文件」属实（同目录另设有「本地基础模型目录」输入 07:3054，其 placeholder 已声明含 tokenizer）。文案不得暗示会自动下载（local_files_only=True 硬边界，页面 caption 2890 亦声明）。
+
+**改动**（标签两处测试钉住不动，只加 placeholder + help + 报错升级）：输入框 placeholder「例如 Qwen/Qwen3-1.7B（需已下载到本机）或本机模型目录的路径」；help 白话三句（tokenizer 是什么→两种可填值→只读不下载边界）；空值报错附同样可照抄示例。
+
+**测试证据**：+1 源码钉 `test_tokenizer_input_explains_what_to_type`（placeholder 示例 + 分词器/不自动下载 + 报错示例三面在场）；两个既有 label 钉的运行时测试（test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failures / test_preflight_passed_state_moves_page_exits_forward）+ 新钉 = 3 passed；ruff 过。**义务全量**：2176 passed / 0 failed / 218.54s（基线 2169 + R130×3 + R131×4，精确对账；R132 新钉因收集后追加不计入，已单跑绿）——第四个连续全绿义务轮（R124/R127/R129/R132）。
+
+**状态更新**：训练前检查的最后一个裸术语交互面消项。候选池更新：①物化等术语白话注释（次小）②00/05↔07 双数据门互指路牌（IA 级）③CLI 词汇的浏览器路径补充（需重新审视 R92 裁决，非一轮可完）。待授权不变：push（本地 5 commits）、benluo.art 部署、venv 重建、mypy 存量债排期。

@@ -2932,12 +2932,25 @@ if dataset is not None:
                     )
                     render_probe_result(saved, source_hints=probe_source_hints(session))
         with st.form(f"training_preflight_{session.session_id}"):
-            tokenizer_path = st.text_input("本地 tokenizer 目录或已缓存标识")
+            tokenizer_path = st.text_input(
+                "本地 tokenizer 目录或已缓存标识",
+                placeholder="例如 Qwen/Qwen3-1.7B（需已下载到本机）或本机模型目录的路径",
+                help=(
+                    "tokenizer 是模型阅读文字用的分词器。这里填一个本机已有的："
+                    "①训练计划用的基础模型目录（里面就有 tokenizer 文件）；"
+                    "②或已下载到本机缓存的模型名（形如 Qwen/Qwen3-1.7B）。"
+                    "本检查只读取、不自动下载。"
+                ),
+            )
             max_length = st.number_input("训练最大 token 长度", min_value=1, value=2048, step=1)
             run_preflight = st.form_submit_button("检查实际截断与答案保留")
         if run_preflight:
             if not tokenizer_path.strip():
-                st.error("请填写已准备好的本地 tokenizer 目录或缓存标识。")
+                st.error(
+                    "请填写已准备好的本地 tokenizer 目录或缓存标识。可填：训练用的基础模型目录"
+                    "（里面含 tokenizer 文件），或已下载到本机的模型名（如 Qwen/Qwen3-1.7B）；"
+                    "此处不自动下载。"
+                )
             else:
                 try:
                     from src.workbench.training_preflight import load_local_tokenizer
