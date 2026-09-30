@@ -32,7 +32,12 @@ if not domains and DOMAINS_DIR.exists():
     domains = [d.name for d in DOMAINS_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")]
 
 if not domains:
-    st.info("暂无包含评测数据的领域。")
+    # 幽灵分支接线（R128）：adapter 注册表导入时无条件注册两个域，此分支生产不可达
+    # （R111 scout 探针 A 双桩可达）；但空态家族范式（R108-R110）要求 st.stop 封页前
+    # 必给出路——注册表未来变化时不留死端
+    st.info("暂无包含评测数据的领域——先去训练实验室发起一次训练。")
+    if st.button("🏋️ 去训练实验室", type="primary"):
+        st.switch_page("pages/00_Training_Lab.py")
     st.stop()
 
 domain = st.selectbox("领域", domains, format_func=get_domain_display_name)
@@ -45,9 +50,36 @@ if len(data) < 2:
         st.warning(
             f"目前只有 1 个模型的评测结果（{data[0].get('model', '模型 0')}），对比至少需要 2 个。"
         )
-    # 出口裁决 00 不去 02（r111-scout 核实）：02 无发起评测能力，指过去是空→空接力；
-    # 指路句不宣称评测结果会出现在本页（scripts/evaluate.py 不写 domains/*/data/results/，
-    # 诚实红线），只停在「训练出（下一个）模型」这一 00 真实能力上
+    # 本页价值先行（R128）：空态先说清「这里能给你什么」——此前这句只存在于首页
+    # 旅程网格的格子里（app.py），用户点到本页只看到两行冷文案
+    st.markdown(
+        "本页做的事：把两个模型的评测结果**并排对比**（总体准确率、MRR、分组明细、成本），"
+        "回答「新模型比旧的好多少」。"
+    )
+    if domain == "entity_matching":
+        # 旗舰空态（R128，对齐 02 页 R120/R121 范式）。R111 时代「不宣称结果会出现在
+        # 本页」的出口裁决依据已失效：R120 页内评测已核实喂饱本页数据源——
+        # 00 页「⚡ 用我的 test 集评测」→ runner.launch_entity_eval →
+        # scripts/eval_entity_match.py → 写 domains/entity_matching/data/results/
+        # eval_detail_*.json = load_eval_data 所读目录
+        st.markdown("**怎么让这里出现对比结果？**")
+        st.markdown(
+            "1. **训练（下一个）模型**：去训练实验室发起训练（数据可先用 Data Wizard 从一张表生成）"
+        )
+        st.markdown(
+            "2. **评测它**：训练完成后在 📋 训练动态 → 「🧭 下一步」→"
+            "**⚡ 用我的 test 集评测**（用你 Data Wizard 导出的 test.json，"
+            "结果自动进入本页数据源）"
+        )
+        st.markdown("3. **换一个模型重复 1–2**（比如基座 vs 微调），凑满 2 个评测结果")
+        st.code(
+            "python scripts/eval_entity_match.py "
+            "--model-path outputs/sft/<run> --test-file outputs/wizard/<dataset>/test.json",
+            language="bash",
+        )
+    # 案例域（medical_entity）不加旗舰指路：其评测结果走领域评测脚本路径，指去
+    # wizard test 门是失实指路（对齐 02 页 fallback 分支裁决）；共享出口句对两域诚实。
+    # 出口裁决 00 不去 02（r111-scout 核实）：02 无发起评测能力，指过去是空→空接力
     st.info("去训练实验室发起（下一个）训练吧。已有的评测结果可在「评测结果」页查看。")
     # st.stop 封页前给出最后一条出路（R108-R110 空态死端范式）：否则用户只能靠侧栏自救
     if st.button("🏋️ 去训练实验室", type="primary"):

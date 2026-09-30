@@ -28,6 +28,16 @@ switch 时执行,读到源模块已替换属性(R109 ui.queries 同机制)。本
 数据源非空(17 份 eval_detail)→ 空态钉必须打桩。最小 2-dict fixture
 完整渲染(fmt_* 全 None-safe)——非空特征化钉已预验证;断言勿依赖
 执行摘要分支(读真实本地目录,他机可能走 03:144/146 info 分支)。
+
+R128 增补:①旗舰空态——03 空态升级到 02 页 R120/R121 范式(价值先行
++「怎么让这里出现对比结果」+编号步骤点名真实控件+CLI 示例)。R111
+诚实红线「不宣称评测结果会出现在本页」的依据已被 R120 链路取代并
+核实:00 页「⚡ 用我的 test 集评测」→ runner.launch_entity_eval →
+scripts/eval_entity_match.py → 写 domains/entity_matching/data/
+results/ = load_eval_data 所读(runner.py docstring 明写 02/03 页面
+数据源);案例域(medical)仍走领域脚本路径,不加旗舰指路。②幽灵分支
+(03 no-domains)按 R108-R110 家族范式接线出口——生产不可达但不再是
+无按钮死端。
 """
 
 from pathlib import Path
@@ -118,3 +128,46 @@ def test_comparison_nonempty_page_renders(monkeypatch):
     assert not at.exception, [e.message for e in at.exception]
     assert not any("对比至少需要" in w.value for w in at.warning), "非空不得渲染空态分支"
     assert any(s.value == "指标对比" for s in at.subheader), "指标对比区必须真渲染"
+
+
+def test_comparison_flagship_guidance_names_real_controls():
+    """旗舰空态钉(R128):entity_matching 域空态必须按 02 页 R120/R121 范式
+    指路——价值先行 + 加粗问句 + 编号步骤点名 00 页真实控件(🧭 下一步 /
+    ⚡ 用我的 test 集评测)+ 终端等价命令,而非两行冷文案。"""
+    source = _source(PAGE_CMP)
+    guard_pos = source.find('if domain == "entity_matching":')
+    assert guard_pos != -1, "空态必须对 entity_matching 域分支(通用域主路)"
+    block_end = source.find('st.info("去训练实验室发起', guard_pos)
+    assert block_end != -1, "旗舰分支后必须保留共享出口 info"
+    block = source[guard_pos:block_end]
+    assert "怎么让这里出现对比结果" in block
+    assert "🧭 下一步" in block and "⚡ 用我的 test 集评测" in block, (
+        "必须指路 00 页下一步面板的页内评测按钮(与 00 页文案一致)"
+    )
+    assert "Data Wizard" in block, "必须说明数据与 test.json 的来源(Data Wizard)"
+    assert "scripts/eval_entity_match.py" in block and "--test-file" in block, (
+        "终端等价命令必须在场(与 00 页双路惯例一致)"
+    )
+    assert "并排对比" in source, "空态必须先说清本页价值(价值先行)"
+
+
+def test_comparison_no_domains_branch_wired_not_dead_end(monkeypatch):
+    """幽灵分支接线钉(R128):双重打桩(注册表返空 + DOMAINS_DIR 不存在)下
+    分支必须给出路按钮并接线 00,而非无按钮死端。生产不可达(R111 探针 A
+    已证),此钉守住家族范式在注册表未来变化时不退化。"""
+    from streamlit.testing.v1 import AppTest
+
+    import ui.components.domain_adapters as da
+    import ui.config as ui_config
+
+    at = AppTest.from_file(str(UI / "app.py"), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.message for e in at.exception]
+    monkeypatch.setattr(da, "list_domains", lambda: [])
+    monkeypatch.setattr(ui_config, "DOMAINS_DIR", ROOT / "nonexistent-domains-dir")
+    at.switch_page("pages/03_Model_Comparison.py").run()
+    assert not at.exception, [e.message for e in at.exception]
+    assert any("训练实验室" in i.value for i in at.info), "幽灵分支 info 必须指路"
+    btn = next(b for b in at.button if b.label == "🏋️ 去训练实验室")
+    btn.click().run()
+    assert any(t.value == "🏋️ 训练实验室" for t in at.title), "按钮必须切到 00 训练实验室"

@@ -3611,3 +3611,23 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（循环停止后仍待用户决策）**：①push origin——TuneSmith **48 commits 未推**（含 R118-R127 全部产品能力）；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建（stale shebangs）；③benluo.art 部署逐次授权——演示页镜像欠账 4 轮（R123 旅程网格/R124 急救包/R125 旅程进度/R126 试生成预览），已登记候选，部署授权后可一轮补齐；④mypy 368 错存量债还债排期。
 
 **成本**：主会话钩子 $197.11→**$200.01**（CRITICAL 全程如实转达，用户以「不计成本」指令维持循环至今）。
+
+## R128 轮报——03 对比页空态升级旗舰范式 + 幽灵分支接线（循环重启首轮）
+
+**日期**：2026-09-30　**基线**：6aae98d（R127 轮报后）
+
+**本轮性质**：定向轮（R127 全量义务轮后第 1 轮，下一义务轮候选 R130）。用户重启 2 分钟打磨循环（同 R119 指令：按北极星持续打磨、不计成本、先核实现状、可用 subagent 加速）。
+
+**选点依据（subagent 审计）**：Explore agent 全读审计 03/04/06 三页零产物首跑体验（完成通知未携带正文，从落盘 transcript 回收完整报告——inline 交付预案生效）。三页空态均已存在且被测试钉住（R108/R110/R111）；剩余缺口集中在 03_Model_Comparison：①空态最薄（两行文案，无本页价值陈述——「并排比差值」只在首页旅程网格 app.py:143 说过）；②不讲解依赖链（训练→评测→≥2 结果）；③未达 02 页 R120/R121 旗舰范式；④带全家族唯一潜伏死端（no-domains 幽灵分支无出口）。04 无需改动；06 侧栏专家逃生口为有意设计（测试文档化）。
+
+**诚实核实（写文案前）**：R111 裁决「不宣称评测结果会出现在本页」的依据（scripts/evaluate.py 不写 results/）已被 R120 取代：00 页「⚡ 用我的 test 集评测」→ runner.launch_entity_eval → scripts/eval_entity_match.py → 写 domains/entity_matching/data/results/eval_detail_*.json = load_eval_data 所读（runner.py:239 docstring 明写「02/03 页面数据源」）。仅对默认 entity_matching 域成立；案例域（medical_entity）走领域脚本路径，保持原共享出口文案（对齐 02 页 fallback 裁决）。
+
+**落地**：ui/pages/03_Model_Comparison.py——①len<2 空态：价值先行一行（并排对比/准确率/MRR/分组明细/成本→「新模型比旧的好多少」）+ entity_matching 域旗舰块（「怎么让这里出现对比结果？」+ 3 编号步骤点名真实控件：训练实验室/🧭 下一步/⚡ 用我的 test 集评测/Data Wizard + CLI 等价命令）+ 共享出口 info 与主按钮保留（全部既有 pin 不破）。②no-domains 幽灵分支按 R108-R110 家族范式接线（info+主按钮→00+stop）。测试：+2 钉（旗舰源码区间钉、幽灵分支接线运行时钉），文档串补 R128 增补说明。
+
+**验证**：定向 24 passed（test_comparison_empty_state_ui 7 项全绿；test_register_unification_ui / test_lab_localization_ui 相邻源码钉全绿）；ruff check 全绿；format 后复跑 7 passed。
+
+**随轮核实（现状清单更新）**：①**push 欠账已清**——用户已于会话间推送 R118-R127 全部 48 commits（origin/main = 6aae98d，fetch 确认同步）；②演示镜像欠账已清——portfolio-fe c1e2fe7（晚于 R127 轮报落笔）已镜像 R123-R126 全部四项且自带 tsc+Playwright 验证；③根目录杂散截图 qlora-dashboard-home.png（Playwright 产物，无引用）已删；④venv/pytest/streamlit 本会话可用，R127「venv 重建」项不阻塞。
+
+**登记候选（审计顺带发现，不在本轮）**：①domain_adapters.py load_eval_data 的 json.load 无守卫——存量 eval_detail_*.json 损坏时 02/03 页裸栈；②04 页 fetch_model_versions 无 try/except——文件存储损坏/权限拒绝时异常穿透 st.cache_data。
+
+**待授权（更新后）**：benluo.art 部署（演示页镜像已就绪 c1e2fe7）；mypy 368 存量债排期；venv 重建（非阻塞）。push 本轮新增 1 commit 待用户决定。
