@@ -72,7 +72,7 @@ with st.sidebar:
     system_prompt = st.text_area(
         "System prompt",
         value="",
-        help="留空 = 不加。垂类任务（如主数据匹配）把任务提示词贴这里",
+        help="留空 = 不加。实体匹配/名称归一化任务（如供应商名归一化）把任务提示词贴这里",
     )
     p1, p2 = st.columns(2)
     with p1:

@@ -131,7 +131,9 @@ def test_data_intake_heavy_buttons_wrapped_in_spinner():
 def test_wizard_demo_button_journey_still_loads_table(tmp_path, monkeypatch):
     """包裹后的 05 页控制流不回归:点演示数据按钮,真实 import_table 路径
     (含 spinner 包裹)执行后表格加载成功——st.error/st.rerun 语义保持。
-    PROJECT_ROOT 经 monkeypatch 替换(07 页 data_page 夹具先例)。"""
+    PROJECT_ROOT 经 monkeypatch 替换(07 页 data_page 夹具先例)。
+    R119 潜伏红收口(R121):按钮从「医疗演示数据」两枚改三枚,旅程钉
+    改点 generic-first 默认旅程按钮「🗂️ 通用演示（供应商名）」。"""
     from streamlit.testing.v1 import AppTest
 
     import ui.config
@@ -140,7 +142,7 @@ def test_wizard_demo_button_journey_still_loads_table(tmp_path, monkeypatch):
     page = AppTest.from_file(str(PAGE_WIZARD), default_timeout=20)
     page.run()
     assert not page.exception
-    demo = next(b for b in page.button if "医疗演示数据" in b.label)
+    demo = next(b for b in page.button if "通用演示" in b.label)
     demo.click().run()
     assert not page.exception, [e.message for e in page.exception]
     assert any("已加载" in s.value for s in page.success), [s.value for s in page.success]
@@ -150,10 +152,19 @@ def test_wizard_entry_pointer_names_real_buttons():
     """05 空态指路句必须点名真实存在的按钮(r108-scout 发现):旧句点名
     「试试演示数据」,实际按钮是「🧪 医疗演示数据」「🏭 主数据演示数据」
     ——与 R106 轮 00:189 预设按钮失配同类(指路牌指向不存在的门,
-    非专家照指路找按钮找不到)。"""
+    非专家照指路找按钮找不到)。R119 潜伏红收口(R121):三按钮时代
+    指路句改写为「🗂️ 通用演示为默认旅程;💊/🏭 为已验证案例」,钉随之
+    换锚,并新增「指路句点名的三枚按钮字面必须在场」的实锚(旧钉只锁
+    句子不锁按钮,按钮改名旧钉不红——本钉补上)。"""
     source = _source(PAGE_WIZARD)
-    assert "或点两个演示数据按钮之一" in source, "指路句必须点名真实按钮"
+    assert "或点演示数据按钮（🗂️ 通用演示为默认旅程；💊/🏭 为已验证案例）" in source, (
+        "指路句必须点名真实按钮与旅程层级"
+    )
     assert "「试试演示数据」" not in source, "幽灵按钮名必须退场"
+    # 指路句点名的按钮必须真实在场(r108 语义的实锚化)
+    assert 'st.button("🗂️ 通用演示（供应商名）")' in source
+    assert 'st.button("💊 案例：药品名（医疗）")' in source
+    assert 'st.button("🏭 案例：主数据")' in source
 
 
 def test_wizard_handoff_send_side_wired():

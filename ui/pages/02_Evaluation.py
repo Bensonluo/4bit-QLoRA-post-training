@@ -33,7 +33,7 @@ if not domains:
     st.info(
         "暂无评测领域。\n\n"
         "**开始使用：**\n"
-        "1. 运行领域评测脚本（如 `domains/medical_entity/evaluate.py`）\n"
+        "1. 运行评测脚本（如 `scripts/eval_entity_match.py`，任意领域 test 集通用）\n"
         "2. 或在下方导入历史评测结果"
     )
     with st.expander("📥 导入历史评测结果"):
@@ -104,9 +104,25 @@ if not data and mlflow_data:
 
 if not data:
     st.warning("该领域暂无评测数据。")
-    st.markdown("**可选操作：**")
-    st.markdown("1. 运行领域评测脚本")
-    st.markdown("2. 在下方导入历史评测结果")
+    if selected_domain == "entity_matching":
+        # 通用域空态闭环（R121）：R120 的「用我的 test 集评测」把结果送到这里——
+        # 空态必须回答「怎么让这里出现结果」，而不是死胡同「运行领域评测脚本」
+        st.markdown("**怎么让这里出现结果？**")
+        st.markdown(
+            "1. **页内一键**：**训练实验室** → 📋 训练动态 → 已完成训练的"
+            "「🧭 下一步」→ **⚡ 用我的 test 集评测**"
+            "（用你 Data Wizard 导出的 test.json，任意领域通用）"
+        )
+        st.code(
+            "python scripts/eval_entity_match.py "
+            "--model-path outputs/sft/<run> --test-file outputs/wizard/<dataset>/test.json",
+            language="bash",
+        )
+        st.markdown("2. 在下方导入历史评测结果")
+    else:
+        st.markdown("**可选操作：**")
+        st.markdown("1. 运行领域评测脚本")
+        st.markdown("2. 在下方导入历史评测结果")
     with st.expander("📥 导入历史评测结果"):
         if st.button("扫描并导入 MLflow"):
             from src.tracking.eval_logger import log_eval_to_mlflow
