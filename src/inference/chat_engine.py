@@ -35,7 +35,11 @@ def load_chat_model(base_model: str, adapter_path: str | None = None) -> tuple[A
     model, tokenizer = load_model_and_tokenizer(config)
 
     if adapter_path:
-        peft_model: Any = PeftModel.from_pretrained(model, adapter_path)
+        # adapter 路径同款 ~ 展开（R115 obs-2 → R116 收口；先例
+        # domains/medical_entity/eval/models.py RealFinetunedModel._load）：
+        # 手输 ~/... 不展开会被 PeftModel 当 repo id 拒收；HF 名逐字节透传无损。
+        adapter_ref = expand_user_ref(adapter_path)
+        peft_model: Any = PeftModel.from_pretrained(model, adapter_ref)
         model = peft_model.merge_and_unload()
 
     model.eval()

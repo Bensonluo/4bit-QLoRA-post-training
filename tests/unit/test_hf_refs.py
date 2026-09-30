@@ -83,6 +83,14 @@ class TestWiring:
         assert "expand_user_ref(base_model)" in src, "chat_engine 底座引用必须经 helper"
         assert "str(Path(base_model).expanduser())" not in src, "旧腐蚀表达式不得回归"
 
+    def test_chat_engine_expands_adapter_path(self) -> None:
+        """接线钉(R116):adapter 路径同样必须经 helper——底座钉(R115)只守
+        base_model,防「底座走 helper、adapter 重内联原串」的部分解线
+        (R114 nit-1 同型;子串锚不引行号)。"""
+        src = CHAT_ENGINE.read_text(encoding="utf-8")
+        assert "expand_user_ref(adapter_path)" in src, "chat_engine adapter 路径必须经 helper"
+        assert "PeftModel.from_pretrained(model, adapter_path)" not in src, "旧腐蚀表达式不得回归"
+
     def test_merger_uses_helper_for_base_override(self) -> None:
         src = MERGER.read_text(encoding="utf-8")
         assert "expand_user_ref(base_model_name)" in src, "merger 显式底座必须经 helper"
