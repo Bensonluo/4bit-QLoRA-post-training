@@ -770,8 +770,15 @@ def summarize_iteration(record: dict) -> list[str]:
         lines.append("本轮假设与变更范围已确认，尚未准备训练。")
     elif status == "blocked":
         failure = record.get("failure")
-        lines.append(f"本轮训练准备被阻断：{failure}。" if failure else "本轮训练准备被阻断。")
-        lines.append("请处理问题后重新准备；处理不了就提出新的改进轮次。")
+        # failure 原文常自带句读，拼接前归一，避免「。。」双句号。
+        detail = failure.rstrip("。") if failure else ""
+        lines.append(f"本轮训练准备被阻断：{detail}。" if failure else "本轮训练准备被阻断。")
+        # blocked 是终态(iterations.prepare 拒绝非 confirmed——每轮只准备一次训练),
+        # 恢复句不得指「重新准备本轮」的假门:出路是修因后从父轮证据再写新一轮。
+        lines.append(
+            "本轮不能原位重试（每轮只准备一次训练）；请先修正问题，"
+            "再从同一父轮的开发集对照起草下一轮改进假设。"
+        )
     else:
         lines.append("提案已保存，尚未确认；确认假设与变更范围后才会准备训练。")
     lines.append("以上只是流程状态与已记录的决定，不代表业务效果达标。")

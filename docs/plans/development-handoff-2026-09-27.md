@@ -3968,3 +3968,22 @@ ruff 双清（format 重折行不影响文本锚定钉）。
 
 **在途**：r141-scout 摸 blocked 态恢复语义全图（re-entry 路径 / run issues 浮现
 位置 / preflight 问题谱系），报告落 R142 处置。
+
+## R142 轮报——blocked 态恢复指路：终态语义如实化 + 页面渲染补位（R141 登记主选点落地）
+
+**日期**：2026-09-30　**基线**：dea2406（R141 轮报后）
+
+**选点**：R140 登记的候选池主项「blocked 态（准备有阻断问题）无专属渲染分支」。核实链条（全部读源验证，不靠 scout 转述）：iterations.py 状态迁移全集只有 confirmed→preparing→(prepared|blocked)→running→decided——**blocked 无出口是终态**；prepare() :249 拒绝非 confirmed（「每轮只准备一次训练」），原位重试不存在。两个入口：Path B（training.prepare 抛异常）带 failure 字符串；Path A（run 建了但未就绪）只落 new_run_id——原因在训练记录 issues 里，iteration 卡上连 failure 都没有。页面 07:1848 只渲染裸 failure，且 summarize_iteration 的 blocked 分支（report_summary:771）此前**从未上屏**（页面仅 evaluated/decided 两分支渲染它，CLI 独享）。
+
+**改动（3 文件）**：
+1. `report_summary.py` summarize_iteration blocked 分支：恢复句从「请处理问题后重新准备；处理不了就提出新的改进轮次」改为诚实版「本轮不能原位重试（每轮只准备一次训练）；请先修正问题，再从同一父轮的开发集对照起草下一轮改进假设」——旧句指向不存在的「重新准备」门（诚实红线）。顺手根治句读拼接「。。」双句号（failure 原文自带句号 + f-string 再拼）。
+2. `07_Data_Intake.py`：blocked 且非托管执行时渲染完整分支——Path A caption 指下方训练记录问题清单；summarize_iteration 首行 st.error（红）+ 余行 st.write（与 CLI 同源同词）；st.info 门牌指路（R139 四门牌范式）：「用当前数据微调模型」→ 父轮「开发集对照」→「将结果转成下一轮改进假设」，如实标注 current_report 数据版本门槛与「父轮产物保留、不需要重新训练」。防御位保留：非 blocked 态的 legacy failure 仍走原裸渲染。
+3. `test_iteration_decide_ui.py` 新钉 `test_blocked_iteration_points_to_parent_evidence_with_honest_no_retry`：事实句在场（error∪markdown 并集断言）+ 双句号极性（只约束阻断行）+ 「重新准备」假门禁用 + Path A caption + 四门牌 + 版本门槛 + 「不需要重新训练」。
+
+**爆炸半径核实**：test_report_summary:991 只钉阻断事实首句（原样保留）；旧恢复句零钉；07:1848 区域零钉。R137 三处指路钉、R139 continue 钉、R138 词汇钉全部未触碰（71+78 定向绿验证）。
+
+**验证**：test_iteration_decide_ui + test_report_summary 78 绿；test_data_intake_ui + test_baseline_analysis_ui + test_funnel_report 71 绿；ruff check + format 全过。义务全量按节奏留给 R143/R144（R140 是最近一次 2184 绿）。
+
+**诚实边界**：r141-scout（R141 预先派出）报告未及到达即完成实现——所有关键语义（终态、两入口、无重试门、渲染缺口）均由直接读源验证，非转述；本条如实记录该事实。
+
+**遗留**：① 义务全量回归（下轮主项）；② 方案同意门与 Agent-only 三处的同意语义不一致仍是用户裁决项（R140 判定，不动）；③ propose 表单结构性前移（needs current_report 语义设计）仍在池。

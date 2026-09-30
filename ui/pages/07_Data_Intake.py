@@ -1845,7 +1845,31 @@ if iterations:
                     for line in summarize_tool_trace(revision.get("tool_trace", []), "修订"):
                         st.write(line)
                     st.json(revision.get("tool_trace", []))
-            if iteration.get("failure"):
+            if iteration["status"] == "blocked" and not execution_managed:
+                # 阻断态恢复指路（R142）：blocked 是终态——prepare() 拒绝非 confirmed
+                # （每轮只准备一次训练），不存在「重试本轮」的门。此前只有 prepare 抛
+                # 异常的记录带裸 failure；训练已建但未就绪的记录连原因都不在本卡
+                # （在下方训练记录的问题清单里）。summarize_iteration 的 blocked 分支
+                # 此前只服务 CLI（页面仅 evaluated/decided 渲染它），现补页面渲染 +
+                # 门牌指路（R139 四门牌范式 + current_report 数据版本门槛如实标注）。
+                if iteration.get("new_run_id"):
+                    st.caption(
+                        f"本轮已创建训练 {iteration['new_run_id'][:12]}；具体阻断问题"
+                        "在下方「用当前数据微调模型」该训练记录的问题清单里。"
+                    )
+                from src.workbench.report_summary import summarize_iteration
+
+                blocked_summary = summarize_iteration(iteration)
+                st.error(blocked_summary[0])
+                for line in blocked_summary[1:]:
+                    st.write(line)
+                st.info(
+                    "下一步：到下方「用当前数据微调模型」找到本轮父轮的训练记录，展开里面的"
+                    "「开发集对照」，在「将结果转成下一轮改进假设」里从同一份结果起草下一轮"
+                    "——父轮模型与对照结果都已保留，不需要重新训练。"
+                    "（该表单只在任务数据仍是本次评测版本时显示。）"
+                )
+            elif iteration.get("failure"):
                 st.error(str(iteration["failure"]))
             if iteration["status"] in {"prepared", "running"} and not execution_managed:
                 st.info(

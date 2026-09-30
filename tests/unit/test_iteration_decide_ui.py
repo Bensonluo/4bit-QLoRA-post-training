@@ -159,3 +159,43 @@ def test_decided_continue_iteration_points_to_next_round_form(decide_page):
     for door in ("用当前数据微调模型", "开发集对照", "将结果转成下一轮改进假设"):
         assert door in pointer, f"指路必须点名真实门牌：{door}"
     assert "本次评测版本" in pointer, "必须如实标注数据版本门槛"
+
+
+def test_blocked_iteration_points_to_parent_evidence_with_honest_no_retry(decide_page):
+    """阻断恢复指路钉（R142）：blocked 是终态（iterations.prepare 拒绝非 confirmed
+    ——每轮只准备一次训练），页面不得指「重新准备本轮」的假门；出路是修因后从
+    同一父轮证据起草下一轮。训练已建（new_run_id）时还须指下方训练记录的问题
+    清单——训练侧 blocked 的原因不在本卡。"""
+    _, session, page, _, iteration = decide_page
+    iteration.update(
+        status="blocked",
+        new_run_id="wb-" + "9" * 32,
+        run_id="wb-" + "9" * 32,
+        failure="本地模型目录不存在。",
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    # 阻断事实句（单一来源 summarize_iteration）以红色错误在场，含 failure 原文；
+    # 句读由单源归一（不出现「。。」双句号）。
+    rendered = [e.value for e in page.error] + [block.value for block in page.markdown]
+    assert any("本轮训练准备被阻断：本地模型目录不存在。" in value for value in rendered)
+    # 句读归一只约束阻断事实行本身（页面其他既有文案不受此钉管辖）。
+    blocked_lines = [value for value in rendered if "本轮训练准备被阻断" in value]
+    assert blocked_lines and not any("。。" in value for value in blocked_lines)
+    # 诚实边界与 CLI 同源：无原位重试；不得残留指向不存在门的「重新准备」措辞。
+    assert any("每轮只准备一次训练" in block.value for block in page.markdown)
+    assert not any("重新准备" in block.value for block in page.markdown), (
+        "R142：不得指向不存在的重试门"
+    )
+    # 已建训练：阻断的具体问题在下方训练记录里，不在本卡。
+    assert any("该训练记录的问题清单" in c.value for c in page.caption)
+    # 门牌指路（R139 四门牌范式）：微调区 → 父轮开发集对照 → 下一轮假设表单 +
+    # 数据版本门槛如实标注。
+    pointers = [i.value for i in page.info if "从同一份结果起草下一轮" in i.value]
+    assert pointers, "blocked 必须渲染恢复指路"
+    pointer = pointers[0]
+    for door in ("用当前数据微调模型", "开发集对照", "将结果转成下一轮改进假设"):
+        assert door in pointer, f"指路必须点名真实门牌：{door}"
+    assert "本次评测版本" in pointer, "必须如实标注数据版本门槛"
+    assert "不需要重新训练" in pointer, "父轮产物保留是诚实出路的一部分"
