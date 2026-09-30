@@ -219,15 +219,36 @@ def get_domain_display_name(domain: str) -> str:
 
 
 def load_eval_data(domain: str) -> list[dict]:
-    """Load the latest eval_detail_*.json for a domain."""
+    """Load the latest eval_detail_*.json for a domain.
+
+    新→旧遍历，首个可解析者胜出。损坏文件（评测中途被杀的半截 JSON 等）如实
+    st.warning（结论→为什么→修法）并跳过，不再让 02/03 整页裸栈（R129）。
+    """
     domain_dir = DOMAINS_DIR / domain / "data" / "results"
     if not domain_dir.exists():
         return []
     json_files = sorted(domain_dir.glob("eval_detail_*.json"), reverse=True)
     if not json_files:
         return []
-    with open(json_files[0]) as f:
-        return json.load(f)
+    corrupt: list[str] = []
+    for json_file in json_files:
+        try:
+            with open(json_file) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+            corrupt.append(f"{json_file.name}（{exc}）")
+            continue
+        if corrupt:
+            st.warning(
+                f"较新的评测结果文件损坏，已跳过：{'；'.join(corrupt)}。"
+                "下面显示的是更早一次评测的结果；重新跑一次评测即可恢复最新。"
+            )
+        return data
+    st.warning(
+        f"评测结果文件损坏，已全部跳过：{'；'.join(corrupt)}。"
+        "多半是评测中途被中断；重新跑一次评测即可恢复。"
+    )
+    return []
 
 
 # Register built-in adapters（顺序即 02/03 选择器默认项：通用域在前）

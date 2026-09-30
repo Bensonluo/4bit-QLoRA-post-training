@@ -171,3 +171,62 @@ def test_comparison_no_domains_branch_wired_not_dead_end(monkeypatch):
     btn = next(b for b in at.button if b.label == "🏋️ 去训练实验室")
     btn.click().run()
     assert any(t.value == "🏋️ 训练实验室" for t in at.title), "按钮必须切到 00 训练实验室"
+
+
+def _corrupt_results_dir(tmp_path, files: dict[str, str]) -> None:
+    """在 tmp_path 下伪造 entity_matching 域的 results 目录(文件名→内容)。"""
+    results = tmp_path / "entity_matching" / "data" / "results"
+    results.mkdir(parents=True)
+    for name, content in files.items():
+        (results / name).write_text(content, encoding="utf-8")
+
+
+def test_comparison_corrupt_newest_falls_back_with_honest_warning(monkeypatch, tmp_path):
+    """损坏守卫钉(R129):最新 eval_detail 损坏时降级到更早一份并如实 warning
+    (结论→为什么→修法),不再裸栈;更早数据照常渲染指标对比。"""
+    from streamlit.testing.v1 import AppTest
+
+    import ui.components.domain_adapters as da
+
+    _corrupt_results_dir(
+        tmp_path,
+        {
+            "eval_detail_20260101_000000.json": "{ 这不是 JSON",
+            "eval_detail_20251231_000000.json": '[{"model": "甲"}, {"model": "乙"}]',
+        },
+    )
+    at = AppTest.from_file(str(UI / "app.py"), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.message for e in at.exception]
+    monkeypatch.setattr(da, "DOMAINS_DIR", tmp_path)
+    at.switch_page("pages/03_Model_Comparison.py").run()
+    assert not at.exception, [e.message for e in at.exception]
+    assert any("损坏" in w.value and "更早" in w.value for w in at.warning), (
+        "跳过损坏的新文件必须如实告知,且说明当前显示的是更早结果"
+    )
+    assert any(s.value == "指标对比" for s in at.subheader), "更早的可用数据必须照常渲染"
+
+
+def test_comparison_all_corrupt_keeps_empty_state_recovery(monkeypatch, tmp_path):
+    """损坏守卫钉(R129):全部 eval_detail 损坏时如实 warning + 落回空态
+    (R128 旗舰指路兜底),不裸栈。"""
+    from streamlit.testing.v1 import AppTest
+
+    import ui.components.domain_adapters as da
+
+    _corrupt_results_dir(
+        tmp_path,
+        {
+            "eval_detail_20260101_000000.json": "{ 半截",
+            "eval_detail_20251231_000000.json": "[ 坏的",
+        },
+    )
+    at = AppTest.from_file(str(UI / "app.py"), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.message for e in at.exception]
+    monkeypatch.setattr(da, "DOMAINS_DIR", tmp_path)
+    at.switch_page("pages/03_Model_Comparison.py").run()
+    assert not at.exception, [e.message for e in at.exception]
+    assert any("全部跳过" in w.value for w in at.warning), "全部损坏必须如实告知并给修法"
+    assert any("还没有任何模型的评测结果" in w.value for w in at.warning), "空态兜底必须接住"
+    assert any(b.label == "🏋️ 去训练实验室" for b in at.button), "出路按钮必须在场"

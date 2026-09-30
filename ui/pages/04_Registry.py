@@ -32,7 +32,18 @@ def _tracker():
     return get_tracker(cfg)
 
 
-versions_df = fetch_model_versions(MLFLOW_TRACKING_URI)
+try:
+    versions_df = fetch_model_versions(MLFLOW_TRACKING_URI)
+except Exception as exc:
+    # 注册表读取失败（存储目录损坏/权限拒绝等）不得打崩整页（R129）：如实报错 +
+    # 家族范式出口；不落回「暂无已注册的模型」空态——读不到 ≠ 没有，诚实红线
+    st.error(
+        f"读取模型注册表失败：{exc}。注册表存储（outputs/mlruns）可能已损坏或无权限，"
+        "模型可能仍在——修复目录权限后刷新本页即可。"
+    )
+    if st.button("🏋️ 去训练实验室", type="primary"):
+        st.switch_page("pages/00_Training_Lab.py")
+    st.stop()
 
 if versions_df.empty:
     st.info(

@@ -126,3 +126,27 @@ def test_registry_nonempty_page_renders(monkeypatch):
     assert not at.exception, [e.message for e in at.exception]
     assert not any("暂无已注册的模型" in i.value for i in at.info), "非空不得渲染空态分支"
     assert any(m.value == "1" for m in at.metric if m.label == "版本数"), "版本数 metric 必须真渲染"
+
+
+def test_registry_corrupt_store_shows_error_not_crash(monkeypatch):
+    """损坏守卫钉(R129):注册表读取异常时如实 st.error + 出口按钮,不裸栈、
+    也不落回失实的「暂无已注册的模型」空态——读不到 ≠ 没有(诚实红线)。"""
+    from streamlit.testing.v1 import AppTest
+
+    import ui.queries
+
+    at = AppTest.from_file(str(UI / "app.py"), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.message for e in at.exception]
+
+    def _boom(*a, **k):
+        raise RuntimeError("模拟存储损坏")
+
+    monkeypatch.setattr(ui.queries, "fetch_model_versions", _boom)
+    at.switch_page("pages/04_Registry.py").run()
+    assert not at.exception, [e.message for e in at.exception]
+    assert any("读取模型注册表失败" in e.value for e in at.error), "必须如实报错而非裸栈"
+    assert any(b.label == "🏋️ 去训练实验室" for b in at.button), "报错态也必须有出路按钮"
+    assert not any("暂无已注册的模型" in i.value for i in at.info), (
+        "读不到 ≠ 没有,不得渲染失实空态文案"
+    )

@@ -3631,3 +3631,21 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **登记候选（审计顺带发现，不在本轮）**：①domain_adapters.py load_eval_data 的 json.load 无守卫——存量 eval_detail_*.json 损坏时 02/03 页裸栈；②04 页 fetch_model_versions 无 try/except——文件存储损坏/权限拒绝时异常穿透 st.cache_data。
 
 **待授权（更新后）**：benluo.art 部署（演示页镜像已就绪 c1e2fe7）；mypy 368 存量债排期；venv 重建（非阻塞）。push 本轮新增 1 commit 待用户决定。
+
+## R129 轮报——审计登记候选清零：损坏工件守卫双落地（含义务轮全量）
+
+**日期**：2026-09-30　**基线**：c8bd7a2（R128 后）
+
+**本轮性质**：定向轮 + 义务轮合并（R127 义务轮后第 2 轮即全量——改动触及 02/03 共享函数 load_eval_data，主动提前兑现义务轮）。
+
+**选点**：R128 登记的两个健壮性候选（均是非专家会撞上的裸栈路径，审计原话「latent crash」）：①domain_adapters.load_eval_data 的 json.load 无守卫——存量 eval_detail_*.json 损坏时 02/03 整页裸栈；②04 页 fetch_model_versions 无 try/except——文件存储损坏/权限拒绝时异常穿透 st.cache_data。
+
+**落地**：
+- **load_eval_data 损坏守卫**（ui/components/domain_adapters.py）：新→旧遍历，首个可解析者胜出；损坏文件如实 st.warning（结论→为什么→修法：点名损坏文件与原因、说明「显示的是更早结果」或「全部跳过」、给「重跑评测恢复」修法）；全部损坏落回空态（由 R120/R121/R128 旗舰指路兜底）。健康路径行为零变化（新文件可解析时无任何新元素）。
+- **04 注册表读取守卫**（ui/pages/04_Registry.py）：fetch_model_versions 异常时如实 st.error（结论→为什么→修法 + 「模型可能仍在」的诚实澄清）+ 家族范式出口按钮 + st.stop；不落回「暂无已注册的模型」空态——读不到 ≠ 没有（诚实红线）。
+
+**测试**：+3 运行时钉——03 损坏最新→降级渲染+如实 warning（tmp 伪造 results 目录，不打桩函数、走真实 load_eval_data）；03 全损→warning+空态兜底+出路按钮；04 异常→st.error+出路按钮+不渲染失实空态文案。定向 65 passed（六个钉 load_eval_data/注册表的套件：comparison/registry/evaluation/loading_feedback/next_steps/entity_eval）；ruff check/format 双绿。
+
+**义务轮全量**：**2169 passed / 0 failed（348.56s，机器负载下长于 R127 的 229s）**，与 R127 基线 2164 + R128 两钉 + R129 三钉 = 2169 精确吻合，零潜伏红——连续第三个义务/定向纪律周期零红（R124/R127/R129）。
+
+**待授权（不变）**：benluo.art 部署；mypy 368 存量债排期；venv 重建（非阻塞）。push：R128+R129 本地待推。
