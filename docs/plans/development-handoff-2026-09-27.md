@@ -3515,3 +3515,21 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权（不变）**：①push origin——TuneSmith 仍 **42 commits**（本轮产品零 commit）；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（本轮镜像改动已就绪待部署）。
 
 **成本**：主会话钩子 $179.93→**$183.44**（CRITICAL，已如实转达，用户以「不计成本」继续）。
+
+## R123 轮报——首页全流程一览：快捷操作 4 钮 → 8 页旅程网格
+
+**日期**：2026-09-30　**基线**：5b7083e（R122 落地后）
+
+**选点**：非专家落地页的「从哪开始、一共几步」问题。证据链三层：①app.py 快捷操作只覆盖 00/01/02/03 四页，05 数据向导 / 04 模型注册 / 06 对话验证 / 07 目标与数据 全靠侧栏摸索；②README:388 已宣称「8 页覆盖全生命周期」，首页只露出 4 页——门面与宣称脱节；③用户本人真实问过「新用户 5 步流水线对应哪些页面」（S1497）——首页若能自答，此问不存在。空态侦察结论：01/04/06/app 最近动态四处均已有 R108/R109 指路闭环，02 已由 R121 收口——死胡同故事收尾后，剩余最大缺口是「全景导览」而非单页补洞。
+
+**实现**（app.py +28/−14，1 新测试文件 4 钉）：
+1. `ui/app.py`：快捷操作段 4 钮 → `_JOURNEY_STEPS` 表驱动的 2×4 旅程网格——按「数据(05) → 训练(00) → 台账(01) → 评测(02) → 对比(03) → 注册(04) → 对话(06) → 目标与数据(07)」排序，每步一句非专家说明 caption（如 05「乱写法表格 → 带质检的训练集」、06「和你训练的模型聊天」），引导 caption 声明旅程序 + 首次使用指路 07；旧四钮字面原样保留（test_register_unification 中文化锚继续有效），hero 不动，00 保持唯一主按钮。
+2. `tests/unit/test_home_journey_map_ui.py`（新增 4 钉）：①8 页全覆盖（8 按钮在场 + 8 跳转目标在旅程表——按钮经表驱动 switch_page(target)，字面调用不存在是循环结构使然，首版钉写成字面 switch_page 断言当场 RED，修正为表内目标串 + click-through 实证接线）；②旅程排序钉（8 步源码序递增——乱序重排如按页号排当场可抓）+ 引导 caption 双句在场；③接线实证（点「🧙 数据向导」元素树切到 05 标题「🧙 Data Wizard」——新钮非幽灵按钮）；④保活钉（旧四钮字面 + hero 文案与主按钮）。
+
+**测试**：定向 39 passed（按 R121 规则 grep 全测试目录后跑齐全部 7 个以 app.py 为入口锚的 AppTest 套件：activity_autorefresh / comparison_empty_state / chat_empty_state / registry_empty_state / experiments_empty_state / home_empty_state / register_unification + 新 4 钉）；ruff check + format 双绿；collect 2147→**2151**（+4 精确）。全量义务轮按节奏留 R124。
+
+**边界如实**：①旅程说明 caption 极简一句话（st.caption），未做卡片化/编号步骤条——Streamlit 原生组件下的渐进增强，视觉打磨留待后续轮；②01 台账作为「步骤」排在 00 与 02 之间是叙述选择（它是横切台账非串行步骤），caption 用「历史台账」如实定位；③按钮表驱动后源码无字面 switch_page——钉①已按表内目标串 + click-through 双证据设计，未来若改回字面写法钉仍稳（目标串断言对两种写法均成立）。
+
+**待授权（不变）**：①push origin——TuneSmith 本轮 +1=**44 commits**；portfolio-fe `0619885`+`205feb4`+`e419470` 未推；②TuneSmith venv 重建；③benluo.art 部署逐次授权（R122 镜像改动已就绪待部署；R123 旅程网格属新产品能力，演示页 Home 尚未镜像，候选后续轮）。
+
+**成本**：主会话钩子 $183.44→**$189.59**（CRITICAL，已如实转达，用户以「不计成本」继续）。

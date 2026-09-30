@@ -124,23 +124,37 @@ with stat_cols[4]:
 
 st.divider()
 
-# ── Quick Actions ───────────────────────────────────────────────
+# ── Quick Actions / 全流程一览（R123）─────────────────────────────
+# 旧版只有 00/01/02/03 四钮——05/04/06/07 全靠侧栏摸索；README 已宣称
+# 「8 页覆盖全生命周期」，首页理应一屏可达全部 8 页。按旅程顺序排列，
+# 每步一句非专家说明（新用户问「从哪开始、一共几步」时本节直接回答）。
 
 st.subheader("快捷操作")
+st.caption(
+    "按完整旅程排序：数据 → 训练 → 台账 → 评测 → 对比 → 注册 → 对话。首次使用建议从「🧩 目标与数据」开始（本页顶部也可进入）。"
+)
 
-qa_cols = st.columns(4)
-with qa_cols[0]:
-    if st.button("🏋️ 发起训练", width="stretch", type="primary"):
-        st.switch_page("pages/00_Training_Lab.py")
-with qa_cols[1]:
-    if st.button("📊 查看实验", width="stretch"):
-        st.switch_page("pages/01_Experiments.py")
-with qa_cols[2]:
-    if st.button("🎯 评测结果", width="stretch"):
-        st.switch_page("pages/02_Evaluation.py")
-with qa_cols[3]:
-    if st.button("⚖️ 对比模型", width="stretch"):
-        st.switch_page("pages/03_Model_Comparison.py")
+# (按钮文案, 一步说明, 跳转目标, 是否主按钮)
+_JOURNEY_STEPS = [
+    ("🧙 数据向导", "乱写法表格 → 带质检的训练集", "pages/05_Data_Wizard.py", False),
+    ("🏋️ 发起训练", "配置 → 预检 → 启动 → 监控", "pages/00_Training_Lab.py", True),
+    ("📊 查看实验", "全部运行的历史台账", "pages/01_Experiments.py", False),
+    ("🎯 评测结果", "test 集判分 · 难度分层", "pages/02_Evaluation.py", False),
+    ("⚖️ 对比模型", "两个模型并排比差值", "pages/03_Model_Comparison.py", False),
+    ("🏛️ 模型注册", "版本 · champion/challenger", "pages/04_Registry.py", False),
+    ("💬 对话验证", "和你训练的模型聊天", "pages/06_Chat.py", False),
+    ("🧩 目标与数据", "说目标给样例，Agent 带着走", "pages/07_Data_Intake.py", False),
+]
+
+for row_start in (0, 4):
+    qa_cols = st.columns(4)
+    for offset, (label, desc, target, primary) in enumerate(
+        _JOURNEY_STEPS[row_start : row_start + 4]
+    ):
+        with qa_cols[offset]:
+            if st.button(label, width="stretch", type="primary" if primary else "secondary"):
+                st.switch_page(target)
+            st.caption(desc)
 
 st.divider()
 
