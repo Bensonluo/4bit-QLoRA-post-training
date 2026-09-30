@@ -3876,3 +3876,38 @@ ruff 双清。首跑新钉红（build_funnel 六 kwargs 必填，预期中的签
 
 **候选池更新**：r137-audit（07 迭代闭环：决策→下一轮接线）报告待交付处置（R139
 主选点）。已知词汇分裂清零。
+
+## R139 轮报——决策闭环指路：decided+continue 点名通往下一轮的四道门牌
+
+**日期**：2026-09-30　**基线**：da572e9（R138 轮报后）
+
+**本轮性质**：定向轮。r137-audit 核心发现落地。
+
+**选点依据（r137-audit，主会话独立复核）**：07 迭代闭环审计三问中，evaluated 态
+已完全接线（结果就地渲染 + 单一决策入口，无需改）；**decided 态是断点**——决策枚举
+明明提供「继续改进」，但 decided 分支（07:1786-1798）只渲染 success 横幅 + 摘要行，
+无按钮、无链接、无 caption 指向下一轮；唯一的下一轮入口（「将结果转成下一轮改进
+假设」表单 07:1211）埋在微调区运行折叠器（07:3174）→「开发集对照」折叠器
+（07:3630）→ 表单折叠器的三层嵌套里，距决策现场约 2600 行、零连接。产品核心承诺
+是闭环改进，前进段断了。主会话逐跳核实四道真实门牌 + current_report 门槛
+（07:1132：表单只在报告数据版本 == 会话当前数据版本时渲染——数据已变化时旧报告
+下表单不显示，指路必须如实标注，否则指不存在的门）。
+
+**改动**：
+1. `ui/pages/07_Data_Intake.py` decided 分支：`decision == "continue"` 时渲染闭环
+   指路 st.info——点名四道门牌（「用当前数据微调模型」→「训练 …」→「开发集
+   对照」→「将结果转成下一轮改进假设」）+ 如实括注数据版本门槛。
+2. `tests/unit/test_iteration_decide_ui.py` 新增旅程钉
+   `test_decided_continue_iteration_points_to_next_round_form`：decided+continue
+   fixture 下指路必须渲染且点名全部门牌 + 版本门槛括注；stop 决策不渲染由既有
+   「without_new_controls」钉守极性。
+
+**验证**：test_iteration_decide_ui 4 绿（含新钉）+ 07 本体 test_data_intake_ui
+47 绿 + ruff 双清。
+
+**候选池更新**（r137-audit 其余发现，报告余部已索要）：①blocked 态恢复路径只给
+裸错误；②修订按钮 ~1655 未接 R137 指路；③~830 方案确认 consent 门与 1136 评测
+consent 门不一致。逐一核实后处置。
+
+**结构改进登记（不本轮做）**：把下一轮假设表单本体搬进 decided+continue 现场
+（真正的就地闭环），需处理 assessments 建议与 current_report 门语义，属结构轮。

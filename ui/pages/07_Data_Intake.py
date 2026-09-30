@@ -1796,6 +1796,18 @@ if iterations:
                 )
                 for line in summarize_iteration(iteration):
                     st.write(line)
+                if iteration["decision"] == "continue":
+                    # 闭环指路（R139）：决策枚举有「继续改进」，但下一轮假设表单埋在
+                    # 三层嵌套折叠器（微调区运行→开发集对照→改进假设）里，与刚记录
+                    # 的决策零连接——r137-audit 核心发现：改进环的前进段断了。指路
+                    # 点名四道真实门牌（R120/R121 编号指路范式），并如实标注数据版本
+                    # 门槛（current_report：表单只在数据仍为本次评测版本时渲染）。
+                    st.info(
+                        "继续改进的下一步：到下方「用当前数据微调模型」找到本轮的"
+                        "「训练 …」折叠器，展开里面的「开发集对照」，在「将结果转成"
+                        "下一轮改进假设」里从这次结果起草下一轮。"
+                        "（该表单只在任务数据仍是本次评测版本时显示。）"
+                    )
             if iteration.get("data_revision"):
                 revision = iteration["data_revision"]
                 component_names = {

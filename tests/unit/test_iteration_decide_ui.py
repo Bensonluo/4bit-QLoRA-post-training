@@ -138,3 +138,24 @@ def test_decided_iteration_shows_recorded_decision_without_new_controls(decide_p
     # 已决策态的人话摘要与 CLI 同源：决定名 + 业务理由回显。
     assert any("已记录你的业务决定：停止本轮路线" in block.value for block in page.markdown)
     assert any("业务理由：试点完成，停止迭代。" in block.value for block in page.markdown)
+
+
+def test_decided_continue_iteration_points_to_next_round_form(decide_page):
+    """决策闭环指路钉（R139）：decided+continue 必须点名通往下一轮假设表单的
+    真实门牌（用当前数据微调模型 → 「训练 …」折叠器 → 开发集对照 → 将结果转成
+    下一轮改进假设）——该表单埋在三层嵌套折叠器里，与决策现场零连接是
+    r137-audit 的核心发现（改进环前进段断裂）。指路须如实标注数据版本门槛
+    （current_report 语义）；stop 等其它决策不渲染（上一测试守极性）。"""
+    _, session, page, _, iteration = decide_page
+    iteration.update(
+        status="decided", decision="continue", decision_reason="分数接近目标，继续调数据。"
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    pointers = [i.value for i in page.info if "继续改进的下一步" in i.value]
+    assert pointers, "decided+continue 必须渲染闭环指路"
+    pointer = pointers[0]
+    for door in ("用当前数据微调模型", "开发集对照", "将结果转成下一轮改进假设"):
+        assert door in pointer, f"指路必须点名真实门牌：{door}"
+    assert "本次评测版本" in pointer, "必须如实标注数据版本门槛"
