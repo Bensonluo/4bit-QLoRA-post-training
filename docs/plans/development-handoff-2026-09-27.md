@@ -3278,3 +3278,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地将领先 24 commits）；②benluo.art 部署；③venv 重建/修复 shebang（mypy+pytest shebang 指旧仓路径 4bit-QLoRA-post-training，可 python -m venv venv --upgrade 一并处理）。
 
 **成本**：主会话成本钩子持续 CRITICAL：$99.47→$102.92（reviewer 中段亦触发）→$105.05（裁决采纳编辑后）；r112-reviewer 自报审查期间 ~$104.62、复验轮自觉控本（5 tool calls）。轮成本趋势 $95→$98→$104——reviewer 连续三轮建议收敛建议转达（如收窄 reviewer 范围/轮内少并行），待用户裁决；按不计成本授权如实登记未中断。
+
+---
+
+## R113（2026-09-30）00 下一步面板页内评测按钮主切（④收口）
+
+**选点**：R112 轮报既定主切（R111 登记④→R112 定为 MEDIUM 独立轮）——R112 只修好终端回退命令，非专家用户的「页内一键评测」缺位。r113-scout 六问裁决（A 命令/B 架构/C 位置文案/D 钉计划/E 尺寸/F 风险）全部采纳。**运营事件**：scout 完成审计后死于 429 五小时限额（reset 09:45:11），报告经磁盘 transcript 本地提取（零 API 成本恢复，subagents 通道 09:45 重置后恢复）——「报告已写完但消息未送达」的挽回先例。
+
+**证据核实**：主会话一手复核 scout 全部载重论断（不抄报告）：①runner.py 全读——launch_training 硬耦合（SCRIPTS 表+YAML 强制写+--config 挂参），domain evaluate.py 是 argparse 无 --config 即死→launch_eval() 独立方法裁决成立；②evaluate.py 全读——:72 相对路径读训练集（cwd=项目根为硬约束，错则 seen/unseen 静默退化）、:95 baseline 无条件、:119 --model-path→RealFinetunedModel、:194 save_results 无条件、:51 --max-samples 默认 500；③report.py:166/184-190——eval_detail 落盘先于 log_eval_to_mlflow 且只捕 ImportError（失败态「以页面为准」兜底的依据）；④test_raw.json 一手计数 3,136（caption 数字不抄 scout）；⑤R104 mock 教义（真子进程+SCRIPTS 桩）与 R111 旅程钉 fixture 先例（test_activity_autorefresh 活 pid 预置+ui.config.PROJECT_ROOT 属性替换）定位。
+
+**实现**：①runner.py：launch_eval(source_run_id, model_path)（~50 行）——cmd=[python, -m, domains.medical_entity.evaluate, --model-path, X]、cwd=项目根、rid=eval-{run_id} 同池、technique=medical_eval、config_path 拷贝源 run（lineage）、log→outputs/logs/eval-{run_id}.log；env 构造抽 _child_env() 与 launch_training 共享（行为同一重构，旧 env 钉保活验证）。②00 页：_render_next_steps 四态块（Chat 指路与 eval_sets 门之间，不依赖 wizard test 集）——running→info+日志 expander+按钮退场防双发；finished→success 两页点名+「无需导入」；failed→error「以页面为准」+重试按钮（nit-1 采纳后：「日志见 eval 行（最近 15 行，完整文件在 outputs/logs/）」）；idle→caption 领域自带测试集 3,136+500+主按钮 ⚡ 生成评测文件→launch_eval(run_id, output_dir)→toast+rerun；R112 终端命令+限界 caption 原样保留（按钮主命令辅）；Activity 循环 technique!=medical_eval 门（防 eval-of-eval 嵌套）+caption「领域评测」中文名。
+
+**测试 RED→GREEN**：净 7（RED 6 failed 精确：runner 2+UI 4；第 7 钉状态转移生而绿披露——仅既有机制+eval-* key）：runner 钉 3（cmd 形状含无 --config+cwd=root+HF_ENDPOINT 默认/meta 形状 technique+lineage+log/状态转移+list_active fragment 门可见性）；源码钉 3（接线+位置 chat<btn<gate+running 分支无按钮+medical_eval 门/诚实文案四态锚含「3,136」「500」/argparse 契约钉——R112 typer 契约平移，launch_eval 旗标⊆evaluate.py 选项面，ast 提取）；旅程钉 1（真实 AppTest：preset meta returncode:0→面板渲染→点⚡→launch_eval 恰一次以 (run-id, 绝对 output_dir)，方法级打桩薄桩点——R111 obs-1 重 fixture 裁量不适用）。
+
+**审查**：r113-reviewer（opus 只读五维度，reset 后通道恢复）verdict **PASS-with-findings：0 should-fix / 2 nit / 7 observation**。独立探针：自跑 53+13 passed+ruff 净+mypy 无新错（HEAD 对照）+/tmp AppTest 嵌套 expander 实证可渲染+自数 3,136；复核确认重试路径 meta 整体替换丢弃 stale returncode 的语义正确性（get_status returncode 优先于 pid 探活的隐患被此设计关闭）；契约钉 regex 手工验证（docstring 裸 --config 不误匹配）。2nit 全采纳：nit-1「完整日志」过度承诺（Activity 行 expander 仅 tail=15）→文案改「日志（最近 15 行，完整文件在 outputs/logs/）」；nit-2 docstring 引用 runner.py:206-209 与 src/tracking/runner.py 歧义→改全路径 domains/medical_entity/eval/runner.py:207。7obs 全登记：obs-1 eval/models.py:427-438 底座 ~ 不展开（merger.py 因同款问题才加了底座覆盖；错底座重试救不了→R114 候选）；obs-2 按钮无技术门（finance/wizard run 也被荐医疗评测，语义空洞非虚假→R114 主候选）；obs-3 数字字面量钉（数据增长 caption 腐化钉不红→数据锚定钉候选）；obs-4 契约钉 regex 仅双引号（R112 先例同型）；obs-5 两标签页/重试双发孤儿进程（launch_training 同类预存在）；obs-6 Stop popover「训练进程」文案在 eval 行微失真；obs-7 CLAUDE.md tracking 节 drift→本地已补（不入库）。
+
+**增量复核**：verdict 后两 nit 采纳编辑→定向 45 passed（eval_button 4+panel 3+tracking_runner 38）+ ruff 双净。
+
+**登记对账与 R114 选点**：全量义务轮 **2076 passed = 2069+7 精确命中零漂移（连续第七次对账精确）**，217.95s；scout 预估 +6-8（2075-2077）实际 +7——区间内命中。R114 选点（R113 遗物收口，待 scout 裁决范围）：obs-2 eval 按钮技术门/文案降级（主）+ obs-1 eval 底座 ~ 展开（merger.py 同款处理平移）+ obs-6 stop 文案微切（顺带）；obs-3 数据锚定钉候选。R114 全量按节奏可跳（R113 刚跑 2076），若 obs-1 落地将触及 domains/eval/models.py，定向补跑其套件。维持 backlog：finance-in-path、02 入口3 rerun、02:45 守卫、R104 nit-3、②③、baseline-only 试跑管线 tertiary。
+
+**边界**：obs-5 双发竞态不修（预存在类，两标签页场景边缘）；obs-2 仅登记不改本源——按钮承诺技术上为真（reviewer 定性「not false advertising」）。
+
+**待授权**：①push origin（本地将领先 25 commits）；②benluo.art 部署；③venv 重建/修复 shebang（mypy+pytest 指旧仓路径）。
+
+**成本**：主会话成本钩子持续 CRITICAL：$105.05→$108.17→**$113.81**（连破 $105/$108/$113）；r113-reviewer 亦独立转达其会话钩子 ~$113。轮成本趋势 $98→$104→$113+——reviewer 连续四轮建议收敛建议转达（收窄 reviewer 范围/轮内少并行），待用户裁决；按不计成本授权如实登记未中断。
