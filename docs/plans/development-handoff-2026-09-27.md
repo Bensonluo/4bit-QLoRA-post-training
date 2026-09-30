@@ -3807,3 +3807,39 @@ real-confusion，且修复成本在面板侧奇低（1 字符串 vs 改 Agent �
 
 **候选池更新**：Q1 状态标签风格统一（待产品取向决策）；06 Chat 空态指引（R128 审计
 已裁为有意设计，动手前须复核）；07 页 consent 区周边的 Agent 桥接补强。
+
+## R137 轮报——Agent-only 功能未配置指路：两处按钮旁补面板位置
+
+**日期**：2026-09-30　**基线**：ec80090（R136 轮报后）
+
+**本轮性质**：定向轮（R136 义务轮后第 1 轮）。R136 审计候选③落地 + 为 R138 预派
+07 迭代闭环审计（r137-audit 进行中，报告落在下一轮处置）。
+
+**选点依据（R136 审计已核实 + 本轮现场复核）**：07 页两个 Agent-only 功能——业务
+评分（07:384「让 Agent 拟定业务评分规则」）与训练方案推荐（07:818「让 Agent 推荐
+训练方案」）——授权 checkbox 文案已说「已选 Agent 服务」（术语在），但整条启用链
+对未配置用户是黑盒：按钮灰着没说为什么，勾选授权点亮后点击报「请填写支持工具调用
+的模型名称」（src/agent/intake.py:129），报错只说缺什么、不说在哪配。主分析路径有
+R130 的就地零密钥指路（07:2016-2022 报错增强 + 07:2028 主 CTA 旁 caption），这两处
+是仅剩的无位置指路现场。与 R136 的关系：R136 把面板名补上了「Agent 服务」桥接词，
+本轮让页面上的 Agent-only 按钮真正指向这个名字。
+
+**改动**：
+1. `ui/pages/07_Data_Intake.py` 两处（业务评分 + 训练方案推荐）：`if not model.strip():`
+   时在按钮正上方渲染指路 caption——「此功能需要 Agent 服务，尚未配置模型：在左侧
+   边栏「分析模型设置（Agent 服务）」填写后，勾选上方发送授权即可使用。」两处同
+   文案（一个词表原则）。已配置用户（model 非空）不渲染，零噪音。
+2. `tests/unit/test_baseline_analysis_ui.py` 新钉
+   `test_agent_only_features_point_to_settings_panel_when_unconfigured`：锁两处
+   caption 在场 + 指路必须落到 R136 桥接名全名（count==2 锚，格式无关）。
+
+**验证**：test_baseline_analysis_ui（8，含新钉）+ test_business_scoring_ui +
+test_training_plan_ui 三套件 16 绿；07 本体大套件 test_data_intake_ui 47 绿；
+ruff format/check 双清。改动为条件渲染 caption，对既有 disabled 断言
+（test_training_plan_ui:132/136）零影响。
+
+**候选池更新**：07 迭代闭环（决策→下一轮接线）审计报告待 r137-audit 交付后处置
+（R138 主选点）；Q1 状态标签风格统一仍延期。
+
+**过程披露**：钉设计吸取 R136 教训——锚 caption 文本与面板名 count 而非调用形态，
+不锚 ruff 折行细节。

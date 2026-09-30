@@ -381,6 +381,13 @@ def show_business_scoring() -> None:
             )
             and allow_remote
         )
+    if not model.strip():
+        # Agent-only 功能无零密钥替代，报错只说「缺模型」不说在哪配（R137 指路）：
+        # 主分析路径有 R130 的就地零密钥指路，这两处是仅剩的无位置指路现场。
+        st.caption(
+            "此功能需要 Agent 服务，尚未配置模型：在左侧边栏「分析模型设置（Agent 服务）」"
+            "填写后，勾选上方发送授权即可使用。"
+        )
     if st.button("让 Agent 拟定业务评分规则", disabled=not authorized):
         if not standard.strip():
             st.error("请先说明业务评分标准和不能接受的错误。")
@@ -814,6 +821,11 @@ def show_training_recommendations() -> None:
         authorized = st.checkbox(
             "允许向已选 Agent 服务发送任务、处理方案、数据统计、候选模型配置与本机硬件摘要；不发送训练、开发或测试原文。",
             key=f"plan_consent_{session.session_id}_{base_url}",
+        )
+    if not model.strip():
+        st.caption(
+            "此功能需要 Agent 服务，尚未配置模型：在左侧边栏「分析模型设置（Agent 服务）」"
+            "填写后，勾选上方发送授权即可使用。"
         )
     if st.button("让 Agent 推荐训练方案", disabled=not authorized):
         model_paths = list(
