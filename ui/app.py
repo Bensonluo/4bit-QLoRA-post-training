@@ -158,6 +158,71 @@ for row_start in (0, 4):
 
 st.divider()
 
+# ── Journey Progress（R125）──────────────────────────────────────
+# R123 旅程网格回答「从哪开始、一共几步」；本节回答配套问题「我走到哪一步了」——
+# 返回用户第二天打开首页，一眼看到产物就绪状态与下一步，不必重新摸索。
+# 检测面全部是通用产物（wizard 训练集 / adapter / 通用评测结果 / 可对话模型），
+# 只读文件系统、不绑任何域；缺什么就给「怎么补」的一句指路。
+
+
+def _journey_progress(root: Path) -> list[tuple[str, bool, str]]:
+    """四步旅程的产物探测：返回 (步骤名, 是否就绪, 一句话详情/指路)。"""
+    from src.inference.discovery import discover_chat_models
+
+    wizard_sets = list((root / "outputs" / "wizard").glob("*/train.json"))
+    adapters = list((root / "outputs").glob("*/adapter_config.json"))
+    results = list((root / "domains" / "entity_matching" / "data" / "results").glob("*.json"))
+    chat_models = discover_chat_models(root)
+    return [
+        (
+            "准备数据",
+            bool(wizard_sets),
+            f"数据向导已生成 {len(wizard_sets)} 个训练集"
+            if wizard_sets
+            else "还没有——用 🧙 数据向导 5 分钟从表格生成",
+        ),
+        (
+            "完成训练",
+            bool(adapters),
+            f"已有 {len(adapters)} 个可继续用的 adapter"
+            if adapters
+            else "到 🏋️ 训练实验室 发起第一次训练",
+        ),
+        (
+            "跑出评测",
+            bool(results),
+            f"评测结果 {len(results)} 份（02/03 页可看）"
+            if results
+            else "训练完成后在「🧭 下一步」一键评测",
+        ),
+        (
+            "对话可用",
+            bool(chat_models),
+            f"{len(chat_models)} 个模型可在 💬 Chat 对话"
+            if chat_models
+            else "完成训练（或合并导出）后即可对话",
+        ),
+    ]
+
+
+st.subheader("📍 旅程进度")
+_progress = _journey_progress(PROJECT_ROOT)
+_ready = sum(1 for _, ok, _ in _progress if ok)
+if _ready == len(_progress):
+    st.success(
+        "全链路已跑通 🎉——从乱写法表格到可对话模型。继续迭代数据集，或到 💬 Chat 体验你的模型。"
+    )
+else:
+    st.markdown(
+        f"产物就绪 **{_ready}/{len(_progress)}**——不用一口气做完，任何时候回来都从这里续上。"
+    )
+_progress_cols = st.columns(4)
+for _pcol, (_plabel, _pok, _pdetail) in zip(_progress_cols, _progress):
+    with _pcol:
+        st.markdown(f"{'✅' if _pok else '⬜'} **{_plabel}**\n\n{_pdetail}")
+
+st.divider()
+
 # ── Recent Activity ─────────────────────────────────────────────
 
 st.subheader("最近动态")
