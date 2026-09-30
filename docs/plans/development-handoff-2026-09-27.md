@@ -3302,3 +3302,27 @@ data_intake_ui 25 里相关面）；ruff check + format 通过。首轮全量回
 **待授权**：①push origin（本地已领先 28 commits，git log origin/main..HEAD 实测）；②benluo.art 部署；③venv 重建/修复 shebang（mypy+pytest 指旧仓路径）。
 
 **成本**：主会话成本钩子持续 CRITICAL：$105.05→$108.17→**$113.81**（连破 $105/$108/$113）；r113-reviewer 亦独立转达其会话钩子 ~$113。轮成本趋势 $98→$104→$113+——reviewer 连续四轮建议收敛建议转达（收窄 reviewer 范围/轮内少并行），待用户裁决；按不计成本授权如实登记未中断。
+
+---
+
+## R114（2026-09-30）R113 遗物收口：eval 底座 ~ 展开 + 评测文案诚实化 + Stop 文案分支
+
+**选点**：R113 轮报预告的遗物三件套。r114-scout 裁决（报告经两次 SendMessage 追回——idle 通知只带一行，教训：完成通知≠报告送达）：obs-1 主修（全仓唯一 `~` 未展开的 from_pretrained 喂入点）+ obs-2 降级为文案（**一手关键发现**：UI 单选仅 sft/dpo/grpo、医疗训练 grep 零写 `.run_meta.json`——硬门=按钮对 100% 用户隐身自杀；dataset 软门真分支几不可达）+ obs-6 顺带；backlog 四项继续不启用。
+
+**证据核实**：主会话一手复核 scout 全部载重论断并**抓出一处误判**——其称新文案对既有钉「零破坏」，实际旧锚「领域自带测试集」是连续子串、新文案「医疗实体匹配领域的自带测试集」必断锚→裁决为显式换锚（非可选）；merger.py:38-44 注释原文「HF treats them as repo ids and rejects them」+chat_engine.py:33+registry.py:190 三先例直读；grep 全仓 expanduser 证实 domains/ 零命中；00:689 popover 文案、`_load` 结构、`name` property 局部导入逐一直读。
+
+**实现**：①models.py 抽模块级纯函数 `resolve_adapter_base(model_path, base_model=None)->str|None`（stdlib-only，免 torch 单测），原 `_load` 解析块逐句平移（break-on-first-existing-file 语义保留），base 引用与 PeftModel adapter 路径双双 `~` 展开；ValueError 留 `_load` 原位。②00 页 idle 文案诚实化：heading（内置医疗实体匹配领域）+「与你本次训练使用的数据无关」。③Stop popover 按 technique 分支（eval 行「评测进程/已写入的日志保留」）。④行号引用卫生：两处 `eval/models.py:427-438` 陈旧引用改函数名（R113 nit-2 同型预防）。
+
+**测试 RED→GREEN**：RED 7（helper ImportError×5 集合级+文案钉+popover 钉）→GREEN 51（4 套件）→nit 采纳后 70（6 套件）。净 +8：纯函数钉 5（展开/优先/极性/回落/空目录）+nit-2 break 语义钉+nit-1 接线钉+obs-6 popover 钉；诚实文案钉显式换锚+区间化（增量改不加数）。
+
+**审查**：r114-reviewer（opus 只读五维度）verdict **PASS-with-findings：0 should-fix / 3 nit / 4 obs**。A 维活探针实证 break-不回落语义等价；C 维裁定「与你本次训练使用的数据无关」在「评测绝不读用户数据文件」意义上全情形为真；D 维核实 Delete popover 对 eval 行仍真（delete_run 只删 job 记录，lineage config 指源 run YAML 不删）；E 维自跑 68 passed（多跑 localization+autorefresh 两 AppTest 面）+ruff 双净+六组 grep 无旧文案残留。3nit 全采纳：nit-1 接线钉（堵「保留 helper、_load 重内联」部分解线）+nit-2 break 语义钉（本轮赖以成立却唯一无钉的语义）+nit-3 锚区间化/极性钉（对齐 R112/R113 先例）。4obs 全登记：obs-1 Windows `Path("Qwen/X")` 反斜杠毁 HF 名（merger/chat_engine 同款预存在模式类，医疗评测路径 macOS/WSL2 不可达，登记不修）→**R115+ 模式类候选**；obs-2 同语系措辞角落可辩护不动；obs-3 int 键 TypeError 早爆优于旧版深死；obs-4 Delete popover 免门。
+
+**增量复核**：nit 采纳编辑后 70 passed（6 套件）+ruff 双净+collect 2084。
+
+**登记对账与 R115 选点**：collect-only **2084 = 2076+8 精确**；scout 预估 +4（区间+3~5），实际+8（nit 采纳+2、helper 粒度细化 5>3）——**区间外偏差如实披露**。全量跳过（节奏 2-3 大轮，R113 刚跑 2076）·R115 基线 2084·R115 全量义务轮（连续两轮 collect 级，下一轮应跑全量）。R115 候选：r114-obs-1 Windows 路径分隔符模式类（src/ 三点齐修+Windows 纪律钉）/backlog：finance-in-path 路由边缘（scripts/evaluate.py:92）、02 入口3 rerun、02:45 守卫、R104 nit-3、②③、baseline-only 试跑管线 tertiary——待 scout 裁决。
+
+**边界**：obs-2 硬门/软门双落选不修本源（门=功能自杀）；obs-3（R113 数字字面量钉）维持字面量；R112 终端命令块/Delete popover/runner.py 零改动。
+
+**待授权**：①push origin（本地已领先 31 commits）；②benluo.art 部署；③venv 重建（mypy/pytest shebang 指旧仓路径）。
+
+**成本**：主会话钩子 $117.02→**$121.12**（CRITICAL 持续）；r114-reviewer 独立转达其会话 $121.01；r114-scout 亦转达 $116。两轮连升 $113.81→$121+，reviewer 收敛建议（收窄审查维度/轮内少并行/scout-reviewer 可合并以省一跳）已多轮转达，**待用户裁决**；按不计成本授权如实登记未中断。
