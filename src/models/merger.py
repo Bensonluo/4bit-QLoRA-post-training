@@ -163,6 +163,8 @@ def export_to_gguf(
     model_path: str,
     output_path: str,
     quantization: str = "q4_k_m",
+    *,
+    llama_cpp_dir: str | Path | None = None,
 ) -> None:
     """Export model to GGUF format for llama.cpp.
 
@@ -173,32 +175,9 @@ def export_to_gguf(
         output_path: Path for output GGUF file
         quantization: GGUF quantization type (q4_k_m, q5_k_m, q8_0, etc.)
     """
-    import subprocess
+    from src.utils.gguf_export import convert_to_gguf
 
-    console.print("\n[bold cyan]Exporting to GGUF format[/bold cyan]")
-    console.print(f"  Model: {model_path}")
-    console.print(f"  Output: {output_path}")
-    console.print(f"  Quantization: {quantization}\n")
-
-    # Convert to GGUF
-    convert_cmd = [
-        "python",
-        "llama.cpp/convert.py",
-        model_path,
-        "--outfile",
-        output_path,
-        "--outtype",
-        quantization,
-    ]
-
-    console.print(f"[cyan]Running: {' '.join(convert_cmd)}[/cyan]")
-
-    try:
-        subprocess.run(convert_cmd, check=True)
-        console.print(f"[green]✓ GGUF model exported to: {output_path}[/green]")
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]✗ GGUF export failed: {e}[/red]")
-        console.print("[yellow]Note: llama.cpp required for GGUF export[/yellow]")
+    convert_to_gguf(model_path, output_path, quantization=quantization, llama_cpp_dir=llama_cpp_dir)
 
 
 def load_merged_model(

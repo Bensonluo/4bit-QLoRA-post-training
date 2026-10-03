@@ -10,13 +10,18 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from src.inference.discovery import looks_merged
+from src.utils.gguf_export import GGUF_QUANTIZATIONS, gguf_toolchain
 
 _EVIDENCE = "export_evidence.json"
 _LINEAGE = ("run_id", "session_id", "dataset_version", "config_digest")
 
 
-def default_export_dir(training_root: Path, run_id: str) -> Path:
+def default_export_dir(
+    training_root: Path, run_id: str, *, export_format: str = "hf", quantization: str = "q4_k_m"
+) -> Path:
     """Place exports outside the training tree, named by their originating run."""
+    if export_format == "gguf":
+        return Path(training_root).parent / "gguf" / f"{run_id}-{quantization}"
     return Path(training_root).parent / "merged" / run_id
 
 
@@ -136,13 +141,20 @@ def _source_identity(record: dict, adapter: Path, base: Path, *, verify_content:
 
 
 def _verified_export(target: Path, plan: dict, *, verify_content: bool = True) -> None:
-    if not looks_merged(target):
+    export_format = plan.get("export_format", "hf")
+    if export_format == "hf" and not looks_merged(target):
         raise ValueError("目录不是完整的已合并模型。")
+    if export_format == "gguf":
+        gguf = target / f"model-{plan['quantization']}.gguf"
+        if not gguf.is_file() or not (target / "Modelfile").is_file():
+            raise ValueError("目录缺少本次 GGUF 模型或交接文件。")
     evidence = json.loads((target / _EVIDENCE).read_text(encoding="utf-8"))
     expected = {key: plan.get(key) for key in (*_LINEAGE, "base_model_path", "adapter_dir")}
     if (
         not isinstance(evidence, dict)
         or evidence.get("format_version") != 1
+        or evidence.get("export_format", "hf") != export_format
+        or (export_format == "gguf" and evidence.get("quantization") != plan["quantization"])
         or any(evidence.get(key) != value for key, value in expected.items())
         or not isinstance(evidence.get("source_identity"), dict)
         or evidence["source_identity"].get("base_model") != plan["source_identity"]["base_model"]
@@ -155,10 +167,21 @@ def _verified_export(target: Path, plan: dict, *, verify_content: bool = True) -
         verify_content and evidence["output_files"] != _files(target, exclude={_EVIDENCE})
     ):
         raise ValueError("已导出模型内容已修改，文件摘要不匹配。")
+    if export_format == "gguf" and verify_content:
+        from src.utils.gguf_metadata import read_gguf_metadata
+
+        if read_gguf_metadata(gguf) != evidence.get("conversion", {}).get("metadata"):
+            raise ValueError("GGUF 实际元数据与转换证据不同。")
 
 
 def plan_model_export(
-    run_record: dict, output_dir: str | Path, *, _verify_content: bool = False
+    run_record: dict,
+    output_dir: str | Path,
+    *,
+    export_format: str = "hf",
+    llama_cpp_dir: str | Path | None = None,
+    quantization: str = "q4_k_m",
+    _verify_content: bool = False,
 ) -> dict:
     """Read-only export preflight; directory shape alone never proves provenance."""
     target_input = Path(output_dir).expanduser()
@@ -173,13 +196,21 @@ def plan_model_export(
         "output_dir": str(target),
         "reasons": [],
         "verification": "full" if _verify_content else "pending",
+        "export_format": export_format,
+        "quantization": quantization if export_format == "gguf" else None,
+        "llama_cpp_dir": str(Path(llama_cpp_dir).expanduser().resolve()) if llama_cpp_dir else None,
         # Snapshot only the fields needed to revalidate. No mutable caller references.
         "run_record": deepcopy(run_record),
     }
     has_adapter = (adapter / "adapter_config.json").is_file() and any(
         (adapter / name).is_file() for name in ("adapter_model.safetensors", "adapter_model.bin")
     )
-    if run_record.get("status") != "succeeded":
+    if export_format not in {"hf", "gguf"} or (
+        export_format == "gguf" and quantization not in GGUF_QUANTIZATIONS
+    ):
+        plan["status"] = "invalid_format"
+        plan["reasons"].append("请选择 HF 或 GGUF 格式，以及支持的 GGUF 精度。")
+    elif run_record.get("status") != "succeeded":
         plan["status"] = "not_succeeded"
         plan["reasons"].append(
             f"只有成功完成的训练才能合并导出；这次运行当前状态是 {run_record.get('status') or '未知'}。"
@@ -227,6 +258,17 @@ def plan_model_export(
                     )
             else:
                 plan["status"] = "ready"
+                if export_format == "gguf":
+                    try:
+                        plan["toolchain_inventory"] = gguf_toolchain(llama_cpp_dir, quantization)
+                        plan["llama_cpp_dir"] = plan["toolchain_inventory"]["directory"]
+                        if _verify_content:
+                            plan["toolchain_identity"] = gguf_toolchain(
+                                llama_cpp_dir, quantization, verify_content=True
+                            )
+                    except (OSError, ValueError) as exc:
+                        plan["status"] = "toolchain_missing"
+                        plan["reasons"].append(str(exc))
     return plan
 
 
@@ -237,8 +279,25 @@ def export_model(plan: dict) -> dict:
         raise ValueError("；".join(plan.get("reasons") or [f"当前状态 {state} 不能合并导出。"]))
     if not isinstance(plan.get("run_record"), dict):
         raise ValueError("导出计划缺少来源快照，请重新盘点。")
-    fresh = plan_model_export(plan["run_record"], plan["output_dir"], _verify_content=True)
-    fields = (*_LINEAGE, "base_model_path", "adapter_dir", "output_dir", "source_inventory")
+    options = {
+        "export_format": plan.get("export_format", "hf"),
+        "quantization": plan.get("quantization") or "q4_k_m",
+        "llama_cpp_dir": plan.get("llama_cpp_dir"),
+    }
+    fresh = plan_model_export(
+        plan["run_record"], plan["output_dir"], **options, _verify_content=True
+    )
+    fields = (
+        *_LINEAGE,
+        "base_model_path",
+        "adapter_dir",
+        "output_dir",
+        "source_inventory",
+        "export_format",
+        "quantization",
+        "llama_cpp_dir",
+        "toolchain_inventory",
+    )
     if any(plan.get(key) != fresh.get(key) for key in fields) or fresh["status"] not in {
         "ready",
         "already_exported",
@@ -246,11 +305,7 @@ def export_model(plan: dict) -> dict:
         reason = "；".join(fresh["reasons"]) or "来源身份与盘点时不一致。"
         raise ValueError(f"导出计划已失效，请重新盘点：{reason}")
     if fresh["status"] == "already_exported":
-        return {
-            "status": "already_exported",
-            "run_id": fresh["run_id"],
-            "output_dir": fresh["output_dir"],
-        }
+        return _completed_result(fresh, "already_exported")
     if state in {"already_exported", "verification_required"}:
         raise ValueError("已导出模型被移走，导出计划已失效，请重新盘点。")
     # Keep torch/peft/transformers out of the planning and refusal paths.
@@ -269,7 +324,39 @@ def export_model(plan: dict) -> dict:
         if merged_dir != staged or not looks_merged(merged_dir):
             raise ValueError("合并未生成预期目录中的完整模型，未写入导出证据。")
         # A long merge can race with source edits. Never attest to changed inputs.
-        after = plan_model_export(fresh["run_record"], fresh["output_dir"], _verify_content=True)
+        published = merged_dir
+        conversion = None
+        merged_source_files = None
+        if fresh["export_format"] == "gguf":
+            from src.utils.gguf_export import convert_to_gguf
+
+            if (
+                gguf_toolchain(fresh["llama_cpp_dir"], fresh["quantization"])
+                != fresh["toolchain_inventory"]
+                or gguf_toolchain(
+                    fresh["llama_cpp_dir"], fresh["quantization"], verify_content=True
+                )
+                != fresh["toolchain_identity"]
+            ):
+                raise ValueError("合并期间 GGUF 工具发生变化，未转换或发布模型。")
+            merged_source_files = _files(merged_dir)
+            published = Path(temporary) / "gguf"
+            published.mkdir()
+            conversion = convert_to_gguf(
+                merged_dir,
+                published / f"model-{fresh['quantization']}.gguf",
+                quantization=fresh["quantization"],
+                llama_cpp_dir=fresh["llama_cpp_dir"],
+            )
+            conversion["gguf_file"] = str(target / f"model-{fresh['quantization']}.gguf")
+            if conversion["toolchain"] != fresh["toolchain_identity"]:
+                raise ValueError("GGUF 实际转换工具与已核验工具不同，未发布模型。")
+            if _files(merged_dir) != merged_source_files:
+                raise ValueError("转换期间合并模型发生变化，未发布 GGUF。")
+            _write_gguf_handoff(published, fresh)
+        after = plan_model_export(
+            fresh["run_record"], fresh["output_dir"], **options, _verify_content=True
+        )
         if after.get("source_identity") != fresh["source_identity"] or after["status"] not in {
             "ready",
             "already_exported",
@@ -277,23 +364,67 @@ def export_model(plan: dict) -> dict:
             raise ValueError("合并过程中训练来源或目标发生变化，未发布导出模型。")
         evidence = {
             "format_version": 1,
+            "export_format": fresh["export_format"],
+            "quantization": fresh["quantization"],
             **{key: fresh.get(key) for key in (*_LINEAGE, "base_model_path", "adapter_dir")},
             "source_identity": fresh["source_identity"],
-            "output_files": _files(merged_dir, exclude={_EVIDENCE}),
+            "output_files": _files(published, exclude={_EVIDENCE}),
             "exported_at": datetime.now(timezone.utc).isoformat(),
         }
-        write_json(merged_dir / _EVIDENCE, evidence)
+        if conversion is not None:
+            evidence.update(
+                conversion=conversion,
+                merged_source_files=merged_source_files,
+                business_evaluation_status="not_run",
+                prompt_protocol="render_alpaca_prompt_without_answer",
+            )
+        write_json(published / _EVIDENCE, evidence)
         try:
             # Atomic publication; an existing nonempty directory is never overwritten.
-            merged_dir.rename(target)
+            published.rename(target)
         except OSError as exc:
             try:
                 _verified_export(target, fresh)
             except (OSError, ValueError, TypeError, KeyError):
                 raise ValueError("导出目标已变化，未覆盖现有目录；请重新盘点。") from exc
-            return {
-                "status": "already_exported",
-                "run_id": fresh["run_id"],
-                "output_dir": str(target),
-            }
-    return {"status": "exported", **evidence, "output_dir": str(target)}
+            return _completed_result(fresh, "already_exported")
+    return {**evidence, **_completed_result(fresh, "exported")}
+
+
+def _completed_result(plan: dict, status: str) -> dict:
+    result = {
+        "status": status,
+        "run_id": plan["run_id"],
+        "output_dir": plan["output_dir"],
+    }
+    if plan["export_format"] == "gguf":
+        result.update(
+            export_format="gguf",
+            quantization=plan["quantization"],
+            gguf_file=str(Path(plan["output_dir"]) / f"model-{plan['quantization']}.gguf"),
+            modelfile=str(Path(plan["output_dir"]) / "Modelfile"),
+            business_evaluation_status="not_run",
+        )
+    return result
+
+
+def _write_gguf_handoff(directory: Path, plan: dict) -> None:
+    filename = f"model-{plan['quantization']}.gguf"
+    (directory / "Modelfile").write_text(
+        f'FROM ./{filename}\nTEMPLATE """{{{{ .Prompt }}}}"""\n', encoding="utf-8"
+    )
+    (directory / "USAGE.md").write_text(
+        "# 本地模型交接\n\n"
+        f"来源训练：{plan['run_id']}；精度：{plan['quantization']}。\n\n"
+        "模型经过格式转换或量化，源 HF 评测分数不能视为当前 GGUF 的业务成绩。"
+        "请用同题、同生成与评分协议重新验证，当前业务验证状态为 not_run。\n\n"
+        "训练和工作台评测使用下列原始提示（删除答案，保留 Response 后的换行）：\n\n"
+        "```text\n### Instruction:\n[训练时的业务指令]\n\n### Input:\n[业务输入]\n\n### Response:\n```\n\n"
+        "没有输入时省略整个 Input 段。不要把占位文本当作实际业务指令。"
+        "Modelfile 的 TEMPLATE 直接使用传入的完整提示；Ollama 调用须提供上述完整文本。"
+        "LM Studio 聊天界面可能使用基座聊天模板，与原始提示不同；"
+        "业务对照应使用不附加聊天模板的原始文本生成。\n\n"
+        "GGUF 内保存源 tokenizer 的聊天模板供兼容工具使用；"
+        "保留它不代表训练采用了该聊天模板。文件和来源摘要见 export_evidence.json。\n",
+        encoding="utf-8",
+    )

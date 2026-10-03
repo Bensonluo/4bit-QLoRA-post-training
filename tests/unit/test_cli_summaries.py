@@ -493,3 +493,116 @@ def test_train_cost_cli_prints_json_and_cost_lines(tmp_path, monkeypatch, capsys
     assert "这是估计值,不是电表读数" in err
     assert "月成本约 4096.0 元" in err
     assert "口径不同,仅供量级比较,不是精确账单" in err
+
+
+@pytest.mark.parametrize("state", ["exported", "already_exported"])
+def test_gguf_cli_forwards_choices_and_prints_handoff(tmp_path, monkeypatch, capsys, state):
+    from src.workbench import model_export, training_runs
+
+    record = {"run_id": "wb-x", "status": "succeeded"}
+    calls = []
+
+    class Training:
+        def __init__(self, root, project_root=None):
+            pass
+
+        def get_status(self, run_id):
+            assert run_id == "wb-x"
+            return record
+
+    def plan(run, target, **options):
+        calls.append((run, target, options))
+        return {"run_id": "wb-x", "status": "ready", "output_dir": str(target), **options}
+
+    def export(planned):
+        assert planned["export_format"] == "gguf"
+        print("本地转换进度")
+        return {
+            **planned,
+            "status": state,
+            "gguf_file": str(tmp_path / "custom output" / "model-q5_k_m.gguf"),
+            "modelfile": str(tmp_path / "custom output" / "Modelfile"),
+        }
+
+    monkeypatch.setattr(training_runs, "TrainingRunService", Training)
+    monkeypatch.setattr(model_export, "plan_model_export", plan)
+    monkeypatch.setattr(model_export, "export_model", export)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "--training-root",
+            str(tmp_path / "custom training"),
+            "train-export",
+            "wb-x",
+            "--format",
+            "gguf",
+            "--quantization",
+            "q5_k_m",
+            "--llama-cpp-dir",
+            str(tmp_path / "my llama.cpp"),
+            "--output-dir",
+            str(tmp_path / "custom output"),
+        ],
+    )
+    assert data_intake.main() == 0
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result["status"] == state
+    assert result["export_format"] == "gguf"
+    assert result["quantization"] == "q5_k_m"
+    assert result["training_root"] == str(tmp_path / "custom training")
+    assert calls == [
+        (
+            record,
+            tmp_path / "custom output",
+            {
+                "export_format": "gguf",
+                "llama_cpp_dir": tmp_path / "my llama.cpp",
+                "quantization": "q5_k_m",
+            },
+        )
+    ]
+    assert "GGUF" in captured.err and "ollama create" in captured.err
+    assert "本地转换进度" in captured.err
+    assert "lms import" in captured.err
+    assert "不能沿用 Hugging Face 模型的评测结论" in captured.err
+
+
+def test_gguf_cli_missing_toolchain_exits_without_output(tmp_path, monkeypatch, capsys):
+    from src.workbench import training_runs
+    from tests.unit.test_model_export import _make_run
+
+    run = _make_run(tmp_path)
+
+    class Training:
+        def __init__(self, root, project_root=None):
+            pass
+
+        def get_status(self, run_id):
+            return run
+
+    monkeypatch.setattr(training_runs, "TrainingRunService", Training)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(tmp_path / "intake"),
+            "train-export",
+            "wb-x",
+            "--format",
+            "gguf",
+            "--llama-cpp-dir",
+            str(tmp_path / "missing tools"),
+        ],
+    )
+    assert data_intake.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "llama.cpp" in captured.err
+    assert not (tmp_path / "gguf").exists()

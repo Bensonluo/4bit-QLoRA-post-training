@@ -679,3 +679,71 @@ def test_learning_rate_tier_suggestion_fills_lower_tier_on_request(training_page
     button(page, "准备本轮训练方案").click().run()
     assert not page.exception
     assert calls[0][3]["training_options"]["learning_rate"] == pytest.approx(0.0003)
+
+
+def test_export_controls_dispatch_only_explicit_gguf_action(training_page, monkeypatch, tmp_path):
+    from src.workbench import model_export
+
+    _, session, page, _, records = training_page
+    records.append(
+        {
+            "run_id": "fixture-export",
+            "session_id": session.session_id,
+            "status": "succeeded",
+            "dataset_version": session.dataset.version,
+            "model_path": "/tmp/base",
+            "output_dir": "/tmp/adapter",
+            "metrics": {},
+            "artifacts": {},
+        }
+    )
+    exports = []
+
+    def plan(run, output, **options):
+        missing = options["export_format"] == "gguf" and not options["llama_cpp_dir"]
+        return {
+            "status": "toolchain_missing" if missing else "ready",
+            "run_id": run["run_id"],
+            "output_dir": str(output),
+            "reasons": ["请提供本地 llama.cpp 目录。"] if missing else [],
+            **options,
+        }
+
+    def export(planned):
+        exports.append(deepcopy(planned))
+        return {
+            **planned,
+            "status": "exported",
+            "gguf_file": str(tmp_path / "custom output" / "model-q5_k_m.gguf"),
+            "modelfile": str(tmp_path / "custom output" / "Modelfile"),
+        }
+
+    monkeypatch.setattr(model_export, "plan_model_export", plan)
+    monkeypatch.setattr(model_export, "export_model", export)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert exports == []
+    page.selectbox(key="export_format_fixture-export").select("gguf").run()
+    assert button(page, "导出模型").disabled
+    assert any("请提供本地 llama.cpp" in item.value for item in page.caption)
+    page.text_input(key="export_llama_cpp_fixture-export").input(
+        str(tmp_path / "my llama.cpp")
+    ).run()
+    page.selectbox(key="export_quantization_fixture-export").select("q5_k_m").run()
+    page.text_input(key="export_output_fixture-export_gguf").input(
+        str(tmp_path / "custom output")
+    ).run()
+    assert exports == [], "格式与路径变更、页面刷新都不能触发实际导出"
+    assert not button(page, "导出模型").disabled
+    button(page, "导出模型").click().run()
+    assert not page.exception
+    assert len(exports) == 1
+    assert exports[0]["export_format"] == "gguf"
+    assert exports[0]["quantization"] == "q5_k_m"
+    assert exports[0]["llama_cpp_dir"] == str(tmp_path / "my llama.cpp")
+    assert exports[0]["output_dir"] == str(tmp_path / "custom output")
+    assert any("GGUF 导出完成" in item.value for item in page.success)
+    assert any("ollama create" in item.value for item in page.caption)
+    page.run()
+    assert len(exports) == 1

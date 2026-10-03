@@ -60,6 +60,11 @@ def main(
         "--gguf-quant",
         help="GGUF quantization type",
     ),
+    llama_cpp_dir: str | None = typer.Option(
+        None,
+        "--llama-cpp-dir",
+        help="Complete local llama.cpp checkout with llama-quantize",
+    ),
 ):
     """Merge LoRA adapters into base model."""
 
@@ -100,6 +105,7 @@ def main(
                 model_path=output_path,
                 output_path=gguf_path,
                 quantization=gguf_quantization,
+                llama_cpp_dir=llama_cpp_dir,
             )
 
     except Exception as e:

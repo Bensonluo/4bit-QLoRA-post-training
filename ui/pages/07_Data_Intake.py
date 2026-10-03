@@ -3500,22 +3500,119 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     except Exception as exc:  # 血缘查询失败不阻塞训练信息展示
                         st.caption(f"模型库查询失败：{exc}")
                     # 环节⑨交接出口:北极星旅程的最后一环是「模型 + 证据」离场。
-                    # 页面只做只读盘点(不在页面跑重合并),命令与状态人话由
-                    # summarize_export 单一来源输出,与 CLI train-export 同源同词汇。
+                    # 轻量盘点与显式导出共用 CLI 的来源核验、格式选择和证据链。
                     with st.expander("📦 合并导出：把这次训练的模型带出工作台"):
+                        from src.utils.gguf_export import GGUF_QUANTIZATIONS
                         from src.workbench.model_export import (
                             default_export_dir,
+                            export_model,
                             plan_model_export,
                         )
+                        from src.workbench.report_summary import (
+                            export_cli_command,
+                            summarize_export,
+                        )
 
+                        export_format = st.selectbox(
+                            "导出格式",
+                            ["hf", "gguf"],
+                            format_func=lambda value: (
+                                "Hugging Face（完整模型目录）"
+                                if value == "hf"
+                                else "GGUF（LM Studio / Ollama 本地模型）"
+                            ),
+                            key=f"export_format_{run_id}",
+                        )
+                        quantization = "q4_k_m"
+                        llama_cpp_dir = None
+                        if export_format == "gguf":
+                            quantization = st.selectbox(
+                                "GGUF 精度",
+                                GGUF_QUANTIZATIONS,
+                                index=GGUF_QUANTIZATIONS.index("q4_k_m"),
+                                help="f16 保留半精度；量化可减少文件大小，业务效果需重新验证。",
+                                key=f"export_quantization_{run_id}",
+                            )
+                            llama_cpp_dir = (
+                                st.text_input(
+                                    "llama.cpp 本地目录",
+                                    help="需包含 convert_hf_to_gguf.py 和已编译的 llama-quantize；不自动下载工具。",
+                                    key=f"export_llama_cpp_{run_id}",
+                                ).strip()
+                                or None
+                            )
+                        default_target = default_export_dir(
+                            Path(training_service.root),
+                            run_id,
+                            export_format=export_format,
+                            quantization=quantization,
+                        )
+                        target_override = st.text_input(
+                            "导出目录（留空使用默认目录）",
+                            placeholder=str(default_target),
+                            key=f"export_output_{run_id}_{export_format}",
+                        ).strip()
                         export_plan = plan_model_export(
                             run,
-                            default_export_dir(Path(training_service.root), run_id),
+                            target_override or default_target,
+                            export_format=export_format,
+                            llama_cpp_dir=llama_cpp_dir,
+                            quantization=quantization,
                         )
-                        from src.workbench.report_summary import summarize_export
-
+                        export_plan["training_root"] = str(training_service.root)
                         for line in summarize_export(export_plan):
                             st.caption(line)
+                        if export_plan["status"] in {
+                            "ready",
+                            "verification_required",
+                            "already_exported",
+                        }:
+                            st.code(export_cli_command(export_plan), language="bash")
+                        request = (
+                            export_format,
+                            quantization,
+                            llama_cpp_dir,
+                            str(export_plan["output_dir"]),
+                        )
+                        result_key = f"export_result_{run_id}"
+                        executed_now = False
+                        if st.button(
+                            "导出模型",
+                            key=f"export_execute_{run_id}",
+                            disabled=export_plan["status"]
+                            not in {"ready", "verification_required", "already_exported"},
+                            type="primary",
+                        ):
+                            try:
+                                with st.spinner(
+                                    "正在核验来源并导出模型，合并与转换可能需要数分钟…"
+                                ):
+                                    exported = export_model(export_plan)
+                                st.session_state[result_key] = (request, exported)
+                                executed_now = True
+                            except (ValueError, RuntimeError, OSError, ImportError) as exc:
+                                st.session_state.pop(result_key, None)
+                                st.error(f"模型导出未完成：{exc}")
+                        previous_export = st.session_state.get(result_key)
+                        if (
+                            previous_export
+                            and previous_export[0] == request
+                            and (
+                                executed_now
+                                or export_plan["status"]
+                                in {"verification_required", "already_exported"}
+                            )
+                        ):
+                            completed_lines = summarize_export(previous_export[1])
+                            if executed_now:
+                                st.success(completed_lines[0])
+                            else:
+                                st.caption("上次导出记录；当前模型内容以本次完整性核验结果为准。")
+                                st.caption(completed_lines[0])
+                            for line in completed_lines[1:]:
+                                st.caption(line)
+                            with st.expander("查看导出证据 JSON"):
+                                st.json(previous_export[1])
                     with st.expander("这次训练花了多少成本（如实估算）"):
                         from src.utils.platform_utils import get_platform
                         from src.workbench.cost_summary import cost_lines, summarize_run_cost

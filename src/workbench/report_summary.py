@@ -8,6 +8,7 @@ beyond what the report's own diagnostics observed.
 
 from __future__ import annotations
 
+import shlex
 from typing import Any
 
 
@@ -1264,6 +1265,23 @@ def summarize_lineage(result: dict) -> list[str]:
     return lines
 
 
+def export_cli_command(record: dict) -> str:
+    """Preserve export choices in a shell-safe command shared by UI and summaries."""
+    command = ["python", "scripts/data_intake.py"]
+    if record.get("training_root"):
+        command.extend(["--training-root", str(record["training_root"])])
+    command.extend(["train-export", str(record.get("run_id") or "RUN_ID")])
+    if record.get("export_format") == "gguf":
+        command.extend(
+            ["--format", "gguf", "--quantization", record.get("quantization") or "q4_k_m"]
+        )
+        if record.get("llama_cpp_dir"):
+            command.extend(["--llama-cpp-dir", str(record["llama_cpp_dir"])])
+    if record.get("output_dir"):
+        command.extend(["--output-dir", str(record["output_dir"])])
+    return shlex.join(command)
+
+
 def summarize_export(record: dict) -> list[str]:
     """train-export 尾行:合并导出(环节⑨交接)人话翻译。
 
@@ -1275,6 +1293,50 @@ def summarize_export(record: dict) -> list[str]:
         return ["这份导出记录没有可读的内容。"]
     boundary = "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署。"
     state = record["status"]
+    gguf = record.get("export_format") == "gguf"
+    if gguf and state in {"exported", "already_exported"}:
+        file = record.get("gguf_file") or record.get("output_dir") or "?"
+        head = (
+            f"GGUF 导出完成：精度 {record.get('quantization') or '?'}，文件 {file}。"
+            if state == "exported"
+            else f"这次训练此前已导出 GGUF：{file}；来源与文件摘要已核验，不会重复转换或量化。"
+        )
+        lines = [
+            head,
+            "独立 GGUF 目录里的 export_evidence.json 记录训练、数据版本、来源模型及转换文件摘要；"
+            "量化后的模型需要重新核对业务效果，不能沿用 Hugging Face 模型的评测结论。",
+            "可在 LM Studio 中导入该 GGUF 文件；Ollama 需先创建本地模型。"
+            "本次完成文件转换与完整性核验，尚未执行目标运行时的加载测试。",
+        ]
+        if record.get("modelfile"):
+            model_name = f"tunesmith-{record.get('run_id') or 'model'}-{record.get('quantization') or 'gguf'}"
+            lines.append(
+                "Ollama 创建命令："
+                + shlex.join(["ollama", "create", model_name, "-f", str(record["modelfile"])])
+            )
+        if record.get("gguf_file"):
+            lines.append(
+                "LM Studio 导入命令："
+                + shlex.join(
+                    [
+                        "lms",
+                        "import",
+                        "--copy",
+                        "--user-repo",
+                        f"tunesmith/{record.get('run_id') or 'model'}",
+                        "--yes",
+                        str(record["gguf_file"]),
+                    ]
+                )
+            )
+        lines.extend(
+            [
+                "目录里的 USAGE.md 提供完整 Alpaca 原始提示的用法；"
+                "请沿用训练时的提示格式，避免另加聊天模板改变模型输入。",
+                boundary,
+            ]
+        )
+        return lines
     if state == "exported":
         return [
             f"合并导出完成：这次训练的适配器已并入基础模型，输出目录 {record.get('output_dir') or '?'}。",
@@ -1292,14 +1354,19 @@ def summarize_export(record: dict) -> list[str]:
     if state == "verification_required":
         return [
             f"目录 {record.get('output_dir') or '?'} 有本次训练的导出证据，模型内容待完整性核验。",
-            f"运行 python scripts/data_intake.py train-export {record.get('run_id') or 'RUN_ID'} "
+            f"运行 {export_cli_command(record)} "
             "核对来源与模型文件摘要；全部一致才返回已导出，不会重复合并。",
             boundary,
         ]
     if state == "ready":
         return [
-            "这次训练的产物清单已齐备；执行时先核验来源内容，再合并导出为 Hugging Face 格式的完整模型：",
-            f"python scripts/data_intake.py train-export {record.get('run_id') or 'RUN_ID'}",
+            (
+                "这次训练的产物清单与本地工具已齐备；执行时先核验来源，再合并、转换为 "
+                f"{record.get('quantization') or 'q4_k_m'} 精度的 GGUF 模型："
+                if gguf
+                else "这次训练的产物清单已齐备；执行时先核验来源内容，再合并导出为 Hugging Face 格式的完整模型："
+            ),
+            export_cli_command(record),
             f"默认输出目录：{record.get('output_dir') or '-'}。",
             boundary,
         ]

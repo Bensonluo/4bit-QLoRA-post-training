@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+from contextlib import redirect_stdout
 from dataclasses import asdict
 from pathlib import Path
 
@@ -454,13 +455,29 @@ def main() -> int:
         command.add_argument("run_id")
         if name == "train-logs":
             command.add_argument("--tail", type=int, default=100)
-    _train_export_help = "核验训练来源并把适配器合并导出为 Hugging Face 格式模型目录与证据链"
+    _train_export_help = "核验训练来源并合并导出为 Hugging Face 或 GGUF 模型与证据链"
     train_export = sub.add_parser(
         "train-export", help=_train_export_help, description=_train_export_help
     )
     train_export.add_argument("run_id")
     train_export.add_argument(
-        "--output-dir", type=Path, help="覆盖默认导出目录（默认 outputs/workbench/merged/RUN_ID）"
+        "--format", choices=("hf", "gguf"), default="hf", help="导出格式（默认 hf）"
+    )
+    train_export.add_argument(
+        "--llama-cpp-dir", type=Path, help="GGUF 转换使用的本地 llama.cpp 目录"
+    )
+    from src.utils.gguf_export import GGUF_QUANTIZATIONS
+
+    train_export.add_argument(
+        "--quantization",
+        choices=GGUF_QUANTIZATIONS,
+        default="q4_k_m",
+        help="GGUF 精度（默认 q4_k_m；f16 保留半精度，其余执行量化）",
+    )
+    train_export.add_argument(
+        "--output-dir",
+        type=Path,
+        help="覆盖默认目录（hf: outputs/workbench/merged/RUN_ID；gguf: outputs/workbench/gguf/RUN_ID-精度）",
     )
     _train_cost_help = "查看这次训练的成本账（时长实测、功耗电价估计、可选 API 对比）"
     train_cost = sub.add_parser("train-cost", help=_train_cost_help, description=_train_cost_help)
@@ -1328,9 +1345,26 @@ def main() -> int:
                 target = (
                     args.output_dir
                     if args.output_dir is not None
-                    else default_export_dir(args.training_root, args.run_id)
+                    else default_export_dir(
+                        args.training_root,
+                        args.run_id,
+                        export_format=args.format,
+                        quantization=args.quantization,
+                    )
                 )
-                result = export_model(plan_model_export(run, target))
+                plan = plan_model_export(
+                    run,
+                    target,
+                    export_format=args.format,
+                    llama_cpp_dir=args.llama_cpp_dir,
+                    quantization=args.quantization,
+                )
+                # Model mergers/converters may print progress; stdout remains one JSON record.
+                with redirect_stdout(sys.stderr):
+                    result = export_model(plan)
+                result["training_root"] = str(args.training_root)
+                if args.llama_cpp_dir is not None:
+                    result["llama_cpp_dir"] = str(args.llama_cpp_dir)
                 print(json.dumps(result, ensure_ascii=False, indent=2))
                 from src.workbench.report_summary import summarize_export
 

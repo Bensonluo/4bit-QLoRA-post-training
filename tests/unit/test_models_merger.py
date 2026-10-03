@@ -7,7 +7,6 @@ imports them locally inside the functions.
 """
 
 from pathlib import Path
-from subprocess import CalledProcessError
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -197,21 +196,18 @@ class TestMergeLoraIntoBase:
 
 
 class TestExportToGguf:
-    @patch("subprocess.run")
-    def test_success_invokes_llama_cpp_convert(self, mock_run: MagicMock) -> None:
-        export_to_gguf("model_dir", "out.gguf", quantization="q5_k_m")
+    @patch("src.utils.gguf_export.convert_to_gguf")
+    def test_uses_staged_converter_with_explicit_tool_directory(self, convert: MagicMock) -> None:
+        export_to_gguf("model_dir", "out.gguf", quantization="q5_k_m", llama_cpp_dir="tools")
+        convert.assert_called_once_with(
+            "model_dir", "out.gguf", quantization="q5_k_m", llama_cpp_dir="tools"
+        )
 
-        cmd = mock_run.call_args[0][0]
-        assert cmd[1] == "llama.cpp/convert.py"
-        assert cmd[2] == "model_dir"
-        assert cmd[-1] == "q5_k_m"
-        mock_run.assert_called_once_with(cmd, check=True)
-
-    @patch("subprocess.run")
-    def test_convert_failure_does_not_raise(self, mock_run: MagicMock) -> None:
-        mock_run.side_effect = CalledProcessError(1, "convert.py")
-
-        export_to_gguf("model_dir", "out.gguf")  # must not raise
+    @patch("src.utils.gguf_export.convert_to_gguf")
+    def test_convert_failure_propagates_to_cli(self, convert: MagicMock) -> None:
+        convert.side_effect = ValueError("GGUF 量化失败")
+        with pytest.raises(ValueError, match="量化失败"):
+            export_to_gguf("model_dir", "out.gguf")
 
 
 class TestLoadMergedModel:

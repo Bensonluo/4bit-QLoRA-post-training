@@ -2082,3 +2082,78 @@ def test_all_zero_without_diagnostics_gates_three_way_choice_on_format():
     assert "零分更可能来自答案格式不匹配" in joined
     assert "格式对得上之前,补数据和改任务定义都还不是下一步" in joined
     assert "失败原因对号处理" not in joined  # 无失败原因可对号
+
+
+def test_gguf_export_summary_preserves_format_and_local_handoff(tmp_path):
+    import shlex
+
+    from src.workbench.report_summary import export_cli_command, summarize_export
+
+    record = {
+        "status": "exported",
+        "run_id": "wb-9",
+        "export_format": "gguf",
+        "quantization": "q4_k_m",
+        "output_dir": str(tmp_path / "my exported model"),
+        "gguf_file": str(tmp_path / "my exported model" / "model-q4_k_m.gguf"),
+        "modelfile": str(tmp_path / "my exported model" / "Modelfile"),
+        "training_root": str(tmp_path / "my training runs"),
+        "llama_cpp_dir": str(tmp_path / "my llama.cpp"),
+    }
+    command = shlex.split(export_cli_command(record))
+    assert command[:4] == [
+        "python",
+        "scripts/data_intake.py",
+        "--training-root",
+        record["training_root"],
+    ]
+    assert command[4:6] == ["train-export", "wb-9"]
+    assert command[6:] == [
+        "--format",
+        "gguf",
+        "--quantization",
+        "q4_k_m",
+        "--llama-cpp-dir",
+        record["llama_cpp_dir"],
+        "--output-dir",
+        record["output_dir"],
+    ]
+    lines = summarize_export(record)
+    assert lines[0].startswith("GGUF 导出完成")
+    assert any("量化后的模型需要重新核对业务效果" in line for line in lines)
+    assert any("尚未执行目标运行时的加载测试" in line for line in lines)
+    assert any("完整 Alpaca 原始提示" in line for line in lines)
+    ollama = next(line.split("：", 1)[1] for line in lines if line.startswith("Ollama 创建命令"))
+    assert shlex.split(ollama) == [
+        "ollama",
+        "create",
+        "tunesmith-wb-9-q4_k_m",
+        "-f",
+        record["modelfile"],
+    ]
+    lm_studio = next(
+        line.split("：", 1)[1] for line in lines if line.startswith("LM Studio 导入命令")
+    )
+    assert shlex.split(lm_studio)[-1] == record["gguf_file"]
+    assert lines[-1].startswith("导出只产出模型文件")
+    record["status"] = "already_exported"
+    assert "不会重复转换或量化" in summarize_export(record)[0]
+    record["status"] = "ready"
+    assert "q4_k_m" in summarize_export(record)[0]
+    assert summarize_export(record)[1] == export_cli_command(record)
+    record["status"] = "verification_required"
+    assert export_cli_command(record) in summarize_export(record)[1]
+
+
+def test_gguf_blocked_summary_only_reports_observed_causes():
+    from src.workbench.report_summary import summarize_export
+
+    lines = summarize_export(
+        {
+            "status": "toolchain_missing",
+            "export_format": "gguf",
+            "reasons": ["缺少本地 llama.cpp 工具。"],
+        }
+    )
+    assert lines[0] == "缺少本地 llama.cpp 工具。"
+    assert all("导出完成" not in line for line in lines)

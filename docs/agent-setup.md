@@ -316,6 +316,11 @@ python scripts/data_intake.py train-stop RUN_ID
 python scripts/data_intake.py train-list SESSION_ID
 python scripts/data_intake.py train-lineage RUN_ID
 python scripts/data_intake.py train-export RUN_ID
+# 首次准备固定版本的本地工具（下载工具源码并编译量化器，不下载模型、不改 Python 环境）：
+python scripts/setup_gguf_tools.py
+# 将上条命令返回的 llama_cpp_dir 填入下一条命令：
+python scripts/data_intake.py train-export RUN_ID --format gguf \
+  --llama-cpp-dir /path/to/llama.cpp --quantization q4_k_m
 python scripts/data_intake.py train-cost RUN_ID
 ```
 
@@ -331,9 +336,15 @@ python scripts/data_intake.py train-cost RUN_ID
 
 `train-export RUN_ID` 是旅程的交接入口：把本次训练的适配器合并进它使用的基础模型，产出 Hugging Face 格式的完整模型与分词器（默认 `outputs/workbench/merged/RUN_ID`，可用 `--output-dir` 覆盖）。合并复用框架层 `merge_adapter_to_dir`，基座路径取自训练记录，不下载、不更换底座。执行前核对基座实际内容身份、训练产物 manifest 与 adapter 文件摘要；合并在同级临时目录完成，来源复核通过并写入 `export_evidence.json` 后原子发布。证据包含训练/会话/数据版本/配置身份、来源与导出文件 SHA256；已存在的目录必须属于同一训练且内容摘要全部一致，重复导出不会改变模型内容。无证据的旧目录或其他模型不会被认作本轮导出；请保留旧内容并选择新的输出目录。
 
-命令 stdout 输出 JSON、stderr 追加 `summarize_export` 单一来源的人话摘要；盘点不过关时逐条点名原因，不静默降级。页面只读盘点，不在页面执行合并，也不在每次刷新时哈希大模型权重：有匹配证据的现存目录显示「待完整性核验」，运行 `train-export` 完整完整性核验后才返回已导出；页面与 CLI 同源同词汇。摘要以「导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署」收尾。
+命令 stdout 输出 JSON、stderr 追加 `summarize_export` 单一来源的人话摘要；盘点不过关时逐条点名原因，不静默降级。页面轻量盘点，不在每次刷新时哈希大模型权重：成功训练记录下可选择格式、精度、本地工具目录和输出目录，点击「导出模型」才执行与 CLI 相同的完整性校验与实际导出。有匹配证据的现存目录显示「待完整性核验」，显式执行后全部摘要一致才返回已导出；页面与 CLI 同源同词汇。摘要以「导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署」收尾。
 
-格式兼容性须单独核对：vLLM 需要支持对应模型架构；Ollama 可通过 `Modelfile` 导入支持的 Safetensors 模型；LM Studio 的 llama.cpp 路径需要 GGUF。本命令没有完成 GGUF 转换或三种工具的实际加载验证，不能宣称任意导出目录均可直接加载。官方说明：[vLLM 支持的模型](https://docs.vllm.ai/en/latest/models/supported_models/)、[Ollama 导入](https://docs.ollama.com/import)、[LM Studio 导入](https://lmstudio.ai/docs/app/advanced/import-model)。
+`scripts/setup_gguf_tools.py` 在独立缓存中准备固定官方版本的完整转换工具与 CPU 量化器，并实际自测；可用 `--destination` 指定位置、`--check-only` 检查已有目录。外来、被修改或版本不同的目录不会被覆盖。它使用当前 Python 检查依赖，不自动 pip 安装；缺依赖时给出解释与依赖清单。
+
+`--format gguf` 将经来源核验的合并模型交给本地 llama.cpp 转换，精度支持 `f16`、`q8_0`、`q4_k_m`、`q5_k_m`、`q6_k`，默认 `q4_k_m`。`--llama-cpp-dir` 需指向包含 `convert_hf_to_gguf.py` 的目录；量化精度还需已编译的 `llama-quantize`。工具缺失、架构不支持或转换失败时如实阻断，不降级、不自动下载或编译。GGUF 默认独立目录为 `outputs/workbench/gguf/RUN_ID-q4_k_m`（随精度变化，可用 `--output-dir` 覆盖），其中保存 GGUF 文件、`export_evidence.json`、`Modelfile` 与 `USAGE.md`；失败不发布半成品，已有其他格式或精度的产物不能冒充本次导出。
+
+GGUF 摘要给出 LM Studio 导入与 `ollama create ... -f Modelfile` 命令。`lms import` 使用 `--copy` 保留工作台产物；随后运行 `lms ls --json`，读取该模型条目的 `modelKey` 并执行 `lms load MODEL_KEY`，不要把条目的文件路径当作模型 key。也可在 LM Studio 模型列表中选择并加载。`Modelfile` 使用完整 Alpaca 原始提示，不自动增加基座聊天模板；请按 `USAGE.md` 保持与训练相同的输入格式。量化后的模型需要重新核对业务效果，不能沿用 Hugging Face 模型的评测或验收结论。
+
+格式兼容性须单独核对：vLLM 需要支持对应模型架构；Ollama 可通过 `Modelfile` 导入支持的模型；LM Studio 的 llama.cpp 路径需要 GGUF。默认 HF 导出不会自动转换；GGUF 出口完成转换与文件完整性核验，不能据此声称所有目标运行时都已实际加载验证。官方说明：[vLLM 支持的模型](https://docs.vllm.ai/en/latest/models/supported_models/)、[Ollama 导入](https://docs.ollama.com/import)、[LM Studio 导入](https://lmstudio.ai/docs/app/advanced/import-model)。
 
 `train-cost RUN_ID` 把训练成本账带到 CLI（度量体系「成本可计算」的平权入口）：stdout 输出 JSON 成本账、stderr 逐行追加人话摘要，与页面在成功训练记录下渲染的成本账同一来源——`summarize_run_cost` 出账、`cost_lines` 出人话，页面与 CLI 同源同词汇。可选 `--api-price`（元/百万 token）与 `--monthly-queries`（次）给出 API 对比口径，两者留 0 不对比（与页面输入同款默认）；`--device` 可指定 cuda/mps/cpu，默认自动检测本机设备。口径边界与页面一致：时长是实测，功耗与电费是估计值、不是电表读数（按设备类别估计功耗与居民电价，硬件购置成本不含在内）；API 对比与本地训练两者口径不同，仅供量级比较，不是精确账单。
 

@@ -1,0 +1,221 @@
+{
+  "kind": "real_gguf_consumer_handoff",
+  "verified_at": "2026-10-03T13:47:41Z",
+  "baseline_commit": "73831e0",
+  "run_id": "wb-4ae1a6dece3147feb4bfef2fcb36fc0b",
+  "base_model": "Qwen3-1.7B",
+  "export_format": "gguf",
+  "quantization": "q4_k_m",
+  "canonical_proof_directory": "/private/tmp/tunesmith-gguf-from-prepared-r145",
+  "status": "exported",
+  "gguf_file": "/private/tmp/tunesmith-gguf-from-prepared-r145/model-q4_k_m.gguf",
+  "output_integrity": {
+    "Modelfile": {
+      "size": 54,
+      "sha256": "ae16029be2d3365ee7354c38fefa26c3cbfd93dd3a0b9142ea337db80f6cf958"
+    },
+    "USAGE.md": {
+      "size": 991,
+      "sha256": "97db1356f5eef3115f5682fcd74944081bf7d0ed52d3d5647b20d6d761cb57cf"
+    },
+    "model-q4_k_m.gguf": {
+      "size": 1107408640,
+      "sha256": "47b90d206d48db085e75be5eeb5b1927690e4582c7c8a089820f786b6ab708b5"
+    }
+  },
+  "export_evidence_sha256": "975f915e5e7d3e241bf252f3aff295d50f4fd5336bb7e6f9fcf896e6ffe32c28",
+  "training_manifest_sha256": "9ec80b71772b8c9e55e3dfa92796b7ada8fbd5ca9166a0d1848ffaf5020c8a1f",
+  "hf_model_weight_bytes": 3441185608,
+  "gguf_bytes": 1107408640,
+  "metadata": {
+    "architecture": "qwen3",
+    "file_type": 15,
+    "tensor_count": 310,
+    "tensor_types": [
+      0,
+      12,
+      14
+    ],
+    "tokenizer_model": "gpt2",
+    "token_count": 151936,
+    "bos_token_id": 151643,
+    "eos_token_id": 151645,
+    "pad_token_id": 151643,
+    "add_bos_token": false,
+    "add_eos_token": false,
+    "validation_scope": "GGUF 元数据、张量表与数据偏移已核查；量化数据仅核查保守长度下界，完整块内容、实际可加载性与业务效果尚需独立验证。"
+  },
+  "chat_template_sha256": {
+    "default": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+  },
+  "tool_preparation": {
+    "status": "ready",
+    "revision": "436f6f89e1e581249900b37a5b8a12a36a6d0912",
+    "repository": "https://github.com/ggml-org/llama.cpp",
+    "llama_cpp_dir": "/private/tmp/tunesmith-gguf-prepared-r145",
+    "quantizer": "/private/tmp/tunesmith-gguf-prepared-r145/build/bin/llama-quantize",
+    "python_executable": "/Users/luopeng/Documents/GitHub/TuneSmith/venv/bin/python",
+    "reused_checkout": false,
+    "check_only": false,
+    "train_export_args": [
+      "--format",
+      "gguf",
+      "--llama-cpp-dir",
+      "/private/tmp/tunesmith-gguf-prepared-r145"
+    ],
+    "train_export_options": "--format gguf --llama-cpp-dir /private/tmp/tunesmith-gguf-prepared-r145",
+    "scope_note": "仅准备并自测官方转换/量化工具；未下载模型、未训练或评估模型。"
+  },
+  "tool_identity_revision": "436f6f89e1e581249900b37a5b8a12a36a6d0912",
+  "python_packages": {
+    "numpy": "2.4.3",
+    "torch": "2.11.0",
+    "transformers": "5.9.0",
+    "sentencepiece": "0.2.1",
+    "safetensors": "0.7.0"
+  },
+  "repeat_export": {
+    "status": "already_exported",
+    "run_id": "wb-4ae1a6dece3147feb4bfef2fcb36fc0b",
+    "output_dir": "/private/tmp/tunesmith-gguf-from-prepared-r145",
+    "export_format": "gguf",
+    "quantization": "q4_k_m",
+    "gguf_file": "/private/tmp/tunesmith-gguf-from-prepared-r145/model-q4_k_m.gguf",
+    "modelfile": "/private/tmp/tunesmith-gguf-from-prepared-r145/Modelfile",
+    "business_evaluation_status": "not_run",
+    "training_root": "outputs/workbench/training"
+  },
+  "equivalent_content_export": {
+    "directory": "/private/tmp/tunesmith-gguf-final-r145",
+    "model_sha256": "47b90d206d48db085e75be5eeb5b1927690e4582c7c8a089820f786b6ab708b5",
+    "note": "The independently prepared CPU toolchain export has the same exact model bytes as the export tested in both consumer loaders. Source identities also match."
+  },
+  "raw_completion": {
+    "kind": "real_raw_gguf_completion",
+    "command": [
+      "/tmp/tunesmith-llama-cpp-r145/build/bin/llama-completion",
+      "-m",
+      "/tmp/tunesmith-gguf-final-r145/model-q4_k_m.gguf",
+      "-f",
+      "/tmp/tunesmith-r145-raw-prompt.txt",
+      "-n",
+      "8",
+      "--temp",
+      "0",
+      "--no-conversation",
+      "--no-display-prompt",
+      "-c",
+      "1024",
+      "-ngl",
+      "0",
+      "-t",
+      "4"
+    ],
+    "exit_code": 0,
+    "seconds": 4.0,
+    "prompt_protocol": "render_alpaca_prompt_without_answer",
+    "prompt_sha256": "467bdabbbe8b45ba77f4b0a70eac305696c3a5de2aab6b5ee1a9c64067a50b99",
+    "max_new_tokens": 8,
+    "temperature": 0,
+    "output_bytes": 38,
+    "output_sha256": "2cf2dc8ab69fa410c4b930cf0c100053b701e1c1c110306b05ad6bfe21f3b6e5",
+    "model_sha256": "47b90d206d48db085e75be5eeb5b1927690e4582c7c8a089820f786b6ab708b5",
+    "loader_sha256": "507e449ae29e342377fa12a07da564eca94430ac75f9b107da1d566fab173fdc",
+    "business_evaluation_status": "not_run"
+  },
+  "raw_prompt_hf_token_count": 22,
+  "raw_prompt_llama_token_count": 22,
+  "lmstudio": {
+    "kind": "real_lmstudio_gguf_handoff",
+    "namespace": "tunesmith/r145-proof-db9503b7ce24",
+    "identifier": "tunesmith-r145-db9503b7ce24",
+    "model_sha256": "47b90d206d48db085e75be5eeb5b1927690e4582c7c8a089820f786b6ab708b5",
+    "source_export_evidence_sha256": "fd6c1405fd6b2a470eff84261a33d77f0d00954b88f74436b08b71badd2a0129",
+    "commands": [
+      [
+        "ps",
+        "--json"
+      ],
+      [
+        "ls",
+        "--json"
+      ],
+      [
+        "import",
+        "/tmp/tunesmith-gguf-final-r145/model-q4_k_m.gguf",
+        "--copy",
+        "--user-repo",
+        "tunesmith/r145-proof-db9503b7ce24",
+        "--yes",
+        "--dry-run"
+      ],
+      [
+        "import",
+        "/tmp/tunesmith-gguf-final-r145/model-q4_k_m.gguf",
+        "--copy",
+        "--user-repo",
+        "tunesmith/r145-proof-db9503b7ce24",
+        "--yes"
+      ],
+      [
+        "ls",
+        "--json"
+      ],
+      [
+        "load",
+        "r145-proof-db9503b7ce24",
+        "--identifier",
+        "tunesmith-r145-db9503b7ce24",
+        "--context-length",
+        "1024",
+        "--gpu",
+        "0.5",
+        "--ttl",
+        "120",
+        "--yes"
+      ],
+      [
+        "ps",
+        "--json"
+      ],
+      [
+        "chat",
+        "tunesmith-r145-db9503b7ce24",
+        "-p",
+        "Reply with exactly OK and no explanation. /no_think",
+        "--dont-fetch-catalog",
+        "--yes",
+        "--stats"
+      ],
+      [
+        "unload",
+        "tunesmith-r145-db9503b7ce24"
+      ]
+    ],
+    "business_evaluation_status": "not_run",
+    "generation_protocol": "LM Studio chat uses the embedded Qwen3 chat template, not the workbench raw Alpaca protocol",
+    "loaded_models_before": 0,
+    "disk_models_before": 3,
+    "import_dry_run": "",
+    "import_seconds": 0.12,
+    "model_key": "r145-proof-db9503b7ce24",
+    "load_seconds": 10.81,
+    "load_status": "loaded",
+    "generation_seconds": 0.42,
+    "generation_stdout_bytes": 13,
+    "generation_stdout_sha256": "f741d0331f206f58e2394d7ef9ecbfd6c08998b38a499d74388bcbcee06d3553",
+    "generation_status": "completed",
+    "own_model_unloaded": true,
+    "own_imported_copy_removed": true,
+    "verified_at": "2026-10-03T13:33:40Z",
+    "disk_models_after": 3,
+    "loaded_models_after": 0,
+    "own_namespaces_remaining": 0,
+    "public_server_state_after": "not_running",
+    "public_server_cleanup_note": "Read-only initial audit observed no public server; after the SDK loading/chat check the server was running on 1234, then stopped and status verified not running."
+  },
+  "lmstudio_version": "0.4.25+1",
+  "lmstudio_runtime": "llama.cpp-mac-arm64-apple-metal-advsimd@2.46.0",
+  "business_evaluation_status": "not_run",
+  "scope_note": "Developer integration proof for one real Qwen3-1.7B Q4_K_M model. No claim of business quality, all architectures or quantizations, Ollama/vLLM loading, or independent nonexpert user success. LM Studio chat and raw Alpaca completion are recorded as different protocols."
+}

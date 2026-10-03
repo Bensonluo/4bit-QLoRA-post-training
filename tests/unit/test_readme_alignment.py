@@ -919,12 +919,17 @@ def test_train_export_docs_pinned(monkeypatch, capsys, tmp_path):
     assert "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署" in section, (
         "导出边界句必须写明"
     )
-    assert "只读盘点，不在页面执行合并" in section, "页面只读盘点边界必须写明"
+    assert "页面轻量盘点" in section and "点击「导出模型」才执行" in section
+    assert "--format gguf" in section and "--llama-cpp-dir" in section
+    assert "outputs/workbench/gguf/RUN_ID-q4_k_m" in section
+    assert "不能沿用 Hugging Face 模型的评测或验收结论" in section
     assert "同源同词汇" in section, "页面与 CLI 同口径承诺必须写明"
     # 帮助文本与命令面同步:收 RUN_ID 与 --output-dir,不收只读族没有的 --revision/--tail。
     help_text = _cli_help_text(monkeypatch, capsys, tmp_path, "train-export")
     assert "run_id" in help_text, "train-export 收位置参数 RUN_ID"
     assert "--output-dir" in help_text
+    assert "--format" in help_text and "--quantization" in help_text
+    assert "--llama-cpp-dir" in help_text and "q4_k_m" in help_text
     assert "--revision" not in help_text, "导出沿用训练记录,不收 --revision"
     assert "--tail" not in help_text, "--tail 是 train-logs 专属"
     assert "合并导出" in help_text, "帮助文本必须说明这是合并导出"

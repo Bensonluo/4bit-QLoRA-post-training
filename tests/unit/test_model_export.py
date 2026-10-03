@@ -11,11 +11,37 @@ from types import ModuleType
 import pytest
 
 from src.inference.discovery import looks_merged
+from src.utils.gguf_export import gguf_toolchain
+from src.utils.gguf_metadata import read_gguf_metadata
 from src.workbench.model_export import default_export_dir, export_model, plan_model_export
 from src.workbench.training_runs import file_digest, model_identity
+from tests.unit.test_gguf_export import _tools
+from tests.unit.test_gguf_metadata import _fields, _write
 
 merger = ModuleType("src.models.merger")
 merger.merge_adapter_to_dir = None
+
+
+def _fake_gguf(calls, *, failure=False):
+    def convert(source, target, *, quantization, llama_cpp_dir):
+        calls.append((source, target, quantization, llama_cpp_dir))
+        if failure:
+            raise ValueError("conversion failed")
+        fields = [
+            (key, kind, 15 if key == "general.file_type" else value)
+            for key, kind, value in _fields()
+        ]
+        _write(Path(target), fields=fields, tensors=[("weight", [256], 12, 0)], payload=b"\0" * 144)
+        return {
+            "gguf_file": str(target),
+            "quantization": quantization,
+            "metadata": read_gguf_metadata(target),
+            "toolchain": gguf_toolchain(llama_cpp_dir, quantization, verify_content=True),
+            "commands": [],
+            "business_evaluation_status": "not_run",
+        }
+
+    return convert
 
 
 @pytest.fixture(autouse=True)
@@ -438,3 +464,75 @@ def test_export_to_empty_directory_is_published_atomically(tmp_path, monkeypatch
     assert result["status"] == "exported"
     assert looks_merged(target)
     assert not list(tmp_path.glob(".merged-export-*"))
+
+
+def test_gguf_default_directory_keeps_formats_and_precisions_separate():
+    assert default_export_dir(Path("/a/training"), "wb-x", export_format="gguf") == Path(
+        "/a/gguf/wb-x-q4_k_m"
+    )
+
+
+def test_gguf_tool_absence_blocks_before_merging(tmp_path, monkeypatch):
+    monkeypatch.delenv("TUNESMITH_LLAMA_CPP", raising=False)
+    run = _make_run(tmp_path)
+    plan = plan_model_export(run, tmp_path / "gguf", export_format="gguf")
+    assert plan["status"] == "toolchain_missing"
+    assert "setup_gguf_tools" in plan["reasons"][0]
+    with pytest.raises(ValueError):
+        export_model(plan)
+    assert not (tmp_path / "gguf").exists()
+
+
+def test_gguf_handoff_is_content_bound_and_repeat_needs_no_conversion_tools(tmp_path, monkeypatch):
+    run, tools, calls = _make_run(tmp_path), _tools(tmp_path), []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    monkeypatch.setattr("src.utils.gguf_export.convert_to_gguf", _fake_gguf(calls))
+    target = tmp_path / "gguf"
+    plan = plan_model_export(run, target, export_format="gguf", llama_cpp_dir=tools)
+    result = export_model(plan)
+    assert result["status"] == "exported" and result["export_format"] == "gguf"
+    assert result["business_evaluation_status"] == "not_run"
+    assert result["conversion"]["gguf_file"] == result["gguf_file"]
+    assert Path(result["gguf_file"]).is_file() and Path(result["modelfile"]).is_file()
+    assert 'TEMPLATE """{{ .Prompt }}"""' in Path(result["modelfile"]).read_text()
+    assert "not_run" in (target / "USAGE.md").read_text()
+    assert not list(tmp_path.glob(".gguf-export-*"))
+    repeat = export_model(plan_model_export(run, target, export_format="gguf"))
+    assert repeat["status"] == "already_exported" and repeat["gguf_file"] == result["gguf_file"]
+    assert len(calls) == 1
+    assert plan_model_export(run, target, export_format="hf")["status"] == "target_conflict"
+    assert (
+        plan_model_export(run, target, export_format="gguf", quantization="q8_0")["status"]
+        == "target_conflict"
+    )
+    path = Path(result["gguf_file"])
+    path.write_bytes(path.read_bytes()[:-1] + b"\x01")
+    with pytest.raises(ValueError, match="文件摘要不匹配"):
+        export_model(plan_model_export(run, target, export_format="gguf"))
+
+
+def test_gguf_conversion_failure_does_not_publish_or_keep_partial_directory(tmp_path, monkeypatch):
+    run, tools = _make_run(tmp_path), _tools(tmp_path)
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    monkeypatch.setattr("src.utils.gguf_export.convert_to_gguf", _fake_gguf([], failure=True))
+    target = tmp_path / "gguf"
+    with pytest.raises(ValueError, match="conversion failed"):
+        export_model(plan_model_export(run, target, export_format="gguf", llama_cpp_dir=tools))
+    assert not target.exists() and not list(tmp_path.glob(".gguf-export-*"))
+
+
+def test_tools_changed_during_merge_are_refused_before_conversion(tmp_path, monkeypatch):
+    run, tools, calls = _make_run(tmp_path), _tools(tmp_path), []
+    original = _fake_merger([])
+
+    def merge(*args, **kwargs):
+        result = original(*args, **kwargs)
+        (tools / "convert_hf_to_gguf.py").write_text("# replaced tool")
+        return result
+
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", merge)
+    monkeypatch.setattr("src.utils.gguf_export.convert_to_gguf", _fake_gguf(calls))
+    target = tmp_path / "gguf"
+    with pytest.raises(ValueError, match="合并期间 GGUF 工具"):
+        export_model(plan_model_export(run, target, export_format="gguf", llama_cpp_dir=tools))
+    assert not target.exists() and calls == []
