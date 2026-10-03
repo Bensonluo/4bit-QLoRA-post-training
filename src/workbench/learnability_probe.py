@@ -9,9 +9,12 @@ never a claim of business quality.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
+from src.workbench.intake_models import IntakeSession
 from src.workbench.sources import content_digest
 
 # 弱信号候选的改标签门槛(单一来源):仅基座零样本不认同是弱证据,不足以修正数据;
@@ -21,10 +24,10 @@ WEAK_SIGNAL_RULE = "单凭模型不认同不改标签，人工核对后仍不认
 
 
 def probe_learnability(
-    session,
+    session: IntakeSession,
     base_model_path: str,
     *,
-    runtime_factory=None,
+    runtime_factory: Any = None,
     sample_size: int = 8,
     max_new_tokens: int = 32,
 ) -> dict:
@@ -37,15 +40,26 @@ def probe_learnability(
         raise ValueError("max_new_tokens 必须是正整数。")
     if session.dataset is None:
         raise ValueError("请先生成独立分区；探针使用固定开发集抽样。")
+    if session.analysis is None:
+        raise ValueError("请先恢复已确认的数据方案，再运行可学性探针。")
     recipe = session.analysis.recipe
     if recipe is None or recipe.output_format != "text" or len(recipe.targets) != 1:
         raise ValueError("可学性探针当前支持单字段文本答案任务；其他形态暂不支持。")
-    verification = {"issues": []}
-    rows = _verified_partitions(session, verification)["validation"]
+    verification: dict[str, Any] = {"issues": []}
+    partitions = _verified_partitions(session, verification)
+    if any(issue["severity"] == "blocking" for issue in verification["issues"]):
+        raise ValueError("当前分区存在泄漏或完整性问题，请先修正后再探测。")
+    rows = partitions["validation"]
     if not rows:
         raise ValueError("当前数据没有开发集样本，无法探测。")
+    train_counts = Counter(row["output"] for row in partitions["train"])
+    if not train_counts:
+        raise ValueError("当前数据没有训练集样本，无法制定多数类基线。")
+    # 基线先从训练集决定固定猜测，再与模型回答同一组开发题；不能按开发题
+    # 的答案选择最有利的标签，或把全开发集比例与抽样模型分数作差。
+    majority_label = train_counts.most_common(1)[0][0]
 
-    from src.workbench.business_evaluation import EvaluationModel
+    from src.workbench.business_evaluation import EvaluationModel, Generation
 
     model = EvaluationModel("基座零样本", base_model_path)
     runtime = (runtime_factory or _default_runtime)(model)
@@ -57,9 +71,23 @@ def probe_learnability(
 
         for row in sampled:
             prompt = render_alpaca_prompt({**row, "output": ""})
-            generation = runtime.generate(prompt, _probe_protocol(max_new_tokens))
-            answer = generation.text.strip()
-            hit = answer == row["output"]
+            error = None
+            truncated = False
+            try:
+                generation = runtime.generate(prompt, _probe_protocol(max_new_tokens))
+                if (
+                    not isinstance(generation, Generation)
+                    or not isinstance(generation.text, str)
+                    or type(generation.truncated) is not bool
+                ):
+                    raise ValueError("模型生成器没有返回有效 Generation。")
+                answer = generation.text.strip()
+                truncated = generation.truncated
+            except Exception as exc:
+                # 单题失败仍留在固定分母与记录里，不把成功题子集当全部证据。
+                answer = ""
+                error = f"{type(exc).__name__}: {exc}"
+            hit = error is None and not truncated and answer == row["output"]
             correct += hit
             observations.append(
                 {
@@ -67,7 +95,9 @@ def probe_learnability(
                     "expected": row["output"],
                     "generated": answer,
                     "match": hit,
-                    "truncated": generation.truncated,
+                    "truncated": truncated,
+                    "error": error,
+                    "baseline_match": majority_label == row["output"],
                 }
             )
     finally:
@@ -78,9 +108,10 @@ def probe_learnability(
     label_counts: dict[str, int] = {}
     for row in rows:
         label_counts[row["output"]] = label_counts.get(row["output"], 0) + 1
-    majority_share = max(label_counts.values()) / len(rows) if label_counts else 0.0
-    majority_label = max(label_counts, key=label_counts.get) if label_counts else ""
+    majority_share = sum(item["baseline_match"] for item in observations) / len(sampled)
     accuracy = correct / len(sampled)
+    failures = sum(item["error"] is not None for item in observations)
+    truncated_count = sum(item["truncated"] for item in observations)
 
     # 标签问题候选:基座零样本与数据标签矛盾的行。基座没见过这些数据,
     # 它的分歧不带训练利益;若盲标核验中用户也不同意数据标签,则是强证据
@@ -93,8 +124,8 @@ def probe_learnability(
     }
     candidates = []
     for observation in observations:
-        if observation["match"] or observation["truncated"]:
-            continue  # 截断的生成不算分歧证据
+        if observation["match"] or observation["truncated"] or observation["error"]:
+            continue  # 未完成或失败的生成不算标签分歧证据
         row_id = observation["row_id"]
         user_also_disagrees = row_id in blind_items
         candidates.append(
@@ -123,6 +154,13 @@ def probe_learnability(
         "zero_shot_accuracy": accuracy,
         "majority_baseline": majority_share,
         "majority_label": majority_label,
+        "baseline_protocol": {
+            "kind": "train_majority_same_sample_v1",
+            "train_total": len(partitions["train"]),
+            "sample_size": len(sampled),
+        },
+        "generation_failures": failures,
+        "truncated_count": truncated_count,
         "label_vocabulary": sorted(label_counts),
         "difference": accuracy - majority_share,
         "observations": observations,
@@ -135,10 +173,12 @@ def probe_learnability(
             f"溯源确认标签后再决定改不改,不要只凭模型输出下结论。{WEAK_SIGNAL_RULE}。"
         ),
         "note": (
-            f"基座零样本 {accuracy:.0%} vs 全开发集多数类「{majority_label}」{majority_share:.0%}"
+            f"基座零样本 {accuracy:.0%} vs 训练集多数类固定猜测「{majority_label}」{majority_share:.0%}"
+            "（双方回答同一组开发题；基线标签只从训练集选择）"
             f"（抽样 {len(sampled)}/{len(rows)} 条）。这只是数据与任务是否存在可学关联的"
             "最便宜证据：样本量小、零样本差异不能预测微调效果，也不构成业务达标结论；"
             "显著低于瞎猜基线通常意味着提示格式或任务定义需要先核查。"
+            f"本次生成失败 {failures} 条、截断 {truncated_count} 条，均按不匹配留在分母内。"
         ),
     }
     return result
@@ -158,7 +198,7 @@ def _probe_protocol(max_new_tokens: int) -> _ProtocolLike:
     return _ProtocolLike(max_new_tokens)
 
 
-def _default_runtime(model):
+def _default_runtime(model: Any) -> Any:
     from src.workbench.business_evaluation import LocalEvaluationRuntime
 
     return LocalEvaluationRuntime(model)
@@ -297,9 +337,19 @@ def low_baseline_triage_lines(result: dict) -> list[str]:
     observations = result.get("observations") or []
     if not observations:
         return []
-    generated = [obs.get("generated", "") for obs in observations if not obs.get("truncated")]
+    generated = [
+        obs.get("generated", "")
+        for obs in observations
+        if not obs.get("truncated") and not obs.get("error")
+    ]
     truncated_count = sum(1 for obs in observations if obs.get("truncated"))
     lines: list[str] = []
+    failures = sum(1 for obs in observations if obs.get("error"))
+    if failures:
+        lines.append(
+            f"{failures} 条生成失败——失败题保留在分母内；先核对逐条错误并修正运行条件，"
+            "失败输出不作为标签分歧或任务定义的证据。"
+        )
     if truncated_count:
         lines.append(
             f"{truncated_count} 条生成被截断——被截断的输出已按不匹配计，当前分数被截断压低；"

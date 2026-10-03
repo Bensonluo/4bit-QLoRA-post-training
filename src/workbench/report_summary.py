@@ -1278,8 +1278,10 @@ def summarize_export(record: dict) -> list[str]:
     if state == "exported":
         return [
             f"合并导出完成：这次训练的适配器已并入基础模型，输出目录 {record.get('output_dir') or '?'}。",
-            "这个目录包含完整模型与分词器，可被 vLLM、Ollama、LM Studio 直接加载；"
+            "这个目录包含 Hugging Face 格式的完整模型与分词器；"
             "目录里的 export_evidence.json 记录了它来自哪次训练与哪个数据版本。",
+            "交给 vLLM 前请核对模型架构兼容性；Ollama 需按支持的架构导入，"
+            "LM Studio 的 llama.cpp 路径需先转换为 GGUF。本次导出没有执行这些加载验证或转换。",
             boundary,
         ]
     if state == "already_exported":
@@ -1287,9 +1289,16 @@ def summarize_export(record: dict) -> list[str]:
             f"这次训练此前已合并导出到 {record.get('output_dir') or '?'}；目录已完整，重复导出不会改变模型内容。",
             boundary,
         ]
+    if state == "verification_required":
+        return [
+            f"目录 {record.get('output_dir') or '?'} 有本次训练的导出证据，模型内容待完整性核验。",
+            f"运行 python scripts/data_intake.py train-export {record.get('run_id') or 'RUN_ID'} "
+            "核对来源与模型文件摘要；全部一致才返回已导出，不会重复合并。",
+            boundary,
+        ]
     if state == "ready":
         return [
-            "这次训练的产物已齐备，可合并导出成可被 vLLM、Ollama、LM Studio 直接加载的完整模型：",
+            "这次训练的产物清单已齐备；执行时先核验来源内容，再合并导出为 Hugging Face 格式的完整模型：",
             f"python scripts/data_intake.py train-export {record.get('run_id') or 'RUN_ID'}",
             f"默认输出目录：{record.get('output_dir') or '-'}。",
             boundary,

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.utils.model_files import config_and_tokenizer_files
 from src.workbench.intake_models import IntakeSession
 from src.workbench.materialize import dataset_is_current
 from src.workbench.sources import content_digest
@@ -46,9 +47,8 @@ def model_identity(path: Path) -> dict[str, Any]:
     if not weights:
         raise ValueError("本地模型目录缺少 safetensors 或 pytorch_model 权重；不会自动下载。")
     files = {}
-    for item in sorted(path.iterdir()):
-        if item.is_file() and item.suffix in {".json", ".txt", ".model", ".tiktoken"}:
-            files[item.name] = file_digest(item)
+    for item in config_and_tokenizer_files(path):
+        files[item.relative_to(path).as_posix()] = file_digest(item)
     return {
         "path": str(path),
         "config_and_tokenizer_hashes": files,

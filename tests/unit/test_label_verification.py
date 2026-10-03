@@ -30,6 +30,7 @@ def test_start_hides_targets_and_samples_deterministically(store):
     assert all(set(item) == {"row_id", "input"} for item in pending["items"])
     assert all("target" not in item and "答案" not in item["input"] for item in pending["items"])
     again = service.start_label_verification(session.session_id, session.revision)
+    assert again["verification_id"] == pending["verification_id"]
     assert [i["row_id"] for i in again["items"]] == [i["row_id"] for i in pending["items"]]
 
 
@@ -401,8 +402,9 @@ def test_blind_verification_rolls_questions_between_rounds(tmp_path):
 
     # 第 2 轮:题目必须换一组;且本轮状态内重复抽题保持一致(确定性,防反复抽题)
     second = service.start_label_verification(session.session_id, session.revision)
-    assert {i["row_id"] for i in second["items"]} != {i["row_id"] for i in first["items"]}
+    assert {i["input"] for i in second["items"]}.isdisjoint({i["input"] for i in first["items"]})
     twin = service.start_label_verification(session.session_id, session.revision)
+    assert twin["verification_id"] == second["verification_id"]
     assert [i["row_id"] for i in twin["items"]] == [i["row_id"] for i in second["items"]]
 
     # 照抄第 1 轮公布的正确标签作答第 2 轮:第 2 轮题目已变,背题不再等于通过
@@ -505,19 +507,19 @@ def test_mismatch_result_lower_bound_reflects_partial_agreement(store):
 
 
 def test_start_reports_shortfall_when_requested_exceeds_labelled_rows(store):
-    """要求条数超过已标注行时如实说明:按现有全部抽取,不静默按更小量缩水。"""
+    """题数按独立输入计算，重复行不增加证据强度；刷新复用已有挑战。"""
     service, session = store
-    labelled = [r for r in session.full_data.preview.rows if r.target is not None]
+    questions = {r.input for r in session.full_data.preview.rows if r.target is not None}
     pending = service.start_label_verification(session.session_id, session.revision, sample_size=20)
     assert pending["requested_sample_size"] == 20
-    assert pending["sample_size"] == len(labelled) < 20
-    assert f"只有 {len(labelled)} 条" in pending["shortfall_note"]
+    assert pending["sample_size"] == len(questions) < 20
+    assert f"只有 {len(questions)} 条" in pending["shortfall_note"]
     assert "不足你选择的 20 条" in pending["shortfall_note"]
+    assert "重复输入只算一道" in pending["shortfall_note"]
 
-    # 需求被满足时不带 shortfall 字段,正常抽取照旧
+    # 改请求数量不能趁刷新重新抽题或伪装原请求已满足。
     normal = service.start_label_verification(session.session_id, session.revision)
-    assert normal["requested_sample_size"] == normal["sample_size"]
-    assert "shortfall_note" not in normal
+    assert normal == pending
 
 
 def test_shortfall_evidence_note_uses_actual_sample_size(store):
@@ -535,20 +537,254 @@ def test_shortfall_evidence_note_uses_actual_sample_size(store):
     assert "本轮 20 条" not in pending["evidence_note"]
     assert "即使全部一致" in pending["evidence_note"]
 
-    # 上限 50 与下限 1 同口径:说明始终跟着实际抽样数走
+    # 抽题后修改数量仍复用同一挑战、原数量与证据强度。
     ceiling = service.start_label_verification(session.session_id, session.revision, sample_size=50)
-    assert ceiling["requested_sample_size"] == 50
+    assert ceiling["requested_sample_size"] == 20
     assert ceiling["sample_size"] == size
     assert f"本轮 {size} 条" in ceiling["evidence_note"]
     single = service.start_label_verification(session.session_id, session.revision, sample_size=1)
-    assert single["sample_size"] == 1
-    assert "本轮 1 条" in single["evidence_note"]
+    assert single == pending
 
     # 页面 number_input(1-50)与服务层校验一致:越界在抽题前就被拒绝
     with pytest.raises(ValueError, match="1 到 50"):
         service.start_label_verification(session.session_id, session.revision, sample_size=0)
     with pytest.raises(ValueError, match="1 到 50"):
         service.start_label_verification(session.session_id, session.revision, sample_size=51)
+
+
+def test_revealed_answers_cannot_be_copied_after_question_bank_exhaustion(store, tmp_path):
+    """全题失败会揭示全部答案；重验必须停下，不能照抄后打开训练门禁。"""
+    service, session = store
+    session = service.materialize_dataset(session.session_id, session.revision)
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    result = service.submit_label_verification(
+        session.session_id,
+        pending["verification_id"],
+        {item["row_id"]: "不知道" for item in pending["items"]},
+    )
+    assert result["verdict"] == "insufficient_agreement"
+    assert all(item["data_label"] for item in result["items"])
+    with pytest.raises(ValueError, match="没有尚未揭示答案的独立题目.*证据不足"):
+        service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    _assert_prepare_blocked(
+        TrainingRunService(tmp_path / "runs"),
+        service.load(session.session_id),
+        tmp_path,
+    )
+
+
+def test_duplicate_inputs_are_one_question_and_remain_excluded_when_revealed(store):
+    service, session = store
+    rows = session.full_data.preview.rows
+    assert len(rows) > len({row.input for row in rows}), (
+        "fixture includes repeated semantic questions"
+    )
+    first = service.start_label_verification(session.session_id, session.revision, sample_size=5)
+    assert len(first["items"]) == len({item["input"] for item in first["items"]})
+    service.submit_label_verification(
+        session.session_id,
+        first["verification_id"],
+        {item["row_id"]: "不知道" for item in first["items"]},
+    )
+    second = service.start_label_verification(session.session_id, session.revision, sample_size=5)
+    assert second["sample_size"] == 2
+    assert "独立题目只有 2 条" in second["shortfall_note"]
+    assert {item["input"] for item in first["items"]}.isdisjoint(
+        {item["input"] for item in second["items"]}
+    )
+
+
+@pytest.mark.parametrize("duplicate_row", [False, True])
+def test_legacy_preissued_overlapping_challenge_cannot_pass_after_reveal(store, duplicate_row):
+    """升级前发出的 pending 题单，也须在提交事务内重新核查答案是否已暴露。"""
+    import json
+    import sqlite3
+    from uuid import uuid4
+
+    service, session = store
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    legacy_id = uuid4().hex
+    with sqlite3.connect(service.database) as connection:
+        connection.execute(
+            "INSERT INTO label_verifications SELECT ?,session_id,full_source_digest,recipe_digest,"
+            "sample_size,seed,row_ids,status,verdict,result,? FROM label_verifications "
+            "WHERE verification_id=?",
+            (legacy_id, "2000-01-01T00:00:00+00:00", pending["verification_id"]),
+        )
+        if duplicate_row:
+            asked_ids = {item["row_id"] for item in pending["items"]}
+            duplicate = next(
+                row for row in session.full_data.preview.rows if row.row_id not in asked_ids
+            )
+            connection.execute(
+                "UPDATE label_verifications SET row_ids=?,sample_size=1 WHERE verification_id=?",
+                (json.dumps([duplicate.row_id]), legacy_id),
+            )
+    revealed = service.submit_label_verification(
+        session.session_id,
+        pending["verification_id"],
+        {item["row_id"]: "不知道" for item in pending["items"]},
+    )
+    copied_answers = {item["row_id"]: item["data_label"] for item in revealed["items"]}
+    if duplicate_row:
+        copied_answers = {
+            duplicate.row_id: next(
+                item["data_label"] for item in revealed["items"] if item["input"] == duplicate.input
+            )
+        }
+    with pytest.raises(ValueError, match="已公布答案.*不能作为独立盲标证据"):
+        service.submit_label_verification(session.session_id, legacy_id, copied_answers)
+    assert (
+        service.load(session.session_id).label_verification["verdict"] == "insufficient_agreement"
+    )
+
+
+def test_verified_evidence_remains_usable_after_exhaustion(store):
+    service, session = store
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    verified = service.submit_label_verification(
+        session.session_id,
+        pending["verification_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    assert verified["verdict"] == "verified"
+    with pytest.raises(ValueError, match="没有尚未揭示答案"):
+        service.start_label_verification(session.session_id, session.revision)
+    assert service.load(session.session_id).label_verification == verified
+
+
+@pytest.mark.parametrize("alter_recipe", [False, True])
+def test_source_revalidation_and_recipe_changes_do_not_launder_revealed_questions(
+    store, alter_recipe
+):
+    """重排来源、改答案、改指令仍是已揭示的输入；只有真正新题可作盲标证据。"""
+    from copy import deepcopy
+
+    from tests.unit.test_data_materialize import FULL
+
+    service, session = store
+    original_source_digest = session.full_data.source.digest
+    first = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    failed = service.submit_label_verification(
+        session.session_id,
+        first["verification_id"],
+        {item["row_id"]: "不知道" for item in first["items"]},
+    )
+    exposed = {item["input"] for item in failed["items"]}
+    if alter_recipe:
+        analysis = deepcopy(session.analysis)
+        analysis.recipe.instruction += "。请直接回答类别。"
+        session = service.apply_analysis(session, analysis)
+        session = service.confirm(session.session_id, session.revision)
+    header, *lines = FULL.decode().splitlines()
+    # Reverse rows so reused row IDs now identify different questions; change answers too.
+    reordered = ("\n".join([header, *reversed(lines)]) + "\n").replace(",yes", ",no").encode()
+    updated = service.validate_full_data(
+        session.session_id, session.revision, "reupload.csv", reordered
+    )
+    updated = service.confirm_full_data(updated.session_id, updated.revision)
+    assert updated.full_data.source.digest != original_source_digest
+    with pytest.raises(ValueError, match="没有尚未揭示答案.*更换文件、行号、标签或配方"):
+        service.start_label_verification(updated.session_id, updated.revision, sample_size=50)
+
+    expanded = reordered + b"c8,o8,genuinely new question,no\n"
+    updated = service.validate_full_data(
+        updated.session_id, updated.revision, "expanded.csv", expanded
+    )
+    updated = service.confirm_full_data(updated.session_id, updated.revision)
+    fresh = service.start_label_verification(updated.session_id, updated.revision, sample_size=50)
+    assert fresh["sample_size"] == 1
+    assert {item["input"] for item in fresh["items"]}.isdisjoint(exposed)
+    assert fresh["items"][0]["input"] == "内容: genuinely new question"
+    assert "独立题目只有 1 条" in fresh["shortfall_note"]
+    result = service.submit_label_verification(
+        updated.session_id, fresh["verification_id"], {fresh["items"][0]["row_id"]: "no"}
+    )
+    assert result["verdict"] == "verified"
+
+
+def test_submission_checks_historical_exposure_across_source_bindings(store):
+    """升级前或预发出的新版本挑战，不能提交历史版本早已公布答案的同一输入。"""
+    import json
+    import sqlite3
+    from uuid import uuid4
+
+    from tests.unit.test_data_materialize import FULL
+
+    service, session = store
+    first = service.start_label_verification(session.session_id, session.revision, sample_size=50)
+    failed = service.submit_label_verification(
+        session.session_id,
+        first["verification_id"],
+        {item["row_id"]: "不知道" for item in first["items"]},
+    )
+    changed = FULL + b"c8,o8,new input,yes\n"
+    updated = service.validate_full_data(
+        session.session_id, session.revision, "expanded.csv", changed
+    )
+    updated = service.confirm_full_data(updated.session_id, updated.revision)
+    legacy_id = uuid4().hex
+    question = next(
+        row for row in updated.full_data.preview.rows if row.input == failed["items"][0]["input"]
+    )
+    with sqlite3.connect(service.database) as connection:
+        connection.execute(
+            "INSERT INTO label_verifications VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                legacy_id,
+                updated.session_id,
+                updated.full_data.source.digest,
+                updated.full_data.approved_recipe_digest,
+                1,
+                42,
+                json.dumps([question.row_id]),
+                "pending",
+                None,
+                None,
+                "2000-01-01T00:00:00+00:00",
+            ),
+        )
+    with pytest.raises(ValueError, match="已公布答案.*不能作为独立盲标证据"):
+        service.submit_label_verification(
+            updated.session_id, legacy_id, {question.row_id: question.target}
+        )
+
+
+def test_concurrent_refreshes_issue_one_challenge_and_submission_is_one_shot(store):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    service, session = store
+    start_barrier = Barrier(2)
+
+    def start():
+        start_barrier.wait()
+        return service.start_label_verification(session.session_id, session.revision)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        pending = list(executor.map(lambda _: start(), range(2)))
+    assert pending[0] == pending[1]
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    answers = {item["row_id"]: targets[item["row_id"]] for item in pending[0]["items"]}
+    submit_barrier = Barrier(2)
+
+    def submit():
+        submit_barrier.wait()
+        try:
+            return service.submit_label_verification(
+                session.session_id,
+                pending[0]["verification_id"],
+                answers,
+            )
+        except ValueError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: submit(), range(2)))
+    assert sum(isinstance(result, ValueError) for result in results) == 1
+    assert next(result for result in results if isinstance(result, dict))["verdict"] == "verified"
+    assert service.load(session.session_id).label_verification["verdict"] == "verified"
 
 
 def _triage_items(*pairs, matched=0):

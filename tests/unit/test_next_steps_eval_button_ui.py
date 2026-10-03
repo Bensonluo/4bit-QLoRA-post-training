@@ -72,9 +72,9 @@ def test_eval_button_block_wiring_and_placement():
     assert gate_pos != -1, "wizard test 门锚必须在场"
     assert generic_btn_pos != -1, "通用评测主按钮必须在场"
     assert medical_btn_pos != -1, "医疗案例回退按钮必须在场"
-    assert (
-        chat_pos < gate_pos < generic_btn_pos < medical_btn_pos
-    ), "通用评测必须是主路（wizard test 门内），医疗案例退为回退分支"
+    assert chat_pos < gate_pos < generic_btn_pos < medical_btn_pos, (
+        "通用评测必须是主路（wizard test 门内），医疗案例退为回退分支"
+    )
     # 接线:launch_eval 以 (run_id, output_dir) 被调,主按钮形态(医疗回退支)
     assert "launch_eval(run_id, str(arts.output_dir))" in source
     assert 'key=f"eval_btn_{run_id}", type="primary"' in source

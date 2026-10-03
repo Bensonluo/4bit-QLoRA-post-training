@@ -413,9 +413,7 @@ class TestLaunchEntityEval:
         runner = TrainingRunner(project_root=str(tmp_path))
         runner._run_meta["src-run"] = {"config_path": "/x/src.yaml", "pid": 1, "returncode": 0}
 
-        rid = runner.launch_entity_eval(
-            "src-run", "/models/adapter", "/data/wizard/demo/test.json"
-        )
+        rid = runner.launch_entity_eval("src-run", "/models/adapter", "/data/wizard/demo/test.json")
 
         assert rid == "enteval-src-run"
         cmd = mock_popen.call_args.args[0]
@@ -431,9 +429,7 @@ class TestLaunchEntityEval:
         assert env["HF_ENDPOINT"] == "https://hf-mirror.com"
 
     @patch("src.tracking.runner.subprocess.Popen")
-    def test_meta_shape_technique_and_lineage(
-        self, mock_popen: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_meta_shape_technique_and_lineage(self, mock_popen: MagicMock, tmp_path: Path) -> None:
         mock_popen.return_value = _fake_proc(pid=999)
         runner = TrainingRunner(project_root=str(tmp_path))
         runner._run_meta["src-run"] = {"config_path": "/x/src.yaml", "pid": 1, "returncode": 0}

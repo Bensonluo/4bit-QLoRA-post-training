@@ -227,6 +227,26 @@ def test_collect_funnel_names_failed_session_segment(tmp_path, monkeypatch):
     assert report["sessions"]["total"] == 0
 
 
+def test_funnel_discloses_skipped_evaluation_while_counting_valid_reports(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.workbench.business_evaluation import BusinessEvaluationService
+
+    def mixed_reports(self, **kwargs):
+        self.load_errors = [{"evaluation_id": "c" * 32, "reason": "业务指标与全量评测行不一致"}]
+        return [SimpleNamespace(dataset={"purpose": "development_only"})]
+
+    monkeypatch.setattr(BusinessEvaluationService, "list_reports", mixed_reports)
+    report = collect_funnel(*_five_roots(tmp_path))
+    assert report["evaluations"] == {"development_only": 1}
+    assert report["errors"] == []
+    assert report["evaluation_load_errors"][0]["evaluation_id"] == "c" * 32
+    assert any(
+        "评测 cccccccc 读取失败，已跳过" in line and "其余有效记录照常统计" in line
+        for line in summarize_funnel(report)
+    )
+
+
 def test_cli_funnel_report_streams_json_stdout_and_human_stderr(tmp_path, monkeypatch, capsys):
     """双流契约:stdout 纯 JSON(脚本可解析),stderr 人话摘要与 summarize_funnel 同源。"""
     from scripts import data_intake

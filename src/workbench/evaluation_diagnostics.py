@@ -11,6 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from src.utils.model_files import config_and_tokenizer_files
 from src.workbench.business_evaluation import (
     EvaluationProtocol,
     EvaluationReport,
@@ -18,6 +19,7 @@ from src.workbench.business_evaluation import (
     _score,
     _strict_object,
     comparison_key,
+    verify_evaluation_metrics,
 )
 from src.workbench.intake_models import DatasetArtifact, IntakeSession
 from src.workbench.materialize import dataset_is_current
@@ -403,16 +405,7 @@ class EvaluationDiagnostics:
                         business_score=row["business_score"], scoring_reason=row["scoring_reason"]
                     )
                 self._cases.append(case)
-            if scoring_recipe is not None:
-                expected_metrics = {
-                    "business_score": sum(row["business_score"] for row in rows) / len(rows),
-                    "pass_rate": sum(row["correct"] is True for row in rows) / len(rows),
-                    "exact_match": None,
-                }
-                if any(
-                    model["metrics"].get(key) != value for key, value in expected_metrics.items()
-                ):
-                    raise ValueError("自定义业务指标与全量评测行不一致。")
+            verify_evaluation_metrics(model, report.protocol, len(records))
             self._counts[model["label"]] = {
                 "total": len(records),
                 "counts": counts,
@@ -743,12 +736,18 @@ def inspect_model_training_evidence(
     )
     base = identity["base"]
     training_base = run["model_identity"]
+    base_directory = Path(base["directory"])
+    metadata_files = {
+        path.relative_to(base_directory).as_posix()
+        for path in config_and_tokenizer_files(base_directory)
+    }
     require(
         training_base == manifest["model_identity"]
         and all(
             same_path(path, base["directory"])
             for path in (run["model_path"], config["model"]["name"], training_base["path"])
         )
+        and set(training_base["config_and_tokenizer_hashes"]) == metadata_files
         and all(
             base["files"].get(name) == digest
             for name, digest in training_base["config_and_tokenizer_hashes"].items()

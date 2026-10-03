@@ -1,25 +1,35 @@
 """model_export 单元:环节⑨交接出口的只读盘点与合并执行。
 
-plan_model_export 六态全覆盖(ready/already_exported/not_succeeded/
-adapter_missing/base_missing/target_conflict);export_model 只在 ready 动手,
-already_exported 幂等返回,其余逐条拒绝;合并复用框架层 merge_adapter_to_dir
-(测试内打桩,不加载真实模型)。
+轻量盘点与执行前完整哈希校验;合并打桩,不加载真实模型。
 """
 
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
-import src.models.merger
 from src.inference.discovery import looks_merged
 from src.workbench.model_export import default_export_dir, export_model, plan_model_export
+from src.workbench.training_runs import file_digest, model_identity
+
+merger = ModuleType("src.models.merger")
+merger.merge_adapter_to_dir = None
+
+
+@pytest.fixture(autouse=True)
+def lightweight_merger(monkeypatch):
+    """The export module must be testable without installing torch/peft."""
+    monkeypatch.setitem(sys.modules, "src.models.merger", merger)
 
 
 def _make_run(tmp_path, *, status="succeeded", with_adapter=True, base_exists=True):
     """构造一份最小训练记录:基座目录 + 产物目录(带/不带 adapter 文件)。"""
     base = tmp_path / "base-model"
     base.mkdir(exist_ok=True)
+    (base / "config.json").write_text("{}", encoding="utf-8")
+    (base / "model.safetensors").write_text("base", encoding="utf-8")
     adapter_dir = tmp_path / "training" / "wb-x" / "model"
     adapter_dir.mkdir(parents=True, exist_ok=True)
     if with_adapter:
@@ -29,14 +39,32 @@ def _make_run(tmp_path, *, status="succeeded", with_adapter=True, base_exists=Tr
         # 同一 tmp_path 可能已被上一个用例写进 adapter 文件,缺件场景必须真缺。
         for name in ("adapter_config.json", "adapter_model.safetensors", "adapter_model.bin"):
             (adapter_dir / name).unlink(missing_ok=True)
-    return {
+    record = {
         "run_id": "wb-x",
         "session_id": "sess-1",
         "dataset_version": "ds-v3",
         "status": status,
         "model_path": str(base) if base_exists else str(tmp_path / "gone-base"),
         "output_dir": str(adapter_dir),
+        "config_digest": "config-v1",
+        "model_identity": model_identity(base),
+        "artifacts": {"manifest": str(adapter_dir / "workbench_manifest.json")},
     }
+    (adapter_dir / "tokenizer_config.json").write_text("{}", encoding="utf-8")
+    manifest = {
+        key: record[key] for key in ("run_id", "dataset_version", "config_digest", "model_identity")
+    }
+    manifest["files"] = {
+        key: {"path": str(adapter_dir / name), "sha256": file_digest(adapter_dir / name)}
+        for key, name in {
+            "adapter_config": "adapter_config.json",
+            "adapter_weights": "adapter_model.safetensors",
+            "tokenizer_config": "tokenizer_config.json",
+        }.items()
+        if (adapter_dir / name).exists()
+    }
+    (adapter_dir / "workbench_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return record
 
 
 def _fake_merger(calls):
@@ -71,13 +99,13 @@ def test_plan_ready_copies_lineage_fields(tmp_path):
     assert not target.exists(), "只读盘点不得创建导出目录"
 
 
-def test_plan_already_exported_when_target_looks_merged(tmp_path):
+def test_plan_refuses_foreign_model_even_when_target_looks_merged(tmp_path):
     target = tmp_path / "merged" / "wb-x"
     target.mkdir(parents=True)
     (target / "config.json").write_text("{}", encoding="utf-8")
     (target / "model.safetensors").write_text("w", encoding="utf-8")
     plan = plan_model_export(_make_run(tmp_path), target)
-    assert plan["status"] == "already_exported"
+    assert plan["status"] == "target_conflict"
 
 
 def test_plan_blocked_states_name_the_cause(tmp_path):
@@ -106,19 +134,22 @@ def test_plan_target_conflict_when_dir_holds_foreign_content(tmp_path):
     (target / "someone-elses.txt").write_text("x", encoding="utf-8")
     plan = plan_model_export(_make_run(tmp_path), target)
     assert plan["status"] == "target_conflict"
-    assert "导出目录已存在且不是完整的已合并模型" in plan["reasons"][0]
+    assert "无法验证为本次训练的完整模型" in plan["reasons"][0]
 
 
 def test_export_model_merges_and_writes_evidence(tmp_path, monkeypatch):
     calls: list = []
-    monkeypatch.setattr(src.models.merger, "merge_adapter_to_dir", _fake_merger(calls))
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
     plan = plan_model_export(_make_run(tmp_path), tmp_path / "merged" / "wb-x")
     result = export_model(plan)
 
     assert result["status"] == "exported"
     assert result["dataset_version"] == "ds-v3"
     # 框架层合并收到的基座来自训练记录,adapter/output 与 plan 一致。
-    assert calls == [(plan["adapter_dir"], plan["output_dir"], plan["base_model_path"])]
+    assert len(calls) == 1
+    assert calls[0][0] == plan["adapter_dir"]
+    assert calls[0][2] == plan["base_model_path"]
+    assert calls[0][1] != plan["output_dir"], "合并先写临时目录，成功后原子发布"
     evidence_path = Path(result["output_dir"]) / "export_evidence.json"
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     assert evidence["run_id"] == "wb-x"
@@ -131,12 +162,14 @@ def test_export_model_merges_and_writes_evidence(tmp_path, monkeypatch):
 
 def test_export_model_already_exported_is_idempotent(tmp_path, monkeypatch):
     calls: list = []
-    monkeypatch.setattr(src.models.merger, "merge_adapter_to_dir", _fake_merger(calls))
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
     target = tmp_path / "merged" / "wb-x"
-    target.mkdir(parents=True)
-    (target / "config.json").write_text("{}", encoding="utf-8")
-    (target / "model.safetensors").write_text("w", encoding="utf-8")
-    plan = plan_model_export(_make_run(tmp_path), target)
+    run = _make_run(tmp_path)
+    export_model(plan_model_export(run, target))
+    calls.clear()
+    plan = plan_model_export(run, target)
+    assert plan["status"] == "verification_required"
+    assert plan["verification"] == "pending"
 
     result = export_model(plan)
     assert result == {"status": "already_exported", "run_id": "wb-x", "output_dir": str(target)}
@@ -145,8 +178,263 @@ def test_export_model_already_exported_is_idempotent(tmp_path, monkeypatch):
 
 def test_export_model_refuses_blocked_plans(tmp_path, monkeypatch):
     calls: list = []
-    monkeypatch.setattr(src.models.merger, "merge_adapter_to_dir", _fake_merger(calls))
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
     plan = plan_model_export(_make_run(tmp_path, status="failed"), tmp_path / "m")
     with pytest.raises(ValueError, match="只有成功完成的训练才能合并导出"):
         export_model(plan)
     assert calls == [], "阻塞盘点不得触发合并"
+
+
+@pytest.mark.parametrize("filename", ["config.json", "model.safetensors"])
+def test_export_rejects_changed_output_after_plan(tmp_path, monkeypatch, filename):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    export_model(plan_model_export(run, target))
+    plan = plan_model_export(run, target)
+    (target / filename).write_text("corrupt", encoding="utf-8")
+    with pytest.raises(ValueError, match="导出计划已失效"):
+        export_model(plan)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("source", ["base", "adapter", "manifest"])
+def test_export_rejects_changed_sources_before_merge(tmp_path, monkeypatch, source):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    plan = plan_model_export(run, target)
+    path = {
+        "base": Path(run["model_path"]) / "model.safetensors",
+        "adapter": Path(run["output_dir"]) / "adapter_model.safetensors",
+        "manifest": Path(run["artifacts"]["manifest"]),
+    }[source]
+    path.write_text("tampered", encoding="utf-8")
+    with pytest.raises(ValueError, match="导出计划已失效"):
+        export_model(plan)
+    assert calls == []
+    assert not target.exists()
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "chat_template.jinja",
+        "chat_templates/tool_use.jinja",
+        "additional_chat_templates/tool_use.jinja",
+    ],
+)
+def test_fresh_export_rejects_templates_changed_since_training(tmp_path, monkeypatch, filename):
+    """A new plan must not legitimize a template changed after its training identity was saved."""
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _make_run(tmp_path)
+    template = Path(run["model_path"]) / filename
+    template.parent.mkdir(parents=True, exist_ok=True)
+    template.write_text("training template")
+    run["model_identity"] = model_identity(Path(run["model_path"]))
+    manifest_path = Path(run["artifacts"]["manifest"])
+    manifest = json.loads(manifest_path.read_text())
+    manifest["model_identity"] = run["model_identity"]
+    manifest_path.write_text(json.dumps(manifest))
+    target = tmp_path / "merged"
+    assert plan_model_export(run, target, _verify_content=True)["status"] == "ready"
+
+    template.write_text("modified template")
+    fresh = plan_model_export(run, target)
+    with pytest.raises(ValueError, match="导出计划已失效.*基础模型或 tokenizer 内容已变化"):
+        export_model(fresh)
+    assert plan_model_export(run, target, _verify_content=True)["status"] == "source_mismatch"
+    assert calls == []
+    assert not target.exists()
+
+
+def test_export_refuses_legacy_identity_that_did_not_record_existing_template(tmp_path):
+    run = _make_run(tmp_path)
+    (Path(run["model_path"]) / "chat_template.jinja").write_text("unrecorded training input")
+    full = plan_model_export(run, tmp_path / "merged", _verify_content=True)
+    assert full["status"] == "source_mismatch"
+    assert "基础模型或 tokenizer 内容已变化" in full["reasons"][0]
+
+
+def test_export_rechecks_target_before_side_effects(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    target = tmp_path / "merged"
+    plan = plan_model_export(_make_run(tmp_path), target)
+    target.mkdir()
+    (target / "foreign.txt").write_text("mine", encoding="utf-8")
+    with pytest.raises(ValueError, match="导出计划已失效"):
+        export_model(plan)
+    assert calls == []
+    assert (target / "foreign.txt").read_text() == "mine"
+
+
+@pytest.mark.parametrize("source", ["model_path", "output_dir"])
+@pytest.mark.parametrize("relation", ["same", "child", "parent", "symlink"])
+def test_export_protects_overlapping_sources(tmp_path, monkeypatch, source, relation):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _make_run(tmp_path)
+    directory = Path(run[source])
+    target = directory
+    if relation == "child":
+        target = directory / "new-export"
+    elif relation == "parent":
+        target = directory.parent
+    elif relation == "symlink":
+        target = tmp_path / "source-link"
+        target.symlink_to(directory, target_is_directory=True)
+    plan = plan_model_export(run, target)
+    assert plan["status"] == "path_overlap"
+    with pytest.raises(ValueError, match="来源目录重叠"):
+        export_model(plan)
+    assert calls == []
+
+
+def test_export_binds_evidence_to_run_and_dataset(tmp_path, monkeypatch):
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    export_model(plan_model_export(run, target))
+    evidence_path = target / "export_evidence.json"
+    evidence = json.loads(evidence_path.read_text())
+    evidence["run_id"] = "other-run"
+    evidence_path.write_text(json.dumps(evidence))
+    assert plan_model_export(run, target)["status"] == "target_conflict"
+
+
+def test_export_revalidates_current_run_record(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _make_run(tmp_path)
+    record_path = Path(run["output_dir"]).parent / "run.json"
+    record_path.write_text(json.dumps(run))
+    plan = plan_model_export(run, tmp_path / "merged")
+    record_path.write_text(json.dumps({**run, "status": "failed"}))
+    with pytest.raises(ValueError, match="运行记录已经变化"):
+        export_model(plan)
+    assert calls == []
+
+
+def test_source_edit_during_merge_never_publishes(tmp_path, monkeypatch):
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    fake = _fake_merger([])
+
+    def merge(*args, **kwargs):
+        output = fake(*args, **kwargs)
+        (Path(run["output_dir"]) / "adapter_model.safetensors").write_text("changed")
+        return output
+
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", merge)
+    with pytest.raises(ValueError, match="未发布"):
+        export_model(plan_model_export(run, target))
+    assert not target.exists()
+    assert not list(tmp_path.glob(".merged-export-*"))
+
+
+def test_plan_does_not_hash_model_weights(tmp_path, monkeypatch):
+    run = _make_run(tmp_path)
+    from src.workbench import training_runs
+
+    original = training_runs.file_digest
+    hashes = []
+
+    def digest(path):
+        hashes.append(path.name)
+        return original(path)
+
+    monkeypatch.setattr(training_runs, "file_digest", digest)
+    assert plan_model_export(run, tmp_path / "merged")["status"] == "ready"
+    assert hashes == ["workbench_manifest.json"]
+
+
+def test_existing_export_plan_defers_weight_hashing(tmp_path, monkeypatch):
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    export_model(plan_model_export(run, target))
+    from src.workbench import training_runs
+
+    original = training_runs.file_digest
+    hashes = []
+
+    def digest(path):
+        hashes.append(path.name)
+        return original(path)
+
+    monkeypatch.setattr(training_runs, "file_digest", digest)
+    assert plan_model_export(run, target)["status"] == "verification_required"
+    assert hashes == ["workbench_manifest.json"]
+
+
+def test_failed_merge_keeps_target_and_removes_staging(tmp_path, monkeypatch):
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    target.mkdir()
+
+    def merge(adapter, output, **kwargs):
+        output = Path(output)
+        output.mkdir()
+        (output / "model.safetensors").write_text("partial")
+        raise RuntimeError("out of memory")
+
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", merge)
+    with pytest.raises(RuntimeError, match="out of memory"):
+        export_model(plan_model_export(run, target))
+    assert list(target.iterdir()) == []
+    assert not list(tmp_path.glob(".merged-export-*"))
+
+
+def test_concurrent_foreign_target_is_never_overwritten(tmp_path, monkeypatch):
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    fake = _fake_merger([])
+
+    def merge(*args, **kwargs):
+        output = fake(*args, **kwargs)
+        target.mkdir()
+        (target / "foreign.txt").write_text("existing")
+        return output
+
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", merge)
+    with pytest.raises(ValueError, match="未发布"):
+        export_model(plan_model_export(run, target))
+    assert (target / "foreign.txt").read_text() == "existing"
+    assert not (target / "export_evidence.json").exists()
+
+
+@pytest.mark.parametrize("value", [[], None, {"files": []}])
+def test_plan_refuses_malformed_training_manifest(tmp_path, value):
+    run = _make_run(tmp_path)
+    Path(run["artifacts"]["manifest"]).write_text(json.dumps(value))
+    assert plan_model_export(run, tmp_path / "merged")["status"] == "source_mismatch"
+
+
+def test_same_size_same_timestamp_output_change_still_fails_hash(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    run = _make_run(tmp_path)
+    target = tmp_path / "merged"
+    export_model(plan_model_export(run, target))
+    plan = plan_model_export(run, target)
+    weight = target / "model.safetensors"
+    original = weight.stat()
+    weight.write_text("z")  # one byte, just like the original
+    os.utime(weight, ns=(original.st_atime_ns, original.st_mtime_ns))
+    with pytest.raises(ValueError, match="文件摘要不匹配"):
+        export_model(plan)
+
+
+def test_export_to_empty_directory_is_published_atomically(tmp_path, monkeypatch):
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    target = tmp_path / "merged"
+    target.mkdir()
+    result = export_model(plan_model_export(_make_run(tmp_path), target))
+    assert result["status"] == "exported"
+    assert looks_merged(target)
+    assert not list(tmp_path.glob(".merged-export-*"))

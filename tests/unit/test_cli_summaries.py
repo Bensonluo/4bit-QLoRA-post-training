@@ -351,22 +351,10 @@ def test_train_export_cli_prints_json_and_export_summary(tmp_path, monkeypatch, 
 
     import src.models.merger
     import src.workbench.training_runs
+    from tests.unit.test_model_export import _make_run
 
     IntakeService(tmp_path / "intake")  # train-export 不读任务,--store 只需可用
-    adapter_dir = tmp_path / "training" / "wb-x" / "model"
-    adapter_dir.mkdir(parents=True)
-    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
-    (adapter_dir / "adapter_model.safetensors").write_text("w", encoding="utf-8")
-    base_dir = tmp_path / "base-model"
-    base_dir.mkdir()
-    record = {
-        "run_id": "wb-x",
-        "session_id": "sess-1",
-        "dataset_version": "ds-v3",
-        "status": "succeeded",
-        "model_path": str(base_dir),
-        "output_dir": str(adapter_dir),
-    }
+    record = _make_run(tmp_path)
 
     class Training:
         def __init__(self, root, project_root=None):
@@ -415,7 +403,8 @@ def test_train_export_cli_prints_json_and_export_summary(tmp_path, monkeypatch, 
     err = captured.err
     assert "合并导出完成：这次训练的适配器已并入基础模型" in err
     assert str(tmp_path / "merged" / "wb-x") in err
-    assert "可被 vLLM、Ollama、LM Studio 直接加载" in err
+    assert "Hugging Face 格式" in err
+    assert "GGUF" in err and "没有执行这些加载验证或转换" in err
     assert "export_evidence.json" in err
     assert "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署。" in err
 

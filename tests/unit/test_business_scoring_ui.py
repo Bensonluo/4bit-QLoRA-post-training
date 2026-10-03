@@ -82,7 +82,7 @@ def scoring_page(training_page, monkeypatch):  # noqa: F811
 
     class Evaluation:
         def __init__(self, *args):
-            pass
+            self.load_errors = []
 
         def list_reports(self, dataset_version=None, purpose=None):
             return reports

@@ -19,7 +19,7 @@ from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
 
 from src.tracking.runner import TrainingRunner
 from src.workbench.intake_service import IntakeService
-from src.workbench.training_runs import TrainingRunService, write_json
+from src.workbench.training_runs import TrainingRunService, model_identity, write_json
 from tests.unit.test_data_materialize import _full
 
 
@@ -159,6 +159,60 @@ def test_same_size_and_timestamp_weight_change_cannot_reuse_prepared_identity(en
     os.utime(weights, ns=(before.st_atime_ns, before.st_mtime_ns))
     with pytest.raises(ValueError, match="文件发生变化"):
         service.start(record["run_id"], session)
+
+
+@pytest.mark.parametrize(
+    "filename", ["chat_template.jinja", "additional_chat_templates/tool_use.jinja"]
+)
+def test_chat_template_changes_cannot_reuse_prepared_training_identity(environment, filename):
+    """Templates saved by the real tokenizer participate in training and evaluation identities."""
+    from src.workbench.business_evaluation import _model_identity
+
+    _, session, service, model = environment
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(model, local_files_only=True)
+    tokenizer.chat_template = {
+        "default": "{{ messages[0]['content'] }}",
+        "tool_use": "{{ messages[0]['content'] }} tools",
+    }
+    tokenizer.save_pretrained(model)
+    loaded = PreTrainedTokenizerFast.from_pretrained(model, local_files_only=True)
+    assert loaded.chat_template == tokenizer.chat_template
+    before = model_identity(model)
+    evaluated = _model_identity(model)
+    for name, digest in before["config_and_tokenizer_hashes"].items():
+        assert evaluated["files"][name] == digest
+    assert {"chat_template.jinja", "additional_chat_templates/tool_use.jinja"} <= set(
+        before["config_and_tokenizer_hashes"]
+    )
+    record = _prepare(environment)
+    template = model / filename
+    stat = template.stat()
+    template.write_text(template.read_text().replace("content", "invalid"))
+    os.utime(template, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert template.stat().st_size == stat.st_size
+    assert model_identity(model) != before
+    assert _model_identity(model) != evaluated
+    with pytest.raises(ValueError, match="文件发生变化"):
+        service.start(record["run_id"], session)
+
+
+@pytest.mark.parametrize(
+    "filename", ["vocab.tiktoken", "vocab.bpe", "chat_templates/tool_use.jinja"]
+)
+def test_training_and_evaluation_hash_additional_tokenizer_vocabularies(tmp_path, filename):
+    from src.workbench.business_evaluation import _model_identity
+
+    (tmp_path / "config.json").write_text("{}")
+    (tmp_path / "model.safetensors").write_bytes(b"weight fixture")
+    vocabulary = tmp_path / filename
+    vocabulary.parent.mkdir(parents=True, exist_ok=True)
+    vocabulary.write_text("original tokenizer vocabulary")
+    trained = model_identity(tmp_path)
+    evaluated = _model_identity(tmp_path)
+    assert trained["config_and_tokenizer_hashes"][filename] == evaluated["files"][filename]
+    vocabulary.write_text("changed tokenizer vocabulary")
+    assert model_identity(tmp_path) != trained
+    assert _model_identity(tmp_path) != evaluated
 
 
 def test_missing_local_weights_and_invalid_parameters_are_reviewable_blockers(environment):

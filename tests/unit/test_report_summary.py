@@ -1899,7 +1899,8 @@ def test_export_summary_covers_all_states():
     }
     lines = summarize_export(exported)
     assert lines[0] == "合并导出完成：这次训练的适配器已并入基础模型，输出目录 /out/wb-1。"
-    assert "可被 vLLM、Ollama、LM Studio 直接加载" in lines[1]
+    assert "Hugging Face 格式" in lines[1]
+    assert "GGUF" in lines[2] and "没有执行这些加载验证或转换" in lines[2]
     assert "export_evidence.json" in lines[1]
     assert lines[-1] == "导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署。"
 
@@ -1913,6 +1914,13 @@ def test_export_summary_covers_all_states():
     assert any("python scripts/data_intake.py train-export wb-9" in line for line in ready)
     assert "默认输出目录：/m/wb-9。" in ready
     assert ready[-1].startswith("导出只产出")
+
+    pending = summarize_export(
+        {"status": "verification_required", "run_id": "wb-9", "output_dir": "/m/wb-9"}
+    )
+    assert "待完整性核验" in pending[0]
+    assert "train-export wb-9" in pending[1] and "全部一致才返回已导出" in pending[1]
+    assert pending[-1].startswith("导出只产出")
 
     blocked = summarize_export(
         {

@@ -156,6 +156,196 @@ def test_open_review_is_not_mislabeled_as_incorrect_quality(task, model_paths, t
     assert all(case["correct"] is None for case in diagnostics.read_cases()["cases"])
 
 
+@pytest.mark.parametrize(
+    "metric,value",
+    [
+        ("exact_match", 1.0),
+        ("total", 1),
+        ("scored", 3),
+        ("generated", 3),
+        ("scorable_coverage", 1.0),
+        ("generation_coverage", 1.0),
+        ("field_accuracy", {"undeclared": 1.0}),
+        ("scored", True),
+    ],
+)
+def test_saved_aggregate_cannot_override_complete_row_evidence(
+    task, model_paths, tmp_path, metric, value
+):
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = make_report(task, model_paths, service.root)
+    # The protocol fingerprint does not bind model metrics: validate the actual
+    # persisted report against all rows, including generation failure/truncation.
+    report.models[0]["metrics"][metric] = value
+    service._save(report)
+    with pytest.raises(ValueError, match="业务指标与全量评测行不一致"):
+        service.get_report(report.evaluation_id)
+    with pytest.raises(ValueError, match="业务指标与全量评测行不一致"):
+        EvaluationDiagnostics(report, task[1])
+
+
+def test_open_review_cannot_acquire_a_counterfeit_quality_score(task, model_paths, tmp_path):
+    report = make_report(
+        task,
+        model_paths,
+        tmp_path / "eval",
+        scorer="open_review",
+        generate=lambda label, index, expected: Generation("开放回答"),
+    )
+    report.models[0]["metrics"]["exact_match"] = 1.0
+    with pytest.raises(ValueError, match="业务指标与全量评测行不一致"):
+        EvaluationDiagnostics(report, task[1])
+
+
+def test_eval_show_refuses_counterfeit_aggregate_without_printing_evidence(
+    task, model_paths, tmp_path, monkeypatch, capsys
+):
+    import sys
+
+    from scripts import data_intake
+
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = make_report(task, model_paths, service.root)
+    report.models[0]["metrics"]["exact_match"] = 1.0
+    service._save(report)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(task[0].root),
+            "--evaluation-root",
+            str(service.root),
+            "eval-show",
+            report.evaluation_id,
+        ],
+    )
+    assert data_intake.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "业务指标与全量评测行不一致" in captured.err
+
+
+def test_json_field_aggregate_is_verified_against_all_rows(task, model_paths, tmp_path):
+    service, session = task
+    original = session.full_data.sources["main"]
+    payload = (
+        service.root / session.session_id / "full" / f"{original.digest}.{original.format}"
+    ).read_bytes()
+    plan = session.analysis.model_copy(deep=True)
+    plan.recipe.output_format = "json"
+    session = service.apply_analysis(session, plan)
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", payload)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(
+        session.session_id,
+        session.revision,
+        registry_root=tmp_path / "registry",
+        validation_fraction=0.34,
+        test_fraction=0.22,
+    )
+    report = BusinessEvaluationService(tmp_path / "eval").compare(
+        session,
+        model_paths,
+        EvaluationProtocol("json_fields_exact", fields=("类别",)),
+        runtime_factory=fixture_factory(
+            session,
+            [],
+            lambda label, index, expected: Generation("not-json" if index == 0 else expected),
+        ),
+    )
+    EvaluationDiagnostics(report, session)
+    report.models[0]["metrics"]["field_accuracy"]["类别"] = 1.0
+    with pytest.raises(ValueError, match="业务指标与全量评测行不一致"):
+        EvaluationDiagnostics(report, session)
+
+
+def test_custom_scoring_coverage_cannot_drop_failed_rows(task, model_paths, tmp_path):
+    from tests.unit.test_custom_scoring_integration import _confirmed
+
+    session = task[1]
+    protocol, _ = _confirmed(tmp_path / "scoring", session)
+
+    # Generate real sandbox scores using the same failed/truncated output pattern.
+    def generation(label, index, expected):
+        if index == 0:
+            raise RuntimeError("generation failure")
+        return Generation(expected, truncated=index == 1)
+
+    report = BusinessEvaluationService(tmp_path / "custom-eval").compare(
+        session,
+        model_paths,
+        protocol,
+        runtime_factory=fixture_factory(session, [], generation),
+    )
+    EvaluationDiagnostics(report, session)
+    report.models[0]["metrics"]["scorable_coverage"] = 1.0
+    with pytest.raises(ValueError, match="业务指标与全量评测行不一致"):
+        EvaluationDiagnostics(report, session)
+
+
+def test_iteration_cannot_bind_or_adopt_counterfeit_aggregate(
+    task, model_paths, tmp_path, monkeypatch
+):
+    from dataclasses import asdict, replace
+    from uuid import uuid4
+
+    from src.workbench.evaluation_suites import EvalSuiteService
+    from src.workbench.iterations import IterationService
+
+    session = task[1].model_copy(deep=True)
+    session.dataset.evaluation_suite = EvalSuiteService(tmp_path / "suites").freeze(task[1])
+    service = IterationService(tmp_path / "iterations", tmp_path / "runs", tmp_path / "eval")
+    parent_models = [model_paths[0], replace(model_paths[1], label="parent")]
+    parent_report = make_report((task[0], session), parent_models, service.evaluations.root)
+    adapter = tmp_path / "new-adapter"
+    adapter.mkdir()
+    (adapter / "adapter_model.safetensors").write_bytes(b"new-model")
+    models = [*parent_models, replace(model_paths[1], label="new", adapter_path=str(adapter))]
+    report = make_report(
+        (task[0], session),
+        models,
+        service.evaluations.root,
+        generate=lambda label, index, expected: Generation(
+            "wrong answer" if label == "new" else expected
+        ),
+    )
+    parent = {
+        "run_id": "parent",
+        "status": "succeeded",
+        "model_path": model_paths[0].base_model,
+        "output_dir": model_paths[1].adapter_path,
+    }
+    child = {**parent, "run_id": "child", "output_dir": str(adapter)}
+    monkeypatch.setattr(
+        service.training, "get_status", lambda identity: parent if identity == "parent" else child
+    )
+    record = service._save(
+        {
+            "iteration_id": "it-" + uuid4().hex,
+            "session_id": session.session_id,
+            "goal": session.goal,
+            "status": "running",
+            "new_run_id": "child",
+            "parent_run_id": "parent",
+            "parent_evaluation_id": parent_report.evaluation_id,
+            "parent_report_digest": content_digest(asdict(parent_report)),
+            "evaluation_suite": session.dataset.evaluation_suite,
+            "model_path": model_paths[0].base_model,
+        }
+    )
+    # Counterfeit a successful new-model score while preserving its genuine wrong outputs.
+    report.models[-1]["metrics"]["exact_match"] = 1.0
+    service.evaluations._save(report)
+    with pytest.raises(ValueError, match="业务指标与全量评测行不一致"):
+        service.bind_evaluation(record["iteration_id"], session, report.evaluation_id)
+    assert service.get(record["iteration_id"])["status"] == "running"
+    with pytest.raises(ValueError, match="完成同题对照"):
+        service.decide(record["iteration_id"], "adopt", "不能采用虚假的完整正确率")
+
+
 def test_read_api_does_not_mutate_original_report_or_evidence(task, model_paths, tmp_path):
     report = make_report(task, model_paths, tmp_path / "eval")
     before = deepcopy(report)
@@ -275,6 +465,53 @@ def test_training_evidence_reads_verified_receipts_not_raw_partitions(task, mode
     assert tuned["mlflow"]["run_id"] is None
     assert "secret_raw_test" not in json.dumps(evidence)
     assert "rows" not in tuned["preflight"]
+
+
+@pytest.mark.parametrize(
+    "template_name",
+    [
+        "chat_template.jinja",
+        "additional_chat_templates/tool_use.jinja",
+        "chat_templates/tool_use.jinja",
+    ],
+)
+def test_training_receipt_cannot_omit_current_chat_template_identity(
+    task, model_paths, tmp_path, template_name
+):
+    from pathlib import Path
+
+    from src.workbench.business_evaluation import _model_identity
+
+    template = Path(model_paths[0].base_model) / template_name
+    template.parent.mkdir(parents=True, exist_ok=True)
+    template.write_text("{{ messages }}")
+    report, directory = training_report(task, model_paths, tmp_path)
+    run_path = directory / "run.json"
+    manifest_path = directory / "model" / "workbench_manifest.json"
+    run, manifest = json.loads(run_path.read_text()), json.loads(manifest_path.read_text())
+    # A complete modern receipt can bind the evaluated tokenizer/template.
+    run["model_identity"]["config_and_tokenizer_hashes"][template_name] = report.models[1][
+        "identity"
+    ]["base"]["files"][template_name]
+    manifest["model_identity"] = deepcopy(run["model_identity"])
+    run_path.write_text(json.dumps(run))
+    manifest_path.write_text(json.dumps(manifest))
+    report.models[1]["identity"]["adapter"] = _model_identity(directory / "model")
+    assert (
+        EvaluationDiagnostics(report, task[1]).training_evidence()["models"][1]["status"]
+        == "available"
+    )
+    # An older receipt omitting a template cannot establish the newer model's
+    # training provenance even when all hashes it happens to list still match.
+    del run["model_identity"]["config_and_tokenizer_hashes"][template_name]
+    manifest["model_identity"] = deepcopy(run["model_identity"])
+    run_path.write_text(json.dumps(run))
+    manifest_path.write_text(json.dumps(manifest))
+    report.models[1]["identity"]["adapter"] = _model_identity(directory / "model")
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][1]
+    assert entry["status"] == "invalid"
+    assert "训练基座身份与评测记录不一致" in entry["reason"]
+    assert "config" not in entry
 
 
 @pytest.mark.parametrize(

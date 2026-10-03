@@ -141,6 +141,7 @@ def collect_funnel(
     session_statuses: list[str] = []
     training_statuses: list[str] = []
     evaluation_purposes: list[str] = []
+    evaluation_load_errors: list[dict[str, str]] = []
     acceptance_decisions: list[str] = []
     iteration_statuses: list[str] = []
     iteration_decisions: list[str] = []
@@ -159,10 +160,12 @@ def collect_funnel(
     try:
         from src.workbench.business_evaluation import BusinessEvaluationService
 
+        evaluations = BusinessEvaluationService(evaluation_root)
         evaluation_purposes = [
             report.dataset.get("purpose", "development_only")
-            for report in BusinessEvaluationService(evaluation_root).list_reports(purpose=None)
+            for report in evaluations.list_reports(purpose=None)
         ]
+        evaluation_load_errors = evaluations.load_errors
     except (ValueError, OSError):
         errors.append("对照评测记录")
     try:
@@ -193,6 +196,8 @@ def collect_funnel(
         iteration_decisions=iteration_decisions,
     )
     report["errors"] = errors
+    if evaluation_load_errors:
+        report["evaluation_load_errors"] = evaluation_load_errors
     return report
 
 
@@ -244,6 +249,11 @@ def summarize_funnel(report: dict) -> list[str]:
     errors = report.get("errors") or []
     if errors:
         lines.append(f"{'、'.join(errors)}读取失败，该段未计入（其余段照常统计）。")
+    for error in report.get("evaluation_load_errors", []):
+        lines.append(
+            f"评测 {error['evaluation_id'][:8]} 读取失败，已跳过：{error['reason']}。"
+            "其余有效记录照常统计。"
+        )
     lines.append(
         "以上是各任务当前停点的快照，不是历史通过率；旅程可以回退，回退后按新停点重新计数。"
         "计数只描述进度，不代表业务效果。"

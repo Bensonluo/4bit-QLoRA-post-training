@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 from uuid import uuid4
 
+from src.utils.model_files import config_and_tokenizer_files
 from src.workbench.intake_models import IntakeSession
 from src.workbench.materialize import dataset_is_current
 from src.workbench.sources import canonical, content_digest
@@ -107,6 +108,14 @@ def assert_comparable(left: EvaluationReport, right: EvaluationReport) -> None:
         raise ValueError("评测报告的比较身份与实际数据/协议不一致。")
     if left.comparison_key != right.comparison_key:
         raise ValueError("开发评测套件、提示、答案或评分/生成协议不同，不能直接比较这些结果。")
+    for report in (left, right):
+        verify_evaluation_report(report)
+        if not report.models:
+            raise ValueError("评测报告没有实际模型结果，不能作为同题对照依据。")
+    # Legacy reports may predate answers_digest; matching protocol identities
+    # still cannot make different observed answers into a same-question test.
+    if _report_questions(left.models[0]) != _report_questions(right.models[0]):
+        raise ValueError("实际评测提示或标准答案不同，不能作为同题对照。")
 
 
 def comparison_key(dataset: dict[str, Any], protocol: dict[str, Any]) -> str:
@@ -147,18 +156,23 @@ def _model_directory(reference: str, revision: str | None = None) -> Path:
 
 def _model_identity(directory: Path) -> dict[str, Any]:
     files = {}
-    for path in sorted(directory.iterdir()):
-        if not path.is_file() or not (
-            path.suffix in {".json", ".safetensors", ".model", ".txt"}
+    candidates = set(config_and_tokenizer_files(directory))
+    candidates.update(
+        path
+        for path in directory.iterdir()
+        if path.is_file()
+        and (
+            path.suffix == ".safetensors"
             or path.name.startswith(("pytorch_model", "adapter_model"))
             and path.suffix == ".bin"
-        ):
-            continue
+        )
+    )
+    for path in sorted(candidates):
         digest = hashlib.sha256()
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
                 digest.update(chunk)
-        files[path.name] = digest.hexdigest()
+        files[path.relative_to(directory).as_posix()] = digest.hexdigest()
     if not files or not any(name.endswith((".safetensors", ".bin")) for name in files):
         raise ValueError(f"模型目录没有可识别的权重文件：{directory}")
     return {"directory": str(directory), "files": files, "content_digest": content_digest(files)}
@@ -319,10 +333,177 @@ def custom_score_observations(recipe, rows, records):
     return scored
 
 
+def evaluation_metrics(rows: Any, protocol: Any, total: Any) -> dict[str, Any]:
+    """Derive aggregates from complete, structurally valid observations only."""
+    error = "业务指标与全量评测行不一致；失败及截断必须保留在分母中。"
+    if not isinstance(protocol, dict):
+        raise ValueError(error)
+    scorer: Any = protocol.get("scorer")
+    fields = protocol.get("fields", ())
+    if (
+        not isinstance(fields, (list, tuple))
+        or any(not isinstance(name, str) or not name for name in fields)
+        or len(set(fields)) != len(fields)
+        or (scorer != "json_fields_exact" and fields)
+    ):
+        raise ValueError(error)
+    fields = tuple(fields)
+    if (
+        type(total) is not int
+        or total < 1
+        or not isinstance(rows, list)
+        or len(rows) != total
+        or scorer
+        not in {"classification_exact", "json_fields_exact", "open_review", "custom_rules"}
+        or any(not isinstance(row, dict) for row in rows)
+    ):
+        raise ValueError(error)
+    indices = [row.get("index") for row in rows]
+    if any(type(index) is not int for index in indices) or set(indices) != set(range(total)):
+        raise ValueError(error)
+    built_in = (
+        EvaluationProtocol(
+            scorer, fields=fields, strip_whitespace=protocol.get("strip_whitespace", True)
+        )
+        if scorer != "custom_rules"
+        else None
+    )
+    if built_in is not None:
+        built_in.validate()
+    for row in rows:
+        status, output = row.get("status"), row.get("output")
+        truncated, tokens = row.get("truncated"), row.get("generated_tokens")
+        if (
+            status not in {"scored", "needs_business_review", "failed", "truncated"}
+            or not {"output", "correct", "field_scores", "generated_tokens"} <= row.keys()
+            or type(truncated) is not bool
+            or (status == "truncated") != truncated
+            or (tokens is not None and (type(tokens) is not int or tokens < 0))
+            or (output is not None and not isinstance(output, str))
+            or (status != "failed" and not isinstance(output, str))
+            or not isinstance(row.get("field_scores"), dict)
+        ):
+            raise ValueError(error)
+        if scorer == "open_review":
+            if status == "scored" or row.get("correct") is not None or row["field_scores"]:
+                raise ValueError(error)
+        else:
+            if (
+                status == "needs_business_review"
+                or type(row.get("correct")) is not bool
+                or (status != "scored" and (row["correct"] or row["field_scores"]))
+            ):
+                raise ValueError(error)
+            if status == "scored" and built_in is not None:
+                assert isinstance(output, str)
+                try:
+                    correct, field_scores = _score(output, row["expected"], built_in)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(error) from exc
+                if row["correct"] is not correct or canonical(row["field_scores"]) != canonical(
+                    field_scores
+                ):
+                    raise ValueError(error)
+        if scorer == "custom_rules":
+            score: Any = row.get("business_score")
+            reason = row.get("scoring_reason")
+            scoring_recipe = protocol.get("custom_scoring_recipe")
+            if not isinstance(scoring_recipe, dict):
+                raise ValueError(error)
+            threshold: Any = scoring_recipe.get("pass_threshold")
+            if (
+                type(score) not in (int, float)
+                or not math.isfinite(score)
+                or not 0 <= score <= 1
+                or (status != "scored" and score != 0)
+                or row["field_scores"]
+                or not isinstance(reason, str)
+                or not reason.strip()
+                or type(threshold) not in (int, float)
+                or not math.isfinite(threshold)
+                or not 0 <= threshold <= 1
+                or (status == "scored" and row["correct"] is not (score >= threshold))
+            ):
+                raise ValueError(error)
+    valid = sum(row["status"] == "scored" for row in rows)
+    generated = sum(row["output"] is not None for row in rows)
+    metrics: dict[str, Any] = {
+        "total": total,
+        "scored": valid,
+        "generated": generated,
+        "scorable_coverage": valid / total,
+        "generation_coverage": generated / total,
+        "exact_match": sum(row["correct"] is True for row in rows) / total
+        if scorer not in {"open_review", "custom_rules"}
+        else None,
+        "field_accuracy": {
+            name: sum(row["field_scores"].get(name, False) for row in rows) / total
+            for name in fields
+        },
+    }
+    if scorer == "custom_rules":
+        metrics.update(
+            business_score=sum(row["business_score"] for row in rows) / total,
+            pass_rate=sum(row["correct"] is True for row in rows) / total,
+        )
+    return metrics
+
+
+def verify_evaluation_metrics(model: Any, protocol: Any, total: Any) -> None:
+    if not isinstance(model, dict):
+        raise ValueError("评测模型结果格式无效。")
+    expected = evaluation_metrics(model.get("rows"), protocol, total)
+    if canonical(model.get("metrics")) != canonical(expected):
+        raise ValueError("业务指标与全量评测行不一致；失败及截断必须保留在分母中。")
+
+
+def _report_questions(model: dict[str, Any]) -> list[tuple[str, str]]:
+    return [
+        (row["prompt"], row["expected"])
+        for row in sorted(model["rows"], key=lambda row: row["index"])
+    ]
+
+
+def verify_evaluation_report(report: EvaluationReport) -> None:
+    """Check self-consistency; source-data binding remains a separate validation."""
+    if (
+        not isinstance(report.dataset, dict)
+        or not isinstance(report.protocol, dict)
+        or not isinstance(report.models, list)
+    ):
+        raise ValueError("业务评测报告格式无效。")
+    if report.comparison_key != comparison_key(report.dataset, report.protocol):
+        raise ValueError("评测报告身份与数据/协议内容不一致。")
+    questions: list[tuple[str, str]] | None = None
+    sources: list[Any] | None = None
+    for model in report.models:
+        verify_evaluation_metrics(model, report.protocol, report.dataset.get("row_count"))
+        rows = sorted(model["rows"], key=lambda row: row["index"])
+        if any(
+            not isinstance(row.get("prompt"), str) or not isinstance(row.get("expected"), str)
+            for row in rows
+        ):
+            raise ValueError("评测报告缺少逐题实际提示或标准答案。")
+        current_questions = _report_questions(model)
+        current_sources = [row.get("source") for row in rows]
+        if questions is not None and (
+            current_questions != questions or canonical(current_sources) != canonical(sources)
+        ):
+            raise ValueError("报告内各模型的实际提示、标准答案或题目来源不同，不能作为同题对照。")
+        questions, sources = current_questions, current_sources
+        if report.protocol.get("prompt_digest") != content_digest([row["prompt"] for row in rows]):
+            raise ValueError("评测报告的实际提示与声明的提示指纹不一致。")
+        if "answers_digest" in report.protocol and report.protocol[
+            "answers_digest"
+        ] != content_digest([row["expected"] for row in rows]):
+            raise ValueError("评测报告的实际标准答案与声明的答案指纹不一致。")
+
+
 class BusinessEvaluationService:
     def __init__(self, root: str | Path):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        self.load_errors: list[dict[str, str]] = []
 
     def get_report(self, evaluation_id: str) -> EvaluationReport:
         if not re.fullmatch(r"[0-9a-f]{32}", evaluation_id):
@@ -330,13 +511,15 @@ class BusinessEvaluationService:
         try:
             data = json.loads((self.root / f"{evaluation_id}.json").read_text(encoding="utf-8"))
             report = EvaluationReport(**data)
-            if report.evaluation_id != evaluation_id or report.comparison_key != comparison_key(
-                report.dataset, report.protocol
-            ):
+            if report.evaluation_id != evaluation_id:
                 raise ValueError("评测报告身份与数据/协议内容不一致。")
+            try:
+                verify_evaluation_report(report)
+            except ValueError as exc:
+                raise ValueError(f"已保存的评测报告被修改或内容无效：{exc}") from exc
         except FileNotFoundError as exc:
             raise ValueError("找不到这个业务评测报告。") from exc
-        except (TypeError, json.JSONDecodeError) as exc:
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
             raise ValueError("业务评测报告格式无效。") from exc
         return report
 
@@ -349,16 +532,20 @@ class BusinessEvaluationService:
     ) -> list[EvaluationReport]:
         if purpose not in (None, "development_only", "final_acceptance"):
             raise ValueError("评测报告用途必须为开发对照或最终验收。")
-        reports = [
-            self.get_report(path.stem)
-            for path in self.root.glob("*.json")
-            if re.fullmatch(r"[0-9a-f]{32}", path.stem)
-        ]
+        reports = []
+        self.load_errors = []
+        for path in self.root.glob("*.json"):
+            if not re.fullmatch(r"[0-9a-f]{32}", path.stem):
+                continue
+            try:
+                reports.append(self.get_report(path.stem))
+            except (ValueError, OSError) as exc:
+                self.load_errors.append({"evaluation_id": path.stem, "reason": str(exc)})
         return sorted(
             (
                 report
                 for report in reports
-                if (dataset_version is None or report.dataset["version"] == dataset_version)
+                if (dataset_version is None or report.dataset.get("version") == dataset_version)
                 and (
                     purpose is None or report.dataset.get("purpose", "development_only") == purpose
                 )
@@ -491,6 +678,7 @@ class BusinessEvaluationService:
             "generation": "greedy_v1",
             "prompt_renderer": "render_alpaca_prompt_without_answer",
             "prompt_digest": content_digest(prompts),
+            "answers_digest": content_digest([row["output"] for row in records]),
         }
         if evaluation_key is not None:
             protocol_identity["evaluation_key"] = evaluation_key
@@ -506,7 +694,6 @@ class BusinessEvaluationService:
         }
         if suite:
             dataset["evaluation_suite"] = suite
-            protocol_identity["answers_digest"] = content_digest([row["output"] for row in records])
         report = EvaluationReport(
             uuid4().hex,
             datetime.now(timezone.utc).isoformat(),
@@ -531,7 +718,7 @@ class BusinessEvaluationService:
         self._save(report)
         identity_cache = {}
         for model in models:
-            outcome = {
+            outcome: dict[str, Any] = {
                 "label": model.label,
                 "requested_model": asdict(model),
                 "identity": {},
@@ -563,7 +750,7 @@ class BusinessEvaluationService:
                 )
                 runtime = (runtime_factory or LocalEvaluationRuntime)(resolved)
                 for index, (row, prompt) in enumerate(zip(records, prompts)):
-                    result = {
+                    result: dict[str, Any] = {
                         "index": index,
                         "source": row["metadata"],
                         "prompt": prompt,
@@ -578,8 +765,17 @@ class BusinessEvaluationService:
                     }
                     try:
                         generation = runtime.generate(prompt, protocol)
-                        if not isinstance(generation, Generation) or not isinstance(
-                            generation.text, str
+                        if (
+                            not isinstance(generation, Generation)
+                            or not isinstance(generation.text, str)
+                            or type(generation.truncated) is not bool
+                            or (
+                                generation.generated_tokens is not None
+                                and (
+                                    type(generation.generated_tokens) is not int
+                                    or generation.generated_tokens < 0
+                                )
+                            )
                         ):
                             raise ValueError("模型生成器没有返回有效 Generation。")
                         result.update(
@@ -658,29 +854,7 @@ class BusinessEvaluationService:
                                 error=f"自定义评分失败：{exc}",
                                 scoring_reason=f"自定义评分失败：{exc}",
                             )
-            total = len(records)
-            valid = sum(row["status"] == "scored" for row in outcome["rows"])
-            generated = sum(row["output"] is not None for row in outcome["rows"])
-            outcome["metrics"] = {
-                "total": total,
-                "scored": valid,
-                "generated": generated,
-                "scorable_coverage": valid / total,
-                "generation_coverage": generated / total,
-                "exact_match": sum(row["correct"] is True for row in outcome["rows"]) / total
-                if protocol.scorer not in {"open_review", "custom_rules"}
-                else None,
-                "field_accuracy": {
-                    name: sum(row["field_scores"].get(name, False) for row in outcome["rows"])
-                    / total
-                    for name in protocol.fields
-                },
-            }
-            if scoring_recipe is not None:
-                outcome["metrics"].update(
-                    business_score=sum(row["business_score"] for row in outcome["rows"]) / total,
-                    pass_rate=sum(row["correct"] is True for row in outcome["rows"]) / total,
-                )
+            outcome["metrics"] = evaluation_metrics(outcome["rows"], report.protocol, len(records))
             report.models.append(outcome)
             self._save(report)
             if any(error.startswith("模型释放失败") for error in outcome["errors"]):

@@ -156,6 +156,180 @@ def test_different_generation_protocols_cannot_be_compared(task, model_paths, tm
     assert_comparable(first, first)
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [("truncated", 1), ("generated_tokens", -1), ("index", True), ("status", "unknown")],
+)
+def test_loaded_report_rejects_invalid_observation_contract(
+    task, model_paths, tmp_path, field, value
+):
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = service.compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=fixture_factory(task[1], []),
+    )
+    report.models[0]["rows"][0][field] = value
+    service._save(report)
+    with pytest.raises(ValueError, match="全量评测行"):
+        service.get_report(report.evaluation_id)
+
+
+def test_report_listing_preserves_valid_siblings_and_discloses_invalid_evidence(
+    task, model_paths, tmp_path
+):
+    from copy import deepcopy
+    from uuid import uuid4
+
+    service = BusinessEvaluationService(tmp_path / "eval")
+    valid = service.compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=fixture_factory(task[1], []),
+    )
+    corrupt = deepcopy(valid)
+    corrupt.evaluation_id = uuid4().hex
+    corrupt.models[0]["metrics"]["exact_match"] = 0.0
+    service._save(corrupt)
+    assert [report.evaluation_id for report in service.list_reports()] == [valid.evaluation_id]
+    assert len(service.load_errors) == 1
+    assert service.load_errors[0]["evaluation_id"] == corrupt.evaluation_id
+    assert "全量评测行" in service.load_errors[0]["reason"]
+    (service.root / f"{corrupt.evaluation_id}.json").unlink()
+    service.list_reports()
+    assert service.load_errors == []
+
+
+def test_running_report_keeps_partial_model_progress_readable(task, model_paths, tmp_path):
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = service.compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact", strip_whitespace=False),
+        runtime_factory=fixture_factory(
+            task[1], [], lambda label, index, expected: Generation(expected + " ")
+        ),
+    )
+    report.status = "running"
+    report.models = report.models[:1]
+    service._save(report)
+    loaded = service.get_report(report.evaluation_id)
+    assert loaded.status == "running"
+    assert len(loaded.models) == 1
+    assert loaded.models[0]["metrics"]["exact_match"] == 0.0
+    report.models = []
+    service._save(report)
+    assert service.get_report(report.evaluation_id).models == []
+
+
+@pytest.mark.parametrize("mutation", ["prompt", "expected", "prompt_digest", "answers_digest"])
+def test_saved_report_binds_observed_questions_to_declared_digests(
+    task, model_paths, tmp_path, mutation
+):
+    from src.workbench.business_evaluation import comparison_key, evaluation_metrics
+
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = service.compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=fixture_factory(task[1], []),
+    )
+    if mutation == "prompt":
+        report.models[0]["rows"][0]["prompt"] += "changed question"
+    elif mutation == "expected":
+        row = report.models[1]["rows"][0]
+        row["expected"] = row["output"] = "different answer"
+        report.models[1]["metrics"] = evaluation_metrics(
+            report.models[1]["rows"], report.protocol, report.dataset["row_count"]
+        )
+        # Even old reports lacking the answer digest must use identical answers.
+        report.protocol.pop("answers_digest")
+        report.comparison_key = comparison_key(report.dataset, report.protocol)
+    else:
+        report.protocol[mutation] = "a" * 64
+        report.comparison_key = comparison_key(report.dataset, report.protocol)
+    service._save(report)
+    with pytest.raises(ValueError, match="提示|标准答案"):
+        service.get_report(report.evaluation_id)
+
+
+def test_in_memory_comparison_cannot_bypass_observed_question_validation(
+    task, model_paths, tmp_path
+):
+    from copy import deepcopy
+
+    from src.workbench.business_evaluation import comparison_key, evaluation_metrics
+
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = service.compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=fixture_factory(task[1], []),
+    )
+    changed = deepcopy(report)
+    changed.models[0]["rows"][0]["prompt"] += "different question"
+    with pytest.raises(ValueError, match="提示"):
+        assert_comparable(changed, changed)
+    legacy = deepcopy(report)
+    legacy.protocol.pop("answers_digest")
+    legacy.comparison_key = comparison_key(legacy.dataset, legacy.protocol)
+    changed = deepcopy(legacy)
+    for model in changed.models:
+        model["rows"][0]["expected"] = model["rows"][0]["output"] = "changed answer"
+        model["metrics"] = evaluation_metrics(
+            model["rows"], changed.protocol, changed.dataset["row_count"]
+        )
+    service._save(changed)
+    # A legacy report remains readable, but its different answers cannot compare
+    # to another report merely because the older protocol lacked their digest.
+    service.get_report(changed.evaluation_id)
+    with pytest.raises(ValueError, match="标准答案不同"):
+        assert_comparable(legacy, changed)
+
+
+def test_question_digests_follow_indices_and_new_reports_always_bind_answers(
+    task, model_paths, tmp_path
+):
+    from src.workbench.sources import content_digest
+
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = service.compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=fixture_factory(task[1], []),
+    )
+    assert not report.dataset.get("evaluation_suite")
+    assert report.protocol["answers_digest"] == content_digest(
+        [row["expected"] for row in report.models[0]["rows"]]
+    )
+    report.models[1]["rows"].reverse()
+    service._save(report)
+    loaded = service.get_report(report.evaluation_id)
+    assert_comparable(loaded, report)
+
+
+@pytest.mark.parametrize(
+    "generation", [Generation("answer", truncated=1), Generation("answer", generated_tokens=-1)]
+)
+def test_invalid_generation_metadata_is_a_counted_failure(task, model_paths, tmp_path, generation):
+    report = BusinessEvaluationService(tmp_path / "eval").compare(
+        task[1],
+        model_paths,
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=fixture_factory(task[1], [], lambda label, index, expected: generation),
+    )
+    assert report.status == "completed_with_failures"
+    for model in report.models:
+        assert model["metrics"]["exact_match"] == 0.0
+        assert model["metrics"]["total"] == report.dataset["row_count"]
+        assert all(row["status"] == "failed" for row in model["rows"])
+
+
 def test_failed_model_load_keeps_all_development_rows(task, model_paths, tmp_path):
     _, session = task
     empty = tmp_path / "empty_model"

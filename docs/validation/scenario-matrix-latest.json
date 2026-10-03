@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-09-27T17:01:11.031714+00:00",
+  "created_at": "2026-10-03T12:19:58.273430+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -683,11 +683,107 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "merged-cells-in-target-column",
+      "expect": "blocked_at:confirm_sample",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "blocked"
+      },
+      "blocked_at": "confirm_sample",
+      "blocked_message": "当前方案仍有业务问题、缺标签或转换问题，不能确认数据就绪。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "formula-cells-in-target-column",
+      "expect": "blocked_at:confirm_sample",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "blocked"
+      },
+      "blocked_at": "confirm_sample",
+      "blocked_message": "当前方案仍有业务问题、缺标签或转换问题，不能确认数据就绪。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "hidden-rows-in-sheet",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "blank-rows-in-sheet",
+      "expect": "blocked_at:confirm_sample",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "blocked"
+      },
+      "blocked_at": "confirm_sample",
+      "blocked_message": "当前方案仍有业务问题、缺标签或转换问题，不能确认数据就绪。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "rare-category-only-in-holdout",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "exact-duplicate-rows-in-full",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
   "summary": {
-    "total": 41,
-    "as_expected": 41,
+    "total": 47,
+    "as_expected": 47,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,

@@ -1,0 +1,53 @@
+{
+  "kind": "real_export_integrity",
+  "run_id": "wb-4ae1a6dece3147feb4bfef2fcb36fc0b",
+  "base_model_path": "/Users/luopeng/.cache/huggingface/hub/Qwen/Qwen3-1___7B",
+  "status": "exported",
+  "repeat_status": "already_exported",
+  "output_dir": "/var/folders/v5/hrww6dn52rg7q13b549_fbsc0000gn/T/tunesmith-export-proof-mv00117f/merged",
+  "output_files": [
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model.safetensors",
+    "tokenizer.json",
+    "tokenizer_config.json"
+  ],
+  "local_reload": {
+    "model_class": "Qwen3ForCausalLM",
+    "tokenizer_class": "Qwen2Tokenizer",
+    "generated_tokens": 4
+  },
+  "seconds": 16.51,
+  "scope_note": "真实已有 Qwen3-1.7B adapter 合并、内容完整性核验幂等返回、Transformers 本地重新加载与四 token 生成；不验证业务质量或 vLLM/Ollama/LM Studio 兼容性。",
+  "verified_at": "2026-10-03T12:14:05.651833+00:00",
+  "export_evidence_sha256": "5208e8c9ad8e26007f5ecc496712137e1e0804b850e0e1ec0921042bb174da3b",
+  "output_integrity": {
+    "chat_template.jinja": {
+      "size": 4168,
+      "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+    },
+    "config.json": {
+      "size": 1416,
+      "sha256": "6601b2e48607880bad26b78c34dacc55754478dc36588d568291501ff739dc2c"
+    },
+    "generation_config.json": {
+      "size": 213,
+      "sha256": "3f645243a89f9ba4cc052426881b0246a72666862ad596c93e285fb55ea56788"
+    },
+    "model.safetensors": {
+      "size": 3441185608,
+      "sha256": "055d27ede790a2df4665635e97ad81bbd6cb8b973c373ab3bc14bde3a59bc7a8"
+    },
+    "tokenizer.json": {
+      "size": 11422650,
+      "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+    },
+    "tokenizer_config.json": {
+      "size": 693,
+      "sha256": "2e3bd3cb5055f7a903a54e7062b2fd14d21b70f4174c3ffcd9fc81ec50a25631"
+    }
+  },
+  "source_manifest_sha256": "9ec80b71772b8c9e55e3dfa92796b7ada8fbd5ca9166a0d1848ffaf5020c8a1f",
+  "final_contract_reverified_at": "2026-10-03T12:22:06.333855+00:00"
+}

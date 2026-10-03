@@ -454,7 +454,7 @@ def main() -> int:
         command.add_argument("run_id")
         if name == "train-logs":
             command.add_argument("--tail", type=int, default=100)
-    _train_export_help = "把成功训练的适配器合并导出为 vLLM/Ollama/LM Studio 可直接加载的模型目录"
+    _train_export_help = "核验训练来源并把适配器合并导出为 Hugging Face 格式模型目录与证据链"
     train_export = sub.add_parser(
         "train-export", help=_train_export_help, description=_train_export_help
     )

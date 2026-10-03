@@ -86,9 +86,9 @@ def test_cli_label_verify_discloses_shortfall_when_labelled_rows_fewer(store, mo
     assert _run_verify(monkeypatch, service, session, "--size", 50) == 0
     out, err = capsys.readouterr()
     payload = json.loads(out)
-    assert payload["sample_size"] == 9, "FULL 全量只有 9 条已标注行"
-    assert "已标注行只有 9 条" in err and "不足你选择的 50 条" in err
-    assert "本轮 9 条即使全部一致" in err, "证据说明按缩水后的实际样本量口径"
+    assert payload["sample_size"] == 7, "FULL 全量 9 行只有 7 个不同模型输入"
+    assert "只有 7" in err and "不足你选择的 50 条" in err
+    assert "本轮 7 条即使全部一致" in err, "证据说明按独立题目数量口径"
 
 
 def test_cli_submit_verdict_line_shows_lower_bound_when_verified(store, monkeypatch, capsys):

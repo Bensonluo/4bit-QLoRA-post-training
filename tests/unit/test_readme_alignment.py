@@ -100,7 +100,9 @@ def test_agent_setup_semantic_safety_layer_pins_three_gates():
         assert gate in section, f"语义安全层缺少关卡条目: {gate}"
     assert "（1–50 条，默认 5 条）" in section, "盲标样本量口径漂移"
     assert "预览或方案变化后核验自动失效" in section, "对比核验失效规则漂移"
-    assert "与「瞎猜多数类」基线对比" in section, "可学性探针基线口径漂移"
+    assert "只从训练集选定" in section and "同一组开发题" in section, (
+        "探针必须同题对照且不偷看开发答案选基线"
+    )
     assert "这三道关卡都不使用 LLM 判断、不消耗模型服务额度，判定全部确定性可复现。" in section
 
 

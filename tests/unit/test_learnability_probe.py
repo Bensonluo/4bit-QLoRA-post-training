@@ -66,6 +66,95 @@ def _labels(session):
     return [json.loads(line) for line in open(path) if line.strip()]
 
 
+def test_probe_truncated_exact_text_and_generation_failure_stay_in_denominator(store, monkeypatch):
+    from src.workbench import training_preflight
+
+    _, session = store
+    rows = [
+        {
+            "instruction": "分类",
+            "input": f"题{i}",
+            "output": "yes",
+            "metadata": {"source_row_id": f"r{i}"},
+        }
+        for i in range(3)
+    ]
+    monkeypatch.setattr(
+        training_preflight, "_verified_partitions", lambda *_: {"train": rows, "validation": rows}
+    )
+    closed = []
+
+    class Runtime:
+        calls = 0
+
+        def generate(self, prompt, protocol):
+            self.calls += 1
+            if self.calls == 2:
+                raise ValueError("输入超过上下文")
+            return Generation("yes", truncated=self.calls == 1)
+
+        def close(self):
+            closed.append(True)
+
+    result = probe_learnability(session, "/tmp/base", runtime_factory=lambda _: Runtime())
+    assert result["sample_size"] == 3
+    assert result["zero_shot_accuracy"] == pytest.approx(1 / 3)
+    assert [item["match"] for item in result["observations"]] == [False, False, True]
+    assert result["generation_failures"] == 1
+    assert result["truncated_count"] == 1
+    assert result["observations"][1]["error"] == "ValueError: 输入超过上下文"
+    assert result["label_error_candidates"] == [], "失败和未完成输出不能作为标签错误证据"
+    assert closed == [True]
+
+
+def test_majority_guess_is_chosen_from_train_and_scored_on_same_questions(store, monkeypatch):
+    from src.workbench import training_preflight
+
+    _, session = store
+
+    def row(index, answer):
+        return {
+            "instruction": "分类",
+            "input": str(index),
+            "output": answer,
+            "metadata": {"source_row_id": str(index)},
+        }
+
+    train = [row(i, "yes") for i in range(4)] + [row(4, "no")]
+    dev = [row(i + 10, answer) for i, answer in enumerate(["yes", "no", "no", "no", "no"])]
+    monkeypatch.setattr(
+        training_preflight, "_verified_partitions", lambda *_: {"train": train, "validation": dev}
+    )
+    result = probe_learnability(
+        session, "/tmp/base", runtime_factory=_factory("yes"), sample_size=2
+    )
+    assert result["zero_shot_accuracy"] == 0.5
+    assert result["majority_label"] == "yes", "基线不能偷看开发集答案来选择猜测标签"
+    assert result["majority_baseline"] == 0.5, "基线与模型必须回答相同的两道题"
+    assert result["difference"] == 0
+    assert result["baseline_protocol"] == {
+        "kind": "train_majority_same_sample_v1",
+        "train_total": 5,
+        "sample_size": 2,
+    }
+    assert [item["baseline_match"] for item in result["observations"]] == [True, False]
+    assert "同一组" in result["note"] and "训练集" in result["note"]
+
+
+def test_probe_invalid_generation_contract_is_recorded_without_losing_the_report(store):
+    _, session = store
+
+    class Runtime:
+        def generate(self, *_args):
+            return Generation("yes", truncated="false")
+
+    result = probe_learnability(session, "/tmp/base", runtime_factory=lambda _: Runtime())
+    assert result["generation_failures"] == result["sample_size"]
+    assert result["zero_shot_accuracy"] == 0
+    assert result["label_error_candidates"] == []
+    assert all("有效 Generation" in item["error"] for item in result["observations"])
+
+
 def test_probe_validates_inputs(store):
     _, session = store
     with pytest.raises(ValueError, match="抽样数量"):
@@ -73,6 +162,10 @@ def test_probe_validates_inputs(store):
     bare = session.model_copy(deep=True)
     bare.dataset = None
     with pytest.raises(ValueError, match="独立分区"):
+        probe_learnability(bare, "/tmp/base", runtime_factory=_factory("x"))
+    bare = session.model_copy(deep=True)
+    bare.analysis = None
+    with pytest.raises(ValueError, match="已确认的数据方案"):
         probe_learnability(bare, "/tmp/base", runtime_factory=_factory("x"))
 
 

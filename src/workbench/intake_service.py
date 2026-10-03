@@ -15,7 +15,7 @@ from uuid import uuid4
 from src.agent.intake import ChatClient, analyze_intake
 from src.workbench.answer_sheet import missing_answer_rows
 from src.workbench.full_data import full_data_is_current, validate_full_source
-from src.workbench.intake_models import BusinessExample, IntakeAnalysis, IntakeSession
+from src.workbench.intake_models import BusinessExample, IntakeAnalysis, IntakeSession, PreviewRow
 from src.workbench.materialize import dataset_is_current, materialize_dataset
 from src.workbench.recipes import check_examples, preview_recipe, validate_analysis
 from src.workbench.sources import profile_source, read_source
@@ -896,51 +896,90 @@ class IntakeService:
         labelled = [row for row in report.preview.rows if row.target is not None]
         if not labelled:
             raise ValueError("当前全量预览没有已标注的行，无法核验。")
-        size = min(sample_size, len(labelled))
         binding = report.source.digest + report.approved_recipe_digest
-        # 轮次感知抽样:已完成轮数计入种子,每轮换一组题(与对比核验同法)。
-        # 核验未通过时页面必须展示正确标签;若每轮题目相同,照抄公布答案即可
-        # 通过下一轮——核验就退化成背题,起不到复现业务含义的作用。
+        by_id = {row.row_id: row for row in labelled}
         with sqlite3.connect(self.database) as connection:
-            completed = connection.execute(
-                "SELECT COUNT(*) FROM label_verifications "
+            # 抽题与待答复用共享写锁，刷新或并发调用不会发出多个同题挑战。
+            connection.execute("BEGIN IMMEDIATE")
+            exposed = self._revealed_label_inputs(connection, session, by_id)
+            pending = connection.execute(
+                "SELECT verification_id, sample_size, seed, row_ids, result FROM label_verifications "
                 "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
-                "AND status='completed'",
+                "AND status='pending' ORDER BY created_at DESC, rowid DESC",
                 (session.session_id, report.source.digest, report.approved_recipe_digest),
-            ).fetchone()
-        round_number = (completed[0] if completed else 0) + 1
-        # 第 1 轮沿用固定绑定种子(保持既有首轮抽题与外部契约不变);
-        # 从第 2 轮起轮数计入种子换题——核验未通过时页面必须公布正确标签,
-        # 若每轮题目相同,照抄公布答案即可通过下一轮,核验退化成背题。
-        seed = (
-            zlib.crc32(binding.encode("utf-8"))
-            if round_number == 1
-            else zlib.crc32(f"{binding}:{round_number}".encode())
-        )
-        picked = _stratified_sample(labelled, size, seed)
-        rows = [labelled[index] for index in picked]
-        verification_id = uuid4().hex
-        with sqlite3.connect(self.database) as connection:
-            connection.execute(
-                "INSERT INTO label_verifications VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    verification_id,
-                    session.session_id,
-                    report.source.digest,
-                    report.approved_recipe_digest,
-                    size,
-                    seed,
-                    json.dumps([row.row_id for row in rows]),
-                    "pending",
-                    None,
-                    None,
-                    datetime.now(timezone.utc).isoformat(),
-                ),
-            )
+            ).fetchall()
+            active = None
+            for candidate in pending:
+                ids = json.loads(candidate[3])
+                inputs = [by_id[identity].input for identity in ids if identity in by_id]
+                if (
+                    active is None
+                    and len(inputs) == len(ids)
+                    and len(set(inputs)) == len(inputs)
+                    and not exposed.intersection(inputs)
+                ):
+                    active = candidate
+                else:
+                    connection.execute(
+                        "UPDATE label_verifications SET status='stale' WHERE verification_id=?",
+                        (candidate[0],),
+                    )
+            # 重复输入只是一道题，不能靠重复行抬高独立核验题数。
+            independent: dict[str, PreviewRow] = {}
+            for labelled_row in labelled:
+                if labelled_row.input not in exposed:
+                    independent.setdefault(labelled_row.input, labelled_row)
+            unseen = list(independent.values())
+            if active is not None:
+                verification_id, size, seed, ids_json, metadata = active
+                rows = [by_id[identity] for identity in json.loads(ids_json)]
+                metadata = json.loads(metadata) if metadata else {}
+                requested = metadata.get("requested_sample_size", size)
+                available = metadata.get("available_questions", len(unseen))
+            else:
+                if not unseen:
+                    raise ValueError(
+                        "没有尚未揭示答案的独立题目，盲标证据不足；不能照抄已公布答案重验。"
+                        "请补充尚未公布答案的新输入；更换文件、行号、标签或配方不会恢复旧题的盲标资格。"
+                        "标签修正可以交给未看过答案的业务人员独立复核，但本人的旧题不能当作新盲标证据。"
+                    )
+                completed = connection.execute(
+                    "SELECT COUNT(*) FROM label_verifications "
+                    "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
+                    "AND status='completed'",
+                    (session.session_id, report.source.digest, report.approved_recipe_digest),
+                ).fetchone()[0]
+                seed = (
+                    zlib.crc32(binding.encode("utf-8"))
+                    if completed == 0
+                    else zlib.crc32(f"{binding}:{completed + 1}".encode())
+                )
+                requested, available = sample_size, len(unseen)
+                size = min(requested, available)
+                rows = [unseen[index] for index in _stratified_sample(unseen, size, seed)]
+                verification_id = uuid4().hex
+                connection.execute(
+                    "INSERT INTO label_verifications VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        verification_id,
+                        session.session_id,
+                        report.source.digest,
+                        report.approved_recipe_digest,
+                        size,
+                        seed,
+                        json.dumps([row.row_id for row in rows]),
+                        "pending",
+                        None,
+                        json.dumps(
+                            {"requested_sample_size": requested, "available_questions": available}
+                        ),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
         return {
             "verification_id": verification_id,
             "sample_size": size,
-            "requested_sample_size": sample_size,
+            "requested_sample_size": requested,
             "seed": seed,
             "items": [{"row_id": row.row_id, "input": row.input} for row in rows],
             "evidence_note": sample_evidence_note(size),
@@ -948,18 +987,61 @@ class IntakeService:
             **(
                 {
                     "shortfall_note": (
-                        f"已标注行只有 {len(labelled)} 条，不足你选择的 {sample_size} 条——"
-                        "本轮已按现有全部已标注行抽取。"
+                        f"尚未揭示答案的独立题目只有 {available} 条，不足你选择的 {requested} 条——"
+                        "已排除公布过答案的题目，重复输入只算一道；本轮按剩余全部独立题目抽取。"
                     )
                 }
-                if size < sample_size
+                if size < requested
                 else {}
             ),
             "note": (
                 "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。"
-                "重新核验会换一组题：上一轮公布过的正确答案照抄无效。"
+                "重新核验会换一组题：排除此任务历史上公布过答案的输入，重复输入只算一道。"
+                "更换文件、行号、标签或配方不会恢复旧题的盲标资格。"
+                "尚未提交时再次抽题会复用当前题目和原抽样数量。"
             ),
         }
+
+    @staticmethod
+    def _revealed_label_inputs(
+        connection: sqlite3.Connection,
+        session: IntakeSession,
+        by_id: dict[str, PreviewRow],
+    ) -> set[str]:
+        """Keep exposure across task revisions; labels and row IDs are not question identities.
+
+        Historical results contain the displayed input but not the instruction. Conservatively
+        reserve that exact input throughout the session, including when instructions change.
+        """
+        report = session.full_data
+        if report is None:
+            raise ValueError("当前全量资料缺失，无法核验盲标题目的暴露历史。")
+        completed = connection.execute(
+            "SELECT row_ids,result,full_source_digest,recipe_digest FROM label_verifications "
+            "WHERE session_id=? AND status='completed'",
+            (session.session_id,),
+        ).fetchall()
+        exposed = set()
+        for identities, result_json, source_digest, recipe_digest in completed:
+            result = json.loads(result_json) if result_json else {}
+            items = {item.get("row_id"): item for item in result.get("items", [])}
+            for identity in json.loads(identities):
+                displayed = items.get(identity, {}).get("input")
+                if isinstance(displayed, str):
+                    exposed.add(displayed)
+                elif (
+                    source_digest == report.source.digest
+                    and recipe_digest == report.approved_recipe_digest
+                    and identity in by_id
+                ):
+                    # Older records without input can only be reconstructed from their own binding.
+                    exposed.add(by_id[identity].input)
+                else:
+                    raise ValueError(
+                        "历史盲标记录缺少已揭示题目的输入，无法核验跨版本暴露；"
+                        "不能把旧题重新认作独立盲题，请恢复完整核验记录。"
+                    )
+        return exposed
 
     def submit_label_verification(
         self, session_id: str, verification_id: str, answers: dict[str, str]
@@ -1030,6 +1112,21 @@ class IntakeService:
         if triage:
             result["mismatch_triage"] = triage
         with sqlite3.connect(self.database) as connection:
+            # 暴露检查与写入同一事务：旧版或并发预发出的重叠挑战不能用公布答案通过。
+            connection.execute("BEGIN IMMEDIATE")
+            current_status = connection.execute(
+                "SELECT status FROM label_verifications WHERE verification_id=?",
+                (verification_id,),
+            ).fetchone()[0]
+            if current_status != "pending":
+                raise ValueError("该盲标核验已提交过结论或失效，请读取最新核验。")
+            exposed = self._revealed_label_inputs(connection, session, by_id)
+            inputs = [by_id[identity].input for identity in row_ids]
+            if len(set(inputs)) != len(inputs) or exposed.intersection(inputs):
+                raise ValueError(
+                    "本次题目包含已公布答案的输入或重复题目，不能作为独立盲标证据；"
+                    "请重新抽取尚未揭示答案的题目，题库耗尽时补充资料或修正监督信号。"
+                )
             connection.execute(
                 "UPDATE label_verifications SET status='completed', verdict=?, result=? "
                 "WHERE verification_id=?",

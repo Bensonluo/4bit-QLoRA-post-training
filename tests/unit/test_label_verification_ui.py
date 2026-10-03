@@ -190,6 +190,10 @@ def test_old_archive_without_statistical_fields_recomputes_note(verify_page):
     assert "下界才是你能依赖的数" in success
 
     # 未通过态旧记录回读:error 后的 caption 同样现算,不粉饰不一致的证据强度
+    # 使用新任务：上一任务的全部问题已经揭示，不能再次当作独立盲标题。
+    from tests.unit.test_data_materialize import _full
+
+    session = _full(service)
     pending = service.start_label_verification(session.session_id, session.revision)
     targets = {row.row_id: row.target for row in session.full_data.preview.rows}
     answers = {item["row_id"]: targets[item["row_id"]] for item in pending["items"]}

@@ -251,6 +251,27 @@ def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = N
     # 截断→先加长度重测;词汇外→模板方向;同答→两方向都要核;其余→任务定义方向。
     for triage_line in low_baseline_triage_lines(result):
         st.caption(triage_line)
+    runtime_issues = [
+        item
+        for item in result.get("observations", [])
+        if item.get("error") or item.get("truncated")
+    ]
+    if runtime_issues:
+        st.warning(
+            "下列题目未完成生成，按不匹配留在分母内；先修正运行问题，不能用这些输出判断标签对错。"
+        )
+        st.dataframe(
+            [
+                {
+                    "行ID": item.get("row_id", ""),
+                    "生成问题": item.get("error")
+                    or "触及生成长度上限，请核对 max_new_tokens 后重测。",
+                }
+                for item in runtime_issues
+            ],
+            hide_index=True,
+            width="stretch",
+        )
     candidates = result.get("label_error_candidates") or []
     st.subheader("标签问题候选(优先人工核对)")
     if candidates:
@@ -3669,6 +3690,11 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                 for model_result in report.models
                             )
                         ]
+                        for load_error in evaluation_service.load_errors:
+                            st.warning(
+                                f"评测 {load_error['evaluation_id'][:8]} 的证据无法核验，已隐藏："
+                                f"{load_error['reason']}。请核对原始报告；其余有效报告仍可查看。"
+                            )
                         for comparison in reports:
                             with st.expander(
                                 f"开发集对照 · {comparison.evaluation_id[:8]} · {comparison.created_at}",

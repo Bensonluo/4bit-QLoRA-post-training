@@ -35,6 +35,33 @@ def _probe_result(candidates, version="test-version"):
     }
 
 
+def test_probe_generation_errors_remain_visible_even_when_baseline_is_zero(probe_page, monkeypatch):
+    import src.workbench.learnability_probe as probe_module
+
+    _, session, page = probe_page
+    result = _probe_result([], session.dataset.version)
+    result.update(
+        zero_shot_accuracy=0,
+        majority_baseline=0,
+        difference=0,
+        observations=[
+            {"row_id": "failed-row", "error": "ValueError: 输入超过上下文", "truncated": False},
+            {"row_id": "short-row", "error": None, "truncated": True},
+        ],
+    )
+    monkeypatch.setattr(probe_module, "probe_learnability", lambda *_args, **_kwargs: result)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(t for t in page.text_input if "本地基础模型目录" in t.label).input("/tmp/local-base").run()
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert not page.exception
+    assert any("不能用这些输出判断标签对错" in message.value for message in page.warning)
+    issue_table = next(table.value for table in page.dataframe if "生成问题" in table.value.columns)
+    assert issue_table["行ID"].tolist() == ["failed-row", "short-row"]
+    assert "输入超过上下文" in issue_table.iloc[0]["生成问题"]
+    assert "max_new_tokens" in issue_table.iloc[1]["生成问题"]
+
+
 def test_probe_candidates_table_with_strong_evidence_first(probe_page, monkeypatch):
     service, session, page = probe_page
     page.run()

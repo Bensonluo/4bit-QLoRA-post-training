@@ -312,7 +312,7 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
 
     class EvaluationFixture:
         def __init__(self, root):
-            pass
+            self.load_errors = [{"evaluation_id": "b" * 32, "reason": "业务指标与全量评测行不一致"}]
 
         def list_reports(self, dataset_version=None, purpose=None):
             return reports
@@ -387,6 +387,11 @@ def test_successful_training_compares_complete_outputs_and_marks_open_tasks(
     assert any(block.label == "查看原始指标 JSON" for block in page.expander)
     button(page, "比较基座与本轮微调效果").click().run()
     assert not page.exception
+    assert any(
+        "评测 bbbbbbbb 的证据无法核验，已隐藏" in message.value
+        and "其余有效报告仍可查看" in message.value
+        for message in page.warning
+    )
     assert calls[0][1].scorer == (
         "open_review" if task_kind == "open_text" else "classification_exact"
     )
