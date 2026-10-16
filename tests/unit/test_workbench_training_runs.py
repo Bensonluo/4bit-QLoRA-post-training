@@ -272,6 +272,49 @@ def test_warning_confirmation_is_specific_to_actual_tokenizer(environment, monke
         service.start(record["run_id"], session)
 
 
+def test_eos_only_truncation_cannot_be_acknowledged_into_training(environment):
+    from src.workbench.training_preflight import preflight_dataset
+
+    _, session, service, model = environment
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(model, local_files_only=True)
+    complete = preflight_dataset(session, tokenizer, 32)
+    length = max(row["full_tokens"] for row in complete["rows"]) - 1
+    record = service.prepare(session, model, max_length=length)
+    assert record["status"] == "blocked"
+    assert all(not row["answer_was_truncated"] for row in record["preflight"]["rows"])
+    assert any(issue["code"] == "terminal_eos_lost" for issue in record["issues"])
+    with patch.object(service.runner, "launch_training") as launch, pytest.raises(ValueError):
+        service.start(record["run_id"], session, acknowledge_warnings=True)
+    launch.assert_not_called()
+    assert not (service.root / record["run_id"] / "started").exists()
+
+
+def test_start_rechecks_legacy_prepared_run_with_missing_eos(environment):
+    from copy import deepcopy
+
+    from src.workbench.training_preflight import preflight_dataset
+
+    _, session, service, model = environment
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(model, local_files_only=True)
+    complete = preflight_dataset(session, tokenizer, 32)
+    length = max(row["full_tokens"] for row in complete["rows"]) - 1
+    legacy = deepcopy(preflight_dataset(session, tokenizer, length))
+    legacy["issues"] = [issue for issue in legacy["issues"] if issue["code"] != "terminal_eos_lost"]
+    legacy["status"] = "warnings"
+    # Previously this exact config could be prepared and acknowledged. Recheck
+    # its real token consumption at start, before creating a launch marker.
+    with patch("src.workbench.training_runs.preflight_dataset", return_value=legacy):
+        record = service.prepare(session, model, max_length=length)
+    assert record["status"] == "prepared"
+    with (
+        patch.object(service.runner, "launch_training") as launch,
+        pytest.raises(ValueError, match="启动前数据校验未通过"),
+    ):
+        service.start(record["run_id"], session, acknowledge_warnings=True)
+    launch.assert_not_called()
+    assert not (service.root / record["run_id"] / "started").exists()
+
+
 def test_real_tiny_sft_worker_writes_traceable_adapter_and_survives_ui_reload(environment):
     _, session, service, _ = environment
     record = _prepare(environment)

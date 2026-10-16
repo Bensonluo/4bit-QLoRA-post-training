@@ -354,6 +354,16 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                         for i, (start, end) in enumerate(actual["offset_mapping"])
                     )
                 truncated = len(full_ids) > sum(attention)
+                # A matching ID at the cut can be an interior EOS. Right
+                # truncation always discards the original complete-record end;
+                # left truncation keeps that end but may discard business input.
+                terminal_eos_supervised = bool(
+                    active_positions
+                    and (not truncated or getattr(tokenizer, "truncation_side", "right") == "left")
+                    and full_ids[-1] == eos_id
+                    and actual_ids[active_positions[-1]] == eos_id
+                    and active_positions[-1] in supervised
+                )
                 detail = {
                     "split": split,
                     "row_id": row_id,
@@ -366,14 +376,31 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                     "answer_kept_tokens": visible_answer,
                     "was_truncated": truncated,
                     "answer_was_truncated": visible_answer < full_answer if verified else None,
+                    "answer_supervision_complete": bool(full_answer and kept_answer == full_answer)
+                    if verified
+                    else None,
                     "answer_boundary_verified": verified,
-                    "terminal_eos_supervised": bool(
-                        active_positions
-                        and actual_ids[active_positions[-1]] == eos_id
-                        and active_positions[-1] in supervised
-                    ),
+                    "terminal_eos_supervised": terminal_eos_supervised,
                 }
                 report["rows"].append(detail)
+                if not terminal_eos_supervised:
+                    _issue(
+                        report,
+                        "terminal_eos_lost",
+                        "blocking",
+                        "原始完整记录的末尾 EOS 未保留在受监督位置；请增大 max_length 或缩短业务输入，不能仅确认警告后继续训练。",
+                        split=split,
+                        row_ids=[row_id],
+                    )
+                if len(active_positions) < 2:
+                    _issue(
+                        report,
+                        "missing_causal_context",
+                        "blocking",
+                        "当前记录不足两个有效 token，缺少可学习的因果上下文；请增大 max_length 或缩短输入。",
+                        split=split,
+                        row_ids=[row_id],
+                    )
                 if truncated:
                     split_report["truncated_rows"] += 1
                 if not supervised:
@@ -393,6 +420,20 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                         "answer_lost",
                         "blocking",
                         "当前 tokenizer、截断或 padding 屏蔽使答案没有任何受监督 token；请查看长度与字段处理。",
+                        split=split,
+                        row_ids=[row_id],
+                    )
+                if (
+                    verified
+                    and kept_answer is not None
+                    and full_answer is not None
+                    and 0 < kept_answer < full_answer
+                ):
+                    _issue(
+                        report,
+                        "answer_partial",
+                        "blocking",
+                        "部分标准答案 token 未参与因果监督；请增大 max_length 或缩短输入以保留答案及其前驱上下文，不能仅确认警告后训练。",
                         split=split,
                         row_ids=[row_id],
                     )

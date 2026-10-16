@@ -4,9 +4,9 @@ import os
 import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
-import torch
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from peft.tuners.lora.loraga import preprocess_loraga
 from transformers import (
@@ -142,6 +142,9 @@ class SFTTrainer:
 
     def prepare_model(self) -> None:
         """Load model and apply LoRA adapters."""
+        # PEFT loads any nonempty cache instead of estimating gradients. Old caches
+        # have no verifiable model/data/objective binding, so reject before loading weights.
+        self._lora_ga_cache_destination()
         console.print("\n[bold cyan]=== Preparing Model ===[/bold cyan]\n")
 
         # Load model and tokenizer
@@ -206,12 +209,32 @@ class SFTTrainer:
                 "[cyan]LoRA-GA: estimating full-finetuning gradient on calibration "
                 f"data ({self.lora_config.lora_ga_calibration_batches} batches)...[/cyan]"
             )
-            preprocess_loraga(
-                self.model,
-                lora_cfg,
-                self._build_lora_ga_train_step(),
-                cache_file=self.lora_config.lora_ga_cache_file,
-            )
+            train_step = self._build_lora_ga_train_step()
+            # Loading weights/data can take time; never reuse a cache that appeared meanwhile.
+            cache_file = self._lora_ga_cache_destination()
+            if cache_file is None:
+                preprocess_loraga(self.model, lora_cfg, train_step, cache_file=None)
+            else:
+                destination = Path(cache_file)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                # PEFT sees only a private, absent path. A competing user cache
+                # can never bypass calibration or be overwritten by torch.save.
+                with TemporaryDirectory(
+                    prefix=".loraga-cache-", dir=destination.parent
+                ) as directory:
+                    private_cache = Path(directory) / "gradients.pt"
+                    preprocess_loraga(
+                        self.model, lora_cfg, train_step, cache_file=str(private_cache)
+                    )
+                    if not private_cache.is_file() or private_cache.is_symlink():
+                        raise ValueError("LoRA-GA 未生成独立的本轮缓存，未发布缓存或应用适配器。")
+                    try:
+                        os.link(private_cache, destination)
+                    except FileExistsError as exc:
+                        raise ValueError(
+                            "LoRA-GA 缓存目标在校准期间已存在，不会覆盖；"
+                            "请改用新路径或将 lora_ga_cache_file 设为 None。"
+                        ) from exc
 
         # Apply LoRA
         console.print(
@@ -229,13 +252,30 @@ class SFTTrainer:
         )
         console.print(f"[green]✓ Total parameters: {total_params:,}[/green]")
 
+    def _lora_ga_cache_destination(self) -> str | None:
+        """Allow fresh cache output only until gradient provenance is supported."""
+        if (
+            self.lora_config.init_lora_weights != "lora_ga"
+            or self.lora_config.lora_ga_cache_file is None
+        ):
+            return None
+        destination = Path(self.lora_config.lora_ga_cache_file).expanduser()
+        if destination.exists() or destination.is_symlink():
+            raise ValueError(
+                "LoRA-GA 缓存缺少可核验来源，不能复用或覆盖已存在的路径："
+                f"{destination}。请改用新路径或将 lora_ga_cache_file 设为 None 重新校准；"
+                "现有缓存保持原样。"
+            )
+        # PEFT requires a nonempty parent path when saving; support bare filenames too.
+        return str(destination.absolute())
+
     def _build_lora_ga_train_step(self) -> Callable[[], None]:
         """Build the calibration callback peft's preprocess_loraga consumes.
 
-        Loads a small slice of the training data via the same dataset class
-        prepare_data would select, tokenizes it with the same tokenizer and
-        max_length, and returns a closure that runs forward+backward over
-        the calibration batches. peft accumulates the target-module weight
+        Applies prepare_data's source limit and train/validation split before
+        selecting a calibration slice. The same formatter and causal collator
+        preserve real EOS and mask padding in forward+backward batches.
+        peft accumulates the target-module weight
         gradients and initializes A/B from their SVD (LoRA-GA,
         arXiv:2407.05000).
         """
@@ -244,39 +284,35 @@ class SFTTrainer:
         )
         calib_dataset = dataset_cls(
             data_path=self.data_config.dataset_name,
-            max_samples=self.lora_config.lora_ga_calibration_batches
-            * self.training_config.batch_size,
+            max_samples=self.data_config.max_samples,
         )
         calib_dataset.load()
+        train_partition, _ = calib_dataset.split_dataset(
+            validation_split=self.data_config.validation_split,
+            seed=self.training_config.seed,
+        )
+        batch_size = max(1, self.training_config.batch_size)
+        limit = min(len(train_partition), self.lora_config.lora_ga_calibration_batches * batch_size)
+        calib_dataset.dataset = train_partition.select(range(limit))
         tokenized = calib_dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
         )
 
-        # tokenize_function emits input_ids/attention_mask (no labels) — pass
-        # the input_ids as labels so the model computes shifted CE loss itself.
-        batch_size = max(1, self.training_config.batch_size)
-        batches: list[dict[str, Any]] = []
-        for start in range(0, len(tokenized), batch_size):
-            # HF Dataset slicing returns a dict of columns, not a list of rows.
-            rows = [
-                tokenized[index] for index in range(start, min(start + batch_size, len(tokenized)))
-            ]
-            batches.append(
-                {
-                    key: torch.tensor([row[key] for row in rows], dtype=torch.long)
-                    for key in ("input_ids", "attention_mask")
-                    if key in rows[0]
-                }
-            )
-
+        collator = AttentionMaskCausalCollator(self.tokenizer)
         model = self.model
         device = next(model.parameters()).device
 
         def train_step() -> None:
-            for batch in batches:
+            for start in range(0, len(tokenized), batch_size):
+                # Dataset slicing yields columns; the shared collator consumes records.
+                rows = [
+                    tokenized[index]
+                    for index in range(start, min(start + batch_size, len(tokenized)))
+                ]
+                batch = collator(rows)
                 moved = {key: tensor.to(device) for key, tensor in batch.items()}
-                loss = model(**moved, labels=moved["input_ids"]).loss
+                loss = model(**moved).loss
                 loss.backward()
 
         return train_step

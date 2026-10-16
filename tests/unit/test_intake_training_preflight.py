@@ -16,6 +16,19 @@ from src.workbench.training_preflight import load_local_tokenizer, preflight_dat
 from tests.unit.test_data_materialize import FULL, _full
 
 
+class NoOffsets:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __getattr__(self, name):
+        return getattr(self.tokenizer, name)
+
+    def __call__(self, prompt, **options):
+        if options.pop("return_offsets_mapping", False):
+            raise NotImplementedError("slow tokenizer")
+        return self.tokenizer(prompt, **options)
+
+
 @pytest.fixture
 def tokenizer():
     backend = Tokenizer(
@@ -123,6 +136,90 @@ def test_left_truncation_keeps_answer_but_requires_context_review(exported, toke
     assert report["status"] == "warnings"
     assert all(row["answer_supervised_tokens"] == 1 for row in report["rows"])
     assert all(row["answer_was_truncated"] is False for row in report["rows"])
+    assert all(row["terminal_eos_supervised"] for row in report["rows"])
+
+
+@pytest.mark.parametrize("auto_eos", [False, True])
+@pytest.mark.parametrize("shared_pad_eos", [False, True])
+@pytest.mark.parametrize("with_offsets", [False, True])
+def test_only_terminal_eos_truncated_blocks_even_when_every_answer_is_complete(
+    exported, tokenizer, auto_eos, shared_pad_eos, with_offsets
+):
+    _, session = exported
+    if not auto_eos:
+        tokenizer.backend_tokenizer.post_processor = processors.TemplateProcessing(
+            single="[BOS] $A", special_tokens=[("[BOS]", tokenizer.bos_token_id)]
+        )
+    if shared_pad_eos:
+        tokenizer.pad_token = tokenizer.eos_token
+    complete = preflight_dataset(session, tokenizer, 64)
+    assert complete["status"] == "passed"
+    lengths = {row["full_tokens"] for row in complete["rows"]}
+    assert len(lengths) == 1
+
+    report = preflight_dataset(
+        session, tokenizer if with_offsets else NoOffsets(tokenizer), lengths.pop() - 1
+    )
+    assert report["status"] == "blocked"
+    assert not any(row["terminal_eos_supervised"] for row in report["rows"])
+    if with_offsets:
+        assert all(
+            row["answer_tokens"] == row["answer_supervised_tokens"] == 1 for row in report["rows"]
+        )
+        assert not any(row["answer_was_truncated"] for row in report["rows"])
+    else:
+        assert not any(row["answer_boundary_verified"] for row in report["rows"])
+    lost = [issue for issue in report["issues"] if issue["code"] == "terminal_eos_lost"]
+    assert len(lost) == len(report["rows"])
+    assert all(issue["severity"] == "blocking" and issue["row_ids"] for issue in lost)
+
+
+@pytest.mark.parametrize("with_offsets", [False, True])
+@pytest.mark.parametrize("answer,cut", [("yes [EOS] yes", 2), ("yes [EOS]", 1)])
+def test_truncation_ending_on_interior_eos_does_not_claim_original_ending_survived(
+    tmp_path, tokenizer, with_offsets, answer, cut
+):
+    service = IntakeService(tmp_path / "intake")
+    session = _full(service, data=FULL.replace(b",yes\n", f",{answer}\n".encode()))
+    session = service.materialize_dataset(session.session_id, session.revision)
+    complete = preflight_dataset(session, tokenizer, 64)
+    length = complete["rows"][0]["full_tokens"] - cut
+    from src.data.loaders import tokenize_alpaca_record
+
+    example = {"instruction": "分类", "input": "内容: a", "output": answer}
+    actual = tokenize_alpaca_record(example, tokenizer, length)
+    assert actual["input_ids"][-1] == tokenizer.eos_token_id
+    report = preflight_dataset(session, tokenizer if with_offsets else NoOffsets(tokenizer), length)
+    assert report["status"] == "blocked"
+    if with_offsets:
+        assert all(row["answer_supervised_tokens"] > 0 for row in report["rows"])
+    assert not any(row["terminal_eos_supervised"] for row in report["rows"])
+    assert any(issue["code"] == "terminal_eos_lost" for issue in report["issues"])
+
+
+@pytest.mark.parametrize("with_offsets", [False, True])
+def test_terminal_eos_at_causal_first_position_is_not_supervised(exported, tokenizer, with_offsets):
+    tokenizer.truncation_side = "left"
+    report = preflight_dataset(exported[1], tokenizer if with_offsets else NoOffsets(tokenizer), 1)
+    assert report["status"] == "blocked"
+    assert not any(row["terminal_eos_supervised"] for row in report["rows"])
+    assert any(issue["code"] == "terminal_eos_lost" for issue in report["issues"])
+
+
+@pytest.mark.parametrize("with_offsets", [False, True])
+def test_eos_only_after_left_padding_still_has_loss_but_lacks_real_causal_context(
+    exported, tokenizer, with_offsets
+):
+    tokenizer.truncation_side = "left"
+    tokenizer.padding_side = "left"
+    report = preflight_dataset(exported[1], tokenizer if with_offsets else NoOffsets(tokenizer), 1)
+    assert report["status"] == "blocked"
+    # The collator really computes PAD -> EOS loss. Keep that accounting honest
+    # while refusing a record without any real predecessor/context token.
+    assert all(row["supervised_tokens"] == 1 for row in report["rows"])
+    assert all(row["terminal_eos_supervised"] is True for row in report["rows"])
+    assert all(row["kept_tokens"] == 1 for row in report["rows"])
+    assert any(issue["code"] == "missing_causal_context" for issue in report["issues"])
 
 
 def test_partial_answer_truncation_is_reported_without_claiming_complete_coverage(
@@ -134,9 +231,70 @@ def test_partial_answer_truncation_is_reported_without_claiming_complete_coverag
     complete = preflight_dataset(session, tokenizer, 64)
     length = complete["rows"][0]["input_tokens"] + 2
     report = preflight_dataset(session, tokenizer, length)
-    assert report["status"] == "warnings"
+    assert report["status"] == "blocked"
     assert all(0 < row["answer_kept_tokens"] < row["answer_tokens"] for row in report["rows"])
     assert all(row["answer_was_truncated"] for row in report["rows"])
+    assert any(issue["code"] == "terminal_eos_lost" for issue in report["issues"])
+    assert any(issue["code"] == "answer_partial" for issue in report["issues"])
+
+
+@pytest.mark.parametrize("with_offsets", [False, True])
+def test_left_truncation_with_partial_answer_keeps_eos_but_cannot_claim_complete_target(
+    tmp_path, tokenizer, with_offsets
+):
+    service = IntakeService(tmp_path / "intake")
+    session = _full(service, data=FULL.replace(b",yes\n", b",yes yes yes yes yes\n"))
+    session = service.materialize_dataset(session.session_id, session.revision)
+    tokenizer.truncation_side = "left"
+    report = preflight_dataset(session, tokenizer if with_offsets else NoOffsets(tokenizer), 3)
+    assert all(row["terminal_eos_supervised"] for row in report["rows"])
+    assert not any(issue["code"] == "terminal_eos_lost" for issue in report["issues"])
+    if with_offsets:
+        assert report["status"] == "blocked"
+        assert all(0 < row["answer_kept_tokens"] < row["answer_tokens"] for row in report["rows"])
+        assert any(issue["code"] == "answer_partial" for issue in report["issues"])
+    else:
+        assert report["status"] == "warnings"
+        assert all(row["answer_kept_tokens"] is None for row in report["rows"])
+        assert not any(issue["code"] == "answer_partial" for issue in report["issues"])
+        assert any(issue["code"] == "answer_offsets_unavailable" for issue in report["issues"])
+
+
+@pytest.mark.parametrize("padding_side", ["left", "right"])
+@pytest.mark.parametrize("with_offsets", [False, True])
+def test_complete_visible_answer_must_also_survive_actual_causal_supervision(
+    tmp_path, tokenizer, padding_side, with_offsets
+):
+    from src.data.loaders import tokenize_alpaca_record
+    from src.data.sft_collator import AttentionMaskCausalCollator
+
+    service = IntakeService(tmp_path / "intake")
+    session = _full(service, data=FULL.replace(b",yes\n", b",yes yes\n"))
+    session = service.materialize_dataset(session.session_id, session.revision)
+    tokenizer.truncation_side = "left"
+    tokenizer.padding_side = padding_side
+    example = {"instruction": "分类", "input": "内容: a", "output": "yes yes"}
+    actual = tokenize_alpaca_record(example, tokenizer, 3)
+    assert actual["input_ids"] == [4, 4, tokenizer.eos_token_id]
+    batch = AttentionMaskCausalCollator(tokenizer)([actual])
+    actual_answer_labels = (batch["labels"][0, 1:] == 4).sum().item()
+    assert actual_answer_labels == (2 if padding_side == "left" else 1)
+    report = preflight_dataset(session, tokenizer if with_offsets else NoOffsets(tokenizer), 3)
+    assert all(row["terminal_eos_supervised"] for row in report["rows"])
+    if with_offsets:
+        assert all(row["answer_kept_tokens"] == row["answer_tokens"] == 2 for row in report["rows"])
+        assert not any(row["answer_was_truncated"] for row in report["rows"])
+        assert all(
+            row["answer_supervised_tokens"] == actual_answer_labels for row in report["rows"]
+        )
+        complete = padding_side == "left"
+        assert report["status"] == ("warnings" if complete else "blocked")
+        assert all(row["answer_supervision_complete"] is complete for row in report["rows"])
+        assert any(issue["code"] == "answer_partial" for issue in report["issues"]) is not complete
+    else:
+        assert report["status"] == "warnings"
+        assert all(row["answer_supervision_complete"] is None for row in report["rows"])
+        assert not any(issue["code"] == "answer_partial" for issue in report["issues"])
 
 
 def test_one_token_leaves_no_shifted_loss_and_missing_pad_blocks(exported, tokenizer):
@@ -165,17 +323,8 @@ def test_pad_equal_eos_preserves_real_end_token_supervision(exported, tokenizer)
 
 
 def test_no_offsets_never_claims_verified_answer_coverage(exported, tokenizer):
-    class NoOffsets:
-        def __getattr__(self, name):
-            return getattr(tokenizer, name)
-
-        def __call__(self, prompt, **options):
-            if options.pop("return_offsets_mapping", False):
-                raise NotImplementedError("slow tokenizer")
-            return tokenizer(prompt, **options)
-
     _, session = exported
-    report = preflight_dataset(session, NoOffsets(), 32)
+    report = preflight_dataset(session, NoOffsets(tokenizer), 32)
     assert report["status"] == "warnings"
     assert all(
         row["answer_tokens"] is None and not row["answer_boundary_verified"]

@@ -85,6 +85,38 @@ def test_preflight_cli_prints_plain_language_advice(tmp_path, capsys):
     assert ("最长一条记录需要" in err) or ("没有内容因长度超限被截断" in err) or ("答案" in err)
 
 
+def test_cli_blocks_missing_eos_even_when_every_answer_token_is_kept(exported, tokenizer, tmp_path):
+    from src.workbench.training_preflight import preflight_dataset
+
+    service, session = exported
+    complete = preflight_dataset(session, tokenizer, 32)
+    length = max(row["full_tokens"] for row in complete["rows"]) - 1
+    directory = tmp_path / "tokenizer"
+    tokenizer.save_pretrained(directory)
+    result = invoke(
+        service,
+        "preflight",
+        session.session_id,
+        "--revision",
+        session.revision,
+        "--tokenizer",
+        directory,
+        "--max-length",
+        length,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)["training_preflight"]
+    assert report["status"] == "blocked"
+    assert all(row["answer_was_truncated"] is False for row in report["rows"])
+    assert any(
+        issue["code"] == "terminal_eos_lost" and issue["severity"] == "blocking"
+        for issue in report["issues"]
+    )
+    assert "EOS" in result.stderr
+    assert "未启动训练" in result.stderr
+    assert service.load(session.session_id).training_preflight == report
+
+
 def test_cli_preflight_passed_tail_points_forward_not_back_to_preflight(
     exported, tokenizer, tmp_path
 ):

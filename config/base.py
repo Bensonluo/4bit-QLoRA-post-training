@@ -128,10 +128,14 @@ class LoRAConfig:
             trainer feeds to peft's gradient estimation (default 4). More
             batches = a less noisy gradient estimate, at linear calibration
             cost. Only used when init_lora_weights="lora_ga".
-        lora_ga_cache_file: Optional path for caching estimated LoRA-GA
-            gradients (peft preprocess_loraga cache_file). If the file
-            exists, gradients load from it and calibration is skipped
-            entirely — useful when re-running the same base+data combo.
+        lora_ga_cache_file: Optional new output path for saving this run's
+            estimated LoRA-GA gradients for inspection (peft cache_file).
+            Write-only until model/data/objective provenance is supported:
+            existing paths, including empty files, are rejected before model
+            loading; existing caches are not loaded or deleted.
+            PEFT writes to a private temporary path; completed gradients are
+            published without overwriting a destination created concurrently.
+            Use a fresh path or None to recalibrate; no cache is deleted.
             Only used when init_lora_weights="lora_ga".
         rank_pattern: Per-module rank overrides (peft LoraConfig field) —
             a dict mapping module-name regex to a rank, e.g.

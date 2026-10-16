@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
+from datasets import Dataset
 from transformers import TrainingArguments
 
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
@@ -766,6 +767,75 @@ class TestPrepareModelLoRAGA:
         model.parameters.side_effect = lambda: iter([real_param])
         return model
 
+    @pytest.mark.parametrize("contents", [b"", b"unverified cached gradients"])
+    @patch("src.training.sft_trainer.preprocess_loraga")
+    @patch("src.training.sft_trainer.load_model_and_tokenizer")
+    def test_existing_gradient_cache_is_preserved_and_rejected_before_loading(
+        self, mock_load, mock_preprocess, tmp_path, contents
+    ):
+        trainer = _make_trainer(tmp_path)
+        trainer.lora_config.init_lora_weights = "lora_ga"
+        cache = tmp_path / "old-gradients.pt"
+        cache.write_bytes(contents)
+        before = cache.stat()
+        trainer.lora_config.lora_ga_cache_file = str(cache)
+
+        with pytest.raises(ValueError, match="缓存缺少可核验来源"):
+            trainer.prepare_model()
+
+        mock_load.assert_not_called()
+        mock_preprocess.assert_not_called()
+        assert cache.read_bytes() == contents
+        assert cache.stat().st_mtime_ns == before.st_mtime_ns
+
+    @patch("src.training.sft_trainer.preprocess_loraga")
+    @patch("src.training.sft_trainer.load_model_and_tokenizer")
+    def test_dangling_gradient_cache_symlink_is_not_overwritten(
+        self, mock_load, mock_preprocess, tmp_path
+    ):
+        trainer = _make_trainer(tmp_path)
+        trainer.lora_config.init_lora_weights = "lora_ga"
+        cache = tmp_path / "old-gradients.pt"
+        missing = tmp_path / "missing-gradients.pt"
+        cache.symlink_to(missing)
+        trainer.lora_config.lora_ga_cache_file = str(cache)
+
+        with pytest.raises(ValueError, match="缓存缺少可核验来源"):
+            trainer.prepare_model()
+
+        mock_load.assert_not_called()
+        mock_preprocess.assert_not_called()
+        assert cache.is_symlink() and cache.readlink() == missing
+        assert not missing.exists()
+
+    @patch("src.training.sft_trainer.preprocess_loraga")
+    @patch("src.training.sft_trainer.load_model_and_tokenizer")
+    def test_cache_created_during_preparation_cannot_skip_calibration(
+        self, mock_load, mock_preprocess, tmp_path
+    ):
+        trainer = _make_trainer(tmp_path)
+        trainer.lora_config.init_lora_weights = "lora_ga"
+        cache = tmp_path / "new-gradients.pt"
+        trainer.lora_config.lora_ga_cache_file = str(cache)
+        mock_load.return_value = (self._ga_model(), MagicMock())
+
+        def callback():
+            cache.write_bytes(b"created while model or data were loading")
+            return lambda: None
+
+        with (
+            patch.object(trainer, "_build_lora_ga_train_step", side_effect=callback),
+            patch(
+                "src.training.sft_trainer.get_peft_model", return_value=mock_load.return_value[0]
+            ),
+            pytest.raises(ValueError, match="缓存缺少可核验来源"),
+        ):
+            trainer.prepare_model()
+
+        mock_load.assert_called_once()
+        mock_preprocess.assert_not_called()
+        assert cache.read_bytes() == b"created while model or data were loading"
+
     @patch("src.training.sft_trainer._dataset_class_for")
     @patch("src.training.sft_trainer.preprocess_loraga")
     @patch("src.training.sft_trainer.get_peft_model")
@@ -780,8 +850,10 @@ class TestPrepareModelLoRAGA:
         mock_ds_cls: MagicMock,
         tmp_path: Path,
     ) -> None:
+        from tests.unit.test_sft_eos_contract import tokenizer
+
         mock_model = self._ga_model()
-        mock_load.return_value = (mock_model, MagicMock())
+        mock_load.return_value = (mock_model, tokenizer())
         mock_peft.return_value = mock_model
 
         rows = [
@@ -799,9 +871,12 @@ class TestPrepareModelLoRAGA:
             def load(self) -> None:
                 pass
 
+            def split_dataset(self, **kwargs: Any) -> tuple[Dataset, None]:
+                return Dataset.from_list(rows), None
+
             def format_for_training(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
                 self.fmt_kwargs = kwargs
-                return rows
+                return list(self.dataset)
 
         mock_ds_cls.return_value = _FakeCalibDataset
 
@@ -821,10 +896,9 @@ class TestPrepareModelLoRAGA:
         # get_peft_model receives the same config object peft preprocessed.
         assert mock_peft.call_args[0][1] is lora_cfg
 
-        # The calibration slice is sized lora_ga_calibration_batches * batch_size
-        # and formatted with the training max_length.
+        # Loading obeys the training source limit before partitioning/calibration slicing.
         fake = _FakeCalibDataset.created[0]
-        assert fake.init_kwargs["max_samples"] == 4 * 1
+        assert fake.init_kwargs["max_samples"] == trainer.data_config.max_samples
         assert fake.fmt_kwargs["max_length"] == trainer.model_config.max_length
 
         # The captured train_step runs forward+backward over the batches.
@@ -861,6 +935,9 @@ class TestPrepareModelLoRAGA:
             def load(self) -> None:
                 pass
 
+            def split_dataset(self, **kwargs: Any) -> tuple[Dataset, None]:
+                return Dataset.from_list([]), None
+
             def format_for_training(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
                 return []
 
@@ -872,13 +949,67 @@ class TestPrepareModelLoRAGA:
         trainer.lora_config.lora_ga_scale = "gd_scale"
         trainer.lora_config.lora_ga_stable_gamma = 32
         trainer.lora_config.lora_ga_cache_file = str(tmp_path / "ga_grads.pt")
+
+        def save_new_cache(model, config, train_step, *, cache_file):
+            path = Path(cache_file)
+            assert not path.exists()
+            path.write_bytes(b"this run's estimated gradients")
+
+        mock_preprocess.side_effect = save_new_cache
         trainer.prepare_model()
 
         lora_cfg = mock_preprocess.call_args[0][1]
         assert lora_cfg.lora_ga_config.direction == "ArBr"
         assert lora_cfg.lora_ga_config.scale == "gd_scale"
         assert lora_cfg.lora_ga_config.stable_gamma == 32
-        assert mock_preprocess.call_args.kwargs["cache_file"] == str(tmp_path / "ga_grads.pt")
+        private = Path(mock_preprocess.call_args.kwargs["cache_file"])
+        assert private != tmp_path / "ga_grads.pt"
+        assert private.parent.parent == tmp_path
+        assert not private.parent.exists()
+        assert (tmp_path / "ga_grads.pt").read_bytes() == b"this run's estimated gradients"
+
+    @pytest.mark.parametrize("outcome", ["collision", "failure"])
+    @patch("src.training.sft_trainer.get_peft_model")
+    @patch("src.training.sft_trainer.preprocess_loraga")
+    @patch("src.training.sft_trainer.load_model_and_tokenizer")
+    def test_gradient_cache_is_private_and_only_published_without_overwriting(
+        self, mock_load, mock_preprocess, mock_peft, tmp_path, outcome
+    ):
+        trainer = _make_trainer(tmp_path)
+        trainer.lora_config.init_lora_weights = "lora_ga"
+        cache = tmp_path / "new-parent" / "gradients.pt"
+        trainer.lora_config.lora_ga_cache_file = str(cache)
+        mock_load.return_value = (self._ga_model(), MagicMock())
+        private_paths = []
+
+        def prepare(model, config, train_step, *, cache_file):
+            private = Path(cache_file)
+            private_paths.append(private)
+            assert private != cache and private.parent.parent == cache.parent
+            assert not private.exists()
+            private.write_bytes(b"this run's private gradients")
+            if outcome == "collision":
+                cache.write_bytes(b"foreign gradients created during PEFT")
+            else:
+                raise RuntimeError("calibration failed")
+
+        mock_preprocess.side_effect = prepare
+        exception = ValueError if outcome == "collision" else RuntimeError
+        message = "不会覆盖" if outcome == "collision" else "calibration failed"
+        with (
+            patch.object(trainer, "_build_lora_ga_train_step", return_value=lambda: None),
+            pytest.raises(exception, match=message),
+        ):
+            trainer.prepare_model()
+
+        mock_preprocess.assert_called_once()
+        mock_peft.assert_not_called()
+        assert len(private_paths) == 1 and not private_paths[0].parent.exists()
+        if outcome == "collision":
+            assert cache.read_bytes() == b"foreign gradients created during PEFT"
+            assert list(cache.parent.iterdir()) == [cache]
+        else:
+            assert not cache.exists() and list(cache.parent.iterdir()) == []
 
     @patch("src.training.sft_trainer.get_peft_model")
     @patch("src.training.sft_trainer.prepare_model_for_kbit_training", return_value=None)

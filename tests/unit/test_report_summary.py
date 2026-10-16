@@ -101,6 +101,71 @@ def test_preflight_summary_passed_and_empty():
     assert "检查通过" in joined and "没有内容因长度超限被截断" in joined
 
 
+def test_preflight_summary_distinguishes_eos_loss_from_context_loss():
+    from src.workbench.report_summary import summarize_preflight
+
+    record = {
+        "status": "blocked",
+        "splits": {"train": {"rows": 1, "truncated_rows": 1}},
+        "rows": [
+            {"was_truncated": True, "answer_was_truncated": False, "terminal_eos_supervised": False}
+        ],
+    }
+    joined = "\n".join(summarize_preflight(record))
+    assert "答案文字保留了" in joined and "结束标记（EOS）" in joined
+    assert "截掉的是输入内容" not in joined
+    record["status"] = "warnings"
+    record["rows"][0]["terminal_eos_supervised"] = True
+    assert "截掉的是输入内容" in "\n".join(summarize_preflight(record))
+
+
+def test_preflight_summary_does_not_claim_unverified_answers_survived_truncation():
+    from src.workbench.report_summary import summarize_preflight
+
+    joined = "\n".join(
+        summarize_preflight(
+            {
+                "status": "warnings",
+                "splits": {"train": {"rows": 1, "truncated_rows": 1}},
+                "rows": [
+                    {
+                        "was_truncated": True,
+                        "answer_was_truncated": None,
+                        "terminal_eos_supervised": True,
+                    }
+                ],
+            }
+        )
+    )
+    assert "证据不足以确认答案完整保留" in joined
+    assert "答案都保留" not in joined
+    assert "截掉的是输入内容" not in joined
+
+
+def test_preflight_summary_reports_visible_answer_missing_shifted_supervision():
+    from src.workbench.report_summary import summarize_preflight
+
+    joined = "\n".join(
+        summarize_preflight(
+            {
+                "status": "blocked",
+                "splits": {"train": {"rows": 1, "truncated_rows": 1}},
+                "rows": [
+                    {
+                        "was_truncated": True,
+                        "answer_was_truncated": False,
+                        "answer_supervision_complete": False,
+                        "terminal_eos_supervised": True,
+                    }
+                ],
+            }
+        )
+    )
+    assert "答案未完整进入训练监督" in joined
+    assert "答案都保留了" not in joined
+    assert "截掉的是输入内容" not in joined
+
+
 def test_training_run_summary_status_and_honesty():
     from src.workbench.report_summary import summarize_training_run
 
@@ -223,7 +288,7 @@ def test_preflight_summary_gives_concrete_length_advice():
         }
     )
     joined = "\n".join(lines)
-    assert "答案在截断后丢了" in joined
+    assert "答案未完整进入训练监督" in joined
     assert "最长一条记录需要 823" in joined
     assert "设为 832 左右" in joined
 
@@ -233,7 +298,14 @@ def test_preflight_summary_gives_concrete_length_advice():
             "status": "warnings",
             "max_length": 1024,
             "splits": {"train": {"rows": 8, "truncated_rows": 1}},
-            "rows": [{"full_tokens": 700, "answer_was_truncated": False}],
+            "rows": [
+                {
+                    "full_tokens": 700,
+                    "was_truncated": True,
+                    "answer_was_truncated": False,
+                    "terminal_eos_supervised": True,
+                }
+            ],
             "issues": [],
         }
     )

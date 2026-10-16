@@ -433,15 +433,37 @@ def summarize_preflight(preflight: dict) -> list[str]:
             if split.get("truncated_rows")
         )
         rows = preflight.get("rows") or []
-        answer_partial = sum(1 for row in rows if row.get("answer_was_truncated"))
+        truncated_rows = [row for row in rows if row.get("was_truncated") is True]
+        answer_partial = sum(
+            1
+            for row in rows
+            if row.get("answer_was_truncated") is True
+            or row.get("answer_supervision_complete") is False
+        )
+        eos_lost = sum(row.get("terminal_eos_supervised") is False for row in truncated_rows)
+        answer_verified = len(truncated_rows) == truncated and all(
+            row.get("answer_was_truncated") is False for row in truncated_rows
+        )
         if answer_partial:
             lines.append(
-                f"有 {answer_partial} 行的答案在截断后丢了一部分（共截断 {detail}）——"
+                f"有 {answer_partial} 行的答案未完整进入训练监督（共截断 {detail}）——"
                 "优先加大长度或缩短输入；答案不完整的样本教不会模型正确作答。"
+            )
+        elif not answer_verified:
+            lines.append(
+                f"有内容超出长度上限被截断（{detail}）——当前证据不足以确认答案完整保留，请核对实际 token 消费。"
+            )
+        elif eos_lost:
+            lines.append(
+                f"有内容超出长度上限被截断（{detail}）——答案文字保留了，但有 {eos_lost} 行未保留受监督的结束标记（EOS）；需调整长度后重新检查。"
+            )
+        elif all(row.get("terminal_eos_supervised") is True for row in truncated_rows):
+            lines.append(
+                f"有内容超出长度上限被截断（{detail}）——答案都保留了，截掉的是输入内容；请核对被截部分是否关键。"
             )
         else:
             lines.append(
-                f"有内容超出长度上限被截断（{detail}）——答案都保留了，截掉的是输入内容；请核对被截部分是否关键。"
+                f"有内容超出长度上限被截断（{detail}）——答案文字保留了，但缺少结束标记的监督证据，请重新检查。"
             )
         full_tokens = [
             row.get("full_tokens") for row in rows if isinstance(row.get("full_tokens"), int)
