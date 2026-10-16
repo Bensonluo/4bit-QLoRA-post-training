@@ -16,6 +16,10 @@ from typing import Any
 
 REVISION = "436f6f89e1e581249900b37a5b8a12a36a6d0912"
 REPOSITORY = "https://github.com/ggml-org/llama.cpp"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Keep direct `python scripts/setup_gguf_tools.py` usable without an editable install.
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def default_destination() -> Path:
@@ -77,6 +81,73 @@ def _quantizer(directory: Path) -> Path:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
     raise ValueError("没有可执行的 llama-quantize；请重新运行准备命令，不能仅凭目录存在宣称成功。")
+
+
+def _evaluation_runtime(directory: Path, jobs: int, *, check_only: bool) -> dict[str, Any]:
+    from src.utils.gguf_runtime_tools import (
+        BRIDGE_SOURCE_DIR,
+        STATIC_CPU_FLAGS,
+        bridge_source_identity,
+        evaluation_runtime_identity,
+        write_evaluation_runtime_manifest,
+    )
+
+    build = directory / "build-tunesmith-eval"
+    name = "tunesmith-gguf-eval.exe" if sys.platform == "win32" else "tunesmith-gguf-eval"
+    binary = build / "bin" / name
+    if any(
+        path.is_symlink() for path in (build, binary.parent, binary, Path(str(binary) + ".json"))
+    ):
+        raise ValueError("评测桥构建/证据路径含符号链接，请另选独立工具目录。")
+    if check_only:
+        return evaluation_runtime_identity(binary)
+    try:
+        return evaluation_runtime_identity(binary)
+    except ValueError:
+        # A missing/stale receipt must cause a real rebuild, even if mtimes make
+        # CMake believe old object files are current after a source restoration.
+        pass
+    sources = bridge_source_identity()
+    _run(
+        [
+            "cmake",
+            "-S",
+            str(BRIDGE_SOURCE_DIR),
+            "-B",
+            str(build),
+            f"-DLLAMA_CPP_DIR={directory}",
+            "-DCMAKE_BUILD_TYPE=Release",
+        ],
+        "配置固定 CPU 静态评测桥",
+    )
+    _run(
+        [
+            "cmake",
+            "--build",
+            str(build),
+            "--config",
+            "Release",
+            "--clean-first",
+            "--target",
+            "tunesmith-gguf-eval",
+            "--parallel",
+            str(jobs),
+        ],
+        "编译本地 JSON 行评测桥（无服务/无模型下载）",
+    )
+    cache = {}
+    for line in (build / "CMakeCache.txt").read_text(encoding="utf-8").splitlines():
+        if not line.startswith(("#", "//")) and ":" in line and "=" in line:
+            key, value = line.split("=", 1)
+            cache[key.split(":", 1)[0]] = value
+    flags = {key: cache.get(key, "") for key in STATIC_CPU_FLAGS}
+    if flags != STATIC_CPU_FLAGS or Path(cache.get("CMAKE_HOME_DIRECTORY", "")).resolve() != (
+        BRIDGE_SOURCE_DIR.resolve()
+    ):
+        raise ValueError("评测桥未使用当前源码的固定静态 CPU 构建配置，未宣称准备成功。")
+    _verify_checkout(directory)
+    write_evaluation_runtime_manifest(binary, bridge_sources=sources, build_flags=flags)
+    return evaluation_runtime_identity(binary)
 
 
 def prepare(destination: Path, jobs: int, *, check_only: bool = False) -> dict[str, Any]:
@@ -155,6 +226,7 @@ def prepare(destination: Path, jobs: int, *, check_only: bool = False) -> dict[s
     help_text = _run([str(binary), "--help"], "检查量化器可运行", codes=(0, 1))
     if "usage:" not in help_text.lower() or "Q4_K_M" not in help_text:
         raise ValueError("量化器没有返回预期帮助内容；未宣称工具准备成功。")
+    runtime = _evaluation_runtime(destination, jobs, check_only=check_only)
     _verify_checkout(destination)
     options = ["--format", "gguf", "--llama-cpp-dir", str(destination)]
     return {
@@ -163,12 +235,15 @@ def prepare(destination: Path, jobs: int, *, check_only: bool = False) -> dict[s
         "repository": REPOSITORY,
         "llama_cpp_dir": str(destination),
         "quantizer": str(binary),
+        "evaluation_runtime_path": runtime["binary_path"],
+        "gguf_runtime_path": runtime["binary_path"],
+        "evaluation_runtime_identity": runtime,
         "python_executable": sys.executable,
         "reused_checkout": reused,
         "check_only": check_only,
         "train_export_args": options,
         "train_export_options": shlex.join(options),
-        "scope_note": "仅准备并自测官方转换/量化工具；未下载模型、未训练或评估模型。",
+        "scope_note": "仅准备并自测官方转换/量化工具与固定 CPU 评测桥；未下载模型、未训练或评估模型。",
     }
 
 

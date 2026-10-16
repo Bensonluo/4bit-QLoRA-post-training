@@ -96,6 +96,27 @@ def summarize_comparison(report: Any) -> list[str]:
         if strict and score > best_score:
             best_label, best_correct, best_score = model["label"], correct, score
 
+    gguf_models = [
+        model for model in models if (model.get("requested_model") or {}).get("gguf_path")
+    ]
+    if gguf_models:
+        lines.append(
+            (
+                "GGUF 根据本次实际逐题输出独立计分，"
+                if strict or custom
+                else "GGUF 保留本次真实逐题输出，开放任务尚待业务评分，"
+            )
+            + "不沿用 Hugging Face 模型的历史分数；"
+            "差异包括合并、精度与运行时的综合影响，不能仅归因于量化。"
+            "这份开发报告不替代 GGUF 最终业务验收。"
+        )
+        for model in gguf_models:
+            requested = model["requested_model"]
+            lines.append(
+                f"GGUF 模型「{model['label']}」：文件 {requested['gguf_path']}；"
+                f"本地运行器 {requested.get('gguf_runtime_path') or '未记录'}。"
+            )
+
     field_models = models if strict else ()  # 「答对」措辞只在严格评分下成立
     field_parts: list[str] = []
     for model in field_models:

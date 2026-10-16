@@ -26,6 +26,8 @@ class EvaluationModel:
     base_model: str
     adapter_path: str | None = None
     revision: str | None = None
+    gguf_path: str | None = None
+    gguf_runtime_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,71 @@ class Generation:
     text: str
     truncated: bool = False
     generated_tokens: int | None = None
+    token_proof: dict[str, Any] | None = None
+
+
+TOKEN_GENERATION = "greedy_token_contract_v2"
+TOKEN_CONTRACT = {
+    "input_tokenization": "hf_default_special_tokens_native_exact_v1",
+    "decoding": "hf_skip_special_tokens_v1",
+    "stopping": "tokenizer_eos_or_max_new_tokens_v1",
+}
+
+
+def generation_token_proof(
+    prompt: str,
+    text: str,
+    prompt_ids: list[int],
+    generated_ids: list[int],
+    eos: int | list[int] | None,
+) -> dict[str, Any]:
+    """Record actual generation IDs, independently of the business scorer."""
+    stops = eos if isinstance(eos, list) else [] if eos is None else [eos]
+    return {
+        "prompt_digest": content_digest(prompt),
+        "output_digest": content_digest(text),
+        "prompt_token_ids": list(prompt_ids),
+        "generated_token_ids": list(generated_ids),
+        "eos_token_ids": sorted(stops),
+        "finish_reason": "eos" if generated_ids and generated_ids[-1] in stops else "length",
+    }
+
+
+def verify_generation_token_proof(row: dict, protocol: dict) -> None:
+    proof = row.get("token_proof")
+    if row.get("output") is None:
+        if proof is not None:
+            raise ValueError("失败且没有输出的生成不能携带成功 token 证据。")
+        return
+    if not isinstance(proof, dict):
+        raise ValueError("同题生成缺少完整 token 证据。")
+    inputs: Any = proof.get("prompt_token_ids")
+    generated: Any = proof.get("generated_token_ids")
+    stops: Any = proof.get("eos_token_ids")
+    maximum = protocol.get("max_new_tokens")
+    if (
+        any(
+            not isinstance(ids, list) or any(type(token) is not int or token < 0 for token in ids)
+            for ids in (inputs, generated, stops)
+        )
+        or not inputs
+        or not generated
+        or len(stops) != len(set(stops))
+        or type(maximum) is not int
+        or not 0 < len(generated) <= maximum
+        or row.get("generated_tokens") != len(generated)
+        or proof.get("prompt_digest") != content_digest(row.get("prompt"))
+        or proof.get("output_digest") != content_digest(row.get("output"))
+    ):
+        raise ValueError("生成 token 证据与实际提示、输出或长度不一致。")
+    ended = generated[-1] in stops
+    if (
+        any(token in stops for token in generated[:-1])
+        or proof.get("finish_reason") != ("eos" if ended else "length")
+        or row.get("truncated") is not (not ended)
+        or (not ended and len(generated) != maximum)
+    ):
+        raise ValueError("生成 token 的 EOS、停止或截断证据不一致。")
 
 
 def protocol_settings(protocol: EvaluationProtocol) -> dict:
@@ -116,6 +183,17 @@ def assert_comparable(left: EvaluationReport, right: EvaluationReport) -> None:
     # still cannot make different observed answers into a same-question test.
     if _report_questions(left.models[0]) != _report_questions(right.models[0]):
         raise ValueError("实际评测提示或标准答案不同，不能作为同题对照。")
+    if left.protocol.get("generation") == TOKEN_GENERATION:
+        observed: dict[int, tuple[list, list]] = {}
+        for report in (left, right):
+            for model in report.models:
+                for row in model["rows"]:
+                    if row.get("token_proof"):
+                        proof = row["token_proof"]
+                        inputs = (proof["prompt_token_ids"], proof["eos_token_ids"])
+                        if row["index"] in observed and observed[row["index"]] != inputs:
+                            raise ValueError("报告间实际输入 token 或 EOS 规则不同。")
+                        observed[row["index"]] = inputs
 
 
 def comparison_key(dataset: dict[str, Any], protocol: dict[str, Any]) -> str:
@@ -181,9 +259,9 @@ def _model_identity(directory: Path) -> dict[str, Any]:
 class LocalEvaluationRuntime:
     """Reuse the platform-aware loader; no background generation thread survives close."""
 
-    def __init__(self, model: EvaluationModel):
-        self.model = None
-        self.tokenizer = None
+    def __init__(self, model: EvaluationModel, *, enforce_token_contract: bool = False):
+        self.model: Any = None
+        self.tokenizer: Any = None
         try:
             from config.base import ModelConfig
             from src.models.loader import load_model_and_tokenizer
@@ -200,6 +278,13 @@ class LocalEvaluationRuntime:
                 from peft import PeftModel
 
                 self.model = PeftModel.from_pretrained(self.model, model.adapter_path)
+            if enforce_token_contract:
+                from transformers import GenerationConfig
+
+                # Transformers fills None fields from model.generation_config.
+                # Use global defaults on our private model, so repo-specific
+                # suppressions, forced tokens or penalties cannot change argmax.
+                self.model.generation_config = GenerationConfig()
             self.model.eval()
         except Exception:
             self.close()
@@ -231,10 +316,18 @@ class LocalEvaluationRuntime:
             and eos is not None
             and int(tokens[-1]) in (eos if isinstance(eos, list) else [eos])
         )
+        text = self.tokenizer.decode(tokens, skip_special_tokens=True)
         return Generation(
-            text=self.tokenizer.decode(tokens, skip_special_tokens=True),
+            text=text,
             truncated=len(tokens) >= protocol.max_new_tokens and not ended,
             generated_tokens=len(tokens),
+            token_proof=generation_token_proof(
+                prompt,
+                text,
+                encoded["input_ids"][0].tolist(),
+                tokens.tolist(),
+                eos,
+            ),
         )
 
     def close(self) -> None:
@@ -476,9 +569,44 @@ def verify_evaluation_report(report: EvaluationReport) -> None:
         raise ValueError("评测报告身份与数据/协议内容不一致。")
     questions: list[tuple[str, str]] | None = None
     sources: list[Any] | None = None
+    token_inputs: dict[int, tuple[list, list]] = {}
+    has_gguf = any(
+        isinstance(model, dict)
+        and (
+            isinstance(model.get("requested_model"), dict)
+            and (
+                model["requested_model"].get("gguf_path")
+                or model["requested_model"].get("gguf_runtime_path")
+            )
+            or isinstance(model.get("identity"), dict)
+            and (model["identity"].get("gguf") or model["identity"].get("format") == "gguf")
+        )
+        for model in report.models
+    )
+    if has_gguf and report.protocol.get("generation") != TOKEN_GENERATION:
+        raise ValueError("GGUF 评测缺少经过核验的 token 生成协议。")
+    if report.protocol.get("generation") == TOKEN_GENERATION and (
+        any(report.protocol.get(key) != value for key, value in TOKEN_CONTRACT.items())
+        or not isinstance(report.protocol.get("decoder_version"), str)
+        or not report.protocol["decoder_version"].strip()
+    ):
+        raise ValueError("token 生成协议的分词、解码、版本或停止规则无效。")
     for model in report.models:
         verify_evaluation_metrics(model, report.protocol, report.dataset.get("row_count"))
+        if has_gguf:
+            from src.workbench.gguf_evaluation import verify_gguf_report_identity
+
+            verify_gguf_report_identity(model)
         rows = sorted(model["rows"], key=lambda row: row["index"])
+        if report.protocol.get("generation") == TOKEN_GENERATION:
+            for row in rows:
+                verify_generation_token_proof(row, report.protocol)
+                if row.get("token_proof") is not None:
+                    proof = row["token_proof"]
+                    inputs = (proof["prompt_token_ids"], proof["eos_token_ids"])
+                    if row["index"] in token_inputs and inputs != token_inputs[row["index"]]:
+                        raise ValueError("同题模型的实际输入 token 或 EOS 规则不同。")
+                    token_inputs[row["index"]] = inputs
         if any(
             not isinstance(row.get("prompt"), str) or not isinstance(row.get("expected"), str)
             for row in rows
@@ -602,6 +730,8 @@ class BusinessEvaluationService:
         """Evaluate one previously selected model on fixed final-test cases only."""
         if not isinstance(model, EvaluationModel) or not model.label.strip():
             raise ValueError("最终验收只接受一个已选定且名称明确的模型。")
+        if model.gguf_path or model.gguf_runtime_path:
+            raise ValueError("GGUF 当前仅支持开发同题对照；最终验收尚未支持量化产物身份冻结。")
         if not dataset_is_current(session) or not session.dataset.evaluation_suite:
             raise ValueError("最终验收需要当前有效数据绑定已冻结的固定测试套件。")
         return self._evaluate(
@@ -680,6 +810,12 @@ class BusinessEvaluationService:
             "prompt_digest": content_digest(prompts),
             "answers_digest": content_digest([row["output"] for row in records]),
         }
+        token_contract = any(model.gguf_path or model.gguf_runtime_path for model in models)
+        if token_contract:
+            import transformers
+
+            protocol_identity.update(generation=TOKEN_GENERATION, **TOKEN_CONTRACT)
+            protocol_identity["decoder_version"] = transformers.__version__
         if evaluation_key is not None:
             protocol_identity["evaluation_key"] = evaluation_key
         dataset = {
@@ -707,6 +843,11 @@ class BusinessEvaluationService:
                 "全部固定开发评测题纳入分母，包括生成失败与截断；独立测试集不用于此对照或自动选参。"
             )
             report.notes.append("仅固定套件的评分题纳入分母；同组新增保留行不悄悄扩充评分题。")
+        if token_contract:
+            report.notes.append(
+                "GGUF 独立生成并评分；合并、量化与运行器的综合差异不等于单独的量化损失。"
+                "本报告核验输入 token、EOS、长度和源 HF 解码规则；旧 greedy_v1 报告需重新运行后比较。"
+            )
         if purpose == "final_acceptance":
             report.notes[0] = (
                 "仅验收已选定模型的固定最终测试题；全部题纳入分母，包括生成失败与截断，不用于模型筛选或调参。"
@@ -716,7 +857,8 @@ class BusinessEvaluationService:
                 "开放任务尚无可执行业务评分规则，仅保留输出供核对，不宣称质量达标。"
             )
         self._save(report)
-        identity_cache = {}
+        identity_cache: dict[Path, dict[str, Any]] = {}
+        token_inputs: dict[int, tuple[list, list]] = {}
         for model in models:
             outcome: dict[str, Any] = {
                 "label": model.label,
@@ -726,10 +868,29 @@ class BusinessEvaluationService:
                 "errors": [],
             }
             runtime = None
+            current_token_inputs: dict[int, tuple[list, list]] = {}
+            paths: tuple[Path | None, ...]
             try:
-                base = _model_directory(model.base_model, model.revision)
-                adapter = _model_directory(model.adapter_path) if model.adapter_path else None
-                for path in (base, adapter):
+                if model.gguf_path or model.gguf_runtime_path:
+                    from src.workbench.gguf_evaluation import (
+                        GGUFLocalEvaluationRuntime,
+                        verified_gguf_model,
+                    )
+
+                    outcome["identity"] = verified_gguf_model(model)
+                    resolved = EvaluationModel(
+                        model.label,
+                        outcome["identity"]["tokenizer"]["directory"],
+                        gguf_path=outcome["identity"]["gguf"]["file"],
+                        gguf_runtime_path=outcome["identity"]["runtime"]["binary_path"],
+                    )
+                    outcome["requested_model"] = asdict(resolved)
+                    paths = ()
+                else:
+                    base = _model_directory(model.base_model, model.revision)
+                    adapter = _model_directory(model.adapter_path) if model.adapter_path else None
+                    paths = (base, adapter)
+                for path in paths:
                     if path is not None:
                         current_identity = _model_identity(path)
                         previous = identity_cache.get(path)
@@ -741,14 +902,22 @@ class BusinessEvaluationService:
                                 "同一对照运行期间模型文件发生变化，不能复用旧模型身份继续比较。"
                             )
                         identity_cache[path] = current_identity
-                outcome["identity"] = {
-                    "base": identity_cache[base],
-                    "adapter": identity_cache.get(adapter),
-                }
-                resolved = EvaluationModel(
-                    model.label, str(base), str(adapter) if adapter else None, model.revision
-                )
-                runtime = (runtime_factory or LocalEvaluationRuntime)(resolved)
+                if not (model.gguf_path or model.gguf_runtime_path):
+                    outcome["identity"] = {
+                        "base": identity_cache[base],
+                        "adapter": identity_cache.get(adapter),
+                    }
+                    resolved = EvaluationModel(
+                        model.label, str(base), str(adapter) if adapter else None, model.revision
+                    )
+                if runtime_factory:
+                    runtime = runtime_factory(resolved)
+                elif model.gguf_path:
+                    runtime = GGUFLocalEvaluationRuntime(resolved, identity=outcome["identity"])
+                elif token_contract:
+                    runtime = LocalEvaluationRuntime(resolved, enforce_token_contract=True)
+                else:
+                    runtime = LocalEvaluationRuntime(resolved)
                 for index, (row, prompt) in enumerate(zip(records, prompts)):
                     result: dict[str, Any] = {
                         "index": index,
@@ -763,6 +932,7 @@ class BusinessEvaluationService:
                         "generated_tokens": None,
                         "error": "",
                     }
+                    generation_valid = False
                     try:
                         generation = runtime.generate(prompt, protocol)
                         if (
@@ -783,6 +953,16 @@ class BusinessEvaluationService:
                             truncated=generation.truncated,
                             generated_tokens=generation.generated_tokens,
                         )
+                        if token_contract:
+                            result["token_proof"] = generation.token_proof
+                            verify_generation_token_proof(result, report.protocol)
+                            proof = generation.token_proof
+                            assert proof is not None
+                            inputs = (proof["prompt_token_ids"], proof["eos_token_ids"])
+                            if index in token_inputs and token_inputs[index] != inputs:
+                                raise ValueError("同题模型的实际输入 token 或 EOS 规则不同。")
+                            current_token_inputs[index] = inputs
+                        generation_valid = True
                         if generation.truncated:
                             result.update(
                                 status="truncated",
@@ -801,8 +981,22 @@ class BusinessEvaluationService:
                                     else "scored"
                                 )
                     except Exception as exc:
+                        # Invalid generation evidence cannot become a scorable output.
+                        if token_contract and not generation_valid:
+                            result.update(output=None, truncated=False, generated_tokens=None)
+                            result.pop("token_proof", None)
                         result["error"] = f"{type(exc).__name__}: {exc}"
                     outcome["rows"].append(result)
+                if token_contract:
+                    if model.gguf_path:
+                        if verified_gguf_model(model) != outcome["identity"]:
+                            raise ValueError("GGUF、来源或运行器在评测期间发生变化。")
+                    elif any(
+                        path is not None and _model_identity(path) != identity_cache[path]
+                        for path in paths
+                    ):
+                        raise ValueError("HF 模型在 GGUF 同题评测期间发生变化。")
+                token_inputs.update(current_token_inputs)
             except Exception as exc:
                 outcome["errors"].append(f"{type(exc).__name__}: {exc}")
                 outcome["rows"] = [

@@ -747,3 +747,209 @@ def test_export_controls_dispatch_only_explicit_gguf_action(training_page, monke
     assert any("ollama create" in item.value for item in page.caption)
     page.run()
     assert len(exports) == 1
+
+
+@pytest.mark.parametrize("valid_export", [True, False])
+def test_gguf_same_question_action_runs_existing_task_and_displays_own_results(
+    training_page, monkeypatch, tmp_path, valid_export
+):
+    import sys
+    from dataclasses import asdict
+    from types import ModuleType
+
+    from scripts import setup_gguf_tools
+    from src.workbench import business_evaluation as evaluation
+
+    monkeypatch.setattr(setup_gguf_tools, "default_destination", lambda: tmp_path / "missing-tools")
+    _, session, page, _, records = training_page
+    records.append(
+        {
+            "run_id": "fixture-gguf",
+            "session_id": session.session_id,
+            "status": "succeeded",
+            "dataset_version": session.dataset.version,
+            "model_path": "/tmp/base",
+            "output_dir": "/tmp/adapter",
+            "metrics": {},
+            "artifacts": {},
+        }
+    )
+    calls, helper_calls, reports = [], [], []
+    directory = tmp_path / "exported model"
+    runtime = tmp_path / "tools" / "tunesmith-gguf-eval"
+    helper = ModuleType("src.workbench.gguf_evaluation")
+
+    def gguf_model(run, export_dir, runtime_path):
+        helper_calls.append((run["run_id"], export_dir, runtime_path))
+        if not valid_export:
+            raise ValueError("GGUF 缺少 hf_tokenizer，请重新导出到新目录。")
+        return evaluation.EvaluationModel(
+            "导出 GGUF",
+            str(export_dir / "hf_tokenizer"),
+            gguf_path=str(export_dir / "model-q4_k_m.gguf"),
+            gguf_runtime_path=str(runtime_path),
+        )
+
+    helper.gguf_evaluation_model = gguf_model
+    monkeypatch.setitem(sys.modules, "src.workbench.gguf_evaluation", helper)
+
+    class Evaluation:
+        def __init__(self, root):
+            self.load_errors = []
+
+        def list_reports(self, dataset_version=None, purpose=None):
+            return reports
+
+        def compare(self, current, models, protocol):
+            calls.append((current.session_id, models, protocol))
+            report = evaluation.EvaluationReport(
+                "c" * 32,
+                "now",
+                {"version": current.dataset.version},
+                {
+                    "scorer": protocol.scorer,
+                    "max_new_tokens": protocol.max_new_tokens,
+                    "generation": "greedy_token_contract_v2",
+                },
+                "comparison-key",
+                status="completed_with_failures",
+            )
+            for model in models:
+                gguf = bool(model.gguf_path)
+                rows = [
+                    {
+                        "index": index,
+                        "source": {"source_row_id": f"r{index + 1:06d}"},
+                        "prompt": f"完整业务问题{index}",
+                        "expected": "答案",
+                        "output": "答案",
+                        "status": "scored",
+                        "correct": True,
+                        "field_scores": {},
+                        "truncated": False,
+                        "generated_tokens": 2,
+                        "error": "",
+                    }
+                    for index in range(3)
+                ]
+                if gguf:
+                    rows[1].update(
+                        status="failed", output=None, correct=False, error="运行器实际失败"
+                    )
+                    rows[2].update(status="truncated", correct=False, truncated=True)
+                report.models.append(
+                    {
+                        "label": model.label,
+                        "requested_model": asdict(model),
+                        "rows": rows,
+                        "identity": {"format": "gguf" if gguf else "hf"},
+                        "errors": [],
+                        "metrics": {
+                            "total": 3,
+                            "scored": 1 if gguf else 3,
+                            "exact_match": 1 / 3 if gguf else 1.0,
+                            "field_accuracy": {},
+                        },
+                    }
+                )
+            reports.append(report)
+            return report
+
+    monkeypatch.setattr(evaluation, "BusinessEvaluationService", Evaluation)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert button(page, "GGUF 与本轮模型同题对照").disabled
+    page.text_input(key="eval_gguf_dir_fixture-gguf").input(str(directory)).run()
+    page.text_input(key="eval_gguf_runtime_fixture-gguf").input(str(runtime)).run()
+    assert calls == [] and helper_calls == []
+    assert not button(page, "GGUF 与本轮模型同题对照").disabled
+    page.number_input(key="eval_tokens_fixture-gguf").set_value(19)
+    page.checkbox(key="eval_whitespace_fixture-gguf").uncheck()
+    button(page, "GGUF 与本轮模型同题对照").click().run()
+    assert not page.exception
+    assert helper_calls == [("fixture-gguf", directory, runtime)]
+    if not valid_export:
+        assert calls == []
+        assert any("hf_tokenizer" in error.value for error in page.error)
+        return
+    assert len(calls) == 1
+    assert calls[0][0] == session.session_id
+    models, protocol = calls[0][1:]
+    assert [model.label for model in models] == ["基座", "本轮微调", "导出 GGUF"]
+    assert models[1].adapter_path == "/tmp/adapter"
+    assert models[2].adapter_path is None and models[2].gguf_path.endswith("model-q4_k_m.gguf")
+    assert protocol.max_new_tokens == 19 and protocol.strip_whitespace is False
+    assert protocol.scorer == "classification_exact"
+    table = next(item.value for item in page.dataframe if "格式" in item.value.columns)
+    row = table[table["格式"] == "GGUF"].iloc[0]
+    assert row["严格准确率"] == 1 / 3
+    assert row["生成失败"] == 1 and row["输出截断"] == 1
+    page.selectbox(key=f"eval_row_fixture-gguf_{'c' * 32}").select(1).run()
+    assert any("运行器实际失败" in item.value for item in page.warning)
+    metadata = next(
+        json.loads(item.value) for item in page.json if "comparison_key" in json.loads(item.value)
+    )
+    assert metadata["models"][2]["format"] == "GGUF"
+    assert metadata["models"][2]["file"] == models[2].gguf_path
+    assert metadata["models"][2]["runtime"] == str(runtime)
+    page.run()
+    assert len(calls) == 1, "刷新不能重新运行已记录的 GGUF 对照"
+
+
+def test_gguf_compare_prefills_existing_tools_and_follows_export_until_overridden(
+    training_page, monkeypatch, tmp_path
+):
+    import sys
+
+    from scripts import setup_gguf_tools
+    from src.workbench import gguf_evaluation
+
+    _, session, page, _, records = training_page
+    records.append(
+        {
+            "run_id": "fixture-defaults",
+            "session_id": session.session_id,
+            "status": "succeeded",
+            "dataset_version": session.dataset.version,
+            "model_path": "/tmp/base",
+            "output_dir": "/tmp/adapter",
+            "metrics": {},
+            "artifacts": {},
+        }
+    )
+    cache = tmp_path / "default tools"
+    selected = tmp_path / "selected tools"
+    name = "tunesmith-gguf-eval.exe" if sys.platform == "win32" else "tunesmith-gguf-eval"
+    binaries = []
+    for directory in (cache, selected):
+        binary = directory / "build-tunesmith-eval" / "bin" / name
+        binary.parent.mkdir(parents=True)
+        binary.write_text("This file must not be executed during a page render.")
+        binaries.append(binary)
+    monkeypatch.setattr(setup_gguf_tools, "default_destination", lambda: cache)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("默认路径发现不能执行 GGUF helper 或运行器")
+
+    monkeypatch.setattr(gguf_evaluation, "gguf_evaluation_model", unexpected)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert page.text_input(key="eval_gguf_runtime_fixture-defaults").value == str(binaries[0])
+    page.selectbox(key="export_format_fixture-defaults").select("gguf").run()
+    page.text_input(key="export_llama_cpp_fixture-defaults").input(str(selected)).run()
+    selected_output = tmp_path / "custom gguf output"
+    page.text_input(key="export_output_fixture-defaults_gguf").input(str(selected_output)).run()
+    assert page.text_input(key="eval_gguf_dir_fixture-defaults").value == str(selected_output)
+    assert page.text_input(key="eval_gguf_runtime_fixture-defaults").value == str(binaries[1])
+    manual_dir = str(tmp_path / "manual gguf")
+    manual_runtime = str(tmp_path / "manual runtime")
+    page.text_input(key="eval_gguf_dir_fixture-defaults").input(manual_dir).run()
+    page.text_input(key="eval_gguf_runtime_fixture-defaults").input(manual_runtime).run()
+    page.text_input(key="export_output_fixture-defaults_gguf").input(
+        str(tmp_path / "next output")
+    ).run()
+    assert page.text_input(key="eval_gguf_dir_fixture-defaults").value == manual_dir
+    assert page.text_input(key="eval_gguf_runtime_fixture-defaults").value == manual_runtime
+    assert not page.exception

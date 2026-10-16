@@ -1039,6 +1039,9 @@ def show_business_comparison(report, *, key: str) -> None:
         summaries.append(
             {
                 "模型": model_result["label"],
+                "格式": "GGUF"
+                if (model_result.get("requested_model") or {}).get("gguf_path")
+                else "Hugging Face",
                 "开发集总数": metrics["total"],
                 "已评分": metrics["scored"],
                 "生成失败": sum(row["status"] == "failed" for row in rows),
@@ -1134,6 +1137,26 @@ def show_business_comparison(report, *, key: str) -> None:
                 "dataset": report.dataset,
                 "protocol": report.protocol,
                 "comparison_key": report.comparison_key,
+                "models": [
+                    {
+                        "label": result["label"],
+                        "format": "GGUF"
+                        if (result.get("requested_model") or {}).get("gguf_path")
+                        else "Hugging Face",
+                        "file": (result.get("requested_model") or {}).get("gguf_path")
+                        or (result.get("requested_model") or {}).get("adapter_path")
+                        or (result.get("requested_model") or {}).get("base_model"),
+                        "runtime": (result.get("requested_model") or {}).get("gguf_runtime_path")
+                        or (
+                            "未记录"
+                            if (result.get("requested_model") or {}).get("gguf_path")
+                            else "Transformers"
+                        ),
+                        "requested_model": result.get("requested_model"),
+                        "identity": result.get("identity"),
+                    }
+                    for result in report.models
+                ],
             }
         )
     st.download_button(
@@ -3687,6 +3710,99 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                 for item in training_service.list_runs()
                                 if item["status"] == "succeeded" and item["run_id"] != run_id
                             }
+                        last_handoff = st.session_state.get(f"export_result_{run_id}")
+                        from scripts.setup_gguf_tools import default_destination
+
+                        gguf_default = str(
+                            default_export_dir(
+                                Path(training_service.root),
+                                run_id,
+                                export_format="gguf",
+                                quantization=st.session_state.get(
+                                    f"export_quantization_{run_id}", "q4_k_m"
+                                ),
+                            )
+                        )
+                        if last_handoff and last_handoff[1].get("export_format") == "gguf":
+                            gguf_default = last_handoff[1]["output_dir"]
+                        if export_plan.get("export_format") == "gguf":
+                            gguf_default = export_plan["output_dir"]
+                        handoff_tools = (
+                            last_handoff[1]
+                            .get("conversion", {})
+                            .get("toolchain", {})
+                            .get("directory")
+                            if last_handoff
+                            else None
+                        )
+                        tool_directories = [
+                            export_plan.get("llama_cpp_dir"),
+                            st.session_state.get(f"export_llama_cpp_{run_id}"),
+                            handoff_tools,
+                            default_destination(),
+                        ]
+                        runtime_name = (
+                            "tunesmith-gguf-eval.exe"
+                            if sys.platform == "win32"
+                            else "tunesmith-gguf-eval"
+                        )
+                        runtime_default = ""
+                        for tool_directory in tool_directories:
+                            if tool_directory:
+                                candidate = (
+                                    Path(tool_directory).expanduser()
+                                    / "build-tunesmith-eval"
+                                    / "bin"
+                                    / runtime_name
+                                )
+                                if candidate.is_file() and not candidate.is_symlink():
+                                    runtime_default = str(candidate)
+                                    break
+                        defaults_key = f"eval_gguf_defaults_{run_id}"
+                        old_defaults = st.session_state.get(defaults_key, {})
+                        new_defaults = {
+                            f"eval_gguf_dir_{run_id}": gguf_default,
+                            f"eval_gguf_runtime_{run_id}": runtime_default,
+                        }
+                        for widget_key, value in new_defaults.items():
+                            if widget_key not in st.session_state or (
+                                widget_key in old_defaults
+                                and st.session_state[widget_key] == old_defaults[widget_key]
+                            ):
+                                # Follow new export choices until the user overrides the defaults.
+                                st.session_state[widget_key] = value
+                        st.session_state[defaults_key] = new_defaults
+                        with st.expander("导出 GGUF：与本轮 HF 同题对照"):
+                            st.caption(
+                                "重新运行基座、本轮 Hugging Face 与导出 GGUF，使用相同开发题、答案和评分规则。"
+                                + (
+                                    "GGUF 独立计分，失败与截断保留在分母中；"
+                                    if scorer != "open_review"
+                                    else "开放任务保留 GGUF 的真实输出，等待业务评分；"
+                                )
+                                + "结果包含合并、精度和运行时的综合差异。"
+                                "这是开发验证，不替换本轮 HF 决策报告，也不构成 GGUF 最终验收。"
+                            )
+                            st.caption(
+                                "已按本轮导出选择和本机已有工具填写默认路径，可在下面覆盖。"
+                                "此处只检查文件是否存在；点击同题对照后才核验完整内容和运行器身份，不自动编译。"
+                            )
+                            if not st.session_state[f"eval_gguf_runtime_{run_id}"]:
+                                st.caption(
+                                    "尚未找到已准备的评测运行器。可运行 python scripts/setup_gguf_tools.py "
+                                    "准备本地工具，或填写已有准备结果中的 gguf_runtime_path。"
+                                )
+                            gguf_export_dir = st.text_input(
+                                "GGUF 对照使用的导出目录",
+                                key=f"eval_gguf_dir_{run_id}",
+                                help="选择本次训练已有的 GGUF 导出目录；旧目录缺少 HF tokenizer 时需重新导出到新目录。",
+                            ).strip()
+                            gguf_runtime_path = st.text_input(
+                                "GGUF 评测运行器路径",
+                                placeholder="/path/to/tunesmith-gguf-eval",
+                                key=f"eval_gguf_runtime_{run_id}",
+                                help="使用本地 GGUF 工具准备结果中的评测运行器；评测时不会自动下载或编译。",
+                            ).strip()
                         with st.form(f"evaluate_run_{run_id}"):
                             parent_choice = ""
                             if run_iteration:
@@ -3718,9 +3834,22 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                 key=f"eval_whitespace_{run_id}",
                             )
                             compare_models = st.form_submit_button("比较基座与本轮微调效果")
-                        if compare_models:
+                            compare_gguf = st.form_submit_button(
+                                "GGUF 与本轮模型同题对照",
+                                disabled=not (gguf_export_dir and gguf_runtime_path),
+                            )
+                        if compare_models or compare_gguf:
                             try:
                                 with st.spinner("正在使用相同开发集顺序生成并比较实际输出…"):
+                                    current_session = service.load(session.session_id)
+                                    if (
+                                        current_session.revision != session.revision
+                                        or current_session.dataset is None
+                                        or current_session.dataset.version != run["dataset_version"]
+                                    ):
+                                        raise ValueError(
+                                            "当前任务或数据已变化，请刷新后重新选择同题对照。"
+                                        )
                                     comparison_models = [EvaluationModel("基座", run["model_path"])]
                                     if parent_choice:
                                         parent_run = training_service.get_status(parent_choice)
@@ -3742,8 +3871,18 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                             adapter_path=run["output_dir"],
                                         )
                                     )
+                                    if compare_gguf:
+                                        from src.workbench.gguf_evaluation import (
+                                            gguf_evaluation_model,
+                                        )
+
+                                        comparison_models.append(
+                                            gguf_evaluation_model(
+                                                run, Path(gguf_export_dir), Path(gguf_runtime_path)
+                                            )
+                                        )
                                     comparison_report = evaluation_service.compare(
-                                        service.load(session.session_id),
+                                        current_session,
                                         comparison_models,
                                         EvaluationProtocol(
                                             scorer=scorer,
@@ -3759,10 +3898,15 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                             strip_whitespace=strip_whitespace,
                                         ),
                                     )
-                                    if run_iteration and run_iteration["status"] in {
-                                        "prepared",
-                                        "running",
-                                    }:
+                                    if (
+                                        not compare_gguf
+                                        and run_iteration
+                                        and run_iteration["status"]
+                                        in {
+                                            "prepared",
+                                            "running",
+                                        }
+                                    ):
                                         iteration_service.bind_evaluation(
                                             run_iteration["iteration_id"],
                                             service.load(session.session_id),

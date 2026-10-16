@@ -50,6 +50,41 @@ def runtime(service, record, events, response=None):
     return Runtime
 
 
+@pytest.mark.parametrize("field", ["gguf_path", "gguf_runtime_path"])
+def test_gguf_is_rejected_before_freezing_or_exposing_final_holdout(
+    task, model_paths, tmp_path, field
+):
+    from dataclasses import replace
+
+    session = task[1]
+    before = session.model_dump()
+    service = AcceptanceService(tmp_path / "acceptance", tmp_path / "eval")
+    model = replace(model_paths[0], **{field: str(tmp_path / field)})
+    with pytest.raises(ValueError, match="GGUF 当前仅支持开发集同题评测"):
+        service.prepare(session, model, EvaluationProtocol("classification_exact"), criteria())
+    assert session.model_dump() == before
+    assert service.list_acceptances() == []
+    assert service.evaluations.list_reports(purpose=None) == []
+    with sqlite3.connect(service.database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM revealed_cases").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM suite_criteria").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("field", ["gguf_path", "gguf_runtime_path"])
+def test_internal_final_acceptance_identity_and_provenance_reject_gguf(field):
+    model = {"base_model": "/missing/hf_tokenizer", "adapter_path": None, field: "/gguf"}
+    with pytest.raises(ValueError, match="GGUF"):
+        AcceptanceService._identity(model)
+    with pytest.raises(ValueError, match="GGUF"):
+        AcceptanceService._training_provenance(None, model, {})
+
+
+@pytest.mark.parametrize("identity", [{"format": "gguf"}, {"gguf": {}}, {"source_training": {}}])
+def test_gguf_identity_cannot_claim_base_model_final_acceptance_provenance(identity):
+    with pytest.raises(ValueError, match="GGUF 不能作为未经微调的基座"):
+        AcceptanceService._training_provenance(None, {"adapter_path": None}, identity)
+
+
 @pytest.mark.parametrize("outcome", ["passed", "failed", "insufficient_evidence"])
 def test_real_holdout_report_is_frozen_and_run_is_idempotent(task, model_paths, tmp_path, outcome):
     session = task[1]

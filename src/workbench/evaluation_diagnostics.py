@@ -13,6 +13,7 @@ from typing import Any
 
 from src.utils.model_files import config_and_tokenizer_files
 from src.workbench.business_evaluation import (
+    EvaluationModel,
     EvaluationProtocol,
     EvaluationReport,
     _model_identity,
@@ -20,6 +21,7 @@ from src.workbench.business_evaluation import (
     _strict_object,
     comparison_key,
     verify_evaluation_metrics,
+    verify_evaluation_report,
 )
 from src.workbench.intake_models import DatasetArtifact, IntakeSession
 from src.workbench.materialize import dataset_is_current
@@ -255,10 +257,14 @@ class EvaluationDiagnostics:
         if any(report.protocol.get(key) != value for key, value in scoring_identity.items()):
             raise ValueError("报告自定义评分规则与已确认完整规则内容不一致。")
         if (
-            report.protocol.get("generation") != "greedy_v1"
+            report.protocol.get("generation") not in {"greedy_v1", "greedy_token_contract_v2"}
             or report.protocol.get("prompt_renderer") != "render_alpaca_prompt_without_answer"
         ):
             raise ValueError("当前诊断不支持这份生成或提示协议。")
+        if report.protocol["generation"] == "greedy_token_contract_v2":
+            verify_evaluation_report(report)
+        elif any(_is_gguf_model(model) for model in report.models):
+            raise ValueError("GGUF 同题诊断必须提供完整的输入 token 与生成协议证据。")
         from src.data.loaders import render_alpaca_prompt
         from src.data_flywheel.dataset_registry import LocalDatasetRegistry
         from src.workbench.training_preflight import _verified_partitions
@@ -413,11 +419,13 @@ class EvaluationDiagnostics:
             }
 
     def training_evidence(self) -> dict[str, Any]:
-        """Read local training receipts bound to the evaluated adapter, never raw train/test rows."""
+        """Read verified local source-training receipts, never raw train/test rows."""
         models = []
         for model in self.report.models:
             entry = {"model": model["label"]}
-            if not model.get("requested_model", {}).get("adapter_path"):
+            if not _is_gguf_model(model) and not model.get("requested_model", {}).get(
+                "adapter_path"
+            ):
                 entry.update(status="not_applicable", reason="该评测对象没有微调适配器。")
             else:
                 try:
@@ -636,10 +644,60 @@ class EvaluationDiagnostics:
         }
 
 
+def _is_gguf_model(model: dict[str, Any]) -> bool:
+    requested = model.get("requested_model") or {}
+    identity = model.get("identity") or {}
+    return bool(
+        requested.get("gguf_path")
+        or requested.get("gguf_runtime_path")
+        or identity.get("format") == "gguf"
+        or identity.get("gguf") is not None
+        or identity.get("source_training") is not None
+    )
+
+
+def _gguf_training_evidence(
+    model: dict[str, Any], session: IntakeSession, evaluation_dataset: dict[str, Any]
+) -> dict[str, Any]:
+    from src.workbench.gguf_evaluation import verified_gguf_model
+
+    requested, identity = model["requested_model"], model["identity"]
+    if (
+        not requested.get("gguf_path")
+        or requested.get("adapter_path")
+        or identity.get("base") is not None
+        or identity.get("adapter") is not None
+    ):
+        raise ValueError("GGUF 必须保留独立产物身份，不能冒充 HF 基座或适配器。")
+    current = verified_gguf_model(EvaluationModel(**requested))
+    if current != identity:
+        raise ValueError("GGUF、导出证据、tokenizer 或运行工具在评测之后已改变。")
+    source = identity["source_training"]
+    if _is_gguf_model(source) or not source["requested_model"].get("adapter_path"):
+        raise ValueError("GGUF 导出来源必须绑定实际 HF 训练适配器。")
+    evidence = inspect_model_training_evidence(source, session, evaluation_dataset)
+    if evidence["status"] == "available" and (
+        evidence["training_run_id"] != source["run_id"]
+        or evidence["training_session_id"] != source["session_id"]
+        or evidence["training_dataset"]["version"] != source["dataset_version"]
+        or content_digest(evidence["config"]) != source["config_digest"]
+    ):
+        raise ValueError("GGUF 导出血缘与已核验的训练回执不一致。")
+    evidence["derived_artifact"] = {
+        "format": "gguf",
+        "identity": identity,
+        "scope": "训练回执仅证明导出来源；GGUF 业务评分来自本报告独立生成的逐题输出，不继承 HF 分数。",
+    }
+    return evidence
+
+
 def inspect_model_training_evidence(
     model: dict[str, Any], session: IntakeSession, evaluation_dataset: dict[str, Any]
 ) -> dict[str, Any]:
     """Verify local training provenance without reading development or final outputs."""
+
+    if _is_gguf_model(model):
+        return _gguf_training_evidence(model, session, evaluation_dataset)
 
     def require(condition: bool, message: str) -> None:
         if not condition:
@@ -797,6 +855,7 @@ def inspect_model_training_evidence(
     return {
         "status": "available",
         "training_run_id": run_id,
+        "training_session_id": training_session.session_id,
         "training_dataset": training_dataset.model_dump(),
         "training_session_digest": content_digest(training_session.model_dump()),
         "config": config,

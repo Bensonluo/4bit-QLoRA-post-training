@@ -467,6 +467,199 @@ def test_training_evidence_reads_verified_receipts_not_raw_partitions(task, mode
     assert "rows" not in tuned["preflight"]
 
 
+def gguf_training_report(task, model_paths, tmp_path, monkeypatch):
+    """Stub the native/export boundary; keep real receipts and token-proof checks."""
+    from dataclasses import asdict
+
+    import transformers
+
+    import src.workbench.gguf_evaluation as gguf_module
+    from src.workbench.business_evaluation import (
+        comparison_key,
+        evaluation_metrics,
+        generation_token_proof,
+    )
+
+    report, directory = training_report(task, model_paths, tmp_path)
+    run = json.loads((directory / "run.json").read_text())
+    source = {key: deepcopy(report.models[1][key]) for key in ("requested_model", "identity")}
+    source.update(
+        {key: run[key] for key in ("run_id", "session_id", "dataset_version", "config_digest")}
+    )
+    quantized = deepcopy(report.models[1])
+    quantized.update(
+        label="quantized",
+        requested_model={
+            "label": "quantized",
+            "base_model": str(tmp_path / "export" / "hf_tokenizer"),
+            "adapter_path": None,
+            "revision": None,
+            "gguf_path": str(tmp_path / "export" / "model-q4_k_m.gguf"),
+            "gguf_runtime_path": str(tmp_path / "native-runtime"),
+        },
+        identity={
+            "format": "gguf",
+            "gguf": {
+                "file": str(tmp_path / "export" / "model-q4_k_m.gguf"),
+                "sha256": "a" * 64,
+                "export_evidence_sha256": "b" * 64,
+            },
+            "runtime": {"binary_path": str(tmp_path / "native-runtime"), "sha256": "c" * 64},
+            "tokenizer": {
+                "directory": str(tmp_path / "export" / "hf_tokenizer"),
+                "sha256": "d" * 64,
+                "files": {"tokenizer_config.json": {"size": 2, "sha256": "d" * 64}},
+            },
+            "source_training": source,
+        },
+    )
+    # The quantized result has its own observed quality, independent of the HF score.
+    quantized["rows"][0].update(output="wrong", correct=False)
+    quantized["metrics"] = evaluation_metrics(
+        quantized["rows"], report.protocol, report.dataset["row_count"]
+    )
+    report.models.append(quantized)
+    report.protocol.update(
+        generation="greedy_token_contract_v2",
+        max_new_tokens=32,
+        input_tokenization="hf_default_special_tokens_native_exact_v1",
+        decoding="hf_skip_special_tokens_v1",
+        stopping="tokenizer_eos_or_max_new_tokens_v1",
+        decoder_version=transformers.__version__,
+    )
+    for model in report.models:
+        for row in model["rows"]:
+            if row["output"] is None:
+                continue
+            generated = [8] * 32 if row["truncated"] else [8, 9]
+            row["generated_tokens"] = len(generated)
+            row["token_proof"] = generation_token_proof(
+                row["prompt"], row["output"], [10 + row["index"], 6], generated, 9
+            )
+    report.comparison_key = comparison_key(report.dataset, report.protocol)
+    current_identity = deepcopy(quantized["identity"])
+    calls = []
+
+    def verify(model):
+        calls.append(asdict(model))
+        return deepcopy(current_identity)
+
+    monkeypatch.setattr(gguf_module, "verified_gguf_model", verify)
+    return report, directory, current_identity, calls
+
+
+def test_gguf_training_evidence_binds_real_hf_source_without_inheriting_score(
+    task, model_paths, tmp_path, monkeypatch
+):
+    report, _, _, calls = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    diagnostics = EvaluationDiagnostics(report, task[1])
+    entry = diagnostics.training_evidence()["models"][2]
+    assert entry["status"] == "available", entry
+    assert entry["training_run_id"] == report.models[2]["identity"]["source_training"]["run_id"]
+    assert entry["training_session_id"] == task[1].session_id
+    assert calls == [report.models[2]["requested_model"]]
+    assert entry["derived_artifact"]["identity"] == report.models[2]["identity"]
+    assert "不继承 HF 分数" in entry["derived_artifact"]["scope"]
+    assert entry["identity"]["evaluation"] == report.models[1]["identity"]
+    assert report.models[1]["metrics"]["exact_match"] == 1
+    assert report.models[2]["metrics"]["exact_match"] == pytest.approx(2 / 3)
+    assert diagnostics.summary()["models"]["quantized"]["counts"]["mismatch"] == 1
+    assert "secret_raw_test" not in json.dumps(entry)
+
+
+@pytest.mark.parametrize("changed", ["gguf", "runtime", "tokenizer", "export_evidence"])
+def test_gguf_training_evidence_rejects_changed_evaluated_artifact(
+    task, model_paths, tmp_path, monkeypatch, changed
+):
+    report, _, current, _ = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    if changed == "export_evidence":
+        current["gguf"]["export_evidence_sha256"] = "f" * 64
+    else:
+        current[changed]["sha256"] = "f" * 64
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][2]
+    assert entry["status"] == "invalid"
+    assert "评测之后已改变" in entry["reason"]
+    assert "config" not in entry
+
+
+@pytest.mark.parametrize("field", ["run_id", "session_id", "dataset_version", "config_digest"])
+def test_gguf_declared_lineage_must_match_verified_source_receipts(
+    task, model_paths, tmp_path, monkeypatch, field
+):
+    report, _, current, _ = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    forged = "f" * 64 if field == "config_digest" else "forged"
+    report.models[2]["identity"]["source_training"][field] = forged
+    current["source_training"][field] = forged
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][2]
+    assert entry["status"] == "invalid"
+    assert "导出血缘与已核验的训练回执不一致" in entry["reason"]
+    assert "config" not in entry
+
+
+def test_gguf_training_evidence_rechecks_source_adapter_contents(
+    task, model_paths, tmp_path, monkeypatch
+):
+    report, directory, _, _ = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    (directory / "model" / "adapter_model.safetensors").write_bytes(b"changed after evaluation")
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][2]
+    assert entry["status"] == "invalid"
+    assert "适配器或其工作台清单在评测之后已改变" in entry["reason"]
+    assert "derived_artifact" not in entry
+
+
+@pytest.mark.parametrize("identity_key", ["base", "adapter"])
+def test_gguf_cannot_masquerade_as_hf_identity(
+    task, model_paths, tmp_path, monkeypatch, identity_key
+):
+    report, _, current, _ = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    report.models[2]["identity"][identity_key] = report.models[1]["identity"][identity_key]
+    current.update(deepcopy(report.models[2]["identity"]))
+    with pytest.raises(ValueError, match="GGUF"):
+        EvaluationDiagnostics(report, task[1])
+
+
+@pytest.mark.parametrize("mutation", ["missing_request", "adapter_request", "recursive_source"])
+def test_gguf_cannot_use_base_fallback_or_another_gguf_as_training_source(
+    task, model_paths, tmp_path, monkeypatch, mutation
+):
+    report, _, current, _ = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    model = report.models[2]
+    if mutation == "missing_request":
+        model["requested_model"]["gguf_path"] = None
+    elif mutation == "adapter_request":
+        model["requested_model"]["adapter_path"] = report.models[1]["requested_model"][
+            "adapter_path"
+        ]
+    else:
+        model["identity"]["source_training"]["identity"]["format"] = "gguf"
+        current.update(deepcopy(model["identity"]))
+    with pytest.raises(ValueError, match="GGUF"):
+        EvaluationDiagnostics(report, task[1])
+
+
+def test_gguf_diagnostics_requires_v2_and_calls_shared_token_proof_validator(
+    task, model_paths, tmp_path, monkeypatch
+):
+    import src.workbench.evaluation_diagnostics as diagnostics_module
+    from src.workbench.business_evaluation import comparison_key
+
+    report, _, _, _ = gguf_training_report(task, model_paths, tmp_path, monkeypatch)
+    calls = []
+
+    def reject(report):
+        calls.append(report.evaluation_id)
+        raise ValueError("invalid complete token proof")
+
+    monkeypatch.setattr(diagnostics_module, "verify_evaluation_report", reject)
+    with pytest.raises(ValueError, match="invalid complete token proof"):
+        EvaluationDiagnostics(report, task[1])
+    assert calls == [report.evaluation_id]
+    report.protocol["generation"] = "greedy_v1"
+    report.comparison_key = comparison_key(report.dataset, report.protocol)
+    with pytest.raises(ValueError, match="GGUF 同题诊断必须提供完整"):
+        EvaluationDiagnostics(report, task[1])
+
+
 @pytest.mark.parametrize(
     "template_name",
     [

@@ -2157,3 +2157,41 @@ def test_gguf_blocked_summary_only_reports_observed_causes():
     )
     assert lines[0] == "缺少本地 llama.cpp 工具。"
     assert all("导出完成" not in line for line in lines)
+
+
+def test_gguf_comparison_summary_reports_independent_failures_and_runtime():
+    base = _model("基座", 4, 0.5)
+    tuned = _model("本轮微调", 4, 1.0)
+    gguf = _model("导出 GGUF", 4, 0.25, statuses=["correct", "failed", "truncated", "wrong"])
+    gguf["requested_model"] = {
+        "gguf_path": "/export/model-q4_k_m.gguf",
+        "gguf_runtime_path": "/tools/tunesmith-gguf-eval",
+    }
+    joined = "\n".join(summarize_comparison(_report([base, tuned, gguf])))
+    assert "导出 GGUF答对 1/4、1 题没写完被截断、1 题生成失败" in joined
+    assert "本轮微调答对 4/4" in joined
+    assert "不沿用 Hugging Face 模型的历史分数" in joined
+    assert "合并、精度与运行时的综合影响" in joined
+    assert "不能仅归因于量化" in joined
+    assert "文件 /export/model-q4_k_m.gguf" in joined
+    assert "本地运行器 /tools/tunesmith-gguf-eval" in joined
+    assert "不替代 GGUF 最终业务验收" in joined
+
+
+def test_gguf_open_and_custom_summaries_keep_the_actual_scoring_contract():
+    for custom in (False, True):
+        model = _model("导出 GGUF", 4, None, statuses=["failed", "truncated"])
+        model["requested_model"] = {"gguf_path": "/export/model.gguf"}
+        model["rows"][0]["output"] = None
+        if custom:
+            model["metrics"].update(pass_rate=0.25, business_score=0.3)
+        joined = "\n".join(summarize_comparison(_report([model])))
+        assert "答对" not in joined
+        assert "本地运行器 未记录" in joined
+        if custom:
+            assert "业务评分均值 0.30、通过 1/4" in joined
+            assert "实际逐题输出独立计分" in joined
+        else:
+            assert "生成了 3/4 条回答" in joined
+            assert "开放任务尚待业务评分" in joined
+            assert "独立计分" not in joined

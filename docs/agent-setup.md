@@ -316,7 +316,7 @@ python scripts/data_intake.py train-stop RUN_ID
 python scripts/data_intake.py train-list SESSION_ID
 python scripts/data_intake.py train-lineage RUN_ID
 python scripts/data_intake.py train-export RUN_ID
-# 首次准备固定版本的本地工具（下载工具源码并编译量化器，不下载模型、不改 Python 环境）：
+# 首次准备固定版本的本地工具（编译 CPU 量化器与本地评测桥，不下载模型、不改 Python 环境）：
 python scripts/setup_gguf_tools.py
 # 将上条命令返回的 llama_cpp_dir 填入下一条命令：
 python scripts/data_intake.py train-export RUN_ID --format gguf \
@@ -338,9 +338,9 @@ python scripts/data_intake.py train-cost RUN_ID
 
 命令 stdout 输出 JSON、stderr 追加 `summarize_export` 单一来源的人话摘要；盘点不过关时逐条点名原因，不静默降级。页面轻量盘点，不在每次刷新时哈希大模型权重：成功训练记录下可选择格式、精度、本地工具目录和输出目录，点击「导出模型」才执行与 CLI 相同的完整性校验与实际导出。有匹配证据的现存目录显示「待完整性核验」，显式执行后全部摘要一致才返回已导出；页面与 CLI 同源同词汇。摘要以「导出只产出模型文件与证据记录，不代表业务效果达标，也不会自动部署」收尾。
 
-`scripts/setup_gguf_tools.py` 在独立缓存中准备固定官方版本的完整转换工具与 CPU 量化器，并实际自测；可用 `--destination` 指定位置、`--check-only` 检查已有目录。外来、被修改或版本不同的目录不会被覆盖。它使用当前 Python 检查依赖，不自动 pip 安装；缺依赖时给出解释与依赖清单。
+`scripts/setup_gguf_tools.py` 在独立缓存中准备固定官方版本的完整转换工具、CPU 量化器与静态 CPU 评测桥，并实际自测；结果中的 `llama_cpp_dir` 用于导出，`evaluation_runtime_path`（别名 `gguf_runtime_path`）用于同题评测。可用 `--destination` 指定位置、`--check-only` 检查已有目录。外来、被修改或版本不同的目录不会被覆盖。评测桥的源码、二进制、固定上游版本与构建设置均绑定摘要，源码更新后需要重新准备工具。它使用当前 Python 检查依赖，不自动 pip 安装；缺依赖时给出解释与依赖清单。
 
-`--format gguf` 将经来源核验的合并模型交给本地 llama.cpp 转换，精度支持 `f16`、`q8_0`、`q4_k_m`、`q5_k_m`、`q6_k`，默认 `q4_k_m`。`--llama-cpp-dir` 需指向包含 `convert_hf_to_gguf.py` 的目录；量化精度还需已编译的 `llama-quantize`。工具缺失、架构不支持或转换失败时如实阻断，不降级、不自动下载或编译。GGUF 默认独立目录为 `outputs/workbench/gguf/RUN_ID-q4_k_m`（随精度变化，可用 `--output-dir` 覆盖），其中保存 GGUF 文件、`export_evidence.json`、`Modelfile` 与 `USAGE.md`；失败不发布半成品，已有其他格式或精度的产物不能冒充本次导出。
+`--format gguf` 将经来源核验的合并模型交给本地 llama.cpp 转换，精度支持 `f16`、`q8_0`、`q4_k_m`、`q5_k_m`、`q6_k`，默认 `q4_k_m`。`--llama-cpp-dir` 需指向包含 `convert_hf_to_gguf.py` 的目录；量化精度还需已编译的 `llama-quantize`。工具缺失、架构不支持或转换失败时如实阻断，不降级、不自动下载或编译。GGUF 默认独立目录为 `outputs/workbench/gguf/RUN_ID-q4_k_m`（随精度变化，可用 `--output-dir` 覆盖），其中保存 GGUF 文件、`export_evidence.json`、`hf_tokenizer/`、`Modelfile` 与 `USAGE.md`。`hf_tokenizer/` 来自实际转换的合并模型，不包含权重或 Python 代码，文件摘要同样进入导出证据。失败不发布半成品，已有其他格式或精度的产物不能冒充本次导出。
 
 GGUF 摘要给出 LM Studio 导入与 `ollama create ... -f Modelfile` 命令。`lms import` 使用 `--copy` 保留工作台产物；随后运行 `lms ls --json`，读取该模型条目的 `modelKey` 并执行 `lms load MODEL_KEY`，不要把条目的文件路径当作模型 key。也可在 LM Studio 模型列表中选择并加载。`Modelfile` 使用完整 Alpaca 原始提示，不自动增加基座聊天模板；请按 `USAGE.md` 保持与训练相同的输入格式。量化后的模型需要重新核对业务效果，不能沿用 Hugging Face 模型的评测或验收结论。
 
@@ -385,6 +385,20 @@ python scripts/data_intake.py eval-compare SESSION_ID RUN_ID --revision CURRENT_
   --max-new-tokens 256
 python scripts/data_intake.py eval-show EVALUATION_ID
 ```
+
+已导出的 GGUF 可加入同一报告，分别生成并评分基座、HF 微调与 GGUF：
+
+```sh
+python scripts/data_intake.py eval-compare SESSION_ID RUN_ID --revision CURRENT_REVISION \
+  --gguf-export-dir outputs/workbench/gguf/RUN_ID-q4_k_m \
+  --gguf-runtime /path/to/tunesmith-gguf-eval --max-new-tokens 256
+```
+
+两个 GGUF 参数必须一起提供；目录须属于当前成功训练，且来源文件仍可核验。旧导出缺少 `hf_tokenizer/` 时，请导出到新目录，原回执保持原样。页面成功训练记录下的「GGUF 与本轮模型同题对照」复用当前评分规则、生成上限和空白规则，自动填写已有导出及已准备运行器，允许手工覆盖；只有明确点击才执行。
+
+此路径使用 `greedy_token_contract_v2`：原始 Alpaca 文本不附加聊天模板，逐题核对完整 HF/native 输入 token，按相同 EOS 与长度上限停止，统一使用携带的 HF tokenizer 解码生成 token。HF 端清除模型自带的禁词、重复惩罚和强制 token 设置；GGUF 端纯 argmax、CPU 四线程、每题独立上下文，没有后台服务。报告记录每题输入/生成 token、停止原因与 decoder 版本；文件、tokenizer、运行器和来源在生成前后核验。失败与截断始终留在分母，开放任务仍等待业务评分，GGUF 不继承 HF 分数。
+
+旧 `greedy_v1` 报告不能直接与新协议比较，需重新生成对照。HF 与 GGUF 的差异同时包含合并、精度及运行器差异，不能全部归因为量化。GGUF 对照仅用于开发验证，不接受 `--iteration-id`，不替换 HF 采用决策报告；最终验收尚未支持 GGUF 身份冻结，入口会明确拒绝。导出回执里的 `business_evaluation_status=not_run` 保留导出时事实，后续业务证据保存在独立评测报告中。
 
 `EVALUATION_ID` 来自比较结果；加 `--keep-whitespace` 可保留首尾空白差异。报告默认保存在 `outputs/workbench/evaluations`，全局参数 `--evaluation-root` 可指定其他目录。这一步比较开发集表现，不代表已完成最终独立测试或业务上线验收。
 

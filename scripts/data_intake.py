@@ -516,6 +516,12 @@ def main() -> int:
     eval_compare.add_argument("--revision", type=int, required=True)
     eval_compare.add_argument("--max-new-tokens", type=int, default=256)
     eval_compare.add_argument(
+        "--gguf-export-dir", type=Path, help="将本次训练已导出的 GGUF 加入同一开发集报告"
+    )
+    eval_compare.add_argument(
+        "--gguf-runtime", type=Path, help="与 --gguf-export-dir 配套使用的本地 GGUF 评测运行器"
+    )
+    eval_compare.add_argument(
         "--keep-whitespace", action="store_true", help="精确评分保留首尾空白差异"
     )
     eval_show = sub.add_parser("eval-show", help="读取已保存的开发集对照报告")
@@ -700,6 +706,12 @@ def main() -> int:
     scoring_list.add_argument("session_id")
     args = parser.parse_args()
     try:
+        if args.command == "eval-compare" and bool(args.gguf_export_dir) != bool(args.gguf_runtime):
+            raise ValueError("--gguf-export-dir 与 --gguf-runtime 必须成对提供。")
+        if args.command == "eval-compare" and args.gguf_export_dir and args.iteration_id:
+            raise ValueError(
+                "GGUF 导出开发对照不能绑定为本轮 HF 改进决策；请去掉 --iteration-id 单独复测导出产物。"
+            )
         if args.command == "agent-config":
             _save_config(args)
             return 0
@@ -1185,19 +1197,27 @@ def main() -> int:
                 models.append(
                     EvaluationModel("本轮微调", run["model_path"], adapter_path=run["output_dir"])
                 )
-                result = evaluation.compare(
-                    session,
-                    models,
-                    EvaluationProtocol(
-                        scorer=scorer,
-                        **({"custom_scoring": custom_scoring} if custom_scoring else {}),
-                        fields=tuple(target.label for target in recipe.targets)
-                        if scorer == "json_fields_exact"
-                        else (),
-                        max_new_tokens=args.max_new_tokens,
-                        strip_whitespace=not args.keep_whitespace,
-                    ),
-                )
+                if args.gguf_export_dir:
+                    from src.workbench.gguf_evaluation import gguf_evaluation_model
+
+                    with redirect_stdout(sys.stderr):
+                        models.append(
+                            gguf_evaluation_model(run, args.gguf_export_dir, args.gguf_runtime)
+                        )
+                with redirect_stdout(sys.stderr):
+                    result = evaluation.compare(
+                        session,
+                        models,
+                        EvaluationProtocol(
+                            scorer=scorer,
+                            **({"custom_scoring": custom_scoring} if custom_scoring else {}),
+                            fields=tuple(target.label for target in recipe.targets)
+                            if scorer == "json_fields_exact"
+                            else (),
+                            max_new_tokens=args.max_new_tokens,
+                            strip_whitespace=not args.keep_whitespace,
+                        ),
+                    )
                 if iteration:
                     iterations.bind_evaluation(
                         iteration["iteration_id"], session, result.evaluation_id

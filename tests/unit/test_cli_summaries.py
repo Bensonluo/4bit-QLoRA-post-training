@@ -606,3 +606,164 @@ def test_gguf_cli_missing_toolchain_exits_without_output(tmp_path, monkeypatch, 
     assert captured.out == ""
     assert "llama.cpp" in captured.err
     assert not (tmp_path / "gguf").exists()
+
+
+@pytest.mark.parametrize("custom", [False, True])
+def test_eval_compare_gguf_runs_all_formats_in_one_report(
+    eval_compare_cli, monkeypatch, capsys, tmp_path, custom
+):
+    from dataclasses import asdict
+    from types import ModuleType
+
+    from src.workbench import business_evaluation
+
+    invoke, session, report = eval_compare_cli
+    calls = []
+    helper_calls = []
+    directory = tmp_path / "my exported model"
+    runtime = tmp_path / "my tools" / "tunesmith-gguf-eval"
+    gguf = business_evaluation.EvaluationModel(
+        "导出 GGUF",
+        str(directory / "hf_tokenizer"),
+        gguf_path=str(directory / "model-q4_k_m.gguf"),
+        gguf_runtime_path=str(runtime),
+    )
+    helper = ModuleType("src.workbench.gguf_evaluation")
+
+    def gguf_model(run, export_dir, runtime_path):
+        helper_calls.append((run["run_id"], export_dir, runtime_path))
+        return gguf
+
+    helper.gguf_evaluation_model = gguf_model
+    monkeypatch.setitem(sys.modules, "src.workbench.gguf_evaluation", helper)
+    scoring = {"scoring_id": "confirmed-rule", "spec_digest": "spec-1"}
+    monkeypatch.setattr(data_intake, "_scoring_reference", lambda *args: scoring)
+
+    def compare(self, current, models, protocol):
+        calls.append((current.session_id, models, protocol))
+        assert [item.label for item in models] == ["基座", "本轮微调", "导出 GGUF"]
+        report.models = [
+            {**_model_result(item.label, 10, score), "requested_model": asdict(item)}
+            for item, score in zip(models, [0.3, 0.8, 0.2])
+        ]
+        report.protocol = {
+            "generation": "greedy_token_contract_v2",
+            "max_new_tokens": protocol.max_new_tokens,
+        }
+        print("真实模型生成进度")
+        return report
+
+    monkeypatch.setattr(business_evaluation.BusinessEvaluationService, "compare", compare)
+    options = ["--scoring-id", "confirmed-rule"] if custom else []
+    assert (
+        invoke(
+            "eval-compare",
+            session.session_id,
+            "fixture-run",
+            "--revision",
+            session.revision,
+            "--gguf-export-dir",
+            directory,
+            "--gguf-runtime",
+            runtime,
+            "--max-new-tokens",
+            17,
+            "--keep-whitespace",
+            *options,
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert len(payload["models"]) == 3
+    assert payload["models"][2]["requested_model"]["gguf_path"] == gguf.gguf_path
+    assert payload["models"][1]["requested_model"]["adapter_path"] == "/tmp/adapter"
+    assert payload["models"][2]["metrics"]["exact_match"] == 0.2
+    assert helper_calls == [("fixture-run", directory, runtime)]
+    assert len(calls) == 1
+    protocol = calls[0][2]
+    assert protocol.max_new_tokens == 17 and protocol.strip_whitespace is False
+    assert protocol.scorer == ("custom_rules" if custom else "classification_exact")
+    assert protocol.custom_scoring == (scoring if custom else None)
+    assert "导出 GGUF答对 2/10" in captured.err
+    assert "综合影响，不能仅归因于量化" in captured.err
+    assert "真实模型生成进度" in captured.err
+
+
+@pytest.mark.parametrize("flag", ["--gguf-export-dir", "--gguf-runtime"])
+def test_eval_compare_gguf_requires_paired_arguments(eval_compare_cli, capsys, flag):
+    invoke, session, _ = eval_compare_cli
+    assert (
+        invoke(
+            "eval-compare",
+            session.session_id,
+            "fixture-run",
+            "--revision",
+            session.revision,
+            flag,
+            "/tmp/existing-path",
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "必须成对提供" in captured.err
+
+
+def test_eval_compare_gguf_refuses_iteration_binding_before_generation(eval_compare_cli, capsys):
+    invoke, session, _ = eval_compare_cli
+    assert (
+        invoke(
+            "eval-compare",
+            session.session_id,
+            "fixture-run",
+            "--revision",
+            session.revision,
+            "--gguf-export-dir",
+            "/tmp/export",
+            "--gguf-runtime",
+            "/tmp/runner",
+            "--iteration-id",
+            "existing-iteration",
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "去掉 --iteration-id" in captured.err
+
+
+def test_eval_compare_invalid_gguf_stops_before_loading_hf(eval_compare_cli, monkeypatch, capsys):
+    from types import ModuleType
+
+    from src.workbench import business_evaluation
+
+    invoke, session, _ = eval_compare_cli
+    helper = ModuleType("src.workbench.gguf_evaluation")
+
+    def gguf_model(*args):
+        raise ValueError("GGUF 导出缺少 hf_tokenizer，请重新导出到新目录。")
+
+    def compare(*args, **kwargs):
+        pytest.fail("未通过 GGUF 核验时不能加载任何模型")
+
+    helper.gguf_evaluation_model = gguf_model
+    monkeypatch.setitem(sys.modules, "src.workbench.gguf_evaluation", helper)
+    monkeypatch.setattr(business_evaluation.BusinessEvaluationService, "compare", compare)
+    assert (
+        invoke(
+            "eval-compare",
+            session.session_id,
+            "fixture-run",
+            "--revision",
+            session.revision,
+            "--gguf-export-dir",
+            "/tmp/export",
+            "--gguf-runtime",
+            "/tmp/runner",
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "hf_tokenizer" in captured.err and "重新导出到新目录" in captured.err

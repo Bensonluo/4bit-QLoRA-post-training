@@ -9,6 +9,7 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from src.workbench.business_evaluation import (
@@ -164,6 +165,7 @@ class AcceptanceService:
 
     @staticmethod
     def _identity(model):
+        AcceptanceService._require_hf_model(model)
         return {
             "base": _model_identity(Path(model["base_model"])),
             "adapter": _model_identity(Path(model["adapter_path"]))
@@ -172,7 +174,19 @@ class AcceptanceService:
         }
 
     @staticmethod
+    def _require_hf_model(model: dict[str, Any]) -> None:
+        if model.get("gguf_path") or model.get("gguf_runtime_path"):
+            raise ValueError("GGUF 当前仅支持开发集同题评测，不能进入最终留出验收。")
+
+    @staticmethod
     def _training_provenance(snapshot, model, identity):
+        AcceptanceService._require_hf_model(model)
+        if (
+            identity.get("format") == "gguf"
+            or identity.get("gguf") is not None
+            or identity.get("source_training") is not None
+        ):
+            raise ValueError("GGUF 不能作为未经微调的基座模型进入最终留出验收。")
         if not model["adapter_path"]:
             return {
                 "status": "base_model",
@@ -229,6 +243,7 @@ class AcceptanceService:
             raise ValueError("请先确认全量资料并物化独立数据分区。")
         if not isinstance(model, EvaluationModel) or not model.label.strip():
             raise ValueError("请明确选择一个待验收的实际模型。")
+        self._require_hf_model(asdict(model))
         protocol.validate()
         criteria = _criteria(criteria, protocol)
         _, scoring_identity = confirmed_scoring_identity(protocol, session)

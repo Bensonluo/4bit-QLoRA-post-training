@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -172,6 +173,11 @@ def _verified_export(target: Path, plan: dict, *, verify_content: bool = True) -
 
         if read_gguf_metadata(gguf) != evidence.get("conversion", {}).get("metadata"):
             raise ValueError("GGUF 实际元数据与转换证据不同。")
+        if evidence.get("tokenizer_directory") is not None and (
+            evidence["tokenizer_directory"] != "hf_tokenizer"
+            or not (target / "hf_tokenizer").is_dir()
+        ):
+            raise ValueError("GGUF 的可携带 tokenizer 目录缺失或路径无效。")
 
 
 def plan_model_export(
@@ -353,6 +359,19 @@ def export_model(plan: dict) -> dict:
                 raise ValueError("GGUF 实际转换工具与已核验工具不同，未发布模型。")
             if _files(merged_dir) != merged_source_files:
                 raise ValueError("转换期间合并模型发生变化，未发布 GGUF。")
+            # Use exactly the tokenizer saved by the merger/converter, including
+            # Jinja templates. No weights or executable Python code are copied.
+            from src.utils.model_files import config_and_tokenizer_files
+
+            for source in config_and_tokenizer_files(merged_dir):
+                destination = published / "hf_tokenizer" / source.relative_to(merged_dir)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+            if any(
+                merged_source_files.get(name) != entry
+                for name, entry in _files(published / "hf_tokenizer").items()
+            ):
+                raise ValueError("复制 tokenizer 时文件发生变化，未发布 GGUF。")
             _write_gguf_handoff(published, fresh)
         after = plan_model_export(
             fresh["run_record"], fresh["output_dir"], **options, _verify_content=True
@@ -377,6 +396,7 @@ def export_model(plan: dict) -> dict:
                 merged_source_files=merged_source_files,
                 business_evaluation_status="not_run",
                 prompt_protocol="render_alpaca_prompt_without_answer",
+                tokenizer_directory="hf_tokenizer",
             )
         write_json(published / _EVIDENCE, evidence)
         try:
@@ -425,6 +445,9 @@ def _write_gguf_handoff(directory: Path, plan: dict) -> None:
         "LM Studio 聊天界面可能使用基座聊天模板，与原始提示不同；"
         "业务对照应使用不附加聊天模板的原始文本生成。\n\n"
         "GGUF 内保存源 tokenizer 的聊天模板供兼容工具使用；"
-        "保留它不代表训练采用了该聊天模板。文件和来源摘要见 export_evidence.json。\n",
+        "保留它不代表训练采用了该聊天模板。hf_tokenizer/ 保存实际转换的 HF 分词文件，"
+        "用于工作台的输入 token 核对与统一解码。可在成功训练记录下选择 GGUF 同题对照；"
+        "评测结果保存在独立报告中，不回写导出时的 not_run 状态。"
+        "文件和来源摘要见 export_evidence.json。\n",
         encoding="utf-8",
     )
