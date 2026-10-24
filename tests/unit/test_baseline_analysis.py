@@ -123,7 +123,8 @@ def test_high_cardinality_target_gets_wrong_column_warning(tmp_path):
     )
     session2 = normal.create("判断类别", "t.csv", normal_rows.encode())
     analysis2 = propose_baseline_analysis(session2, target_column="类别")
-    assert not any("唯一" in f.message for f in analysis2.findings)
+    # 判别词用预警专属短语「选错」:任务形态推断 finding 也含「唯一率」字样,不冲突
+    assert not any("选错" in f.message for f in analysis2.findings)
 
 
 def test_label_variants_are_flagged_for_cleanup(tmp_path):
@@ -491,3 +492,58 @@ def test_baseline_temporal_applies_and_materializes_point_in_time(tmp_path):
     assert manifest["metadata"]["seed"] is None
     assert manifest["metadata"]["excluded_rows"][0]["row_id"] == "r000005"
     assert manifest["metadata"]["temporal_policy"]["prediction_at_column"] == "决策时间"
+
+
+def _make(tmp_path, rows: bytes, goal: str, target: str):
+    service = IntakeService(tmp_path / "intake")
+    session = service.create(goal, "t.csv", rows)
+    return service, session
+
+
+def test_classification_instruction_lists_observed_values(tmp_path):
+    """分类:指令列出真实观测到的类别值——契约由数据参数化。"""
+    _, session = _make(
+        tmp_path,
+        "描述,类别\n杯子破损,质量\n物流未更新,物流\n屏幕碎裂,质量\n".encode(),
+        "根据描述判断售后类别",
+        "类别",
+    )
+    analysis = propose_baseline_analysis(session, target_column="类别")
+    instruction = analysis.recipe.instruction
+    assert "答案必须且只能是以下之一" in instruction
+    assert "质量、物流" in instruction  # 值来自数据实测,非预设
+    assert "不要复述题目" in instruction
+    assert analysis.recipe.input_render == "labeled"
+
+
+def test_generation_instruction_uses_text_contract_and_plain_render(tmp_path):
+    """开放生成:文本契约(不列值集),单一长文本输入改纯文本渲染。"""
+    long_answer = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 3
+    long_question = (
+        "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。" * 2
+    )
+    rows = "描述,答复\n" + "".join(
+        f"{long_question}（情形{i}）,{long_answer}（变体{i}）\n" for i in range(1, 10)
+    )
+    service, session = _make(tmp_path, rows.encode(), "根据客户问题生成标准答复", "答复")
+    analysis = propose_baseline_analysis(session, target_column="答复")
+    instruction = analysis.recipe.instruction
+    assert "完整答复内容" in instruction and "自然文本" in instruction
+    assert "以下之一" not in instruction  # 生成任务不列值集
+    assert "不要复述题目" in instruction
+    # 渲染推理:单一长文本输入 → plain(预览无「字段: 」前缀)
+    assert analysis.recipe.input_render == "plain"
+    updated = service.apply_analysis(session, analysis, model="t")
+    assert updated.preview.rows
+    assert "答复" not in updated.preview.rows[0].input.split("\n")[0][:4]
+
+
+def test_extraction_instruction_uses_short_value_contract(tmp_path):
+    """抽取/归一(近全唯一短值):短值契约,不列值集也不称类别。"""
+    rows = "描述,编号\n" + "".join(f"问题{i},GD-{i:03d}\n" for i in range(1, 10))
+    _, session = _make(tmp_path, rows.encode(), "根据描述对应工单编号", "编号")
+    analysis = propose_baseline_analysis(session, target_column="编号")
+    instruction = analysis.recipe.instruction
+    assert "具体值" in instruction and ("名称或编号" in instruction)
+    assert "以下之一" not in instruction and "类别" not in instruction
+    assert "不要复述题目" in instruction

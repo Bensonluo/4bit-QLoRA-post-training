@@ -242,7 +242,21 @@ def test_thinking_context_survives_tool_turns_without_persisting(tmp_path):
             message["reasoning_content"] == "private-reasoning-fixture"
             for message in assistant_turns
         )
-    assert updated.analysis == result
+    # analyze 路径为业务理解区追加任务形态徽标 finding(Agent 路径同引擎);
+    # 除该徽标外,方案与模型提交内容逐字段一致(不悄悄改方案)。
+    from src.workbench.baseline_analysis import infer_task_archetype
+
+    inferred = infer_task_archetype(updated, "类别", ["客户描述"])
+    badge = (
+        f"任务形态推断（Agent 路径，同引擎）：分类。依据（数据实测）：答案列不同取值 "
+        f"{len(inferred['distinct_values'])} 个、唯一率 {inferred['unique_ratio']:.0%}、"
+        f"平均长度 {inferred['avg_target_len']:.0f} 字。"
+    )
+    badge_finding = [f for f in updated.analysis.findings if f.message.startswith(badge)]
+    assert badge_finding, "业务理解区应包含任务形态徽标 finding"
+    stripped = updated.analysis.model_copy(deep=True)
+    stripped.findings = [f for f in stripped.findings if f not in badge_finding]
+    assert stripped == result
     assert "private-reasoning-fixture" not in updated.model_dump_json()
     assert "reasoning_content" not in json.dumps(updated.tool_trace)
     assert "private-reasoning-fixture" not in service.load(session.session_id).model_dump_json()

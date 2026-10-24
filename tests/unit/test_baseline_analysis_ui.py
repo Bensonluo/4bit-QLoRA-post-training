@@ -286,3 +286,57 @@ def test_agent_only_features_point_to_settings_panel_when_unconfigured():
         "指路等同词表；不得再出现「上方」等陈旧方位词）"
     )
     assert "上方「分析模型设置」" not in source, "R141：面板在侧栏，不得残留「上方」方位词"
+
+
+def test_inference_panel_shows_archetype_and_editable_instruction_takes_effect(data_page):
+    """推断亮出来:任务形态/依据可见,指令草稿可编辑且编辑生效。"""
+    service, session, page = data_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    target = next(s for s in page.selectbox if s.label.startswith("答案列"))
+    target.select("类别").run()
+    # 推断面板可见:分类形态+实测依据+指令草稿(含数据观测到的类别值)
+    assert any(e.label.startswith("数据推断的任务形态：分类") for e in page.expander)
+    assert any("不同取值" in c.value and "唯一率" in c.value for c in page.caption)
+    instruction_box = next(t for t in page.text_area if t.label.startswith("任务指令（由推断组装"))
+    assert "答案必须且只能是以下之一" in instruction_box.value
+    assert "质量" in instruction_box.value
+
+    # 编辑指令 → 应用后生效
+    instruction_box.set_value("判断售后类别，答案只给一个词。").run()
+    next(b for b in page.button if b.label == "生成基础分析并预览").click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert current.analysis.recipe.instruction == "判断售后类别，答案只给一个词。"
+
+
+def test_cleared_instruction_falls_back_to_auto_composed(data_page):
+    """清空指令 → 按最新推断自动组装(不把空串当指令)。"""
+    service, session, page = data_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(s for s in page.selectbox if s.label.startswith("答案列")).select("类别").run()
+    instruction_box = next(t for t in page.text_area if t.label.startswith("任务指令（由推断组装"))
+    instruction_box.set_value("   ").run()
+    next(b for b in page.button if b.label == "生成基础分析并预览").click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert "答案必须且只能是以下之一" in current.analysis.recipe.instruction
+    # 推断依据随分析存档(业务理解区刷新后仍可见)
+    assert any("任务形态推断：分类" in f.message for f in current.analysis.findings)
+
+
+def test_archetype_badge_shown_in_business_understanding(data_page, monkeypatch):
+    """分析应用后,业务理解区顶部显示任务形态徽标(来自存档 findings)。"""
+
+    service, session, page = data_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(s for s in page.selectbox if s.label.startswith("答案列")).select("类别").run()
+    next(b for b in page.button if b.label == "生成基础分析并预览").click().run()
+    assert not page.exception
+    assert any("任务形态推断：分类" in message.value for message in page.success), (
+        "业务理解顶部应显示分类徽标"
+    )
+    # 依据详情仍在 findings 列表(数据判断区),不因徽标丢失
+    assert any("唯一率" in c.value for c in page.caption)

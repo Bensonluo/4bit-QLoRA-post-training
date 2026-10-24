@@ -395,9 +395,29 @@ def analyze_intake(
 ) -> tuple[IntakeAnalysis, list[dict[str, Any]]]:
     if (revision_context is None) != (diagnostics is None):
         raise ValueError("改进分析必须同时提供已确认方向与真实评测证据。")
+    # 数据实测的任务形态提示:与零密钥路径同一推理引擎,Agent 起草方案时
+    # 看得见数据说了什么(分类/抽取/生成+依据),不是盲猜。
+    archetype_hint = None
+    if session.source.rows:
+        try:
+            from src.workbench.baseline_analysis import infer_task_archetype
+
+            # 用所有非空列粗推一遍:Agent 还没选字段,给出的是"每个候选答案列
+            # 分别会推成什么"的完整视图,而非替用户选列。
+            hints = {}
+            columns = list(session.source.columns)
+            for target in columns:
+                inputs = [c for c in columns if c != target]
+                if not inputs:
+                    continue
+                hints[target] = infer_task_archetype(session, target, inputs)["archetype"]
+            archetype_hint = hints or None
+        except (ValueError, KeyError):
+            archetype_hint = None
     context = {
         "goal": session.goal,
         "data_description": session.data_description,
+        "candidate_target_archetypes": archetype_hint,
         "source": {
             "name": session.source.name,
             "scope": session.source.scope,

@@ -140,6 +140,13 @@ class DataRecipe(Contract):
     inputs: list[FieldBinding] = Field(min_length=1)
     targets: list[FieldBinding] = Field(default_factory=list)
     output_format: Literal["text", "json"] = "text"
+    input_render: Literal["labeled", "plain"] = Field(
+        default="labeled",
+        description=(
+            "输入渲染由数据结构推理：单一长文本输入用 plain（原文直出，字段前缀不携带信息）；"
+            "多字段用 labeled（字段名： 值）。旧配方缺省即 labeled。"
+        ),
+    )
     allow_multiple_targets: bool = False
     multiple_targets_reason: str = ""
     group_columns: list[str] = Field(default_factory=list)

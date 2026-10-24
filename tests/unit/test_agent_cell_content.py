@@ -297,3 +297,22 @@ def test_cell_read_does_not_bypass_profile_guard(tmp_path):
     _, trace = analyze_intake(session, client)
     assert not trace[2]["ok"] and "读取数据画像" in trace[2]["error"]
     assert trace[-1]["ok"]
+
+
+def test_agent_intake_context_includes_archetype_hints(tmp_path):
+    """Agent 分析时看得见每个候选答案列的数据实测形态——不是盲猜。"""
+    from tests.unit.test_data_intake import CSV, analysis
+
+    service = IntakeService(tmp_path)
+    session = service.create("根据描述判断类别", "t.csv", CSV)
+    client = ScriptedModel(complete_steps(analysis()))
+    _, _trace = analyze_intake(session, client)
+    user_payload = next(
+        json.loads(m["content"])
+        for messages in client.seen
+        for m in messages
+        if m.get("role") == "user"
+    )
+    hints = user_payload.get("candidate_target_archetypes")
+    assert hints is not None and "类别" in hints
+    assert hints["类别"] in {"classification", "extraction", "generation"}

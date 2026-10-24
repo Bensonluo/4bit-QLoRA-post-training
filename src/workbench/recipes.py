@@ -70,7 +70,11 @@ def preview_recipe(source: SampleSource, recipe: DataRecipe) -> PreviewResult:
             issues.append(str(exc))
         if any(is_missing(v) for v in inputs.values()):
             issues.append("模型输入有缺失；未自动补值或删除该行。")
-        input_text = "\n".join(f"{label}: {_text(value)}" for label, value in inputs.items())
+        if getattr(recipe, "input_render", "labeled") == "plain" and len(inputs) == 1:
+            # 数据结构推理的渲染:单一输入时字段前缀不携带信息,原文直出。
+            input_text = _text(next(iter(inputs.values())))
+        else:
+            input_text = "\n".join(f"{label}: {_text(value)}" for label, value in inputs.items())
         missing_target = not targets or any(is_missing(v) for v in targets.values())
         if missing_target:
             issues.append("缺少监督答案，需要补充或确认标签；没有自动生成真值。")

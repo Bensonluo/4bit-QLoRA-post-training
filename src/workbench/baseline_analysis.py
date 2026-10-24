@@ -101,6 +101,98 @@ def _value_kind(session: IntakeSession, column: str) -> str:
     return "unspecified"
 
 
+def infer_task_archetype(
+    session: IntakeSession, target_column: str, input_columns: list[str]
+) -> dict:
+    """从数据实测结构推理任务原型——不是模板选择,是测量。
+
+    推理依据全部来自数据:答案列的取值分布(类别数/平均长度/唯一率)与
+    输入列的形态(是否单一长文本)。三档原型 + 渲染方式,均可追溯。
+    """
+    target_values = [
+        row.values.get(target_column, "").strip()
+        for row in session.source.rows
+        if row.values.get(target_column, "").strip()
+    ]
+    distinct = list(dict.fromkeys(target_values))  # 首现顺序:契约列值贴合数据呈现
+    avg_target_len = (
+        sum(len(v) for v in target_values) / len(target_values) if target_values else 0.0
+    )
+    unique_ratio = len(distinct) / len(target_values) if target_values else 0.0
+    target_is_open = avg_target_len >= _OPEN_TEXT_MIN_AVG_LENGTH
+
+    single_long_input = (
+        len(input_columns) == 1 and _value_kind(session, input_columns[0]) == "open_text"
+    )
+
+    if target_is_open:
+        archetype = "generation"
+    elif (
+        len(target_values) >= 8
+        and unique_ratio >= 0.9
+        and avg_target_len < _OPEN_TEXT_MIN_AVG_LENGTH
+    ):
+        # 近全唯一且值短:类别任务通常每类多例,值从不重复说明是抽取/归一。
+        # 唯一率在 <8 行时无统计意义(2 行样本必然全唯一),不足以判抽取。
+        archetype = "extraction"
+    elif len(distinct) <= _CATEGORICAL_MAX_DISTINCT:
+        archetype = "classification"
+    else:
+        archetype = "classification"  # 中间形态按分类口径,契约里不列值集
+
+    return {
+        "archetype": archetype,
+        "distinct_values": distinct,
+        "unique_ratio": unique_ratio,
+        "avg_target_len": avg_target_len,
+        "input_render": "plain" if single_long_input else "labeled",
+    }
+
+
+def compose_instruction(
+    goal: str,
+    target_column: str,
+    input_columns: list[str],
+    archetype: dict,
+) -> str:
+    """按推理出的原型组装指令:任务动词、输出契约、防复述护栏各不相同。
+
+    每个组成部分都由实测数据参数化——类别任务列出真实观测到的类别值,
+    生成任务给文本契约,抽取任务给短值契约。同一产品不再给不同任务
+    同一句话。
+    """
+    goal_text = goal.strip()
+    input_labels = "、".join(input_columns)
+    values = archetype["distinct_values"]
+    kind = archetype["archetype"]
+    head = f"{goal_text}。输入：{input_labels}。"
+
+    if kind == "classification":
+        if 2 <= len(values) <= 8:
+            contract = (
+                f"答案必须且只能是以下之一：{'、'.join(values)}。"
+                "直接输出该类别本身，不要复述题目，不要附加解释。"
+            )
+        elif len(values) > 8:
+            contract = (
+                f"答案是「{target_column}」的类别值（数据中共 {len(values)} 类）。"
+                "直接输出类别本身，不要复述题目，不要附加解释。"
+            )
+        else:
+            contract = f"直接输出「{target_column}」的类别值本身，不要复述题目，不要附加解释。"
+    elif kind == "generation":
+        contract = (
+            f"写出「{target_column}」的完整答复内容：一段符合业务要求的自然文本，"
+            "不是类别或编号。直接给出答复正文，不要复述题目，不要加解释或前缀。"
+        )
+    else:  # extraction
+        contract = (
+            f"答案是从输入对应出的「{target_column}」具体值（简短、唯一，如名称或编号）。"
+            "只输出该值本身，不要复述题目，不要附加解释。"
+        )
+    return head + contract
+
+
 def propose_baseline_analysis(
     session: IntakeSession,
     *,
@@ -154,13 +246,11 @@ def propose_baseline_analysis(
         raise ValueError("至少保留一个输入字段（除答案与分组外不能全部排除）。")
     target_label = f"{target_column}（答案）"
     input_labels = "、".join(input_columns)
+    archetype = infer_task_archetype(session, target_column, input_columns)
     instruction_text = (
         instruction.strip()
         if instruction and instruction.strip()
-        else (
-            f"{session.goal.strip()}。输入字段：{input_labels}。"
-            f"请严格只输出「{target_column}」的答案值本身，不要复述题目，不要附加解释。"
-        )
+        else compose_instruction(session.goal, target_column, input_columns, archetype)
     )
 
     roles = [
@@ -393,6 +483,24 @@ def propose_baseline_analysis(
                 ),
             )
         )
+    archetype_names = {
+        "classification": "分类",
+        "extraction": "抽取/归一",
+        "generation": "开放生成",
+    }
+    findings.append(
+        Finding(
+            kind="observed",
+            message=(
+                f"任务形态推断：{archetype_names[archetype['archetype']]}。"
+                f"依据（数据实测）：答案列不同取值 {len(archetype['distinct_values'])} 个、"
+                f"唯一率 {archetype['unique_ratio']:.0%}、平均长度 {archetype['avg_target_len']:.0f} 字；"
+                f"输入渲染按结构取「{'纯文本直出' if archetype['input_render'] == 'plain' else '字段名标注'}」。"
+                "指令由这些事实组装，生成前可修改。"
+            ),
+            evidence_row_ids=[row.row_id for row in session.source.rows[:2]],
+        )
+    )
     findings.append(
         Finding(
             kind="observed",
@@ -405,6 +513,7 @@ def propose_baseline_analysis(
     )
     recipe_payload = {
         "instruction": instruction_text,
+        "input_render": archetype["input_render"],
         "inputs": [
             {
                 "column": column,
