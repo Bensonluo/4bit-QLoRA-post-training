@@ -8,6 +8,7 @@ from datasets import Dataset
 from transformers import PreTrainedTokenizer
 
 from src.data.base import BaseDataset
+from src.data.sft_protocol import LEGACY_PROTOCOL, tokenize_sft_record, validate_protocol
 from src.utils.logging import console
 
 
@@ -58,7 +59,19 @@ class MedicalEntityDataset(BaseDataset):
         self,
         tokenizer: PreTrainedTokenizer,
         max_length: int = 1024,
+        *,
+        sft_protocol: str = LEGACY_PROTOCOL,
     ) -> Any:
+        validate_protocol(sft_protocol)
+        if self.dataset is None:
+            self.load()
+        if sft_protocol != LEGACY_PROTOCOL:
+            self.dataset = self.dataset.map(
+                lambda row: tokenize_sft_record(row, tokenizer, max_length, protocol=sft_protocol),
+                remove_columns=self.dataset.column_names,
+            )
+            return self.dataset
+
         def tokenize_fn(examples: dict[str, list]) -> dict[str, Any]:
             prompts = []
             for inst, inp, out in zip(

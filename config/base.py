@@ -1,7 +1,11 @@
 """Configuration base classes for QLoRA post-training."""
 
+import math
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import Literal
+
+SFT_TRAINING_PROTOCOLS = ("alpaca_full_prompt_v1", "alpaca_answer_only_v1")
 
 
 @dataclass
@@ -387,8 +391,13 @@ class TrainingConfig:
         if self.learning_rate <= 0:
             raise ValueError("learning_rate must be positive")
 
-        if not 0 < self.warmup_ratio <= 1:
-            raise ValueError("warmup_ratio must be between 0 and 1")
+        if (
+            isinstance(self.warmup_ratio, bool)
+            or not isinstance(self.warmup_ratio, Real)
+            or not 0 <= self.warmup_ratio <= 1
+            or not math.isfinite(self.warmup_ratio)
+        ):
+            raise ValueError("warmup_ratio must be a finite real number between 0 and 1 inclusive")
 
         if self.fp16 and self.bf16:
             raise ValueError("Cannot enable both fp16 and bf16")
@@ -455,6 +464,7 @@ class DataConfig:
         validation_file: Path to custom validation data
         format: Data format ("alpaca", "chat", "sharegpt", etc.)
         dataset_loader: Explicit loader; None preserves legacy name/domain selection
+        sft_protocol: Versioned SFT prompt and supervision contract
     """
 
     dataset_name: str = "yahma/alpaca-cleaned"
@@ -466,6 +476,7 @@ class DataConfig:
     validation_file: str | None = None
     format: str = "alpaca"
     dataset_loader: str | None = None
+    sft_protocol: str = "alpaca_full_prompt_v1"
 
     def __post_init__(self) -> None:
         """Validate configuration."""
@@ -476,6 +487,10 @@ class DataConfig:
             raise ValueError('format must be one of: "alpaca", "chat", "sharegpt", "dpo", "grpo"')
         if self.dataset_loader not in (None, "alpaca", "finance", "medical_entity"):
             raise ValueError("dataset_loader must be alpaca, finance, medical_entity, or None")
+        if self.sft_protocol not in SFT_TRAINING_PROTOCOLS:
+            raise ValueError(f"sft_protocol must be one of: {SFT_TRAINING_PROTOCOLS}")
+        if self.sft_protocol != "alpaca_full_prompt_v1" and self.format != "alpaca":
+            raise ValueError("Answer-only sft_protocol requires format='alpaca'.")
 
 
 @dataclass

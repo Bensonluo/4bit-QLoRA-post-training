@@ -6,6 +6,8 @@ from typing import Any
 from datasets import Dataset
 from transformers import PreTrainedTokenizer
 
+from src.data.sft_protocol import LEGACY_PROTOCOL
+
 
 class BaseDataset(ABC):
     """Abstract base class for datasets."""
@@ -39,12 +41,15 @@ class BaseDataset(ABC):
         self,
         tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
+        *,
+        sft_protocol: str = LEGACY_PROTOCOL,
     ) -> Dataset:
         """Format dataset for training.
 
         Args:
             tokenizer: Tokenizer to use
             max_length: Maximum sequence length
+            sft_protocol: Explicit SFT prompt and supervision contract
 
         Returns:
             Formatted dataset

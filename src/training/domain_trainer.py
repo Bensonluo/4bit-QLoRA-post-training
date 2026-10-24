@@ -110,6 +110,7 @@ class DomainAdaptationTrainer(SFTTrainer):
         self.train_dataset = dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
+            **self._sft_protocol_options(),
         )
         if self.eval_dataset is not None:
             if validation_loader is None:
@@ -118,6 +119,7 @@ class DomainAdaptationTrainer(SFTTrainer):
             self.eval_dataset = validation_loader.format_for_training(
                 self.tokenizer,
                 max_length=self.model_config.max_length,
+                **self._sft_protocol_options(),
             )
 
 

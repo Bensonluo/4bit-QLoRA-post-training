@@ -6,6 +6,7 @@ from datasets import Dataset, load_dataset
 from transformers import PreTrainedTokenizer
 
 from src.data.base import BaseDataset
+from src.data.sft_protocol import LEGACY_PROTOCOL, tokenize_sft_record, validate_protocol
 from src.utils.logging import console
 
 
@@ -120,13 +121,18 @@ class AlpacaDataset(BaseDataset):
         self,
         tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
+        *,
+        sft_protocol: str = LEGACY_PROTOCOL,
     ) -> Dataset:
         """Format Alpaca dataset for SFT training."""
+        validate_protocol(sft_protocol)
         if self.dataset is None:
             self.load()
 
         def format_prompt(example: dict) -> dict:
             """Format a single example."""
+            if sft_protocol != LEGACY_PROTOCOL:
+                return tokenize_sft_record(example, tokenizer, max_length, protocol=sft_protocol)
             tokenized = tokenize_alpaca_record(example, tokenizer, max_length=max_length)
 
             # For causal LM, labels are same as input_ids
@@ -243,8 +249,12 @@ class PreferenceDataset(BaseDataset):
         self,
         tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
+        *,
+        sft_protocol: str = LEGACY_PROTOCOL,
     ) -> Dataset:
         """Format preference dataset for DPO training."""
+        if sft_protocol != LEGACY_PROTOCOL:
+            raise ValueError("SFT answer-only protocols do not apply to preference training.")
         if self.dataset is None:
             self.load()
 

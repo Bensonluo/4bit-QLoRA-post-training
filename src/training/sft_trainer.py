@@ -1,8 +1,11 @@
 """Supervised Fine-Tuning (SFT) trainer with QLoRA."""
 
+import math
 import os
 import warnings
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -18,6 +21,7 @@ from transformers.trainer_callback import TrainerCallback
 from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
 from src.data import AlpacaDataset, BaseDataset, FinanceDataset
 from src.data.sft_collator import AttentionMaskCausalCollator
+from src.data.sft_protocol import LEGACY_PROTOCOL
 from src.models import load_model_and_tokenizer
 from src.tracking import MLflowTrainCallback, get_tracker, register_trained_model
 from src.training.callbacks import MFUCallback
@@ -36,6 +40,29 @@ from src.utils.platform_utils import get_platform
 # peft exports LoraGAConfig at the top level only in recent versions — import
 # from its defining module so this works across the supported peft range.
 from peft.tuners.lora.config import LoraGAConfig  # isort: skip
+
+
+@dataclass
+class _SFTRatioTrainingArguments(TrainingArguments):
+    """Keep SFT warmup a ratio when HF knows the actual optimizer step count."""
+
+    sft_warmup_ratio: float = 0.03
+
+    def __post_init__(self) -> None:
+        ratio = self.sft_warmup_ratio
+        if (
+            isinstance(ratio, bool)
+            or not isinstance(ratio, Real)
+            or not 0 <= ratio <= 1
+            or not math.isfinite(ratio)
+        ):
+            raise ValueError("sft_warmup_ratio must be a finite real number in [0, 1].")
+        if self.warmup_steps != 0:
+            raise ValueError("SFT uses sft_warmup_ratio; warmup_steps must remain zero.")
+        super().__post_init__()
+
+    def get_warmup_steps(self, num_training_steps: int) -> int:
+        return math.ceil(num_training_steps * self.sft_warmup_ratio)
 
 
 def _dataset_class_for(dataset_name: str, loader_name: str | None = None) -> type[BaseDataset]:
@@ -269,6 +296,11 @@ class SFTTrainer:
         # PEFT requires a nonempty parent path when saving; support bare filenames too.
         return str(destination.absolute())
 
+    def _sft_protocol_options(self) -> dict[str, Any]:
+        """Keep legacy formatter calls unchanged while explicitly opting into masks."""
+        protocol = getattr(self.data_config, "sft_protocol", LEGACY_PROTOCOL)
+        return {} if protocol == LEGACY_PROTOCOL else {"sft_protocol": protocol}
+
     def _build_lora_ga_train_step(self) -> Callable[[], None]:
         """Build the calibration callback peft's preprocess_loraga consumes.
 
@@ -297,9 +329,10 @@ class SFTTrainer:
         tokenized = calib_dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
+            **self._sft_protocol_options(),
         )
 
-        collator = AttentionMaskCausalCollator(self.tokenizer)
+        collator = AttentionMaskCausalCollator(self.tokenizer, **self._sft_protocol_options())
         model = self.model
         device = next(model.parameters()).device
 
@@ -367,18 +400,21 @@ class SFTTrainer:
         self.train_dataset = dataset.format_for_training(
             self.tokenizer,
             max_length=self.model_config.max_length,
+            **self._sft_protocol_options(),
         )
         if self.eval_dataset is not None:
             if _val_dataset_obj is not None:
                 self.eval_dataset = _val_dataset_obj.format_for_training(
                     self.tokenizer,
                     max_length=self.model_config.max_length,
+                    **self._sft_protocol_options(),
                 )
             else:
                 dataset.dataset = self.eval_dataset
                 self.eval_dataset = dataset.format_for_training(
                     self.tokenizer,
                     max_length=self.model_config.max_length,
+                    **self._sft_protocol_options(),
                 )
 
     def setup_trainer(self) -> None:
@@ -418,9 +454,10 @@ class SFTTrainer:
             gradient_accumulation_steps=self.training_config.gradient_accumulation_steps,
             learning_rate=self.training_config.learning_rate,
             weight_decay=self.training_config.weight_decay,
-            # transformers >= 5.x: warmup_ratio merged into warmup_steps
-            # (a float value keeps ratio semantics).
-            warmup_steps=self.training_config.warmup_ratio,
+            # HF overloads warmup_steps>=1 as an absolute count, so a separate
+            # ratio preserves both endpoints and recalculates after batch retries.
+            warmup_steps=0,
+            sft_warmup_ratio=self.training_config.warmup_ratio,
             lr_scheduler_type=self.training_config.lr_scheduler_type,
             logging_steps=self.training_config.logging_steps,
             save_steps=self.training_config.save_steps,
@@ -493,12 +530,13 @@ class SFTTrainer:
         if self.training_config.optim:
             training_kwargs["optim"] = self.training_config.optim
 
-        training_args = TrainingArguments(**training_kwargs)
+        training_args = _SFTRatioTrainingArguments(**training_kwargs)
 
         # Data collator
         data_collator = AttentionMaskCausalCollator(
             tokenizer=self.tokenizer,
             pad_to_multiple_of=8,
+            **self._sft_protocol_options(),
         )
 
         # Create trainer
