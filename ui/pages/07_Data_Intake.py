@@ -1571,32 +1571,41 @@ if active_iteration:
     available_suites[active_iteration["evaluation_suite"]["suite_id"]] = active_iteration[
         "evaluation_suite"
     ]
-st.subheader(session.goal)
-st.caption(
-    f"{session.source.name} · {len(session.source.rows)} 条记录 · 任务 {session.session_id[:8]}"
-)
-
-# 旅程进度指示器:让用户在任何时刻都知道"走到哪了、还差什么"。
-_JOURNEY_STEPS = [
+# ── 旅程进度:单一来源,页面/CLI 同一状态机词汇 ─────────────────────────
+_JOURNEY = [
     ("awaiting_analysis", "① 分析目标与数据"),
     ("review_preview", "② 核对真实转换预览"),
     ("awaiting_full_data", "③ 提供全量数据"),
     ("awaiting_full_validation", "④ 验证全量数据"),
     ("review_full_data", "⑤ 确认全量数据"),
     ("awaiting_dataset_split", "⑥ 生成独立分区"),
-    ("ready_for_training_preflight", "⑦ 训练前检查"),
-    ("ready_for_training", "⑧ 启动训练"),
+    ("ready_for_training_preflight", "⑦ 训练前检查与训练"),
+    ("ready_for_training", "⑧ 对照与决策"),
 ]
-_current_action = next_action(session)
-_step_order = [step[0] for step in _JOURNEY_STEPS]
-_current_index = _step_order.index(_current_action) if _current_action in _step_order else None
-if _current_index is not None:
-    done_marks = "✓ " + " → ✓ ".join(step[1] for step in _JOURNEY_STEPS[:_current_index])
-    current_mark = f"→ **{_JOURNEY_STEPS[_current_index][1]}**"
-    remaining = [step[1] for step in _JOURNEY_STEPS[_current_index + 1 :]]
-    tail = " → " + " → ".join(remaining) if remaining else ""
-    st.caption(f"{done_marks} {current_mark}{tail}")
 
+
+def _journey_progress(session) -> None:
+    """渲染旅程进度条与当前步骤:用户任何时刻都知道走到哪了、还差什么。"""
+    action = next_action(session)
+    idx = next((i for i, (key, _) in enumerate(_JOURNEY) if key == action), None)
+    if idx is None:
+        return
+    total = len(_JOURNEY)
+    st.progress(idx / total, text=f"当前步骤：{_JOURNEY[idx][1]}（第 {idx + 1} / {total} 步）")
+    done = "✅ " + " ✅ ".join(step[1] for step in _JOURNEY[:idx])
+    if done:
+        st.caption(done)
+    remaining = [_JOURNEY[j][1] for j in range(idx + 1, total)]
+    if remaining:
+        st.caption("接下来：" + " → ".join(remaining))
+
+
+st.subheader(session.goal)
+st.caption(
+    f"{session.source.name} · {len(session.source.rows)} 条记录 · 任务 {session.session_id[:8]}"
+)
+
+_journey_progress(session)
 st.info(session.profile["scope_note"])
 show_fact_notes(session.profile)
 if iterations:
