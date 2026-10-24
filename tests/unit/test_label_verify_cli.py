@@ -153,6 +153,98 @@ def test_cli_submit_hint_is_copyable_verbatim(store, monkeypatch, capsys):
     assert "--verification-id" in hint and "--answer" in hint
 
 
+def _open_store(tmp_path):
+    """开放生成目标:长文本答案(≥40 字触发逐条审阅模式)。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    service = IntakeService(tmp_path / "open-intake")
+    long_q = (
+        "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。"
+    )
+    long_a = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 2
+    sample = (
+        "编号,客户问题,标准答复\n"
+        + "".join(f"{i:03d},{long_q}（{i}）,{long_a}（{i}）\n" for i in range(1, 9))
+    ).encode()
+    full = (
+        "编号,客户问题,标准答复\n"
+        + "".join(f"{i:03d},{long_q}（{i}）,{long_a}（{i}）\n" for i in range(1, 11))
+    ).encode()
+    session = service.create("根据客户问题生成标准答复", "qa.csv", sample)
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",)),
+        model="cli-open",
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(session.session_id, session.revision, "f.csv", full)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    return service, session
+
+
+def test_cli_label_verify_review_mode_shows_answers_and_accepts_yes_no(
+    tmp_path, capsys, monkeypatch
+):
+    """审阅模式 CLI:出示数据答复,是/否裁决可提交,判定行附下界。"""
+    service, session = _open_store(tmp_path)
+
+    from scripts import data_intake
+
+    captured_errs = []
+
+    def _run(*extra):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "data_intake.py",
+                "--store",
+                str(service.root),
+                "label-verify",
+                session.session_id,
+                "--revision",
+                str(session.revision),
+                *map(str, extra),
+            ],
+        )
+        capsys.readouterr()
+        assert data_intake.main() == 0
+        captured = capsys.readouterr()
+        captured_errs.append(captured.err)
+        return json.loads(captured.out)
+
+    pending = _run("--size", "2")
+    assert pending["mode"] == "review"
+    first_err = captured_errs[-1]
+    assert "逐条审阅" in first_err and "是/否" in first_err
+    assert "数据中的答复：" in first_err
+    assert all("answer" in item for item in pending["items"])
+
+    # 提交:第一条认可,第二条否决 → 审阅未通过
+    row_yes = pending["items"][0]["row_id"]
+    row_no = pending["items"][1]["row_id"]
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "data_intake.py",
+            "--store",
+            str(service.root),
+            "label-verify-submit",
+            session.session_id,
+            "--verification-id",
+            pending["verification_id"],
+            "--answer",
+            f"{row_yes}=是",
+            "--answer",
+            f"{row_no}=否",
+        ],
+    )
+    assert data_intake.main() == 0  # submit 本身成功,verdict 在 JSON 里
+    err = capsys.readouterr().err
+    assert "insufficient_agreement" in err
+
+
 def test_cli_label_verify_export_csv_writes_blind_question_list(
     store, tmp_path, monkeypatch, capsys
 ):

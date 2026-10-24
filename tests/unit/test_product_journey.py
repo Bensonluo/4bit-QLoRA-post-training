@@ -294,3 +294,67 @@ def test_open_generation_journey_to_real_trained_adapter(journey):
     assert result["status"] == "succeeded", training.read_logs(record["run_id"], tail=50)
     manifest = json.loads(Path(result["artifacts"]["manifest"]).read_text())
     assert manifest["dataset_version"] == session.dataset.version
+
+
+def test_extraction_journey_to_real_trained_adapter(journey):
+    """抽取/归一原型零密钥全程到真实训练产物——三大原型的最后一块贯穿。
+
+    近全唯一短值答案列:推断为抽取原型(短值契约),高基数预警在场但不阻断;
+    盲标复现模式放行;真实训练产出 adapter 与 manifest。
+    """
+    intake, training, model = journey
+    rows = "编号,客户描述,工单号\n" + "".join(
+        f"{i:03d},问题描述第{i}种,GD-{i:03d}\n" for i in range(1, 9)
+    )
+    session = intake.create("根据客户描述对应工单编号", "工单.csv", rows.encode())
+    session = intake.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="工单号", group_columns=("编号",)),
+        model="journey-extraction",
+    )
+    assert session.analysis.recipe.instruction.startswith("根据客户描述对应工单编号")
+    assert "具体值" in session.analysis.recipe.instruction
+    assert "以下之一" not in session.analysis.recipe.instruction
+    session = intake.confirm(session.session_id, session.revision)
+    full = "编号,客户描述,工单号\n" + "".join(
+        f"{i:03d},问题描述第{i}种,GD-{i:03d}\n" for i in range(1, 13)
+    )
+    session = intake.validate_full_data(
+        session.session_id, session.revision, "全量.csv", full.encode()
+    )
+    session = intake.confirm_full_data(session.session_id, session.revision)
+
+    pending = intake.start_label_verification(session.session_id, session.revision, sample_size=2)
+    assert pending["mode"] == "reproduce"
+    targets = {row.row_id: row.target for row in session.full_data.preview.rows}
+    intake.submit_label_verification(
+        session.session_id,
+        pending["verification_id"],
+        {item["row_id"]: targets[item["row_id"]] for item in pending["items"]},
+    )
+    session = intake.materialize_dataset(session.session_id, session.revision)
+    assert session.label_verification["verdict"] == "verified"
+
+    record = training.prepare(
+        session,
+        model,
+        max_length=64,
+        training_options={
+            "num_epochs": 1,
+            "batch_size": 2,
+            "gradient_accumulation_steps": 1,
+            "gradient_checkpointing": False,
+            "logging_steps": 1,
+        },
+    )
+    assert record["status"] == "prepared", record["issues"]
+    training.start(record["run_id"], session)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        result = training.get_status(record["run_id"])
+        if result["status"] in {"succeeded", "failed", "stopped"}:
+            break
+        time.sleep(0.2)
+    assert result["status"] == "succeeded", training.read_logs(record["run_id"], tail=50)
+    manifest = json.loads(Path(result["artifacts"]["manifest"]).read_text())
+    assert manifest["dataset_version"] == session.dataset.version

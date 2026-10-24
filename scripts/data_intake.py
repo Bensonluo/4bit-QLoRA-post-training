@@ -1499,26 +1499,18 @@ def main() -> int:
                         "与数据说明来自仓库单一来源（src/workbench/demo_task.py），"
                         "自定义值不会被采用，逐一点名并直接报错，不静默忽略。"
                     )
-                from src.workbench.demo_task import (
-                    DEMO_DESCRIPTION,
-                    DEMO_GOAL,
-                    demo_create_payload,
-                    demo_sample,
-                )
+                from src.workbench.demo_task import demo_create_payload
 
                 if args.demo_variant and not args.demo:
                     raise ValueError("--demo-variant 需要与 --demo 同用。")
                 payload = demo_create_payload(PROJECT_ROOT, args.demo_variant)
-                demo_pair = None if payload is None else (payload[2], payload[1])
                 if payload is None:
                     missing = (
                         f"data/custom/examples/{args.demo_variant}_sample.csv"
                         if args.demo_variant
                         else "data/custom/examples/aftercare_tickets_sample.csv"
                     )
-                    raise ValueError(
-                        f"演示文件不在场（{missing}）；如实报错，不编造演示数据。"
-                    )
+                    raise ValueError(f"演示文件不在场（{missing}）；如实报错，不编造演示数据。")
                 demo_goal, demo_content, demo_name, demo_description = payload
                 session = service.create(
                     demo_goal,
@@ -1914,7 +1906,9 @@ def main() -> int:
                 print(f"题目清单已导出：{args.export_csv}", file=sys.stderr)
             result = {
                 "verification_id": pending["verification_id"],
+                "mode": pending["mode"],
                 "sample_size": pending["sample_size"],
+                "items": pending["items"],
                 "row_ids": [item["row_id"] for item in pending["items"]],
                 "submit_hint": (
                     # 与 label-verify-submit 解析器严格一致：提交路径不收 --revision，
