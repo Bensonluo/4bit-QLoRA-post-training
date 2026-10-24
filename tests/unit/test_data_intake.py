@@ -155,7 +155,8 @@ def test_analyze_cli_appends_analysis_summary_to_stderr(
     assert data_intake.main() == 0
     captured = capsys.readouterr()
     json.loads(captured.out)  # stdout 仍是纯 JSON,人话只走 stderr
-    assert "这份分析给出数据判断与待确认问题：发现 1 条、待确认问题 0 个。" in captured.err
+    assert "这份分析给出数据判断与待确认问题：发现 2 条、待确认问题 0 个。" in captured.err
+    assert "任务形态推断（Agent 路径，同引擎）：分类" in captured.err
     assert "已观察：不同问题可能都通过补发处理，处理结果不是问题类别。" in captured.err
     assert "暂定微调思路：确认标签后可考虑 SFT，规模等待全量检查。" in captured.err
     # 工具核查轨迹与评测解读同格式渲染(夹具 4 次调用全部成功,无失败子句)
@@ -528,7 +529,7 @@ def test_revisions_invalidate_confirmation_and_reject_stale_write(service, sessi
     with pytest.raises(ValueError, match="已更新"):
         service.apply_analysis(initial, analysis())
     with sqlite3.connect(service.database) as connection:
-        assert connection.execute("SELECT count(*) FROM revisions").fetchone()[0] == 4
+        assert connection.execute("SELECT count(*) FROM revisions").fetchone()[0] == 5
 
 
 def test_remote_data_requires_authorization_and_url_has_no_credentials():
@@ -625,3 +626,46 @@ def test_next_action_phrase_translates_every_state_without_fabricating():
         "或直接 train-prepare 准备训练（尚未启动训练）。"
     ), "预检通过态的两个出口必须点名(R94):不再回环指向已完成的 preflight"
     assert next_action_phrase("not_a_real_state") == "", "未知状态不编造人话"
+
+
+def test_create_demo_variant_supports_generation_and_extraction(tmp_path):
+    """CLI create --demo-variant:三大原型演示全可从命令行冷启动。"""
+    from scripts import data_intake
+
+    store = tmp_path / "intake"
+
+    def run(*args):
+        import sys
+
+        old_argv = sys.argv
+        sys.argv = ["data_intake.py", "--store", str(store), "create", *args]
+        try:
+            code = data_intake.main()
+        finally:
+            sys.argv = old_argv
+        assert code == 0
+
+    run("--demo", "--demo-variant", "generation")
+    sessions = IntakeService(store).list_sessions()
+    assert "生成标准答复" in sessions[0].goal
+
+    run("--demo", "--demo-variant", "extraction")
+    sessions = IntakeService(store).list_sessions()
+    assert any("工单编号" in s.goal for s in sessions)
+
+    # 变体与自定义 goal 互斥:逐一点名,不静默忽略
+    import sys
+
+    sys.argv = [
+        "data_intake.py",
+        "--store",
+        str(store),
+        "create",
+        "--demo",
+        "--demo-variant",
+        "generation",
+        "--goal",
+        "自定义",
+    ]
+    # main 捕获 ValueError 转退出码 2 并打印逐一点名的冲突,不向上抛
+    assert data_intake.main() == 2

@@ -35,7 +35,13 @@ def stage_demo_files(project_root: Path) -> None:
     """把仓库自带的演示文件复制到该 PROJECT_ROOT，模拟文件在场的完整安装。"""
     target = project_root / "data" / "custom" / "examples"
     target.mkdir(parents=True, exist_ok=True)
-    for name in (DEMO_SAMPLE_NAME, DEMO_FULL_NAME):
+    for name in (
+        DEMO_SAMPLE_NAME,
+        DEMO_FULL_NAME,
+        "generation_qa_sample.csv",
+        "generation_qa_full.csv",
+        "extraction_id_sample.csv",
+    ):
         shutil.copy(REPO_EXAMPLES / name, target / name)
 
 
@@ -642,8 +648,9 @@ def test_combined_sources_show_lineage_and_accept_separate_full_uploads(data_pag
     assert any(item.label == "全量资料组合过程与原始来源" for item in page.expander)
 
 
+@pytest.mark.parametrize("requested_protocol", ["alpaca_full_prompt_v1", "alpaca_answer_only_v1"])
 def test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failures(
-    data_page, monkeypatch
+    data_page, monkeypatch, requested_protocol
 ):
     import src.workbench.training_preflight as preflight
     from tests.unit.test_full_data import FULL, approved
@@ -660,9 +667,10 @@ def test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failure
         calls.append((path, local_files_only))
         return token
 
-    def report(current, tokenizer, max_length):
+    def report(current, tokenizer, max_length, *, sft_protocol):
         assert tokenizer is token
         assert max_length == 6
+        assert sft_protocol == requested_protocol
         return {
             "status": "blocked",
             "scope_note": "UI protocol fixture",
@@ -689,6 +697,7 @@ def test_preflight_only_loads_tokenizer_on_explicit_button_and_shows_row_failure
         "/tmp/local-fixture"
     )
     next(n for n in page.number_input if n.label == "训练最大 token 长度").set_value(6)
+    next(s for s in page.selectbox if s.label == "预检的训练监督范围").select(requested_protocol)
     button(page, "检查实际截断与答案保留").click().run()
     assert not page.exception
     assert calls == [("/tmp/local-fixture", True)]
@@ -1372,7 +1381,8 @@ def test_preflight_passed_state_moves_page_exits_forward(data_page, monkeypatch)
     session = service.materialize_dataset(session.session_id, session.revision)
     assert next_action(session) == "ready_for_training_preflight"
 
-    def report(current, tokenizer, max_length):
+    def report(current, tokenizer, max_length, *, sft_protocol):
+        assert sft_protocol == "alpaca_full_prompt_v1"
         return {
             "status": "passed",
             "scope_note": "UI protocol fixture",
@@ -1569,3 +1579,68 @@ def test_tokenizer_input_explains_what_to_type():
     assert 'placeholder="例如 Qwen/Qwen3-1.7B' in source, "输入框必须带可照抄示例"
     assert "分词器" in source and "不自动下载" in source, "help 必须白话解释是什么+边界"
     assert "如 Qwen/Qwen3-1.7B" in source, "空值报错必须给可照抄示例"
+
+
+def test_demo_variants_available_on_first_screen(data_page, monkeypatch):
+    """第一屏演示区三大原型各有入口:分类(原有)+生成+抽取,零寻找成本。"""
+    import ui.config
+
+    stage_demo_files(ui.config.PROJECT_ROOT)
+    service, _, page = data_page
+    page.run()
+    assert not page.exception
+    buttons = [b.label for b in page.button]
+    assert "创建演示任务（售后工单分类）" in buttons
+    assert any("客服答复生成" in label for label in buttons)
+    assert any("工单编号对应" in label for label in buttons)
+
+
+def test_generation_demo_variant_creates_session_with_review_gate(data_page):
+    """生成演示入口一键建任务;答案列形态推断为开放生成(逐条审阅核验)。"""
+    import ui.config
+
+    stage_demo_files(ui.config.PROJECT_ROOT)
+    from src.workbench.baseline_analysis import infer_task_archetype
+
+    service, _, page = data_page
+    page.run()
+    button = next(b for b in page.button if "客服答复生成" in b.label)
+    button.click().run()
+    assert not page.exception
+    assert "intake_id" in page.session_state or any("业务理解" in h.value for h in page.subheader)
+    sessions = service.list_sessions()
+    assert any("生成标准答复" in s.goal for s in sessions)
+    demo = next(s for s in sessions if "生成标准答复" in s.goal)
+    inference = infer_task_archetype(demo, "标准答复", ["客户问题"])
+    assert inference["archetype"] == "generation"
+
+
+def test_generation_demo_full_companion_validates_and_gates(data_page, monkeypatch):
+    """生成演示任务的配套全量按钮:验证通过进入下一阶段(审阅式盲标关卡在等)。"""
+    import ui.config
+
+    stage_demo_files(ui.config.PROJECT_ROOT)
+    service, session, page = data_page
+    # 用真实演示样例字节建任务(来源摘要才能匹配 generation 演示文件)
+    demo_bytes = (
+        ui.config.PROJECT_ROOT / "data/custom/examples/generation_qa_sample.csv"
+    ).read_bytes()
+    session = service.create("根据客户问题生成标准答复", "generation_qa_sample.csv", demo_bytes)
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",)),
+        model="ui",
+    )
+    session = service.confirm(session.session_id, session.revision)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    button = next(
+        b for b in page.button if "配套演示全量数据" in b.label and "generation" in b.label
+    )
+    button.click().run()
+    assert not page.exception
+    current = service.load(session.session_id)
+    assert current.full_data is not None and current.full_data.status == "review"

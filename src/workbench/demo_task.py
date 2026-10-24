@@ -51,3 +51,73 @@ def is_demo_session(source_digest: str, project_root: Path) -> bool:
     """任务来源是否就是演示样例(按内容摘要比对,同名不同内容不算)。"""
     sample = demo_sample(project_root)
     return sample is not None and source_digest == hashlib.sha256(sample[1]).hexdigest()
+
+
+# 泛化演示:三大任务原型各有内置演示数据,新用户零寻找成本体验不同形态。
+DEMO_VARIANTS = {
+    "generation": {
+        "goal": "根据客户问题生成标准答复",
+        "description": "演示数据（虚构）：开放生成任务——客户问题对应一段完整的标准答复文本。",
+        "sample": "generation_qa_sample.csv",
+        "button": "创建演示任务（客服答复生成·开放生成）",
+    },
+    "extraction": {
+        "goal": "根据客户描述对应工单编号",
+        "description": "演示数据（虚构）：抽取任务——从客户描述对应出唯一的工单编号。",
+        "sample": "extraction_id_sample.csv",
+        "button": "创建演示任务（工单编号对应·抽取）",
+    },
+}
+
+
+def demo_variant_sample(project_root: Path, variant: str) -> tuple[str, bytes, dict] | None:
+    """指定原型演示的(文件名, 内容, 元信息);文件不在场返回 None。"""
+    spec = DEMO_VARIANTS.get(variant)
+    if spec is None:
+        return None
+    data = _demo_bytes(project_root, spec["sample"])
+    if data is None:
+        return None
+    return (spec["sample"], data, spec)
+
+
+def demo_variant_full(project_root: Path, variant: str) -> tuple[str, bytes] | None:
+    """指定原型演示的全量配套文件;不在场返回 None。"""
+    spec = DEMO_VARIANTS.get(variant)
+    if spec is None:
+        return None
+    full_name = spec["sample"].replace("_sample", "_full")
+    data = _demo_bytes(project_root, full_name)
+    if data is None:
+        return None
+    return (full_name, data)
+
+
+def variant_of_sample_source(source_digest: str, project_root: Path) -> str | None:
+    """来源若为某原型演示样例,返回该原型 key;否则 None(内容摘要比对)。"""
+    for variant, spec in DEMO_VARIANTS.items():
+        sample = _demo_bytes(project_root, spec["sample"])
+        if sample is not None and source_digest == hashlib.sha256(sample).hexdigest():
+            return variant
+    return None
+
+
+def demo_create_payload(
+    project_root: Path, variant: str | None = None
+) -> tuple[str, bytes, str, str] | None:
+    """CLI create --demo 的数据源:默认分类演示,可指定原型变体。
+
+    返回 (goal, 样例内容, 文件名, 描述);文件不在场返回 None。
+    """
+    if variant is None:
+        sample = demo_sample(project_root)
+        if sample is None:
+            return None
+        return (DEMO_GOAL, sample[1], sample[0], DEMO_DESCRIPTION)
+    spec = DEMO_VARIANTS.get(variant)
+    if spec is None:
+        return None
+    data = _demo_bytes(project_root, spec["sample"])
+    if data is None:
+        return None
+    return (spec["goal"], data, spec["sample"], spec["description"])
