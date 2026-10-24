@@ -161,6 +161,7 @@ class TrainingRecoveryService:
                     session,
                     parent["model_path"],
                     max_length=config["model"]["max_length"],
+                    sft_protocol=config["data"].get("sft_protocol", "alpaca_full_prompt_v1"),
                     training_options=training,
                     lora_options=dict(config["lora"]),
                     model_options={
@@ -184,7 +185,11 @@ class TrainingRecoveryService:
                     child["model_identity"] != parent["model_identity"]
                     or child["config"]["model"] != config["model"]
                     or child["config"]["lora"] != config["lora"]
-                    or child["config"]["data"] != config["data"]
+                    or child["config"]["data"]
+                    != {
+                        **config["data"],
+                        "sft_protocol": config["data"].get("sft_protocol", "alpaca_full_prompt_v1"),
+                    }
                     or any(
                         child["config"]["training"][key] != value
                         for key, value in config["training"].items()

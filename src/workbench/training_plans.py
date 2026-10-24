@@ -60,8 +60,27 @@ def _dataset(session):
 
 
 def _business(session):
+    archetype = None
+    if session.analysis and session.analysis.recipe and session.analysis.recipe.targets:
+        target_column = session.analysis.recipe.targets[0].column
+        input_columns = [binding.column for binding in session.analysis.recipe.inputs]
+        try:
+            from src.workbench.baseline_analysis import infer_task_archetype
+
+            inferred = infer_task_archetype(session, target_column, input_columns)
+            archetype = {
+                "archetype": inferred["archetype"],
+                "distinct_values": len(inferred["distinct_values"]),
+                "unique_ratio": round(inferred["unique_ratio"], 3),
+                "avg_target_len": round(inferred["avg_target_len"], 1),
+                "input_render": inferred["input_render"],
+                "note": "从数据实测推理的任务原型;推荐参数(轮数/学习率量级)应按原型区分:开放生成倾向更少轮数防背诵,分类按常规。",
+            }
+        except ValueError:
+            archetype = None
     return {
         "goal": session.goal,
+        "task_archetype": archetype,
         "task": session.analysis.task.model_dump() if session.analysis else None,
         "recipe": session.analysis.recipe.model_dump()
         if session.analysis and session.analysis.recipe
@@ -320,7 +339,9 @@ class TrainingPlanService:
             "scope_note": SCOPE,
         }
 
-    def probe(self, session, model_path, max_length) -> dict:
+    def probe(
+        self, session, model_path, max_length, *, sft_protocol="alpaca_full_prompt_v1"
+    ) -> dict:
         if type(max_length) is not int or max_length <= 0:
             raise ValueError("max_length 必须为正整数。")
         result = {
@@ -328,6 +349,7 @@ class TrainingPlanService:
             "model_path": str(Path(model_path).expanduser().resolve()),
             "model_identity": None,
             "max_length": max_length,
+            "sft_protocol": sft_protocol,
             "preflight": None,
             "issues": [],
             "scope_note": SCOPE,
@@ -338,10 +360,28 @@ class TrainingPlanService:
             capacity = facts["context_capacity"]
             if isinstance(capacity, int) and max_length > capacity:
                 raise ValueError(f"max_length 超过本地模型配置的上下文长度 {capacity}。")
-            report = preflight_dataset(session, tokenizer, max_length)
+            report = preflight_dataset(session, tokenizer, max_length, sft_protocol=sft_protocol)
             # Agent sees aggregate facts and concrete risk examples, not every training row.
             rows = report.pop("rows", [])
             report["inspected_rows"] = len(rows)
+            training_rows = [row for row in rows if row.get("split") == "train"]
+            report["token_consumption"] = {
+                "split": "train",
+                "rows": len(training_rows),
+                **{
+                    key: (
+                        sum(row[key] for row in training_rows)
+                        if training_rows and all(type(row.get(key)) is int for row in training_rows)
+                        else None
+                    )
+                    for key in (
+                        "full_tokens",
+                        "supervised_tokens",
+                        "prompt_supervised_tokens",
+                        "answer_supervised_tokens",
+                    )
+                },
+            }
             report["risk_examples"] = [
                 row for row in rows if row.get("was_truncated") or not row.get("supervised_tokens")
             ][:10]
@@ -371,12 +411,19 @@ class TrainingPlanService:
             "status",
             *OPTION_FIELDS,
         }
-        if set(proposal) != required or proposal["status"] not in (
+        if set(proposal) not in (required, required | {"sft_protocol"}) or proposal[
+            "status"
+        ] not in (
             "ready",
             "needs_data",
             "unsupported",
         ):
             raise ValueError("训练方案字段或状态无效，仅支持当前 SFT/LoRA 方案。")
+        from config.base import SFT_TRAINING_PROTOCOLS
+
+        sft_protocol = proposal.get("sft_protocol", "alpaca_full_prompt_v1")
+        if sft_protocol not in SFT_TRAINING_PROTOCOLS:
+            raise ValueError("训练方案的监督协议无效。")
         for key in ("rationale", "limitations", "business_questions"):
             if not isinstance(proposal[key], list) or any(
                 not isinstance(value, str) or not value.strip() for value in proposal[key]
@@ -419,7 +466,7 @@ class TrainingPlanService:
             if platform != context["platform"]:
                 raise ValueError("硬件条件已变化，请重新检查方案。")
             _options(proposal, platform)
-            probe = self.probe(session, path, proposal["max_length"])
+            probe = self.probe(session, path, proposal["max_length"], sft_protocol=sft_protocol)
             if probe["status"] == "blocked":
                 raise ValueError(
                     "实际 tokenizer/数据预检阻断，不能保存 ready 方案："
@@ -497,6 +544,7 @@ class TrainingPlanService:
                     session,
                     proposal["model_path"],
                     **{key: proposal[key] for key in ("max_length", *OPTION_FIELDS)},
+                    sft_protocol=proposal.get("sft_protocol", "alpaca_full_prompt_v1"),
                     plan_trace=record.get("trace"),
                 )
                 record["run_id"] = run["run_id"]

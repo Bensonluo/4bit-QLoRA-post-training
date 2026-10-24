@@ -13,6 +13,7 @@ from typing import Any
 from datasets import Dataset, load_dataset
 
 from src.data.base import BaseDataset
+from src.data.sft_protocol import LEGACY_PROTOCOL
 from src.utils.logging import console
 
 
@@ -97,12 +98,16 @@ class GRPODataset(BaseDataset):
         self,
         tokenizer: Any,
         max_length: int = 512,
+        *,
+        sft_protocol: str = LEGACY_PROTOCOL,
     ) -> Dataset:
         """Format dataset for GRPO training.
 
         For GRPO, the tokenizer is managed by the trainer during generation,
         so we only validate/return the dataset with standardized columns.
         """
+        if sft_protocol != LEGACY_PROTOCOL:
+            raise ValueError("SFT answer-only protocols do not apply to GRPO training.")
         if self.dataset is None:
             self.load()
         _ = tokenizer, max_length  # kept for signature parity with BaseDataset

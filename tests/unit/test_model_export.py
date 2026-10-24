@@ -14,6 +14,7 @@ from src.inference.discovery import looks_merged
 from src.utils.gguf_export import gguf_toolchain
 from src.utils.gguf_metadata import read_gguf_metadata
 from src.workbench.model_export import default_export_dir, export_model, plan_model_export
+from src.workbench.sources import content_digest
 from src.workbench.training_runs import file_digest, model_identity
 from tests.unit.test_gguf_export import _tools
 from tests.unit.test_gguf_metadata import _fields, _write
@@ -341,6 +342,148 @@ def test_export_revalidates_current_run_record(tmp_path, monkeypatch):
     plan = plan_model_export(run, tmp_path / "merged")
     record_path.write_text(json.dumps({**run, "status": "failed"}))
     with pytest.raises(ValueError, match="运行记录已经变化"):
+        export_model(plan)
+    assert calls == []
+
+
+def _protocol_run(tmp_path, protocol="alpaca_answer_only_v1"):
+    run = _make_run(tmp_path)
+    run["config"] = {"data": {"sft_protocol": protocol} if protocol else {}}
+    run["config_digest"] = content_digest(run["config"])
+    run["preflight"] = {
+        "status": "passed",
+        "supervision_strategy": "answer_and_eos_only"
+        if protocol == "alpaca_answer_only_v1"
+        else "full_prompt_padding_masked",
+        "splits": {"train": {"rows": 1}},
+        "rows": [
+            {
+                "split": "train",
+                "row_id": "row-1",
+                "answer_boundary_verified": True,
+                "answer_supervision_complete": True,
+                "terminal_eos_supervised": True,
+                "prompt_supervised_tokens": 0,
+                "answer_supervised_tokens": 2,
+                "supervised_tokens": 3,
+            }
+        ],
+    }
+    if protocol:
+        run["preflight"]["sft_protocol"] = protocol
+    directory = Path(run["output_dir"]).parent
+    manifest_path = Path(run["artifacts"]["manifest"])
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config_digest"] = run["config_digest"]
+    manifest_path.write_text(json.dumps(manifest))
+    (directory / "config.json").write_text(json.dumps(run["config"]))
+    (directory / "run.json").write_text(json.dumps(run))
+    return run
+
+
+@pytest.mark.parametrize("protocol", [None, "alpaca_full_prompt_v1", "alpaca_answer_only_v1"])
+def test_protocol_bound_export_preserves_historical_and_new_idempotence(
+    tmp_path, monkeypatch, protocol
+):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _protocol_run(tmp_path, protocol)
+    target = tmp_path / "merged"
+    export_model(plan_model_export(run, target))
+    evidence = json.loads((target / "export_evidence.json").read_text())
+    if protocol:
+        assert evidence["training_protocol"]["sft_protocol"] == protocol
+        assert evidence["source_identity"]["training_protocol"] == evidence["training_protocol"]
+    else:
+        assert "training_protocol" not in evidence
+        assert "training_protocol" not in evidence["source_identity"]
+    assert export_model(plan_model_export(run, target))["status"] == "already_exported"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("target", ["config_file", "record", "run_file"])
+def test_protocol_config_mutation_cannot_reuse_old_config_digest(tmp_path, target):
+    run = _protocol_run(tmp_path)
+    directory = Path(run["output_dir"]).parent
+    if target == "config_file":
+        (directory / "config.json").write_text(
+            json.dumps({"data": {"sft_protocol": "alpaca_full_prompt_v1"}})
+        )
+    elif target == "record":
+        run["config"]["data"]["sft_protocol"] = "alpaca_full_prompt_v1"
+        (directory / "config.json").write_text(json.dumps(run["config"]))
+        (directory / "run.json").write_text(json.dumps(run))
+    else:
+        current = json.loads((directory / "run.json").read_text())
+        current["config"]["data"]["sft_protocol"] = "alpaca_full_prompt_v1"
+        (directory / "run.json").write_text(json.dumps(current))
+    plan = plan_model_export(run, tmp_path / "merged")
+    assert plan["status"] == "source_mismatch"
+    assert "配置" in plan["reasons"][0] or "运行记录已经变化" in plan["reasons"][0]
+
+
+def test_answer_objective_receipt_cannot_claim_another_protocol(tmp_path, monkeypatch):
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger([]))
+    run = _protocol_run(tmp_path)
+    target = tmp_path / "merged"
+    export_model(plan_model_export(run, target))
+    path = target / "export_evidence.json"
+    evidence = json.loads(path.read_text())
+    evidence["training_protocol"]["sft_protocol"] = "alpaca_full_prompt_v1"
+    path.write_text(json.dumps(evidence))
+    assert plan_model_export(run, target)["status"] == "target_conflict"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("answer_boundary_verified", False),
+        ("answer_supervision_complete", False),
+        ("terminal_eos_supervised", False),
+        ("prompt_supervised_tokens", 1),
+        ("answer_supervised_tokens", 0),
+        ("supervised_tokens", 4),
+    ],
+)
+def test_export_refuses_inconsistent_answer_supervision_statistics(tmp_path, field, value):
+    run = _protocol_run(tmp_path)
+    run["preflight"]["rows"][0][field] = value
+    (Path(run["output_dir"]).parent / "run.json").write_text(json.dumps(run))
+    plan = plan_model_export(run, tmp_path / "merged")
+    assert plan["status"] == "source_mismatch"
+    assert "答案专属监督" in plan["reasons"][0]
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_rows", "missing_row", "duplicate_row", "missing_config", "blocked"]
+)
+def test_answer_objective_cannot_use_incomplete_or_unbound_receipt(tmp_path, mutation):
+    run = _protocol_run(tmp_path)
+    directory = Path(run["output_dir"]).parent
+    if mutation == "missing_rows":
+        del run["preflight"]["rows"]
+    elif mutation == "missing_row":
+        run["preflight"]["splits"]["train"]["rows"] = 2
+    elif mutation == "duplicate_row":
+        run["preflight"]["rows"] *= 2
+    elif mutation == "missing_config":
+        del run["config"]
+        (directory / "config.json").unlink()
+    else:
+        run["preflight"]["status"] = "blocked"
+    (directory / "run.json").write_text(json.dumps(run))
+    plan = plan_model_export(run, tmp_path / "merged")
+    assert plan["status"] == "source_mismatch"
+
+
+def test_changed_protocol_after_plan_is_refused_before_merge(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(merger, "merge_adapter_to_dir", _fake_merger(calls))
+    run = _protocol_run(tmp_path)
+    plan = plan_model_export(run, tmp_path / "merged")
+    path = Path(run["output_dir"]).parent / "config.json"
+    path.write_text(json.dumps({"data": {"sft_protocol": "alpaca_full_prompt_v1"}}))
+    with pytest.raises(ValueError, match="配置摘要不一致"):
         export_model(plan)
     assert calls == []
 

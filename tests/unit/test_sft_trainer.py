@@ -62,8 +62,10 @@ class TestSetupTrainer:
         # eval_dataset=None → evaluation disabled, best-model loading off
         assert _as_str(args.eval_strategy) == "no"
         assert args.load_best_model_at_end is False
-        # transformers >= 5.x: float warmup_steps keeps ratio semantics
-        assert args.warmup_steps == pytest.approx(0.03)
+        # SFT preserves ratio semantics, including the 100% endpoint that HF's
+        # overloaded warmup_steps=1 would interpret as a single warmup step.
+        assert args.warmup_steps == 0
+        assert args.sft_warmup_ratio == pytest.approx(0.03)
         assert kwargs["train_dataset"] == trainer.train_dataset
 
     @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
@@ -678,7 +680,7 @@ class TestDistributedInjection:
         assert args.fsdp_config["min_num_params"] == 0
 
     @patch("src.training.sft_trainer.get_distributed_info")
-    @patch("src.training.sft_trainer.TrainingArguments")
+    @patch("src.training.sft_trainer._SFTRatioTrainingArguments")
     @patch("src.training.sft_trainer.AttentionMaskCausalCollator")
     @patch("src.training.sft_trainer.Trainer")
     def test_deepspeed_injected(

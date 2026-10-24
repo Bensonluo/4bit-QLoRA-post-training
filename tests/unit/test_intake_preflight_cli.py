@@ -35,6 +35,40 @@ def test_cli_preflight_records_real_answer_loss_and_uses_local_tokenizer(
     assert service.load(session.session_id).training_preflight == report
 
 
+def test_cli_answer_only_preflight_uses_requested_objective(exported, tokenizer, tmp_path):
+    from tokenizers import processors
+
+    service, session = exported
+    # Generation prompts must not acquire an automatic trailing EOS.
+    tokenizer.backend_tokenizer.post_processor = processors.TemplateProcessing(
+        single="[BOS] $A", special_tokens=[("[BOS]", tokenizer.bos_token_id)]
+    )
+    directory = tmp_path / "answer-tokenizer"
+    tokenizer.save_pretrained(directory)
+    result = invoke(
+        service,
+        "preflight",
+        session.session_id,
+        "--revision",
+        session.revision,
+        "--tokenizer",
+        directory,
+        "--max-length",
+        32,
+        "--sft-protocol",
+        "alpaca_answer_only_v1",
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)["training_preflight"]
+    assert report["status"] == "passed"
+    assert report["sft_protocol"] == "alpaca_answer_only_v1"
+    assert report["supervision_strategy"] == "answer_and_eos_only"
+    assert all(row["prompt_supervised_tokens"] == 0 for row in report["rows"])
+    assert all(row["supervised_tokens"] == 2 for row in report["rows"])
+    assert "只学习答案与结束标记" in result.stderr
+    assert service.load(session.session_id).training_preflight == report
+
+
 def test_preflight_cli_prints_plain_language_advice(tmp_path, capsys):
     """CLI 预检输出包含大白话建议(有截断时给具体长度建议)。"""
     import sys

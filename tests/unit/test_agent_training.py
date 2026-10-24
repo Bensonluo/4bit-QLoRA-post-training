@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.agent.training import recommend_training
+from src.agent.training import SYSTEM, TrainingProposal, recommend_training
 
 
 class ScriptedPlanner:
@@ -169,6 +169,249 @@ def test_ready_requires_observed_context_exact_successful_probe_and_local_candid
         message.get("reasoning_content")
         for message in client.seen[-1]
         if message["role"] == "assistant"
+    )
+    assert result["proposal"]["sft_protocol"] == "alpaca_full_prompt_v1"
+
+
+@pytest.fixture
+def protocol_backend(backend, monkeypatch):
+    calls, records = backend
+    service = sys.modules["src.workbench.training_plans"].TrainingPlanService
+
+    def probe(self, session, path, length, *, sft_protocol="alpaca_full_prompt_v1"):
+        calls.append(("probe", path, length, sft_protocol))
+        return {
+            "model_path": path,
+            "max_length": length,
+            "sft_protocol": sft_protocol,
+            "status": "passed",
+            "issues": [],
+            "preflight": {
+                "status": "passed",
+                "issues": [],
+                "sft_protocol": sft_protocol,
+                "supervision_strategy": (
+                    "full_prompt_padding_masked"
+                    if sft_protocol == "alpaca_full_prompt_v1"
+                    else "answer_and_eos_only"
+                ),
+            },
+        }
+
+    monkeypatch.setattr(service, "probe", probe)
+    return calls, records
+
+
+def test_answer_only_proposal_requires_matching_protocol_probe(protocol_backend, tmp_path):
+    path = tmp_path / "model"
+    value = proposal(path) | {"sft_protocol": "alpaca_answer_only_v1"}
+    client = ScriptedPlanner(
+        [
+            ("inspect_training_context", {}),
+            (
+                "probe_training",
+                {
+                    "model_path": str(path),
+                    "max_length": 128,
+                    "sft_protocol": "alpaca_answer_only_v1",
+                },
+            ),
+            ("submit_training_plan", submission(value)),
+        ]
+    )
+    result = recommend_training(
+        SimpleNamespace(session_id="fixture", goal="目标"),
+        [str(path)],
+        client,
+        tmp_path / "plans",
+        tmp_path / "runs",
+    )
+    assert all(item["ok"] for item in result["tool_trace"])
+    assert result["proposal"]["sft_protocol"] == "alpaca_answer_only_v1"
+    assert result["context"]["probes"][0]["sft_protocol"] == "alpaca_answer_only_v1"
+    assert ("probe", str(path), 128, "alpaca_answer_only_v1") in protocol_backend[0]
+    assert len(protocol_backend[1]) == 1
+
+
+def test_full_and_answer_probes_cannot_be_borrowed_even_at_same_path_and_length(
+    protocol_backend, tmp_path
+):
+    path = tmp_path / "model"
+    full = proposal(path)
+    answer = full | {"sft_protocol": "alpaca_answer_only_v1"}
+
+    def cite_full(messages):
+        entries = [
+            json.loads(message["content"]) for message in messages if message["role"] == "tool"
+        ]
+        full_id = next(
+            entry["evidence_id"]
+            for entry in entries
+            if entry.get("sft_protocol") == "alpaca_full_prompt_v1"
+        )
+        return {"proposal": answer, "evidence_ids": [evidence(messages, "context:"), full_id]}
+
+    client = ScriptedPlanner(
+        [
+            ("inspect_training_context", {}),
+            ("probe_training", {"model_path": str(path), "max_length": 128}),
+            ("submit_training_plan", submission(answer)),
+            (
+                "probe_training",
+                {
+                    "model_path": str(path),
+                    "max_length": 128,
+                    "sft_protocol": "alpaca_answer_only_v1",
+                },
+            ),
+            ("submit_training_plan", submission(full)),
+            ("submit_training_plan", cite_full),
+            ("submit_training_plan", submission(answer)),
+        ]
+    )
+    result = recommend_training(
+        SimpleNamespace(session_id="fixture", goal="目标"),
+        [str(path)],
+        client,
+        tmp_path / "plans",
+        tmp_path / "runs",
+    )
+    assert [entry["ok"] for entry in result["tool_trace"]] == [
+        True,
+        True,
+        False,
+        True,
+        False,
+        False,
+        True,
+    ]
+    probes = result["context"]["probes"]
+    assert {probe["sft_protocol"] for probe in probes} == {
+        "alpaca_full_prompt_v1",
+        "alpaca_answer_only_v1",
+    }
+    assert probes[0]["evidence_id"] != probes[1]["evidence_id"]
+    assert len(protocol_backend[1]) == 1
+
+
+@pytest.mark.parametrize("protocol", ["native_chat_answer_only_v1", "answer_only", None, 1, []])
+def test_forged_or_unexposed_protocol_is_rejected_before_probe_or_save(backend, tmp_path, protocol):
+    path = tmp_path / "model"
+    invalid = proposal(path) | {"sft_protocol": protocol}
+    client = ScriptedPlanner(
+        [
+            ("inspect_training_context", {}),
+            (
+                "probe_training",
+                {"model_path": str(path), "max_length": 128, "sft_protocol": protocol},
+            ),
+            ("submit_training_plan", submission(invalid, with_probe=False)),
+            (
+                "submit_training_plan",
+                submission(proposal(None, status="unsupported"), with_probe=False),
+            ),
+        ]
+    )
+    result = recommend_training(
+        SimpleNamespace(session_id="fixture", goal="目标"),
+        [str(path)],
+        client,
+        tmp_path / "plans",
+        tmp_path / "runs",
+    )
+    assert [entry["ok"] for entry in result["tool_trace"]] == [True, False, False, True]
+    assert [call[0] for call in backend[0]] == ["context"]
+    assert len(backend[1]) == 1
+
+
+@pytest.mark.parametrize("mutation", ["top_protocol", "preflight_protocol", "preflight_strategy"])
+def test_probe_result_cannot_mislabel_actual_supervision(
+    protocol_backend, tmp_path, monkeypatch, mutation
+):
+    service = sys.modules["src.workbench.training_plans"].TrainingPlanService
+    original = service.probe
+
+    def misbound(self, *args, **kwargs):
+        observed = original(self, *args, **kwargs)
+        if mutation == "top_protocol":
+            observed["sft_protocol"] = "alpaca_full_prompt_v1"
+        elif mutation == "preflight_protocol":
+            observed["preflight"]["sft_protocol"] = "alpaca_full_prompt_v1"
+        else:
+            observed["preflight"]["supervision_strategy"] = "full_prompt_padding_masked"
+        return observed
+
+    monkeypatch.setattr(service, "probe", misbound)
+    path = tmp_path / "model"
+    client = ScriptedPlanner(
+        [
+            ("inspect_training_context", {}),
+            (
+                "probe_training",
+                {
+                    "model_path": str(path),
+                    "max_length": 128,
+                    "sft_protocol": "alpaca_answer_only_v1",
+                },
+            ),
+            (
+                "submit_training_plan",
+                submission(proposal(None, status="unsupported"), with_probe=False),
+            ),
+        ]
+    )
+    result = recommend_training(
+        SimpleNamespace(session_id="fixture", goal="目标"),
+        [str(path)],
+        client,
+        tmp_path / "plans",
+        tmp_path / "runs",
+    )
+    assert [entry["ok"] for entry in result["tool_trace"]] == [True, False, True]
+    assert result["context"]["probes"] == []
+    assert "监督协议与请求不一致" in result["tool_trace"][1]["error"]
+
+
+def test_agent_schema_and_guidance_expose_two_alpaca_objectives_only():
+    schema = TrainingProposal.model_json_schema()["properties"]["sft_protocol"]
+    assert schema["default"] == "alpaca_full_prompt_v1"
+    assert schema["enum"] == ["alpaca_full_prompt_v1", "alpaca_answer_only_v1"]
+    assert "精确 token 前缀边界" in SYSTEM
+    assert "完整答案及 EOS" in SYSTEM
+    assert "不能宣称只答案监督必然更优" in SYSTEM
+    assert "不得拿全提示协议的 probe 证据提交只答案方案" in SYSTEM
+
+
+def test_probe_tool_protocol_is_optional_and_limited_to_two_public_values(backend, tmp_path):
+    class SchemaPlanner(ScriptedPlanner):
+        def complete(self, messages, tools):
+            probe = next(
+                tool["function"] for tool in tools if tool["function"]["name"] == "probe_training"
+            )
+            parameters = probe["parameters"]
+            assert parameters["required"] == ["model_path", "max_length"]
+            assert parameters["properties"]["sft_protocol"] == {
+                "type": "string",
+                "enum": ["alpaca_full_prompt_v1", "alpaca_answer_only_v1"],
+                "default": "alpaca_full_prompt_v1",
+            }
+            return super().complete(messages, tools)
+
+    client = SchemaPlanner(
+        [
+            ("inspect_training_context", {}),
+            (
+                "submit_training_plan",
+                submission(proposal(None, status="unsupported"), with_probe=False),
+            ),
+        ]
+    )
+    recommend_training(
+        SimpleNamespace(session_id="fixture", goal="目标"),
+        [],
+        client,
+        tmp_path / "plans",
+        tmp_path / "runs",
     )
 
 

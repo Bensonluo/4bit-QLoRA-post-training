@@ -18,6 +18,16 @@ LR_TIER_DISCLAIMER = (
     "非本产品实测，以你自己的同题对照结果为准。"
 )
 
+SFT_PROTOCOL_LABELS = {
+    "alpaca_full_prompt_v1": "学习输入提示与答案（现有默认）",
+    "alpaca_answer_only_v1": "只学习答案与结束标记",
+}
+
+
+def supervision_label(sft_protocol: str) -> str:
+    """Explain the exact objective without suggesting a measured quality gain."""
+    return SFT_PROTOCOL_LABELS.get(sft_protocol, f"未知监督协议：{sft_protocol}")
+
 
 def learning_rate_suggestion(total_rows: int) -> tuple[float, str]:
     """按 QUICKSTART 第 4 步的外部分档给学习率起步档：<2,000 条 5e-5~1e-4，≥2,000 条 2e-4。"""
@@ -39,6 +49,8 @@ def manual_training_parameter_lines() -> list[str]:
         "LoRA rank＝适配器记多大本事的容量，小任务 8 够用，越大越占显存。",
         "4-bit 量化＝显存放不下完整模型才开（仅限兼容的 NVIDIA 显卡）。",
         "最大 token 长度＝每条样本最多装多少内容，按训练前检查的建议填。",
+        "监督范围＝哪些文字参与训练损失；可保留现有全提示监督，或只学习答案与结束标记。"
+        "仅答案监督会逐行核验完整边界，不能截断；效果需用同题对照判断。",
         "推荐起步值（小数据）：训练轮数 1–2、每设备 batch size 1、梯度累积步数 4、"
         "学习率 0.0002（即 2e-4）、LoRA rank 8——与默认值一致；先跑通再调。",
     ]

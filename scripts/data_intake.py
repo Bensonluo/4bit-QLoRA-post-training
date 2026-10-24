@@ -21,6 +21,7 @@ from src.workbench.intake_service import (
     next_action,
     next_action_phrase,
 )
+from src.workbench.training_guidance import SFT_PROTOCOL_LABELS
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -179,6 +180,11 @@ def main() -> int:
         help="用仓库自带的虚构售后工单样例创建任务，与页面「第一次使用？用内置演示任务开始」"
         "同一来源（src/workbench/demo_task.py）；演示文件不在场时如实报错，不编造演示数据",
     )
+    create.add_argument(
+        "--demo-variant",
+        choices=["generation", "extraction"],
+        help="演示原型变体（与 --demo 同用）：generation=客服答复生成,extraction=工单编号对应",
+    )
     create.add_argument("--description", default="")
     create.add_argument("--scope", choices=["sample", "full"], default="sample")
     create.add_argument("--encoding")
@@ -319,6 +325,12 @@ def main() -> int:
     preflight.add_argument("--revision", type=int, required=True)
     preflight.add_argument("--tokenizer", required=True, help="本地 tokenizer 目录或已缓存标识")
     preflight.add_argument("--max-length", type=int, required=True)
+    preflight.add_argument(
+        "--sft-protocol",
+        choices=list(SFT_PROTOCOL_LABELS),
+        default="alpaca_full_prompt_v1",
+        help="监督范围：现有全提示监督，或 alpaca_answer_only_v1 仅学习完整答案与结束标记",
+    )
     label_verify = sub.add_parser(
         "label-verify",
         help="盲标核验：抽样已标注行并隐藏答案，由业务用户独立作答（训练准备的前置门禁）",
@@ -397,6 +409,12 @@ def main() -> int:
     train_prepare.add_argument("session_id")
     train_prepare.add_argument("--revision", type=int, required=True)
     train_prepare.add_argument("--model-path", type=Path, required=True)
+    train_prepare.add_argument(
+        "--sft-protocol",
+        choices=list(SFT_PROTOCOL_LABELS),
+        default="alpaca_full_prompt_v1",
+        help="监督范围；仅答案监督会严格检查训练/生成边界且不允许截断",
+    )
     train_prepare.add_argument(
         "--max-length",
         type=int,
@@ -592,6 +610,11 @@ def main() -> int:
     iteration_propose.add_argument("--epochs", type=int)
     iteration_propose.add_argument("--learning-rate", type=float)
     iteration_propose.add_argument("--max-length", type=int)
+    iteration_propose.add_argument(
+        "--sft-protocol",
+        choices=list(SFT_PROTOCOL_LABELS),
+        help="本轮监督范围；未指定时继承父轮，可同题比较监督范围变更的效果",
+    )
     for name in (
         "iteration-confirm",
         "iteration-prepare",
@@ -1025,6 +1048,7 @@ def main() -> int:
                         data_change=args.data_change,
                         training_options=options or None,
                         max_length=args.max_length,
+                        sft_protocol=args.sft_protocol,
                     )
                 elif args.command == "iteration-revise":
                     from src.agent.revisions import revise_data_for_iteration
@@ -1295,6 +1319,7 @@ def main() -> int:
                         session,
                         str(args.model_path),
                         max_length=args.max_length,
+                        sft_protocol=args.sft_protocol,
                         training_options={
                             "num_epochs": args.epochs,
                             "batch_size": args.batch_size,
@@ -1474,30 +1499,53 @@ def main() -> int:
                         "与数据说明来自仓库单一来源（src/workbench/demo_task.py），"
                         "自定义值不会被采用，逐一点名并直接报错，不静默忽略。"
                     )
-                from src.workbench.demo_task import DEMO_DESCRIPTION, DEMO_GOAL, demo_sample
-
-                demo_pair = demo_sample(PROJECT_ROOT)
-                if demo_pair is None:
-                    raise ValueError(
-                        "演示文件不在场（data/custom/examples/aftercare_tickets_sample.csv）；"
-                        "如实报错，不编造演示数据。"
-                    )
-                session = service.create(
+                from src.workbench.demo_task import (
+                    DEMO_DESCRIPTION,
                     DEMO_GOAL,
-                    demo_pair[0],
-                    demo_pair[1],
-                    data_description=DEMO_DESCRIPTION,
+                    demo_create_payload,
+                    demo_sample,
+                )
+
+                if args.demo_variant and not args.demo:
+                    raise ValueError("--demo-variant 需要与 --demo 同用。")
+                payload = demo_create_payload(PROJECT_ROOT, args.demo_variant)
+                demo_pair = None if payload is None else (payload[2], payload[1])
+                if payload is None:
+                    missing = (
+                        f"data/custom/examples/{args.demo_variant}_sample.csv"
+                        if args.demo_variant
+                        else "data/custom/examples/aftercare_tickets_sample.csv"
+                    )
+                    raise ValueError(
+                        f"演示文件不在场（{missing}）；如实报错，不编造演示数据。"
+                    )
+                demo_goal, demo_content, demo_name, demo_description = payload
+                session = service.create(
+                    demo_goal,
+                    demo_name,
+                    demo_content,
+                    data_description=demo_description,
                     scope="sample",
                 )
                 print(
-                    "已用内置演示任务创建（虚构售后工单样例，与页面入口同一来源）。",
+                    "已用内置演示任务创建（虚构数据，与页面入口同一来源）。",
                     file=sys.stderr,
                 )
-                print(
-                    "零密钥继续：baseline-analyze SESSION_ID "
-                    "--target 类别 --group 编号 --exclude 处理结果",
-                    file=sys.stderr,
-                )
+                if args.demo_variant:
+                    variant_hints = {
+                        "generation": "baseline-analyze SESSION_ID --target 标准答复 --group 编号",
+                        "extraction": "baseline-analyze SESSION_ID --target 工单号 --group 编号",
+                    }
+                    print(
+                        f"零密钥继续：{variant_hints.get(args.demo_variant, variant_hints['generation'])}",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        "零密钥继续：baseline-analyze SESSION_ID "
+                        "--target 类别 --group 编号 --exclude 处理结果",
+                        file=sys.stderr,
+                    )
             else:
                 if args.input is None or not (args.goal or "").strip():
                     raise ValueError("create 需要 --input 与 --goal；零密钥冷启动可改用 --demo。")
@@ -1729,7 +1777,11 @@ def main() -> int:
                 raise ValueError("max-length 必须为正整数。")
             tokenizer = load_local_tokenizer(args.tokenizer, local_files_only=True)
             session = service.preflight_training(
-                args.session_id, args.revision, tokenizer, args.max_length
+                args.session_id,
+                args.revision,
+                tokenizer,
+                args.max_length,
+                sft_protocol=args.sft_protocol,
             )
             print(
                 f"训练前检查：{session.training_preflight['status']}（未启动训练）", file=sys.stderr
@@ -1836,7 +1888,14 @@ def main() -> int:
             pending = service.start_label_verification(
                 args.session_id, args.revision, sample_size=args.size
             )
-            print("请仅根据输入作答，不要查看数据中的现有答案。", file=sys.stderr)
+            if pending.get("mode") == "review":
+                print(
+                    "开放文本答案无法逐字复现，本任务采用逐条审阅："
+                    "题目连同数据中的答复一起出示，由你逐条裁决「是/否」。",
+                    file=sys.stderr,
+                )
+            else:
+                print("请仅根据输入作答，不要查看数据中的现有答案。", file=sys.stderr)
             # 抽题时如实预告本轮样本量最多能提供的证据强度：
             # 小样本下即使全部一致，真实一致率的置信下界也远低于 100%。
             print(pending["evidence_note"], file=sys.stderr)
@@ -1845,6 +1904,8 @@ def main() -> int:
                 print(pending["shortfall_note"], file=sys.stderr)
             for item in pending["items"]:
                 print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
+                if pending.get("mode") == "review":
+                    print(f"  数据中的答复：{item.get('answer', '')}", file=sys.stderr)
             # 题目清单可导出 CSV 供线下作答核对,与 learnability-probe 的候选导出同款;
             # 导出发生在抽题成功之后,清单不含数据答案,盲标不因导出失效。
             if args.export_csv is not None:

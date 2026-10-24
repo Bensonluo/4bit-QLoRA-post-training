@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,87 @@ from src.utils.gguf_export import GGUF_QUANTIZATIONS, gguf_toolchain
 
 _EVIDENCE = "export_evidence.json"
 _LINEAGE = ("run_id", "session_id", "dataset_version", "config_digest")
+
+
+def _verified_training_protocol(config: dict, preflight: dict) -> dict:
+    """Check objective evidence, preserving pre-protocol full-prompt receipts."""
+    from src.data.sft_protocol import ANSWER_PROTOCOL, LEGACY_PROTOCOL, validate_protocol
+
+    if not isinstance(config, dict) or not isinstance(preflight, dict):
+        raise ValueError("训练配置或监督预检不是有效对象。")
+    data = config.get("data", {})
+    if not isinstance(data, dict):
+        raise ValueError("训练数据配置不是有效对象。")
+    configured = validate_protocol(data.get("sft_protocol", LEGACY_PROTOCOL))
+    inspected = validate_protocol(preflight.get("sft_protocol", LEGACY_PROTOCOL))
+    expected_strategy = (
+        "full_prompt_padding_masked" if configured == LEGACY_PROTOCOL else "answer_and_eos_only"
+    )
+    strategy = preflight.get("supervision_strategy", "full_prompt_padding_masked")
+    if configured not in {LEGACY_PROTOCOL, ANSWER_PROTOCOL} or (
+        inspected != configured or strategy != expected_strategy
+    ):
+        raise ValueError("训练配置与预检的 SFT 监督协议不一致或尚不受证据链支持。")
+    verified: dict[str, Any] = {
+        "sft_protocol": configured,
+        "supervision_strategy": expected_strategy,
+    }
+    if configured == LEGACY_PROTOCOL:
+        return verified
+    if preflight.get("status") not in {"passed", "warnings"}:
+        raise ValueError("答案专属监督没有通过训练预检。")
+    rows, splits = preflight.get("rows"), preflight.get("splits")
+    if not isinstance(rows, list) or not rows or not isinstance(splits, dict) or not splits:
+        raise ValueError("答案专属监督缺少完整逐行预检证据。")
+    counts: Counter[str] = Counter()
+    seen = set()
+    answer_total = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("答案专属监督的逐行预检记录无效。")
+        answer_count, total = row.get("answer_supervised_tokens"), row.get("supervised_tokens")
+        if (
+            any(
+                row.get(key) is not True
+                for key in (
+                    "answer_boundary_verified",
+                    "answer_supervision_complete",
+                    "terminal_eos_supervised",
+                )
+            )
+            or type(row.get("prompt_supervised_tokens")) is not int
+            or row["prompt_supervised_tokens"] != 0
+            or type(answer_count) is not int
+            or answer_count <= 0
+            or type(total) is not int
+            or total != answer_count + 1
+            or not isinstance(row.get("split"), str)
+            or not isinstance(row.get("row_id"), str)
+            or not row["row_id"]
+        ):
+            raise ValueError("答案专属监督的答案边界、提示屏蔽、完整答案或原始 EOS 证据不一致。")
+        key = (row["split"], row["row_id"])
+        if key in seen:
+            raise ValueError("答案专属监督的逐行预检记录重复。")
+        seen.add(key)
+        counts[row["split"]] += 1
+        answer_total += answer_count
+    if any(
+        not isinstance(summary, dict)
+        or type(summary.get("rows")) is not int
+        or summary["rows"] < 0
+        or counts[split] != summary["rows"]
+        for split, summary in splits.items()
+    ) or set(counts) - set(splits):
+        raise ValueError("答案专属监督的逐行证据与分区行数不一致。")
+    verified["supervision_totals"] = {
+        "verified_rows": len(rows),
+        "prompt_supervised_tokens": 0,
+        "answer_supervised_tokens": answer_total,
+        "terminal_eos_supervised_tokens": len(rows),
+        "supervised_tokens": answer_total + len(rows),
+    }
+    return verified
 
 
 def default_export_dir(
@@ -54,6 +136,7 @@ def _files(
 
 
 def _source_identity(record: dict, adapter: Path, base: Path, *, verify_content: bool) -> dict:
+    from src.workbench.sources import content_digest
     from src.workbench.training_runs import file_digest, model_identity
 
     if any(not record.get(key) for key in _LINEAGE):
@@ -77,9 +160,26 @@ def _source_identity(record: dict, adapter: Path, base: Path, *, verify_content:
                 "output_dir",
                 "model_identity",
                 "artifacts",
+                "config",
+                "preflight",
             )
         ):
             raise ValueError("训练运行记录已经变化，请重新获取当前运行。")
+    config_path = run_directory / "config.json"
+    config = record.get("config")
+    if config is not None or config_path.exists():
+        if (
+            not isinstance(config, dict)
+            or content_digest(config) != record["config_digest"]
+            or (
+                config_path.exists()
+                and json.loads(config_path.read_text(encoding="utf-8")) != config
+            )
+        ):
+            raise ValueError("训练配置内容与运行或产物清单的配置摘要不一致。")
+        training_protocol = _verified_training_protocol(config, record.get("preflight") or {})
+    else:
+        training_protocol = _verified_training_protocol({}, record.get("preflight") or {})
     identity = record.get("model_identity")
     if (
         not isinstance(identity, dict)
@@ -134,11 +234,16 @@ def _source_identity(record: dict, adapter: Path, base: Path, *, verify_content:
             )
         ):
             raise ValueError("训练产物已修改，内容哈希或路径不匹配。")
-    return {
+    source: dict[str, Any] = {
         "base_model": identity,
         "adapter_files": adapter_files,
         "training_manifest_sha256": file_digest(manifest_path),
     }
+    # Old receipts had no explicit protocol. Preserve their existing identities
+    # so already exported historical models remain idempotently verifiable.
+    if isinstance(config, dict) and "sft_protocol" in config.get("data", {}):
+        source["training_protocol"] = training_protocol
+    return source
 
 
 def _verified_export(target: Path, plan: dict, *, verify_content: bool = True) -> None:
@@ -161,6 +266,10 @@ def _verified_export(target: Path, plan: dict, *, verify_content: bool = True) -
         or evidence["source_identity"].get("base_model") != plan["source_identity"]["base_model"]
         or evidence["source_identity"].get("training_manifest_sha256")
         != plan["source_identity"]["training_manifest_sha256"]
+        or (
+            "training_protocol" in plan["source_identity"]
+            and evidence.get("training_protocol") != plan["source_identity"]["training_protocol"]
+        )
         or (verify_content and evidence.get("source_identity") != plan.get("source_identity"))
     ):
         raise ValueError("导出证据不属于本次训练或来源内容已变化。")
@@ -390,6 +499,8 @@ def export_model(plan: dict) -> dict:
             "output_files": _files(published, exclude={_EVIDENCE}),
             "exported_at": datetime.now(timezone.utc).isoformat(),
         }
+        if "training_protocol" in fresh["source_identity"]:
+            evidence["training_protocol"] = fresh["source_identity"]["training_protocol"]
         if conversion is not None:
             evidence.update(
                 conversion=conversion,

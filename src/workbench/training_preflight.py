@@ -188,12 +188,74 @@ def _verified_partitions(session, report):
     return splits
 
 
-def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -> dict[str, Any]:
+def _answer_only_consumption(
+    row: dict[str, Any], tokenizer: Any, max_length: int, sft_protocol: str, collator: Any
+) -> dict[str, Any]:
+    """Measure labels consumed by the trainer after proving the entire answer boundary."""
+    from src.data.sft_protocol import tokenize_sft_record
+
+    full = tokenize_sft_record(row, tokenizer, protocol=sft_protocol)
+    if len(full["input_ids"]) > max_length:
+        raise ValueError(
+            f"完整记录需要 {len(full['input_ids'])} token，超过本轮长度 {max_length}；"
+            "仅答案监督不允许截断输入、答案或结束标记，请增大长度或缩短输入。"
+        )
+    actual = tokenize_sft_record(row, tokenizer, max_length, protocol=sft_protocol)
+    batch = collator([actual])
+    ids = batch["input_ids"][0].tolist()
+    attention = batch["attention_mask"][0].tolist()
+    labels = batch["labels"][0].tolist()
+    active = [index for index, mask in enumerate(attention) if mask]
+    if [ids[index] for index in active] != full["input_ids"] or [
+        labels[index] for index in active
+    ] != full["labels"]:
+        raise ValueError("训练 collator 改变了已验证的答案监督标签，不能启动。")
+    supervised = [index for index, label in enumerate(labels) if index > 0 and label != -100]
+    expected = [index for index, label in enumerate(full["labels"]) if label != -100]
+    if not expected or expected[0] == 0 or len(supervised) != len(expected):
+        raise ValueError("因果位移后未完整监督答案及其结束标记。")
+    if any(label != -100 for label, mask in zip(labels, attention) if mask == 0):
+        raise ValueError("训练 collator 没有屏蔽 padding 的监督标签。")
+    eos = getattr(tokenizer, "eos_token_id", None)
+    if full["labels"][-1] != eos or not active or active[-1] not in supervised:
+        raise ValueError("完整答案原有的结束标记没有参与训练。")
+    answer_count = len(expected) - 1
+    return {
+        "split": None,
+        "row_id": row["metadata"]["source_row_id"],
+        "full_tokens": len(full["input_ids"]),
+        "input_tokens": len(full["input_ids"]) - answer_count,
+        "answer_tokens": answer_count,
+        "kept_tokens": len(active),
+        "supervised_tokens": len(supervised),
+        "answer_supervised_tokens": answer_count,
+        "prompt_supervised_tokens": 0,
+        "answer_kept_tokens": answer_count,
+        "was_truncated": False,
+        "answer_was_truncated": False,
+        "answer_supervision_complete": True,
+        "answer_boundary_verified": True,
+        "terminal_eos_supervised": True,
+    }
+
+
+def preflight_dataset(
+    session: IntakeSession,
+    tokenizer: Any,
+    max_length: int,
+    *,
+    sft_protocol: str = "alpaca_full_prompt_v1",
+) -> dict[str, Any]:
     """Inspect actual causal-LM consumption; this is not business acceptance."""
     if type(max_length) is not int or max_length <= 0:
         raise ValueError("max_length 必须是正整数，并由选定模型与业务长度共同决定。")
+    from config.base import SFT_TRAINING_PROTOCOLS
+
+    if sft_protocol not in SFT_TRAINING_PROTOCOLS:
+        raise ValueError("不支持该训练监督协议；请选择全提示监督或仅答案监督。")
+    answer_only = sft_protocol == "alpaca_answer_only_v1"
     artifact = session.dataset
-    report = {
+    report: dict[str, Any] = {
         "status": "passed",
         "dataset_name": artifact.name if artifact else None,
         "version": artifact.version if artifact else None,
@@ -213,7 +275,10 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                 "model_max_length",
             )
         },
-        "supervision_strategy": "full_prompt_padding_masked",
+        "sft_protocol": sft_protocol,
+        "supervision_strategy": "answer_and_eos_only"
+        if answer_only
+        else "full_prompt_padding_masked",
         "issues": [],
         "splits": {},
         "rows": [],
@@ -222,9 +287,13 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
     report["tokenizer"]["class"] = type(tokenizer).__name__
     _issue(
         report,
-        "full_prompt_supervision",
+        "answer_only_supervision" if answer_only else "full_prompt_supervision",
         "info",
-        "Alpaca 训练对整个 prompt 计算标签，完整记录带 EOS；collator 按 attention_mask 屏蔽 padding，因果损失跳过批次首位置，并非仅监督答案。",
+        (
+            "本轮只对完整答案与结束标记（EOS）计算训练损失，输入提示与 padding 不参与；逐行验证训练和生成的 token 边界，不允许截断或猜测答案位置。"
+            if answer_only
+            else "Alpaca 训练对整个 prompt 计算标签，完整记录带 EOS；collator 按 attention_mask 屏蔽 padding，因果损失跳过批次首位置，并非仅监督答案。"
+        ),
     )
     if not dataset_is_current(session):
         _issue(
@@ -262,7 +331,11 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
     from src.data.loaders import render_alpaca_prompt, tokenize_alpaca_record
     from src.data.sft_collator import AttentionMaskCausalCollator
 
-    collator = AttentionMaskCausalCollator(tokenizer)
+    collator = (
+        AttentionMaskCausalCollator(tokenizer, sft_protocol=sft_protocol)
+        if answer_only
+        else AttentionMaskCausalCollator(tokenizer)
+    )
     offsets_available = True
     for split, rows in splits.items():
         split_report = {
@@ -275,6 +348,23 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
         report["splits"][split] = split_report
         for row in rows:
             row_id = row["metadata"]["source_row_id"]
+            if answer_only:
+                try:
+                    detail = _answer_only_consumption(
+                        row, tokenizer, max_length, sft_protocol, collator
+                    )
+                    detail["split"] = split
+                    report["rows"].append(detail)
+                except (ValueError, TypeError, KeyError, IndexError, OverflowError) as exc:
+                    _issue(
+                        report,
+                        "answer_supervision_contract",
+                        "blocking",
+                        f"无法验证仅答案监督：{exc}",
+                        split=split,
+                        row_ids=[row_id],
+                    )
+                continue
             answer_start = len(render_alpaca_prompt({**row, "output": ""}))
             try:
                 try:
@@ -373,6 +463,11 @@ def preflight_dataset(session: IntakeSession, tokenizer: Any, max_length: int) -
                     "kept_tokens": sum(attention),
                     "supervised_tokens": len(supervised),
                     "answer_supervised_tokens": kept_answer,
+                    "prompt_supervised_tokens": (
+                        len(supervised) - kept_answer - int(terminal_eos_supervised)
+                        if kept_answer is not None
+                        else None
+                    ),
                     "answer_kept_tokens": visible_answer,
                     "was_truncated": truncated,
                     "answer_was_truncated": visible_answer < full_answer if verified else None,

@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
+from config.base import SFT_TRAINING_PROTOCOLS
 from src.agent.intake import ChatClient, _tool
 from src.workbench.intake_models import Contract, IntakeSession
 from src.workbench.sources import content_digest
@@ -19,9 +20,13 @@ class TrainingProposal(Contract):
         default=None, description="仅可选择已通过工具观察的本地候选路径；没有可用候选时留空。"
     )
     max_length: int | None = Field(default=None, strict=True, gt=0)
+    sft_protocol: Literal["alpaca_full_prompt_v1", "alpaca_answer_only_v1"] = Field(
+        default="alpaca_full_prompt_v1",
+        description="监督协议：full 保留全提示监督；answer_only 仅监督原答案及 EOS，必须先取得相同协议的真实预检。",
+    )
     training_options: dict[str, Any] = Field(
         default_factory=dict,
-        description="SFT参数：num_epochs,batch_size,gradient_accumulation_steps,learning_rate,gradient_checkpointing,warmup_ratio,weight_decay,logging_steps,save_steps,eval_steps,fp16,bf16,max_grad_norm。不得更改输出目录、采样规则或监督策略。",
+        description="SFT参数：num_epochs,batch_size,gradient_accumulation_steps,learning_rate,gradient_checkpointing,warmup_ratio,weight_decay,logging_steps,save_steps,eval_steps,fp16,bf16,max_grad_norm。不得通过此字段更改输出目录、采样规则或监督协议。",
     )
     lora_options: dict[str, Any] = Field(
         default_factory=dict,
@@ -41,7 +46,7 @@ class TrainingProposal(Contract):
 
     @field_validator("rationale", "limitations", "business_questions")
     @classmethod
-    def nonempty_statements(cls, values):
+    def nonempty_statements(cls, values: list[str]) -> list[str]:
         if any(not value.strip() for value in values):
             raise ValueError("解释、限制或业务问题不能是空文本。")
         return [value.strip() for value in values]
@@ -51,16 +56,18 @@ class TrainingSubmission(Contract):
     proposal: TrainingProposal
     evidence_ids: list[str] = Field(
         min_length=1,
-        description="引用实际工具返回的 evidence_id；ready必须同时引用业务/硬件上下文和所选模型、长度的真实probe。",
+        description="引用实际工具返回的 evidence_id；ready必须同时引用业务/硬件上下文和所选模型、长度、监督协议的真实probe。",
     )
 
 
 SYSTEM = """你是 TuneSmith 的微调顾问。帮助没有算法工程师的用户，把已确认业务与资料变成可执行的 SFT/LoRA 方案。
 先调用 inspect_training_context，核查目标、数据版本/规模/切分、硬件与用户给定的本地候选模型事实。
 只能选择用户给定并通过工具观察的本地候选，不假装发现未知模型，不联网下载、不执行模型远程代码。
-在给出 ready 方案前必须 probe_training：读取所选路径、max_length 对应的真实 tokenizer 和监督预检结果。
+在给出 ready 方案前必须 probe_training：读取所选路径、max_length、sft_protocol 对应的真实 tokenizer 和监督预检结果。
 第一次长度或模型不可行时，根据实际错误修订技术方案并再次 probe；不能忽略缺答案、空监督或硬件不支持。
-该产品使用现有 Alpaca SFT 与 LoRA 链路。现有全 prompt 监督及 padding 处理以工具事实为准，不得改成 answer-only 或臆造 EOS 监督。
+该产品使用现有 Alpaca SFT 与 LoRA 链路，只支持两个明确的监督协议：alpaca_full_prompt_v1（默认）监督完整提示及答案，padding 不参与 loss；alpaca_answer_only_v1 仅监督原答案与原始末尾 EOS。
+两种协议使用相同 Alpaca 生成提示，可用同题报告比较。只答案协议必须通过精确 token 前缀边界、完整答案及 EOS 的严格预检；失败应修订方案重新 probe，不能猜边界、截掉答案、修改原答案或自动回退。
+选择协议是待同题验证的技术建议，不能宣称只答案监督必然更优；不得拿全提示协议的 probe 证据提交只答案方案，也不得提供其他协议或聊天模板。
 最终测试集仅允许预检数据可读取及长度，不用于评分、挑选模型、调参或判断业务效果。
 probe反映真实tokenizer/数据与已知平台约束，不等于训练已成功或显存充足；限制需要如实写清。
 根据业务、数据和实际架构解释长度、轮数、学习率、batch及LoRA选择，不要求用户填写YAML。
@@ -100,12 +107,17 @@ def recommend_training(
         ),
         _tool(
             "probe_training",
-            "用候选本地模型真实tokenizer预检指定长度，不创建训练运行。",
+            "用候选本地模型真实tokenizer预检指定长度和监督协议，不创建训练运行。",
             {
                 "type": "object",
                 "properties": {
                     "model_path": {"type": "string"},
                     "max_length": {"type": "integer", "minimum": 1},
+                    "sft_protocol": {
+                        "type": "string",
+                        "enum": list(SFT_TRAINING_PROTOCOLS),
+                        "default": "alpaca_full_prompt_v1",
+                    },
                 },
                 "required": ["model_path", "max_length"],
                 "additionalProperties": False,
@@ -117,7 +129,7 @@ def recommend_training(
             TrainingSubmission.model_json_schema(),
         ),
     ]
-    messages = [
+    messages: list[dict[str, Any]] = [
         {"role": "system", "content": SYSTEM},
         {
             "role": "user",
@@ -134,9 +146,9 @@ def recommend_training(
     ]
     context = None
     context_id = None
-    probes: dict[tuple[str, int], tuple[str, dict]] = {}
+    probes: dict[tuple[str, int, str], tuple[str, dict]] = {}
     seen: set[str] = set()
-    trace = []
+    trace: list[dict[str, Any]] = []
     for _ in range(16):
         message = client.complete(messages, tools)
         if not isinstance(message, dict):
@@ -179,8 +191,12 @@ def recommend_training(
                 elif name == "probe_training":
                     if context is None:
                         raise ValueError("请先读取业务、数据、硬件及模型上下文。")
-                    if set(args) != {"model_path", "max_length"}:
-                        raise ValueError("预检只接受model_path和max_length。")
+                    if not {"model_path", "max_length"} <= set(args) or set(args) - {
+                        "model_path",
+                        "max_length",
+                        "sft_protocol",
+                    }:
+                        raise ValueError("预检只接受model_path、max_length和可选sft_protocol。")
                     if not isinstance(args["model_path"], str) or not args["model_path"].strip():
                         raise ValueError("预检模型必须是已给定的本地候选路径。")
                     path = str(Path(args["model_path"]).expanduser().resolve())
@@ -189,16 +205,49 @@ def recommend_training(
                     length = args["max_length"]
                     if type(length) is not int or length <= 0:
                         raise ValueError("预检长度必须是正整数。")
-                    observed = service.probe(session, path, length)
-                    identity = "probe:" + content_digest(
-                        {"model_path": path, "max_length": length, "result": observed}
+                    protocol = args.get("sft_protocol", "alpaca_full_prompt_v1")
+                    if protocol not in SFT_TRAINING_PROTOCOLS:
+                        raise ValueError("预检仅支持全提示或答案专属的 Alpaca 监督协议。")
+                    observed = (
+                        service.probe(session, path, length)
+                        if protocol == "alpaca_full_prompt_v1"
+                        else service.probe(session, path, length, sft_protocol=protocol)
                     )
-                    probes[(path, length)] = (identity, observed)
+                    preflight = observed.get("preflight") or {}
+                    expected_strategy = (
+                        "full_prompt_padding_masked"
+                        if protocol == "alpaca_full_prompt_v1"
+                        else "answer_and_eos_only"
+                    )
+                    if not isinstance(preflight, dict) or (
+                        observed.get("sft_protocol", "alpaca_full_prompt_v1") != protocol
+                        or (
+                            preflight
+                            and (
+                                preflight.get("sft_protocol", "alpaca_full_prompt_v1") != protocol
+                                or preflight.get(
+                                    "supervision_strategy", "full_prompt_padding_masked"
+                                )
+                                != expected_strategy
+                            )
+                        )
+                    ):
+                        raise ValueError("实际预检返回的监督协议与请求不一致，不能作为方案证据。")
+                    identity = "probe:" + content_digest(
+                        {
+                            "model_path": path,
+                            "max_length": length,
+                            "sft_protocol": protocol,
+                            "result": observed,
+                        }
+                    )
+                    probes[(path, length, protocol)] = (identity, observed)
                     seen.add(identity)
                     context["probes"].append(
                         {
                             "model_path": path,
                             "max_length": length,
+                            "sft_protocol": protocol,
                             "evidence_id": identity,
                             "result": observed,
                         }
@@ -220,10 +269,20 @@ def recommend_training(
                     if proposal.status == "ready":
                         if proposal.business_questions:
                             raise ValueError("还有未澄清业务问题，不能声明方案ready。")
-                        observed_pair = probes.get((proposal.model_path, proposal.max_length))
+                        selected_path, selected_length = proposal.model_path, proposal.max_length
+                        if (
+                            not isinstance(selected_path, str)
+                            or not selected_path.strip()
+                            or type(selected_length) is not int
+                            or selected_length <= 0
+                        ):
+                            raise ValueError("ready方案必须明确本地模型路径和正整数训练长度。")
+                        observed_pair = probes.get(
+                            (selected_path, selected_length, proposal.sft_protocol)
+                        )
                         if observed_pair is None or observed_pair[0] not in cited:
                             raise ValueError(
-                                "ready方案必须先预检并引用所选模型及相同长度的真实probe。"
+                                "ready方案必须先预检并引用所选模型、相同长度及监督协议的真实probe。"
                             )
                         observed = observed_pair[1]
                         preflight = observed.get("preflight") or {}

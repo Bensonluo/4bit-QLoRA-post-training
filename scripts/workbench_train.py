@@ -104,7 +104,10 @@ def main():
             raise ValueError("本地模型或 tokenizer 在启动前发生变化。")
         session = IntakeSession.model_validate_json((directory / "session.json").read_text())
         preflight = preflight_dataset(
-            session, training_tokenizer(record["model_path"]), config["model"]["max_length"]
+            session,
+            training_tokenizer(record["model_path"]),
+            config["model"]["max_length"],
+            sft_protocol=config["data"].get("sft_protocol", "alpaca_full_prompt_v1"),
         )
         if preflight["status"] == "blocked":
             raise ValueError(

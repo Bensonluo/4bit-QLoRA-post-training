@@ -226,3 +226,71 @@ def test_demo_task_zero_key_journey_to_preflight(journey):
     )
     report = session.training_preflight
     assert report is not None and report["status"] == "passed", report["issues"]
+
+
+_LONG_Q = (
+    "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。" * 3
+)
+_LONG_A = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 3
+OPEN_SAMPLE = (
+    "编号,客户问题,标准答复\n"
+    + "".join(f"{i:03d},{_LONG_Q}（{i}）,{_LONG_A}（{i}）\n" for i in range(1, 9))
+).encode()
+OPEN_FULL = (
+    "编号,客户问题,标准答复\n"
+    + "".join(f"{i:03d},{_LONG_Q}（{i}）,{_LONG_A}（{i}）\n" for i in range(1, 13))
+).encode()
+
+
+def test_open_generation_journey_to_real_trained_adapter(journey):
+    """开放生成任务零密钥全程到真实训练产物——原型链路的真实贯穿。
+
+    分类旅程(test_zero_agent_journey...)的开放生成对应版本:推断为生成
+    原型、plain 渲染、盲标逐条审阅、真实训练产出 adapter 与 manifest。
+    """
+    intake, training, model = journey
+    session = intake.create("根据客户问题生成标准答复", "客服问答.csv", OPEN_SAMPLE)
+    session = intake.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",)),
+        model="journey-open",
+    )
+    assert "完整答复内容" in session.analysis.recipe.instruction
+    assert session.analysis.recipe.input_render == "plain"
+    session = intake.confirm(session.session_id, session.revision)
+    session = intake.validate_full_data(session.session_id, session.revision, "全量.csv", OPEN_FULL)
+    session = intake.confirm_full_data(session.session_id, session.revision)
+
+    pending = intake.start_label_verification(session.session_id, session.revision, sample_size=2)
+    assert pending["mode"] == "review"
+    intake.submit_label_verification(
+        session.session_id,
+        pending["verification_id"],
+        {item["row_id"]: "是" for item in pending["items"]},
+    )
+    session = intake.materialize_dataset(session.session_id, session.revision)
+    assert session.label_verification["verdict"] == "verified"
+
+    record = training.prepare(
+        session,
+        model,
+        max_length=256,
+        training_options={
+            "num_epochs": 1,
+            "batch_size": 2,
+            "gradient_accumulation_steps": 1,
+            "gradient_checkpointing": False,
+            "logging_steps": 1,
+        },
+    )
+    assert record["status"] == "prepared", record["issues"]
+    training.start(record["run_id"], session)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        result = training.get_status(record["run_id"])
+        if result["status"] in {"succeeded", "failed", "stopped"}:
+            break
+        time.sleep(0.2)
+    assert result["status"] == "succeeded", training.read_logs(record["run_id"], tail=50)
+    manifest = json.loads(Path(result["artifacts"]["manifest"]).read_text())
+    assert manifest["dataset_version"] == session.dataset.version

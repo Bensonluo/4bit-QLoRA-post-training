@@ -55,11 +55,38 @@ def test_actual_context_and_probe_do_not_prepare_a_run(plans, tmp_path):
     probe = service.probe(session, str(model), 32)
     assert probe["status"] == "passed"
     assert probe["preflight"]["supervision_strategy"] == "full_prompt_padding_masked"
+    tokens = probe["preflight"]["token_consumption"]
+    train_count = probe["preflight"]["splits"]["train"]["rows"]
+    assert tokens["split"] == "train"
+    assert tokens["rows"] == train_count
+    assert tokens["answer_supervised_tokens"] == train_count
+    assert tokens["supervised_tokens"] > tokens["answer_supervised_tokens"]
+    assert tokens["prompt_supervised_tokens"] == tokens["supervised_tokens"] - 2 * train_count
     assert not list(service.training.root.glob("wb-*"))
     lost = service.probe(session, str(model), 2)
     assert lost["status"] == "blocked"
     assert any(issue.get("code") == "answer_lost" for issue in lost["issues"])
     assert service.probe(session, str(model), 65)["status"] == "blocked"
+
+
+def test_probe_keeps_unknown_answer_consumption_unknown(plans, monkeypatch):
+    from src.workbench import training_plans
+    from tests.unit.test_intake_training_preflight import NoOffsets
+
+    service, session, model = plans
+    model_facts = training_plans._model_facts
+
+    def without_offsets(path):
+        facts, tokenizer = model_facts(path)
+        return facts, NoOffsets(tokenizer)
+
+    monkeypatch.setattr(training_plans, "_model_facts", without_offsets)
+    report = service.probe(session, str(model), 32)["preflight"]
+    assert report["status"] == "warnings"
+    tokens = report["token_consumption"]
+    assert tokens["supervised_tokens"] > 0
+    assert tokens["answer_supervised_tokens"] is None
+    assert tokens["prompt_supervised_tokens"] is None
 
 
 def test_save_reopen_confirm_prepare_and_repeat_reuses_one_actual_run(plans):
@@ -320,3 +347,17 @@ def test_readiness_exit_lines_cover_remaining_gating_states(plans, expected, gat
     assert len(lines) == 2, f"{expected} 应为门禁句+出口行两元素"
     assert gate_keyword in lines[0], f"{expected} 的门禁句保持在出口行之前"
     assert lines[1] == next_action_phrase(expected)
+
+
+def test_context_includes_data_derived_task_archetype(plans, tmp_path):
+    """推荐上下文携带数据实测的任务原型(分类夹具断言;单一来源 infer)。"""
+    from src.workbench.intake_service import IntakeService
+    from src.workbench.training_plans import _business
+    from tests.unit.test_data_materialize import _full
+
+    service = IntakeService(tmp_path / "intake")
+    session = _full(service)
+    payload = _business(session)
+    assert payload["task_archetype"]["archetype"] == "classification"
+    assert payload["task_archetype"]["distinct_values"] >= 1  # 夹具单类别,推理仍为分类
+    assert "推荐参数" in payload["task_archetype"]["note"]
