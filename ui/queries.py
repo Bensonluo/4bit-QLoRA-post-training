@@ -45,26 +45,24 @@ def fetch_metric_history_by_run_id(
     tracking_uri: str, run_id: str, metric: str
 ) -> list[tuple[int, float]]:
     """Return [(step, value), ...] for one metric of one MLflow run uuid."""
-    import mlflow
+    from mlflow.tracking import MlflowClient
 
-    mlflow.set_tracking_uri(tracking_uri)
-    history = mlflow.get_metric_history(run_id, metric)
+    history = MlflowClient(tracking_uri=tracking_uri).get_metric_history(run_id, metric)
     return [(m.step, m.value) for m in history]
 
 
 @st.cache_data(ttl=_TTL_SECONDS, show_spinner=False)
 def fetch_metric_names_by_name(tracking_uri: str, run_name: str) -> list[str]:
     """Return the sorted metric names logged for a run (resolved by runName tag)."""
-    import mlflow
+    from mlflow.tracking import MlflowClient
 
-    mlflow.set_tracking_uri(tracking_uri)
-    runs = mlflow.search_runs(
-        filter_string=f"tags.mlflow.runName='{run_name}'",
-        order_by=["start_time DESC"],
-    )
+    runs = fetch_runs(tracking_uri)
+    if runs.empty or "tags.mlflow.runName" not in runs.columns:
+        return []
+    runs = runs[runs["tags.mlflow.runName"] == run_name]
     if runs.empty:
         return []
-    run = mlflow.get_run(runs.iloc[0]["run_id"])
+    run = MlflowClient(tracking_uri=tracking_uri).get_run(runs.iloc[0]["run_id"])
     return sorted(run.data.metrics.keys())
 
 
@@ -76,16 +74,17 @@ def fetch_metric_history_by_name(
 
     Used by the Activity tab where only the TrainingLab run_name is known.
     """
-    import mlflow
+    from mlflow.tracking import MlflowClient
 
-    mlflow.set_tracking_uri(tracking_uri)
-    runs = mlflow.search_runs(
-        filter_string=f"tags.mlflow.runName='{run_name}'",
-        order_by=["start_time DESC"],
-    )
+    runs = fetch_runs(tracking_uri)
+    if runs.empty or "tags.mlflow.runName" not in runs.columns:
+        return []
+    runs = runs[runs["tags.mlflow.runName"] == run_name]
     if runs.empty:
         return []
-    history = mlflow.get_metric_history(runs.iloc[0]["run_id"], metric)
+    history = MlflowClient(tracking_uri=tracking_uri).get_metric_history(
+        runs.iloc[0]["run_id"], metric
+    )
     return [(m.step, m.value) for m in history]
 
 
