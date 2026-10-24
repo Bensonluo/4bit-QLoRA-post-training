@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import streamlit as st
 from ui.components.domain_adapters import (
     difficulty_label,
     entity_type_label,
+    get_adapter,
     get_domain_display_name,
     list_domains,
     load_eval_data,
@@ -20,10 +22,13 @@ from ui.components.domain_adapters import (
 from ui.components.format import delta as _delta
 from ui.components.format import fmt_num as _fmt_num
 from ui.components.format import fmt_pct as _fmt_pct
+from ui.components.shell import display_navigation
 from ui.config import DOMAINS_DIR
+from ui.runtime import DISPLAY_ONLY
 
 st.set_page_config(page_title="模型对比", page_icon="⚖️", layout="wide")
 st.title("⚖️ 模型对比")
+st.caption("选择两条评测记录，先看指标差值，再检查分组与错误样本。")
 
 # ── Domain Selector ─────────────────────────────────────────────
 
@@ -32,6 +37,9 @@ if not domains and DOMAINS_DIR.exists():
     domains = [d.name for d in DOMAINS_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")]
 
 if not domains:
+    if DISPLAY_ONLY:
+        display_navigation("展示环境尚未收录模型对照结果，可先浏览样例任务与历史实验。")
+        st.stop()
     # 幽灵分支接线（R128）：adapter 注册表导入时无条件注册两个域，此分支生产不可达
     # （R111 scout 探针 A 双桩可达）；但空态家族范式（R108-R110）要求 st.stop 封页前
     # 必给出路——注册表未来变化时不留死端
@@ -44,6 +52,9 @@ domain = st.selectbox("领域", domains, format_func=get_domain_display_name)
 data = load_eval_data(domain)
 
 if len(data) < 2:
+    if DISPLAY_ONLY:
+        display_navigation("当前领域不足两条模型评测记录，暂不能对照。可浏览已有的任务与实验记录。")
+        st.stop()
     if not data:
         st.warning("还没有任何模型的评测结果。")
     else:
@@ -86,25 +97,33 @@ if len(data) < 2:
         st.switch_page("pages/00_Training_Lab.py")
     st.stop()
 
-# ── Model Selectors ─────────────────────────────────────────────
+# ── Select distinct records, including repeated display names ──────────────
 
-models = [d.get("model", f"模型 {i}") for i, d in enumerate(data)]
+models = [d.get("model", f"模型 {i + 1}") for i, d in enumerate(data)]
+duplicate_names = len(set(models)) != len(models)
+
+
+def record_label(index: int) -> str:
+    return f"{models[index]}（记录 {index + 1}）" if duplicate_names else models[index]
+
 
 sel_cols = st.columns(2)
 with sel_cols[0]:
-    model_a_name = st.selectbox("模型 A", models, index=0)
+    model_a_index = st.selectbox("模型 A", range(len(data)), index=0, format_func=record_label)
 with sel_cols[1]:
-    model_b_name = st.selectbox("模型 B", models, index=min(1, len(models) - 1))
-
-model_a = next((d for d in data if d.get("model") == model_a_name), data[0])
-model_b = next((d for d in data if d.get("model") == model_b_name), data[min(1, len(data) - 1)])
-
-st.divider()
-
-# ── Side-by-Side Cards ──────────────────────────────────────────
+    model_b_index = st.selectbox(
+        "模型 B",
+        [i for i in range(len(data)) if i != model_a_index],
+        format_func=record_label,
+    )
+model_a, model_b = data[model_a_index], data[model_b_index]
+model_a_name, model_b_name = record_label(model_a_index), record_label(model_b_index)
+a_column, b_column = f"A · {model_a_name}", f"B · {model_b_name}"
 
 st.subheader("指标对比")
-
+st.caption(
+    "差值为 B − A。准确率、MRR、吞吐越高越好，延迟越低越好；置信度供参考。请核对评测集与运行条件。"
+)
 comparison_metrics = [
     ("总体准确率", "overall_accuracy", True),
     ("MRR", "mrr", False),
@@ -112,117 +131,99 @@ comparison_metrics = [
     ("平均延迟 (ms)", "avg_latency_ms", False),
     ("吞吐 (样本/秒)", "throughput_per_sec", False),
 ]
+metric_rows = []
+for label, key, is_pct in comparison_metrics:
+    a, b = model_a.get(key), model_b.get(key)
+    formatter = _fmt_pct if is_pct else _fmt_num
+    difference = _delta(a, b, pct=is_pct)
+    # Accuracy is a difference in percentage points, not relative growth.
+    if is_pct and difference is not None:
+        difference = difference.replace("%", " 个百分点")
+    metric_rows.append(
+        {
+            "指标": label,
+            a_column: formatter(a),
+            b_column: formatter(b),
+            "差值（B − A）": difference or "—",
+        }
+    )
+st.dataframe(pd.DataFrame(metric_rows), width="stretch", hide_index=True)
 
-# Model A card
-with st.container(border=True):
-    st.markdown(f"### {model_a_name}")
-    a_cols = st.columns(len(comparison_metrics))
-    for i, (label, key, is_pct) in enumerate(comparison_metrics):
-        with a_cols[i]:
-            val = model_a.get(key)
-            if is_pct:
-                st.metric(label, _fmt_pct(val))
-            else:
-                st.metric(label, _fmt_num(val))
-
-# Delta row
-st.markdown(
-    "<div style='text-align:center;font-size:1.5rem;padding:0.5rem 0'>↓ 差值（B − A）</div>",
-    unsafe_allow_html=True,
-)
-
-with st.container(border=True):
-    st.markdown(f"### {model_b_name}")
-    b_cols = st.columns(len(comparison_metrics))
-    for i, (label, key, is_pct) in enumerate(comparison_metrics):
-        with b_cols[i]:
-            val_b = model_b.get(key)
-            val_a = model_a.get(key)
-            if is_pct:
-                st.metric(label, _fmt_pct(val_b), delta=_delta(val_a, val_b, pct=True))
-            else:
-                st.metric(label, _fmt_num(val_b), delta=_delta(val_a, val_b, pct=False))
-
-st.divider()
-
-# ── Breakdowns ──────────────────────────────────────────────────
-
-st.subheader("分组明细")
-
-b1, b2 = st.columns(2)
-
-with b1:
-    st.markdown("**按难度分组的准确率**")
-    difficulties = ["easy", "medium", "hard"]
-    diff_cols = st.columns(len(difficulties))
-    for i, diff in enumerate(difficulties):
-        with diff_cols[i]:
-            acc_a = model_a.get("accuracy_by_difficulty", {}).get(diff)
-            acc_b = model_b.get("accuracy_by_difficulty", {}).get(diff)
-            st.metric(difficulty_label(diff), _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True))
-
-with b2:
-    st.markdown("**按实体类型分组的准确率**")
-    entity_types = list(model_a.get("accuracy_by_type", {}).keys()) or ["drug", "hospital"]
-    ent_cols = st.columns(len(entity_types))
-    for i, etype in enumerate(entity_types):
-        with ent_cols[i]:
-            acc_a = model_a.get("accuracy_by_type", {}).get(etype)
-            acc_b = model_b.get("accuracy_by_type", {}).get(etype)
-            st.metric(
-                entity_type_label(etype), _fmt_pct(acc_b), delta=_delta(acc_a, acc_b, pct=True)
+breakdown_tab, errors_tab, cost_tab = st.tabs(["分组差异", "错误样本", "成本与记录"])
+with breakdown_tab:
+    st.subheader("分组明细")
+    rows = []
+    for key, title, labeler in (
+        ("accuracy_by_difficulty", "难度", difficulty_label),
+        ("accuracy_by_type", "实体类型", entity_type_label),
+    ):
+        a_groups, b_groups = model_a.get(key) or {}, model_b.get(key) or {}
+        groups = list(dict.fromkeys([*a_groups, *b_groups]))
+        for group in groups:
+            a, b = a_groups.get(group), b_groups.get(group)
+            difference = _delta(a, b, pct=True)
+            rows.append(
+                {
+                    "分组": f"{title} · {labeler(group)}",
+                    a_column: _fmt_pct(a),
+                    b_column: _fmt_pct(b),
+                    "差值（B − A）": difference.replace("%", " 个百分点") if difference else "—",
+                }
             )
-
-st.divider()
-
-# ── Executive Summary ───────────────────────────────────────────
-
-st.subheader("执行摘要")
-results_dir = DOMAINS_DIR / domain / "data" / "results"
-if results_dir.exists():
-    summaries = sorted(results_dir.glob("executive_summary_*.md"), reverse=True)
-    if summaries:
-        with open(summaries[0]) as f:
-            st.markdown(f.read())
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     else:
-        st.info("未找到执行摘要文件。")
-else:
-    st.info("未找到结果目录。")
+        st.info("所选记录未包含分组指标。")
+with errors_tab:
+    adapter = get_adapter(domain)
+    selected_records = [model_a, model_b]
+    if adapter and any(item.get("per_sample") for item in selected_records):
+        # Distinguish widget keys when two recorded runs share a model name.
+        adapter.render_error_analysis(
+            [
+                {**model_a, "model": f"A · {model_a_name}"},
+                {**model_b, "model": f"B · {model_b_name}"},
+            ]
+        )
+    else:
+        st.info("所选记录未包含可查看的逐条预测，无法展示错误样本。")
+with cost_tab:
+    st.subheader("成本估算")
+    st.caption("按记录中的吞吐估算处理时间；未计入模型加载和数据读写。缺少实测值时不作推算。")
 
-st.divider()
+    def recorded_time(record: dict) -> str:
+        throughput = record.get("throughput_per_sec")
+        if (
+            isinstance(throughput, (int, float))
+            and not isinstance(throughput, bool)
+            and math.isfinite(throughput)
+            and throughput > 0
+        ):
+            return f"{1_000_000 / throughput / 3600:.1f} 小时"
+        return "—"
 
-# ── Cost Estimation ─────────────────────────────────────────────
-
-st.subheader("成本估算")
-
-latency_a = model_a.get("avg_latency_ms", 0)
-latency_b = model_b.get("avg_latency_ms", 0)
-tp_a = model_a.get("throughput_per_sec", 1)
-tp_b = model_b.get("throughput_per_sec", 1)
-
-cost_df = pd.DataFrame(
-    {
-        "指标": [
-            "平均延迟",
-            "吞吐",
-            "100 万样本耗时",
-            "部署方式",
-            "数据安全",
-        ],
-        model_a_name: [
-            f"{latency_a:.0f} ms",
-            f"{tp_a:.0f} 样本/秒",
-            f"{1_000_000 / max(tp_a, 0.1) / 3600:.1f} 小时",
-            "本地 GPU" if latency_a > 0 else "不适用",
-            "本地部署",
-        ],
-        model_b_name: [
-            f"{latency_b:.0f} ms",
-            f"{tp_b:.0f} 样本/秒",
-            f"{1_000_000 / max(tp_b, 0.1) / 3600:.1f} 小时",
-            "本地 GPU" if latency_b > 0 else "不适用",
-            "本地部署",
-        ],
-    }
-)
-st.dataframe(cost_df, width="stretch", hide_index=True)
+    cost_df = pd.DataFrame(
+        {
+            "指标": ["平均延迟 (ms)", "吞吐 (样本/秒)", "100 万样本耗时"],
+            a_column: [
+                _fmt_num(model_a.get("avg_latency_ms")),
+                _fmt_num(model_a.get("throughput_per_sec")),
+                recorded_time(model_a),
+            ],
+            b_column: [
+                _fmt_num(model_b.get("avg_latency_ms")),
+                _fmt_num(model_b.get("throughput_per_sec")),
+                recorded_time(model_b),
+            ],
+        }
+    )
+    st.dataframe(cost_df, width="stretch", hide_index=True)
+    with st.expander("领域历史摘要"):
+        st.subheader("执行摘要")
+        st.caption("领域归档摘要，供补充阅读；可能涉及其他模型与评测批次。")
+        results_dir = DOMAINS_DIR / domain / "data" / "results"
+        summaries = sorted(results_dir.glob("executive_summary_*.md"), reverse=True)
+        if summaries:
+            st.markdown(summaries[0].read_text())
+        else:
+            st.info("未找到执行摘要文件。")

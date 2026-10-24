@@ -79,7 +79,9 @@ def test_experiments_empty_branch_exit_before_stop():
     挪到 st.stop 之后仍全绿——接线死了只有旅程钉能抓,补上后结构钉也抓。"""
     source = _source(PAGE_EXP)
     assert 'st.info("暂无实验记录。请先在训练实验室（Training Lab）发起训练。")' in source
-    block = source.split("暂无实验记录", 1)[1]
+    block = source.split('st.info("暂无实验记录。请先在训练实验室（Training Lab）发起训练。")', 1)[
+        1
+    ]
     stop_pos = block.find("st.stop()")
     btn_pos = block.find('st.button("🏋️ 去训练实验室"')
     switch_pos = block.find('st.switch_page("pages/00_Training_Lab.py")')

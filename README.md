@@ -2,9 +2,9 @@
 
 # TuneSmith 🔨
 
-**A fine-tuning workbench for small businesses and individuals who cannot hire an algorithm engineer. Start with a business goal and sample data; the task archetype (classification / extraction / open generation) is inferred from your measured data with an editable instruction draft — no fixed templates. A built-in semantic safety layer — blind label verification (reproduce for short answers, per-row review for open text), contrast checks and a learnability probe — keeps the business judgments only you can make from silently passing. Existing local training, evaluation and model management support the next steps.**
+**An enterprise-oriented fine-tuning workbench that turns business goals and raw data into validated training sets, controlled training runs, comparable model evidence, and acceptance decisions.**
 
-The goal-and-data workflow is under active development. Sample analysis, real conversion previews, full-data validation, training and iteration are connected and have been exercised with fictional data on local hardware. Real customer acceptance and demonstrated business benefit remain open. [North star & product goals](docs/plans/north-star.md) · [Configure your Agent provider (BYOK)](docs/agent-setup.md)
+Designed for small business teams and individual practitioners: BYOK analysis, semantic safety checks, sandboxed data adapters, frozen evaluation suites, and model lineage carry the workflow from intake through a second improvement round and final acceptance. [Product goals](docs/plans/north-star.md) · [Agent setup](docs/agent-setup.md) · [Validation records](docs/validation/)
 
 * formerly "4-bit QLoRA Post-Training Framework"
 
@@ -45,60 +45,21 @@ The goal-and-data workflow is under active development. Sample analysis, real co
 
 ## 💡 Why This Project
 
-The product's north star is to help small businesses and individuals complete fine-tuning that meets their own domain needs at an affordable cost, with less dependence on algorithm specialists. The first development priority is the work before training: understanding the goal together with the supplied data, finding missing supervision, resolving business ambiguity and executing the right data preparation. Templates are examples, not the limit of supported business needs. MLflow and result charts support validation later in this process.
+Enterprise fine-tuning starts before model training: a spreadsheet must become valid supervision, business meaning needs confirmation, and an apparent score improvement must survive a comparable evaluation. TuneSmith makes these decisions part of one workflow, with page and CLI entry points.
 
-Most QLoRA tutorials assume an A100 and stop at `trainer.train()`. Reality for most practitioners:
-
-- ❌ You have an **RTX 4060 (8GB)** or a **MacBook Pro M2**, not a datacenter GPU
-- ❌ You need to actually **compare models**, not just train one and guess if it's better
-- ❌ Apple Silicon users are stuck — most QLoRA guides are CUDA-only
-- ❌ "Fine-tuning" feels like a black box with no UI to visualize what's happening
-
-This project solves all of them:
-
-> 🔥 **Train Qwen3-4B in 8GB VRAM** with 4-bit QLoRA — or train **Qwen3-14B on Apple Silicon** in bf16 — with a Streamlit dashboard for the entire lifecycle and MLflow for experiment tracking.
-
-The existing implementation provides the training and evaluation foundation: SFT, DPO, GRPO, domain adaptation, evaluation, and side-by-side model comparison.
-
----
+The primary users are small business teams and individual practitioners with limited algorithm-engineering capacity. Agent-assisted diagnosis and real row previews support their decisions; local training, experiment tracking and model management support execution.
 
 ## ✨ Key Highlights
 
-<div align="center">
+| Stage | Current capability | Engineering purpose |
+|---|---|---|
+| Goal and data intake | BYOK analysis, task inference, multi-source composition, real before/after previews | Turn business requirements into inspectable training examples |
+| Semantic safety | Contrast pairing, blind label verification, learnability probe, scenario regression matrix | Catch incorrect supervision before spending training resources |
+| Controlled preparation | Docker/Seatbelt-isolated adapters, grouped partitions, tokenizer preflight | Bound generated-code execution and detect leakage/truncated answers |
+| Training and lineage | CUDA/MPS/CPU, SFT/DPO/GRPO/domain adaptation, FSDP/DeepSpeed/DDP, MLflow Registry | Connect training configuration, artifacts and model versions |
+| Comparable iteration | Frozen dev/test suites, base/parent/round comparison, bad-case evidence, final acceptance | Record why to adopt, iterate, stop or request more evidence |
 
-| 🚀 Training | 📊 Tracking | 🎯 Evaluation |
-|:---:|:---:|:---:|
-| SFT + DPO + GRPO + Domain | MLflow + **Model Registry** ⭐ | Difficulty-stratified |
-| Cross-platform auto-detect | Live loss curves | Multi-model comparison |
-| **FSDP + DeepSpeed** ⭐ | Run diff viewer + lineage | Confidence calibration |
-
-| 🍎 Apple Silicon | 🖥️ NVIDIA | 📋 Reporting |
-|:---:|:---:|:---:|
-| bf16 via MPS | 4-bit QLoRA | Markdown exec summary |
-| Up to 14B on 64GB | 84% VRAM savings | Cost estimation |
-| Zero-config detect | Multi-GPU scale-out | Deploy recommendations |
-
-| 🤝 Agent Intake | 🛡️ Semantic Safety | 🧪 Long-Tail | 🔁 Iteration |
-|:---:|:---:|:---:|:---:|
-| BYOK analysis agent | Blind label verification | Sandboxed adapter code | Frozen eval suites |
-| Goal + data joint diagnosis | Contrast checks (no blind nodding) | Real OS isolation | Base / parent / round compare |
-| Real before/after previews | Learnability probe + scenario matrix | Business cases + counterexamples | Adopt / iterate / stop |
-
-| 📈 Stats | | |
-|:---:|:---:|:---:|
-| **84%** VRAM savings (NVIDIA) | **0.6B–14B** model range | **4** post-training techniques |
-| **8** dashboard pages | **5+** model families | **FSDP + DeepSpeed + DDP** distributed |
-
-</div>
-
-### 🧠 What makes it different
-
-1. **Agent-assisted intake** — start from a business goal and a raw spreadsheet, not a prepared dataset; a BYOK analysis agent (GLM / local / any OpenAI-compatible service) turns "I have data" into a validated training recipe, and long-tail rules fall back to sandboxed adapter code instead of a dead end
-2. **True cross-platform** — one codebase, auto-detects CUDA / MPS / CPU, no config flags
-3. **Full lifecycle dashboard** — not just training, but experiment management + evaluation + comparison
-4. **Domain adaptation system** — pluggable domains with a built-in medical entity showcase (Chinese drug/hospital name normalization)
-5. **Honest evaluation** — difficulty-stratified metrics (easy/medium/hard) instead of one aggregate number; in business comparisons, failures and truncations stay in the denominator
-6. **Executive summaries** — auto-generated Markdown reports with cost estimation and deployment recommendations
+The goal-and-data loop currently connects local SFT/LoRA training; DPO/GRPO are available in the platform foundation and their integration into this same workflow remains on the roadmap. The hosted instance uses the same frontend in read-only display mode; run locally to execute the full Goal & Data workflow.
 
 ---
 
@@ -122,7 +83,7 @@ The whole loop lives on one page (**目标与数据**, `ui/pages/07_Data_Intake.
 | Property | What it means |
 |---|---|
 | Semantic safety layer (task-agnostic) | 盲标核验 hides existing answers and asks you to label samples yourself; 对比核验 makes you pair answers to the right inputs instead of nodding through a preview; a learnability probe estimates whether the data can learn the task before GPU-hours are spent — these checks block training when they fail, because misjudged business meaning silently poisons everything downstream |
-| Scenario matrix regression | A growing matrix of 41 input scenarios (GBK encodings, wide tables, mixed types, punctuation variants, …) runs as honest regression — each scenario records expected-vs-actual so coverage claims stay checkable |
+| Scenario matrix regression | A growing matrix of input scenarios (GBK encodings, wide tables, mixed types, punctuation variants, …) runs as honest regression — each scenario records expected-vs-actual so coverage claims stay checkable |
 | Business confirmation, not code review | Users validate meaning through real transformation previews (raw row → model input → answer); agent-drafted long-tail adapter code is verified against business cases **and counterexamples** before use, never executed unreviewed on real data |
 | Real isolation for long-tail code | Adapter / custom-scoring code runs only inside Docker (`--network=none`, read-only, `--cap-drop=ALL`, non-root, pids/memory limits) or macOS Seatbelt (deny-by-default profile); no host fallback — an unavailable backend returns `unavailable`, not a silent bypass |
 | Content-hash identity | Base weights, data versions, and eval protocols are identified by SHA-256 of actual content; a changed file invalidates stale confirmations and cached comparisons instead of reusing them |
@@ -204,9 +165,7 @@ remain open. Existing Training Lab presets are also available for prepared datas
 
 Don't want to install? **[Try the dashboard online →](https://benluo.art/qlora-dashboard/)**
 
-The hosted instance covers the training-lab pages (training, experiments, evaluation,
-comparison, registry, data wizard). The 🧩 **Goal & Data** workflow — including the
-zero-key built-in demo task — is not on the hosted instance; run it locally with Option 1.
+The hosted instance runs the **same Streamlit frontend** (`ui/app.py`) in **read-only display mode**, including 🧩 **Goal & Data**. Browse the built-in example preview and recorded local validation results. The cloud instance has no GPU and does not execute training, model inference, uploads or external Agent calls. Run it locally with Option 1 for the full workflow. Deployment instructions: [Cloud display](deploy/README.md).
 
 ### Option 3: CLI training
 
@@ -547,7 +506,7 @@ python scripts/launch_dashboard.py  # Starts both MLflow + Streamlit
 
 ## 🤝 Contributing
 
-Portfolio project, but PRs welcome — especially:
+Contributions are welcome — especially:
 - 🎯 New domain adapters (legal, finance, code, etc.)
 - 🍎 Apple Silicon performance optimizations
 - 📊 New evaluation metrics or visualizations
@@ -573,7 +532,7 @@ If this project helped you fine-tune on budget hardware, please ⭐ star the rep
 
 ## 🇨🇳 中文说明
 
-**面向小公司和个人使用者的微调工作台** — 从业务目标和样例数据出发:分析 Agent(自带模型服务,支持智谱 GLM / 本地模型 / OpenAI 兼容端点)联合分析目标与数据、产出可执行的数据处理方案与真实转换预览;再经对比核验与盲标核验确认监督语义、全量数据校验、独立分区物化、训练前 token 预检、训练方案推荐、本地训练、基座/微调同开发集对照、坏例诊断,进入固定题集下的第二轮改进与最终业务验收。训练底座在消费级硬件上微调 0.6B–14B 大模型(前身为 4-bit QLoRA 后训练框架)。
+**面向企业业务团队与个人使用者的微调工作台** — 从业务目标和样例数据出发:分析 Agent(自带模型服务,支持智谱 GLM / 本地模型 / OpenAI 兼容端点)联合分析目标与数据、产出可执行的数据处理方案与真实转换预览;再经对比核验与盲标核验确认监督语义、全量数据校验、独立分区物化、训练前 token 预检、训练方案推荐、本地训练、基座/微调同开发集对照、坏例诊断,进入固定题集下的第二轮改进与最终业务验收。训练底座在消费级硬件上微调 0.6B–14B 大模型(前身为 4-bit QLoRA 后训练框架)。
 
 > 当前状态:完整闭环已在本地用虚构数据端到端验证(真实 Qwen3 训练 + 真实 GLM 分析,证据见 `docs/validation/`);真实客户任务与业务验收尚未完成。
 

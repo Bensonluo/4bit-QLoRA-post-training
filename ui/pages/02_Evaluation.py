@@ -16,12 +16,16 @@ from ui.components.domain_adapters import (
     list_domains,
     load_eval_data,
 )
+from ui.components.format import fmt_pct
+from ui.components.shell import display_navigation
 from ui.config import DOMAINS_DIR, MLFLOW_TRACKING_URI
+from ui.runtime import DISPLAY_ONLY, action_button
 
 logger = logging.getLogger("qlora")
 
 st.set_page_config(page_title="评测结果", page_icon="🎯", layout="wide")
 st.title("🎯 评测结果")
+st.caption("查看评测指标、分组差异与错误样本；业务验收在对应任务中完成。")
 
 # ── Domain Selector ─────────────────────────────────────────────
 
@@ -30,6 +34,9 @@ if not domains and DOMAINS_DIR.exists():
     domains = [d.name for d in DOMAINS_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")]
 
 if not domains:
+    if DISPLAY_ONLY:
+        display_navigation("展示环境尚未收录领域评测结果，可先浏览样例任务与历史实验。")
+        st.stop()
     st.info(
         "暂无评测领域。\n\n"
         "**开始使用：**\n"
@@ -37,7 +44,7 @@ if not domains:
         "2. 或在下方导入历史评测结果"
     )
     with st.expander("📥 导入历史评测结果"):
-        if st.button("扫描并导入 MLflow"):
+        if action_button("扫描并导入 MLflow"):
             from src.tracking.eval_logger import log_eval_to_mlflow
 
             imported = 0
@@ -103,6 +110,9 @@ if not data and mlflow_data:
     data = mlflow_data
 
 if not data:
+    if DISPLAY_ONLY:
+        display_navigation("该领域尚未收录评测结果。样例任务与历史训练记录仍可浏览。")
+        st.stop()
     st.warning("该领域暂无评测数据。")
     if selected_domain == "entity_matching":
         # 通用域空态闭环（R121）：R120 的「用我的 test 集评测」把结果送到这里——
@@ -124,7 +134,7 @@ if not data:
         st.markdown("1. 运行领域评测脚本")
         st.markdown("2. 在下方导入历史评测结果")
     with st.expander("📥 导入历史评测结果"):
-        if st.button("扫描并导入 MLflow"):
+        if action_button("扫描并导入 MLflow"):
             from src.tracking.eval_logger import log_eval_to_mlflow
 
             imported = 0
@@ -156,56 +166,49 @@ else:
     cols = st.columns(min(len(data), 4))
     for i, model_data in enumerate(data[:4]):
         with cols[i]:
-            acc = model_data.get("overall_accuracy", 0)
             st.metric(
                 label=model_data.get("model", f"模型 {i + 1}"),
-                value=f"{acc:.1%}" if acc else "N/A",
+                value=fmt_pct(model_data.get("overall_accuracy")),
             )
 
-st.divider()
-
-# ── Detailed Charts ─────────────────────────────────────────────
-
-st.subheader("详细分析")
-
-if adapter:
-    adapter.render_detail(data)
-else:
-    st.info("安装领域适配器后可查看详细图表。")
-
-st.divider()
-
-# ── Error Analysis ──────────────────────────────────────────────
-
-if adapter:
-    with st.expander("🔍 错误分析", expanded=False):
-        adapter.render_error_analysis(data)
-
-st.divider()
-
-# ── Import ──────────────────────────────────────────────────────
-
-with st.expander("📥 导入历史评测结果到 MLflow"):
-    if st.button("扫描并导入 MLflow"):
-        from src.tracking.eval_logger import log_eval_to_mlflow
-
-        imported = 0
-        # 同一「扫描并导入」操作在本页有三处入口(无域分支/无数据分支/此处),
-        # 反馈三处同在——只包一处会让最常到达的入口反而裸跑。
-        with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):
-            for domain_dir in DOMAINS_DIR.iterdir():
-                if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
-                    continue
-                results_dir = domain_dir / "data" / "results"
-                if not results_dir.exists():
-                    continue
-                for json_file in results_dir.glob("eval_detail_*.json"):
-                    try:
-                        log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
-                        imported += 1
-                    except Exception as e:
-                        st.warning(f"导入 {json_file.name} 失败：{e}")
-        if imported:
-            st.success(f"已导入 {imported} 个评测结果文件到 MLflow。")
+results_tab, errors_tab, records_tab = st.tabs(["指标与分组", "错误样本", "评测记录管理"])
+with results_tab:
+    st.subheader("详细分析")
+    if adapter:
+        adapter.render_detail(data)
+    else:
+        st.info("该领域暂无分组图表，可查看上方指标与原始评测记录。")
+with errors_tab:
+    if adapter:
+        if not any(item.get("per_sample") for item in data):
+            st.info("当前评测记录未包含逐条预测，无法展示错误样本。")
         else:
-            st.info("未发现可导入的评测结果文件。")
+            adapter.render_error_analysis(data)
+    else:
+        st.info("该领域尚无错误样本视图。")
+with records_tab:
+    st.caption("已有评测结果可导入实验记录；导入不会重新运行模型评测。")
+    with st.expander("📥 导入历史评测结果到 MLflow"):
+        if action_button("扫描并导入 MLflow"):
+            from src.tracking.eval_logger import log_eval_to_mlflow
+
+            imported = 0
+            # 同一「扫描并导入」操作在本页有三处入口(无域分支/无数据分支/此处),
+            # 反馈三处同在——只包一处会让最常到达的入口反而裸跑。
+            with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):
+                for domain_dir in DOMAINS_DIR.iterdir():
+                    if not domain_dir.is_dir() or domain_dir.name.startswith("_"):
+                        continue
+                    results_dir = domain_dir / "data" / "results"
+                    if not results_dir.exists():
+                        continue
+                    for json_file in results_dir.glob("eval_detail_*.json"):
+                        try:
+                            log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                            imported += 1
+                        except Exception as e:
+                            st.warning(f"导入 {json_file.name} 失败：{e}")
+            if imported:
+                st.success(f"已导入 {imported} 个评测结果文件到 MLflow。")
+            else:
+                st.info("未发现可导入的评测结果文件。")

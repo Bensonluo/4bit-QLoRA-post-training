@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("streamlit")
 
 UI = Path(__file__).resolve().parents[2] / "ui"
-INTAKE_TITLE = "从业务目标和数据开始"  # 07 页 st.title 原文（07_Data_Intake.py:40）
+INTAKE_TITLE = "先说业务目标，再看数据"  # 07 页 st.title 原文（07_Data_Intake.py:40）
 DOOR_BUTTON = "🚪 去数据入口"
 
 

@@ -12,11 +12,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import streamlit as st
 
 from src.inference.discovery import ChatModelOption, discover_chat_models
+from ui.components.shell import display_navigation
 from ui.config import PROJECT_ROOT
+from ui.runtime import DISPLAY_ONLY, action_button, action_chat_input
 
-st.set_page_config(page_title="Chat", page_icon="💬", layout="wide")
+st.set_page_config(page_title="模型试用", page_icon="💬", layout="wide")
 
-st.title("💬 Chat")
+st.title("模型试用")
+if DISPLAY_ONLY:
+    st.caption("本地工作台支持选择 LoRA 或合并模型，配置提示词与采样参数，流式查看模型回答。")
+    display_navigation(
+        "此展示环境未加载模型权重。可浏览示例任务的输入与监督答案，或查看历史实验记录。"
+    )
+    st.stop()
 st.caption(
     "选一个训练产物（adapter / 已合并模型）或任意底座，加载后直接对话——"
     "训练完的模型不该只躺在 outputs/ 里。"
@@ -52,10 +60,12 @@ with st.sidebar:
     adapter_path: str | None = None
     if opt is None:
         base_model = st.text_input(
-            "底座模型（HF 名或本地路径）",
-            value="Qwen/Qwen2.5-0.5B-Instruct",
+            "底座模型（HF 名或本地路径）", value="Qwen/Qwen2.5-0.5B-Instruct", disabled=DISPLAY_ONLY
         )
-        adapter_path = st.text_input("LoRA adapter 路径（可选）", value="").strip() or None
+        adapter_path = (
+            st.text_input("LoRA adapter 路径（可选）", value="", disabled=DISPLAY_ONLY).strip()
+            or None
+        )
     else:
         st.caption(f"路径：`{opt.path}`")
         if opt.kind == "adapter":
@@ -63,6 +73,7 @@ with st.sidebar:
                 "底座覆盖（可选）",
                 value="",
                 help="默认从 adapter_config.json 读取；底座在本地其他位置时填这里",
+                disabled=DISPLAY_ONLY,
             )
             base_model = override.strip() or (opt.base_model or "")
             adapter_path = str(opt.path)
@@ -81,7 +92,7 @@ with st.sidebar:
         temperature = st.slider("采样温度", 0.0, 1.5, 0.7, 0.05)
     thinking = st.checkbox("思考模式（Qwen3）", value=False, help="开启后允许模型先推理再作答")
 
-    if st.button("⚡ 加载模型", type="primary", use_container_width=True):
+    if action_button("⚡ 加载模型", type="primary", use_container_width=True):
         if not base_model.strip():
             st.error(
                 "底座模型为空：adapter 的 adapter_config.json 里没有底座名，请在「底座覆盖」里补一个。"
@@ -128,7 +139,7 @@ if not loaded_base:
 where = f"`{loaded_base}`" + (f" + adapter `{loaded_adapter}`" if loaded_adapter else "")
 unload_col, _ = st.columns([1, 3])
 with unload_col:
-    if st.button("⬅️ 换模型 / 卸载"):
+    if action_button("⬅️ 换模型 / 卸载"):
         st.session_state.pop("chat_base", None)
         st.session_state.pop("chat_adapter", None)
         st.session_state["chat_messages"] = []
@@ -147,7 +158,7 @@ for msg in st.session_state["chat_messages"]:
         if msg.get("elapsed"):
             st.caption(f"{msg['elapsed']:.1f}s")
 
-prompt = st.chat_input("输入消息，Enter 发送…")
+prompt = action_chat_input("输入消息，Enter 发送…")
 if prompt:
     st.session_state["chat_messages"].append({"role": "user", "content": prompt})
 

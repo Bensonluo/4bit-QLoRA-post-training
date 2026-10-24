@@ -22,6 +22,7 @@ execution_service.stop 全文件唯一)。R104 空态钉「No training runs yet�
 维护,轮报披露。
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -110,7 +111,8 @@ def test_lab_stop_requires_confirmation():
     source = _source(PAGE_LAB)
     assert 'st.popover("⏹ 停止"' in source, "停止入口必须是 popover"
     block = source.split('st.popover("⏹ 停止"', 1)[1]
-    confirm_pos = block.find('st.button("确认停止"')
+    confirm = re.search(r'action_button\(\s*"确认停止"', block)
+    confirm_pos = confirm.start() if confirm else -1
     stop_pos = block.find("runner.stop_training")
     assert confirm_pos != -1 and stop_pos != -1 and confirm_pos < stop_pos, (
         "确认按钮必须在 popover 内且先于 stop_training"
@@ -118,7 +120,7 @@ def test_lab_stop_requires_confirmation():
     assert source.count("runner.stop_training") == 1, "stop_training 只能出现在确认流程内"
     # 00 页删除 popover 同轮中文化(caption 如实:本地运行记录,产物保留)
     del_block = source.split('st.popover("🗑 删除"', 1)[1]
-    assert 'st.button("确认删除"' in del_block, "删除确认按钮必须中文化"
+    assert 'action_button("确认删除"' in del_block, "删除确认按钮必须中文化"
     assert "config" in del_block.lower() or "配置" in del_block, "删除 caption 必须说明保留范围"
 
 
@@ -143,7 +145,8 @@ def test_intake_stop_requires_confirmation():
     source = _source(PAGE_INTAKE)
     assert 'st.popover("停止本轮后台执行"' in source
     block = source.split('st.popover("停止本轮后台执行"', 1)[1]
-    confirm_pos = block.find('st.button("确认停止"')
+    confirm = re.search(r'action_button\(\s*"确认停止"', block)
+    confirm_pos = confirm.start() if confirm else -1
     stop_pos = block.find("execution_service.stop")
     assert confirm_pos != -1 and stop_pos != -1 and confirm_pos < stop_pos
     assert source.count("execution_service.stop(") == 1

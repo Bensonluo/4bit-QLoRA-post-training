@@ -9,6 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
+from ui.components.shell import display_navigation
+from ui.runtime import DISPLAY_ONLY, action_button
+
 st.set_page_config(page_title="实验记录", page_icon="📊", layout="wide")
 st.title("📊 实验记录")
 
@@ -36,6 +39,11 @@ def _status_label(value: str) -> str:
 
 
 if runs.empty:
+    if DISPLAY_ONLY:
+        display_navigation(
+            "展示环境暂无实验记录，可先浏览示例任务的数据与核验过程。", experiments=False
+        )
+        st.stop()
     st.info("暂无实验记录。请先在训练实验室（Training Lab）发起训练。")
     # st.stop 封页前给出最后一条出路（R108 06 页范式）：否则用户只能靠侧栏自救
     if st.button("🏋️ 去训练实验室", type="primary"):
@@ -217,7 +225,7 @@ if selected_run:
             "软删除：运行记录将从界面移除（底层进入 MLflow 回收站 .trash），"
             "config 与日志文件不受影响。"
         )
-        if st.button("确认删除", type="primary"):
+        if action_button("确认删除", type="primary"):
             mlflow.delete_run(run_id)
             fetch_runs.clear()  # 30s TTL 缓存不清会让被删运行残留,与 caption 承诺矛盾(04 页 idiom)
             st.success("已删除。")

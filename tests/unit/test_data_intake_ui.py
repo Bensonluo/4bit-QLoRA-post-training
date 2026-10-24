@@ -75,8 +75,8 @@ def test_open_task_analyze_confirm_and_return_to_new(data_page, monkeypatch):
     assert not page.exception
     button(page, "联合分析目标与数据").click().run()
     assert not page.exception
-    assert any(s.value == "真实转换预览" for s in page.subheader)
-    assert len(page.metric) == 4
+    assert any(item.label == "真实转换预览" for item in page.expander)
+    assert any("已生成预览 2" in item.value and "缺少答案 0" in item.value for item in page.caption)
     assert button(page, "确认当前转换含义").disabled
     next(c for c in page.checkbox if c.label.startswith("已核对预览")).check().run()
     button(page, "确认当前转换含义").click().run()
@@ -1547,7 +1547,7 @@ def test_task_view_survives_corrupt_iterations_row(tmp_path, monkeypatch):
     page.session_state["intake_id"] = session.session_id
     page.run()
     assert not page.exception
-    assert any(h.value == session.goal for h in page.subheader), "任务视图主结构必须照常渲染"
+    assert any(h.value == session.goal for h in page.title), "任务视图主结构必须照常渲染"
     assert any("迭代记录读取失败" in w.value for w in page.warning)
 
 
@@ -1567,7 +1567,7 @@ def test_task_view_survives_corrupt_suite_file(tmp_path, monkeypatch):
     page.session_state["intake_id"] = session.session_id
     page.run()
     assert not page.exception
-    assert any(h.value == session.goal for h in page.subheader)
+    assert any(h.value == session.goal for h in page.title)
     assert any("评测套件列表读取失败" in w.value for w in page.warning)
 
 

@@ -74,7 +74,7 @@ def test_import_entry_pins_survive_empty_state_rewrite():
     必须原样在场——test_register_unification_ui / test_loading_feedback_ui
     的钉不因 R121 重写而失锚。"""
     source = _source(PAGE_EVAL)
-    assert source.count('st.button("扫描并导入 MLflow"') == 3
+    assert source.count('action_button("扫描并导入 MLflow"') == 3
     assert source.count('with st.spinner("正在扫描并导入历史评测结果到 MLflow…"):') == 3
 
 

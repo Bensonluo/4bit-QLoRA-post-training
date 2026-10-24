@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MLFLOW_TRACKING_URI = f"file://{PROJECT_ROOT / 'outputs' / 'mlruns'}"
+MLFLOW_TRACKING_URI = os.environ.get(
+    "MLFLOW_TRACKING_URI", f"file://{PROJECT_ROOT / 'outputs' / 'mlruns'}"
+)
 DOMAINS_DIR = PROJECT_ROOT / "domains"
 CONFIGS_DIR = PROJECT_ROOT / "outputs" / "configs"
 

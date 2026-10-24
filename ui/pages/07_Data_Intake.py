@@ -39,13 +39,11 @@ from src.workbench.training_guidance import (
 )
 from src.workbench.training_runs import TrainingRunService
 from ui.components.agent_settings import render_agent_settings
+from ui.components.task_state import preparation_progress
 from ui.config import PROJECT_ROOT
+from ui.runtime import DISPLAY_ONLY, action_button, action_submit, action_upload
 
 st.set_page_config(page_title="目标与数据 — TuneSmith", page_icon="🧩", layout="wide")
-st.title("从业务目标和数据开始")
-st.caption(
-    "描述希望模型完成的工作，提供一份样例。我们一起判断资料是否适合、还缺什么，并预览真实的数据处理结果。"
-)
 service = IntakeService(PROJECT_ROOT / "outputs" / "workbench" / "intake")
 
 
@@ -418,7 +416,7 @@ def show_business_scoring() -> None:
             "此功能需要 Agent 服务，尚未配置模型：在左侧边栏「分析模型设置（Agent 服务）」"
             "填写后，勾选上方发送授权即可使用。"
         )
-    if st.button("让 Agent 拟定业务评分规则", disabled=not authorized):
+    if action_button("让 Agent 拟定业务评分规则", disabled=not authorized):
         if not standard.strip():
             st.error("请先说明业务评分标准和不能接受的错误。")
         else:
@@ -489,7 +487,7 @@ def show_business_scoring() -> None:
                 value=confirmed,
                 disabled=confirmed,
             )
-            if st.button(
+            if action_button(
                 "确认这套业务评分规则",
                 key=f"confirm_scoring_{identity}",
                 disabled=confirmed or not acknowledge or validation.get("status") != "passed",
@@ -591,7 +589,7 @@ def show_final_acceptance(run: dict) -> None:
                     suite_test_count,
                 ):
                     st.caption(gate_line)
-                prepare = st.form_submit_button("冻结此模型与业务验收标准")
+                prepare = action_submit("冻结此模型与业务验收标准")
             if prepare:
                 if not standard.strip() or minimum_score is None or minimum_cases is None:
                     st.error("请明确填写业务标准、最低通过率和最低题数，软件不替你设定业务门槛。")
@@ -654,7 +652,7 @@ def show_final_acceptance(run: dict) -> None:
                     }
                 )
             if record["status"] == "prepared":
-                if st.button("按冻结标准执行最终验收", key=f"run_acceptance_{identity}"):
+                if action_button("按冻结标准执行最终验收", key=f"run_acceptance_{identity}"):
                     try:
                         with st.spinner("正在执行单模型独立测试验收…"):
                             acceptance.run(identity, service.load(session.session_id))
@@ -764,7 +762,7 @@ def show_final_acceptance(run: dict) -> None:
                             }[value],
                         )
                         reason = st.text_area("这条判断的业务理由")
-                        submit_review = st.form_submit_button("保存这条业务判断")
+                        submit_review = action_submit("保存这条业务判断")
                     if submit_review:
                         if not review_decision or not reason.strip():
                             st.error("请选择通过或不通过，并说明业务理由。")
@@ -857,7 +855,7 @@ def show_training_recommendations() -> None:
             "此功能需要 Agent 服务，尚未配置模型：在左侧边栏「分析模型设置（Agent 服务）」"
             "填写后，勾选上方发送授权即可使用。"
         )
-    if st.button("让 Agent 推荐训练方案", disabled=not authorized):
+    if action_button("让 Agent 推荐训练方案", disabled=not authorized):
         model_paths = list(
             dict.fromkeys(
                 [
@@ -957,7 +955,7 @@ def show_training_recommendations() -> None:
                 st.caption(
                     "确认会按保存的方案重新核对数据和模型，并准备训练；启动仍需在训练记录中点击。数据或模型已改变时需要重新推荐。"
                 )
-                if st.button("确认推荐方案并准备训练", key=f"prepare_plan_{plan_id}"):
+                if action_button("确认推荐方案并准备训练", key=f"prepare_plan_{plan_id}"):
                     try:
                         with st.spinner("正在准备训练方案并核对 token 消费…"):
                             plans.prepare(plan_id, service.load(session.session_id))
@@ -1201,7 +1199,7 @@ def show_business_comparison(report, *, key: str) -> None:
             # 面板在左侧边栏（07:1303 st.sidebar），旧文案「上方」是面板搬侧栏前的
             # 陈旧方位词（R141 修正）；面板名用 R136 桥接全名，与三处未配置指路同词表。
             st.caption("请先在左侧边栏「分析模型设置（Agent 服务）」里允许向所选服务发送业务资料。")
-    if st.button(
+    if action_button(
         "让 Agent 分析结果与下一步",
         key=f"assess_{key}_{report.evaluation_id}",
         disabled=not report_authorized or not current_report,
@@ -1310,7 +1308,7 @@ def show_business_comparison(report, *, key: str) -> None:
                     ),
                     disabled=not change_training,
                 )
-                propose_iteration = st.form_submit_button("保存改进提案，进入确认")
+                propose_iteration = action_submit("保存改进提案，进入确认")
             if propose_iteration:
                 try:
                     iteration_service.propose(
@@ -1378,6 +1376,11 @@ with st.sidebar:
             "新建任务不受影响。多半是存储写入被中途打断。"
         )
     labels = {s.session_id: f"{s.goal[:35]} · {s.session_id[:6]}" for s in sessions}
+    if DISPLAY_ONLY and not st.session_state.get("ts_display_intake_initialized"):
+        if sessions and "intake_id" not in st.session_state:
+            st.session_state["intake_id"] = sessions[0].session_id
+            st.session_state["intake_select"] = sessions[0].session_id
+        st.session_state["ts_display_intake_initialized"] = True
     st.selectbox(
         "选择任务",
         ["", *labels],
@@ -1385,7 +1388,7 @@ with st.sidebar:
         key="intake_select",
         on_change=select_task,
     )
-    st.button("新建数据任务", on_click=new_task)
+    action_button("新建数据任务", on_click=new_task)
     with st.expander("全部任务停点快照"):
         # 北极星「度量体系·过程漏斗」:跨任务的只读停点计数。与 CLI
         # funnel-report 同一份 collect_funnel + summarize_funnel
@@ -1409,19 +1412,25 @@ with st.sidebar:
             for line in summarize_funnel(report):
                 st.write(line)
 
-base_url, model, api_key, allow_remote = render_agent_settings(
-    PROJECT_ROOT / "outputs" / "workbench" / "agent-settings.json"
-)
+with st.sidebar:
+    base_url, model, api_key, allow_remote = render_agent_settings(
+        PROJECT_ROOT / "outputs" / "workbench" / "agent-settings.json"
+    )
 
 if "intake_id" not in st.session_state:
+    st.caption("业务任务 / 目标与数据")
+    st.title("先说业务目标，再看数据")
+    st.write("提供原始资料，核对模型需要学习的输入与答案。")
+    goal = st.text_area(
+        "希望模型完成什么业务工作？",
+        placeholder="例如：根据客户首次咨询判断售后问题类型。历史工单里的处理结果可能不是我想要的标签。",
+        key="new_intake_goal",
+        height=100,
+    )
     # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
     # 按上传的文件类型显示 sheet 选择。
-    upload = st.file_uploader("提供 CSV、Excel 或 JSONL", type=["csv", "xlsx", "xls", "jsonl"])
+    upload = action_upload("提供 CSV、Excel 或 JSONL", type=["csv", "xlsx", "xls", "jsonl"])
     with st.form("new_intake"):
-        goal = st.text_area(
-            "希望模型完成什么业务工作？",
-            placeholder="例如：根据客户首次咨询判断售后问题类型。历史工单里的处理结果可能不是我想要的标签。",
-        )
         description = st.text_area(
             "这些数据是什么？有哪些已知情况？",
             placeholder="例如：一行一个工单，描述来自客户，类别由人工审核。有些记录缺类别。",
@@ -1431,7 +1440,7 @@ if "intake_id" not in st.session_state:
             encoding = st.text_input("编码（留空自动识别）", placeholder="utf-8-sig / gb18030")
             delimiter_label = st.selectbox("CSV 分隔符", ["自动", "逗号", "分号", "Tab", "竖线"])
             sheet = excel_sheet_input(upload, key="new_intake_sheet")
-        create = st.form_submit_button("读取数据并开始", type="primary")
+        create = action_submit("读取数据并开始", type="primary")
     if create:
         if upload is None:
             st.error("请提供一份数据样例；不需要先整理成训练格式。")
@@ -1464,7 +1473,7 @@ if "intake_id" not in st.session_state:
                 "（分析、预览核对、对比核验、盲标核验）与真实任务完全相同，"
                 "没有预设结论。"
             )
-            if st.button(DEMO_SAMPLE_BUTTON):
+            if action_button(DEMO_SAMPLE_BUTTON):
                 try:
                     demo_session = service.create(
                         DEMO_GOAL,
@@ -1486,7 +1495,7 @@ if "intake_id" not in st.session_state:
                     continue
                 variant_name, variant_bytes, variant_spec = variant_pair
                 st.caption(variant_spec["description"])
-                if st.button(variant_spec["button"], key=f"demo_{variant_key}"):
+                if action_button(variant_spec["button"], key=f"demo_{variant_key}"):
                     try:
                         demo_session = service.create(
                             variant_spec["goal"],
@@ -1518,7 +1527,7 @@ except Exception as exc:
         f"读取任务失败：{exc}。这个任务的存储可能已损坏或已被删除——其他任务不受影响，"
         "可用侧栏切换，或新建一个任务。"
     )
-    st.button("🆕 新建数据任务", on_click=new_task)
+    action_button("🆕 新建数据任务", on_click=new_task)
     st.stop()
 iteration_service = IterationService(
     PROJECT_ROOT / "outputs/workbench/iterations",
@@ -1571,43 +1580,230 @@ if active_iteration:
     available_suites[active_iteration["evaluation_suite"]["suite_id"]] = active_iteration[
         "evaluation_suite"
     ]
-# ── 旅程进度:单一来源,页面/CLI 同一状态机词汇 ─────────────────────────
-_JOURNEY = [
-    ("awaiting_analysis", "① 分析目标与数据"),
-    ("review_preview", "② 核对真实转换预览"),
-    ("awaiting_full_data", "③ 提供全量数据"),
-    ("awaiting_full_validation", "④ 验证全量数据"),
-    ("review_full_data", "⑤ 确认全量数据"),
-    ("awaiting_dataset_split", "⑥ 生成独立分区"),
-    ("ready_for_training_preflight", "⑦ 训练前检查与训练"),
-    ("ready_for_training", "⑧ 对照与决策"),
-]
-
-
-def _journey_progress(session) -> None:
-    """渲染旅程进度条与当前步骤:用户任何时刻都知道走到哪了、还差什么。"""
-    action = next_action(session)
-    idx = next((i for i, (key, _) in enumerate(_JOURNEY) if key == action), None)
-    if idx is None:
-        return
-    total = len(_JOURNEY)
-    st.progress(idx / total, text=f"当前步骤：{_JOURNEY[idx][1]}（第 {idx + 1} / {total} 步）")
-    done = "✅ " + " ✅ ".join(step[1] for step in _JOURNEY[:idx])
-    if done:
-        st.caption(done)
-    remaining = [_JOURNEY[j][1] for j in range(idx + 1, total)]
-    if remaining:
-        st.caption("接下来：" + " → ".join(remaining))
-
-
-st.subheader(session.goal)
+st.caption("业务任务 / 目标与数据")
+st.title(session.goal)
+scope = "样例" if session.source.scope == "sample" else "全量资料"
 st.caption(
-    f"{session.source.name} · {len(session.source.rows)} 条记录 · 任务 {session.session_id[:8]}"
+    f"{session.source.name} · {len(session.source.rows)} 条{scope} · 任务 {session.session_id[:8]}"
 )
+preparation_progress(session)
+source_notes = any(
+    session.profile.get(key)
+    for key in ("merged_note", "formula_note", "hidden_note", "blank_note", "dup_header_note")
+)
+if source_notes:
+    show_fact_notes(session.profile)
+if session.preview:
+    with st.expander(
+        "真实转换预览",
+        expanded=next_action(session) in {"review_preview", "needs_data_revision", "needs_labels"},
+    ):
+        st.caption(session.preview.scope_note)
 
-_journey_progress(session)
-st.info(session.profile["scope_note"])
-show_fact_notes(session.profile)
+        if session.analysis and session.analysis.recipe and session.analysis.recipe.temporal_split:
+            from src.workbench.temporal_split import is_pending_label
+
+            pending_labels = [
+                row.row_id
+                for row in session.preview.rows
+                if is_pending_label(row, session.analysis.recipe.temporal_split)
+            ]
+            if pending_labels:
+                st.info(
+                    f"其中 {len(pending_labels)} 条记录截至观察截止时标签尚未成熟，将明确保留排除。仍需至少一条已成熟、真实有标签的样例才能确认。"
+                )
+        status_names = {
+            "ready": "已生成预览",
+            "needs_label": "缺少答案",
+            "invalid": "需修正处理",
+            "conflict": "答案有冲突",
+        }
+        st.caption(
+            " · ".join(
+                f"{label} {session.preview.counts[state]}" for state, label in status_names.items()
+            )
+        )
+        for entry in session.tool_trace:
+            if entry.get("tool") == "validate_business_examples" and not entry.get("ok"):
+                st.warning(
+                    "新方案改变了此前认可的样例，请重新核对业务含义：" + "；".join(entry["errors"])
+                )
+        sample_rows_to_show = (
+            session.preview.rows
+            if len(session.preview.rows) <= 3
+            else select_preview_rows(
+                session.preview.rows,
+                key=f"sample_preview_{session.session_id}_{session.revision}",
+                label="样例",
+            )
+        )
+        show_missing_label_next_step(session.preview.rows)
+        for row in sample_rows_to_show:
+            with st.expander(
+                f"{row.row_id} · {status_names[row.status]}",
+                expanded=len(session.preview.rows) <= 3,
+            ):
+                actual_input, expected_answer = st.columns([3, 2])
+                with actual_input:
+                    st.caption("模型实际输入")
+                    st.code(row.input, language=None)
+                with expected_answer:
+                    st.caption("监督答案")
+                    st.code(preview_answer(row), language=None)
+                for issue in row.issues:
+                    st.warning(issue)
+                with st.expander("查看原始记录"):
+                    st.json(row.original)
+        with st.expander("完整任务指令"):
+            st.write(session.preview.instruction)
+    status = next_action(session)
+    if status == "review_preview":
+        st.subheader("对比核验（确认前先配对一次，防止盲点头）")
+        contrast = service.contrast_check_status(session.session_id)
+
+        def render_contrast_round() -> None:
+            with st.form("contrast_check_form"):
+                st.write("开始配对对比：抽取两条答案不同的输入，把答案配到正确的输入上。")
+                start_contrast = action_submit("开始配对对比", type="primary")
+            if start_contrast:
+                try:
+                    pending = service.start_contrast_check(session.session_id, session.revision)
+                    st.session_state["pending_contrast_check"] = pending
+                    st.rerun()
+                except (ValueError, RuntimeError, OSError) as exc:
+                    st.error(str(exc))
+            pending_contrast = st.session_state.get("pending_contrast_check")
+            if pending_contrast:
+                st.write(f"**配对题（verification {pending_contrast['check_id'][:8]}）**")
+
+                # 长选项(开放生成目标)截断显示;选中提交的仍是完整原文。
+                # 截断必须保头尾:两个长答案常只差尾缀(如「（2）」),只砍尾部
+                # 会让选项标签完全相同——用户无法分辨,配对退化成掷硬币。
+                def _contrast_option_label(value: str) -> str:
+                    if value == "":
+                        return "请选择"
+                    if len(value) <= 34:
+                        return f"「{value}」"
+                    return f"「{value[:10]}…{value[-16:]}」"
+
+                with st.form(f"contrast_answer_{pending_contrast['check_id']}"):
+                    mapping = {}
+                    for item in pending_contrast["items"]:
+                        st.code(item["input"], language=None)
+
+                        # 默认不预选任何答案:漏选提交不记录核验轮次,瞎点不算配对证据。
+                        mapping[item["row_id"]] = st.selectbox(
+                            f"这条输入的正确答案（{item['row_id']}）",
+                            ["", *pending_contrast["options"]],
+                            format_func=_contrast_option_label,
+                            key=f"cc_{pending_contrast['check_id']}_{item['row_id']}",
+                        )
+                    submitted_contrast = action_submit("提交配对", type="primary")
+                if submitted_contrast:
+                    if any(value == "" for value in mapping.values()):
+                        st.error("请为每条输入选择答案；未选择不算作答，也不会记录核验轮次。")
+                    else:
+                        try:
+                            service.submit_contrast_check(
+                                session.session_id, pending_contrast["check_id"], mapping
+                            )
+                            st.session_state["pending_contrast_check"] = None
+                            st.rerun()
+                        except (ValueError, RuntimeError, OSError) as exc:
+                            st.error(str(exc))
+
+        def render_contrast_history() -> None:
+            """轮次历史逐轮可查:第几轮、题目、你的选择、正确答案、对错。"""
+            history = (contrast or {}).get("history") or []
+            if not history:
+                return
+            st.caption("核验轮次历史：每一轮的题目、你的选择与对错都可回查，二连对有据可依。")
+            st.dataframe(
+                [
+                    {
+                        "轮次": f"第 {entry['round']} 轮",
+                        "题目": item["input"],
+                        "你的选择": item["chosen"],
+                        "正确答案": item["correct_answer"],
+                        "对错": "对" if item["match"] else "错",
+                    }
+                    for entry in history
+                    for item in entry["items"]
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+
+        verified_streak = (
+            contrast.get("streak", 0) if contrast and contrast.get("verdict") == "verified" else 0
+        )
+        # 连胜三档词汇与 CLI 同源(contrast_streak_banner):还差一轮/二连对/N 轮连胜,
+        # 页面横幅与 CLI stderr 不各说各话。
+        from src.workbench.intake_service import contrast_streak_banner
+
+        banner = contrast_streak_banner(contrast)
+        if banner:
+            if verified_streak >= 2:
+                st.success(banner)
+            elif contrast and contrast.get("verdict") == "mismatch":
+                st.error(banner)
+            else:
+                st.info(banner)
+        render_contrast_history()
+        if verified_streak < 2:
+            render_contrast_round()
+        if verified_streak >= 2:
+            # 二连对后核验已达标;第三轮起只是自愿加练,不强制——文案必须与行为一致。
+            with st.expander(f"可选：继续第 {verified_streak + 1} 轮对比核验提高置信度（不强制）"):
+                st.caption(
+                    "核验已达标，不需要再核验；多配一轮只是自愿加练——碰巧连续蒙对的概率会越来越低。"
+                )
+                render_contrast_round()
+        accepted = st.checkbox(
+            "已核对预览：输入是模型实际可获得的信息，答案与我希望模型学会的目标一致。",
+            key=f"sample_review_{session.session_id}_{session.revision}_{','.join(row.row_id for row in sample_rows_to_show)}",
+        )
+        if action_button("确认当前转换含义", disabled=not accepted or not sample_rows_to_show):
+            try:
+                service.confirm(
+                    session.session_id,
+                    session.revision,
+                    [r.row_id for r in sample_rows_to_show],
+                )
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+    elif status == "awaiting_full_data":
+        st.success(
+            "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组"
+            "（多资料任务用 full-sources）；尚未认定可以正式训练。"
+        )
+    elif status == "awaiting_full_validation":
+        st.info(
+            "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查"
+            "（已声明全量可省略 --input；多资料任务用 full-sources）。"
+        )
+    elif status == "needs_data_revision":
+        st.warning(
+            "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；"
+            "此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。"
+        )
+    with st.expander("处理规则与工具记录"):
+        st.json(
+            session.analysis.recipe.model_dump()
+            if session.analysis and session.analysis.recipe
+            else {}
+        )
+        from src.workbench.report_summary import summarize_tool_trace
+
+        for line in summarize_tool_trace(session.tool_trace, "分析"):
+            st.write(line)
+        st.json(session.tool_trace)
+
+with st.expander("数据来源与读取说明"):
+    st.write(session.profile["scope_note"])
+    if not source_notes:
+        show_fact_notes(session.profile)
 if iterations:
     st.subheader("改进轮次与当前下一步")
     iteration_states = {
@@ -1683,7 +1879,7 @@ if iterations:
                         "已核对上述预检提示，继续按确认方案执行。",
                         key=f"execution_warning_ack_{identity}",
                     )
-                    if st.button(
+                    if action_button(
                         "核对后继续到开发集对照",
                         key=f"resume_execution_{identity}",
                         disabled=not acknowledged,
@@ -1705,7 +1901,9 @@ if iterations:
                             "将中断本轮在途执行，且不可从断点续跑（需重新发起）；"
                             "已完成阶段的产物与记录保留。"
                         )
-                        if st.button("确认停止", key=f"stop_confirm_{identity}", type="primary"):
+                        if action_button(
+                            "确认停止", key=f"stop_confirm_{identity}", type="primary"
+                        ):
                             try:
                                 execution_service.stop(identity)
                                 st.rerun()
@@ -1734,7 +1932,7 @@ if iterations:
                             "已确认本轮每行代表独立业务对象。",
                             key=f"execution_independent_{identity}",
                         )
-                    if st.button(
+                    if action_button(
                         "按确认方案执行到开发集对照",
                         key=f"execute_iteration_{identity}",
                         disabled=not independent,
@@ -1749,7 +1947,7 @@ if iterations:
                             st.rerun()
                         except (ValueError, RuntimeError, OSError, ImportError) as exc:
                             st.error(str(exc))
-            if iteration["status"] == "proposed" and st.button(
+            if iteration["status"] == "proposed" and action_button(
                 "确认本轮假设与变更范围", key=f"confirm_iteration_{identity}"
             ):
                 try:
@@ -1776,7 +1974,7 @@ if iterations:
                             "此功能需要 Agent 服务，尚未配置模型：在左侧边栏「分析模型设置（Agent 服务）」"
                             "填写后，勾选上方发送授权即可使用。"
                         )
-                    if st.button(
+                    if action_button(
                         "让 Agent 按确认方向修改数据方案",
                         key=f"revise_iteration_{identity}",
                         disabled=not revision_authorized,
@@ -1823,7 +2021,7 @@ if iterations:
                                 "已确认本轮每行是独立业务对象。",
                                 key=f"independent_iteration_{identity}",
                             )
-                        if st.button(
+                        if action_button(
                             "用本轮固定题集准备数据版本", key=f"materialize_iteration_{identity}"
                         ):
                             try:
@@ -1837,7 +2035,7 @@ if iterations:
                                 st.rerun()
                             except (ValueError, RuntimeError, OSError) as exc:
                                 st.error(str(exc))
-                    if st.button(
+                    if action_button(
                         "按已确认范围准备下一轮训练",
                         key=f"prepare_iteration_{identity}",
                         disabled=attached_suite != iteration["evaluation_suite"],
@@ -1906,7 +2104,7 @@ if iterations:
                     key=f"decision_reason_{identity}",
                 )
                 decision_map = {name: code for code, name in ITERATION_DECISION_NAMES.items()}
-                if st.button(
+                if action_button(
                     "记录本轮决策",
                     key=f"decide_{identity}",
                     type="primary",
@@ -2028,7 +2226,7 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
         show_fact_notes(source, alias=alias if len(original_sources) > 1 else "")
     # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
     # 按上传的文件类型显示 sheet 选择。
-    source_upload = st.file_uploader("上传补充原始资料", type=["csv", "xlsx", "xls", "jsonl"])
+    source_upload = action_upload("上传补充原始资料", type=["csv", "xlsx", "xls", "jsonl"])
     with st.form(f"source_upload_{session.session_id}"):
         source_alias = st.text_input(
             "补充资料名称", placeholder="例如 labels、orders；main 是首次上传的资料"
@@ -2040,7 +2238,7 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
         source_scope = st.radio("补充资料范围", ["样例", "全量"])
         source_sheet = excel_sheet_input(source_upload, key=f"source_sheet_{session.session_id}")
         replace_source = st.checkbox("若资料名称已存在，替换该份资料并重新分析。")
-        add_source = st.form_submit_button("保存补充资料")
+        add_source = action_submit("保存补充资料")
     if add_source:
         if source_upload is None:
             st.error("请上传这份原始资料。")
@@ -2115,500 +2313,312 @@ with st.expander("本地数据事实与原始行", expanded=session.analysis is 
         "这里展示当前处理阶段的数据；原始资料分别保留在上方资料列表中。统计范围仅为已提供的资料。"
     )
 
-if session.analysis:
-    analysis = session.analysis
-    st.subheader("业务理解")
-    # 任务形态徽标:从 findings 单一来源提取,不重算(推断结论随分析存档)
-    archetype_finding = next(
-        (f for f in analysis.findings if f.message.startswith("任务形态推断：")), None
-    )
-    if archetype_finding:
-        st.success(archetype_finding.message.split("。依据")[0] + "。")
-    st.write(f"**实际使用输入：** {analysis.task.usage_input}")
-    st.write(f"**希望输出：** {analysis.task.desired_output}")
-    st.write(f"**每行含义：** {analysis.task.row_meaning}")
-    st.write(f"**监督答案来源：** {analysis.task.supervision_source}")
-    if analysis.recipe and analysis.recipe.temporal_split:
-        show_temporal_policy(analysis.recipe.temporal_split)
-    role_names = {
-        "input": "模型输入",
-        "target": "监督答案",
-        "group": "分组/关联",
-        "metadata": "检查依据",
-        "unused": "暂不使用",
-        "unknown": "待澄清",
-    }
-    st.dataframe(
-        [
-            {
-                "字段": r.column,
-                "用途": role_names[r.role],
-                "依据": r.reason,
-                "预测时可获得": "是"
-                if r.available_at_prediction is True
-                else "否"
-                if r.available_at_prediction is False
-                else "待确认",
-            }
-            for r in analysis.task.field_roles
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-    st.subheader("数据判断与待确认问题")
-    kinds = {
-        "observed": "已观察",
-        "hypothesis": "待验证推断",
-        "needs_business_input": "需要业务解释",
-        "needs_full_data": "需要全量验证",
-    }
-    for finding in analysis.findings:
-        evidence = (
-            f"（证据：{', '.join(finding.evidence_row_ids)}）" if finding.evidence_row_ids else ""
-        )
-        st.write(f"**{kinds[finding.kind]}：** {finding.message} {evidence}")
-    for question in analysis.questions:
-        st.warning(question.question)
-        st.caption(
-            question.why
-            + (" 可选解释：" + " / ".join(question.options) if question.options else "")
-        )
-    for gap in analysis.capability_gaps:
-        st.warning(f"当前能力缺口：{gap}")
-    st.write(f"**暂定微调思路：** {analysis.training_approach}")
-    st.write("**下一步：**")
-    for step in analysis.next_steps:
-        st.write(f"- {step}")
-
-feedback = st.text_area(
-    "回答问题或修正理解",
-    placeholder="请说明真实使用时有哪些信息、哪些答案才是正确的，或指出预览里不符合业务的地方。",
-    key=f"intake_feedback_{session.session_id}_{session.revision}",
+analysis_needs_attention = (
+    session.analysis is None
+    or bool(session.analysis.questions or session.analysis.capability_gaps)
+    or next_action(session) in {"needs_data_revision", "needs_labels", "needs_recipe"}
 )
-if st.button("保存业务补充，稍后分析", disabled=not feedback.strip()):
-    try:
-        service.answer(session.session_id, feedback)
-        st.rerun()
-    except ValueError as exc:
-        st.error(str(exc))
-if st.button(
-    "联合分析目标与数据" if not session.analysis else "根据补充说明重新分析", type="primary"
-):
-    try:
-        client = CompatibleChatClient(base_url, model, api_key, allow_remote=allow_remote)
-        if feedback.strip():
-            session = service.answer(session.session_id, feedback)
-        with st.spinner("Agent 正在检查数据、核实字段用途并试运行处理方案…"):
-            session = service.analyze(session.session_id, client)
-        st.rerun()
-    except (ValueError, RuntimeError, OSError) as exc:
-        message = str(exc)
-        if "请填写支持工具调用的模型名称" in message:
-            # 无模型报错就地指路零密钥替代（R130）：报错不得只说「去填模型名称」，
-            # 基础分析是北极星契约内的等效起点
-            message += (
-                "也可以不配置模型服务：展开下方「没有 Agent 服务？用基础分析开始」，"
-                "零密钥用产品内置判断分析。"
-            )
-        st.error(message)
-
-if session.analysis is None or session.agent_model == "baseline-deterministic":
-    # 主 CTA 旁的零密钥指路（R130）：折叠器标签再响也压不过上方主按钮的视觉
-    # 权重——一句话把「不配 Agent 也行」说在主按钮正下方。
-    st.caption("不想配置 Agent？下一个折叠项「没有 Agent 服务？用基础分析开始」就是零密钥入口。")
-    with st.expander("没有 Agent 服务？用基础分析开始（产品内置判断，无需任何密钥）"):
-        st.caption(
-            "基础分析只依据你的字段选择和数据事实生成方案：不判断业务含义，"
-            "之后仍需在真实预览里逐行核对；需要多源组合、时间分区或业务问答时再配置 Agent。"
+with st.expander("业务理解与方案修订", expanded=analysis_needs_attention):
+    if session.analysis:
+        analysis = session.analysis
+        st.subheader("业务理解")
+        # 任务形态徽标:从 findings 单一来源提取,不重算(推断结论随分析存档)
+        archetype_finding = next(
+            (f for f in analysis.findings if f.message.startswith("任务形态推断：")), None
         )
-        if session.analysis is not None:
-            st.caption(
-                "当前已有一份基础分析：调整字段重新生成会替换它，此前的预览确认与对比核验随之失效。"
-            )
-        baseline_target = st.selectbox(
-            "答案列（模型要预测的字段）",
-            list(session.source.columns),
-            key=f"baseline_target_{session.session_id}",
-        )
-        baseline_groups = st.multiselect(
-            "业务分组字段（同一客户/会话/对象多行时选择，防泄漏；可留空）",
-            [column for column in session.source.columns if column != baseline_target],
-            key=f"baseline_groups_{session.session_id}",
-        )
-        baseline_exclude = st.multiselect(
-            "排除字段（不作为模型输入；可留空）",
+        if archetype_finding:
+            st.success(archetype_finding.message.split("。依据")[0] + "。")
+        st.write(f"**实际使用输入：** {analysis.task.usage_input}")
+        st.write(f"**希望输出：** {analysis.task.desired_output}")
+        st.write(f"**每行含义：** {analysis.task.row_meaning}")
+        st.write(f"**监督答案来源：** {analysis.task.supervision_source}")
+        if analysis.recipe and analysis.recipe.temporal_split:
+            show_temporal_policy(analysis.recipe.temporal_split)
+        role_names = {
+            "input": "模型输入",
+            "target": "监督答案",
+            "group": "分组/关联",
+            "metadata": "检查依据",
+            "unused": "暂不使用",
+            "unknown": "待澄清",
+        }
+        st.dataframe(
             [
+                {
+                    "字段": r.column,
+                    "用途": role_names[r.role],
+                    "依据": r.reason,
+                    "预测时可获得": "是"
+                    if r.available_at_prediction is True
+                    else "否"
+                    if r.available_at_prediction is False
+                    else "待确认",
+                }
+                for r in analysis.task.field_roles
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+        st.subheader("数据判断与待确认问题")
+        kinds = {
+            "observed": "已观察",
+            "hypothesis": "待验证推断",
+            "needs_business_input": "需要业务解释",
+            "needs_full_data": "需要全量验证",
+        }
+        for finding in analysis.findings:
+            evidence = (
+                f"（证据：{', '.join(finding.evidence_row_ids)}）"
+                if finding.evidence_row_ids
+                else ""
+            )
+            st.write(f"**{kinds[finding.kind]}：** {finding.message} {evidence}")
+        for question in analysis.questions:
+            st.warning(question.question)
+            st.caption(
+                question.why
+                + (" 可选解释：" + " / ".join(question.options) if question.options else "")
+            )
+        for gap in analysis.capability_gaps:
+            st.warning(f"当前能力缺口：{gap}")
+        st.write(f"**暂定微调思路：** {analysis.training_approach}")
+        st.write("**下一步：**")
+        for step in analysis.next_steps:
+            st.write(f"- {step}")
+
+    feedback = st.text_area(
+        "回答问题或修正理解",
+        placeholder="请说明真实使用时有哪些信息、哪些答案才是正确的，或指出预览里不符合业务的地方。",
+        key=f"intake_feedback_{session.session_id}_{session.revision}",
+    )
+    if action_button("保存业务补充，稍后分析", disabled=not feedback.strip()):
+        try:
+            service.answer(session.session_id, feedback)
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+    if action_button(
+        "联合分析目标与数据" if not session.analysis else "根据补充说明重新分析", type="primary"
+    ):
+        try:
+            client = CompatibleChatClient(base_url, model, api_key, allow_remote=allow_remote)
+            if feedback.strip():
+                session = service.answer(session.session_id, feedback)
+            with st.spinner("Agent 正在检查数据、核实字段用途并试运行处理方案…"):
+                session = service.analyze(session.session_id, client)
+            st.rerun()
+        except (ValueError, RuntimeError, OSError) as exc:
+            message = str(exc)
+            if "请填写支持工具调用的模型名称" in message:
+                # 无模型报错就地指路零密钥替代（R130）：报错不得只说「去填模型名称」，
+                # 基础分析是北极星契约内的等效起点
+                message += (
+                    "也可以不配置模型服务：展开下方「没有 Agent 服务？用基础分析开始」，"
+                    "零密钥用产品内置判断分析。"
+                )
+            st.error(message)
+
+    if session.analysis is None or session.agent_model == "baseline-deterministic":
+        # 主 CTA 旁的零密钥指路（R130）：折叠器标签再响也压不过上方主按钮的视觉
+        # 权重——一句话把「不配 Agent 也行」说在主按钮正下方。
+        st.caption(
+            "不想配置 Agent？下一个折叠项「没有 Agent 服务？用基础分析开始」就是零密钥入口。"
+        )
+        with st.expander("没有 Agent 服务？用基础分析开始（产品内置判断，无需任何密钥）"):
+            st.caption(
+                "基础分析只依据你的字段选择和数据事实生成方案：不判断业务含义，"
+                "之后仍需在真实预览里逐行核对；需要多源组合、时间分区或业务问答时再配置 Agent。"
+            )
+            if session.analysis is not None:
+                st.caption(
+                    "当前已有一份基础分析：调整字段重新生成会替换它，此前的预览确认与对比核验随之失效。"
+                )
+            baseline_target = st.selectbox(
+                "答案列（模型要预测的字段）",
+                list(session.source.columns),
+                key=f"baseline_target_{session.session_id}",
+            )
+            baseline_groups = st.multiselect(
+                "业务分组字段（同一客户/会话/对象多行时选择，防泄漏；可留空）",
+                [column for column in session.source.columns if column != baseline_target],
+                key=f"baseline_groups_{session.session_id}",
+            )
+            baseline_exclude = st.multiselect(
+                "排除字段（不作为模型输入；可留空）",
+                [
+                    column
+                    for column in session.source.columns
+                    if column != baseline_target and column not in baseline_groups
+                ],
+                key=f"baseline_exclude_{session.session_id}",
+            )
+            baseline_input_columns = [
                 column
                 for column in session.source.columns
-                if column != baseline_target and column not in baseline_groups
-            ],
-            key=f"baseline_exclude_{session.session_id}",
-        )
-        baseline_input_columns = [
-            column
-            for column in session.source.columns
-            if column != baseline_target
-            and column not in baseline_groups
-            and column not in baseline_exclude
-        ]
-        if baseline_target and baseline_input_columns:
-            from src.workbench.baseline_analysis import (
-                compose_instruction,
-                infer_task_archetype,
-            )
-
-            inference = infer_task_archetype(session, baseline_target, baseline_input_columns)
-            archetype_names = {
-                "classification": "分类",
-                "extraction": "抽取/归一",
-                "generation": "开放生成",
-            }
-            with st.expander(
-                f"数据推断的任务形态：{archetype_names[inference['archetype']]}（点击展开依据，指令可修改）"
-            ):
-                st.caption(
-                    f"推断依据（来自你的数据实测）：答案列不同取值 "
-                    f"{len(inference['distinct_values'])} 个、唯一率 {inference['unique_ratio']:.0%}、"
-                    f"平均长度 {inference['avg_target_len']:.0f} 字；"
-                    f"输入渲染取「{'纯文本直出' if inference['input_render'] == 'plain' else '字段名标注'}」"
-                    f"（{'单一长文本输入，字段前缀不携带信息' if inference['input_render'] == 'plain' else '多字段需要标注区分'}）。"
-                )
-                # 草稿刷新规则:字段选择变化即重写草稿;用户编辑过(选择未变)则保留。
-                # 不能用 value=——它只在组件首次创建时生效,改列后草稿会残留旧列内容。
-                instruction_key = f"baseline_instruction_{session.session_id}"
-                signature_key = f"baseline_instruction_sig_{session.session_id}"
-                signature = (
-                    f"{baseline_target}|{'+'.join(sorted(baseline_groups))}"
-                    f"|-{','.join(sorted(baseline_exclude))}"
-                )
-                if st.session_state.get(signature_key) != signature:
-                    st.session_state[signature_key] = signature
-                    st.session_state[instruction_key] = compose_instruction(
-                        session.goal, baseline_target, baseline_input_columns, inference
-                    )
-                st.text_area(
-                    "任务指令（由推断组装，可直接修改；清空则按最新推断自动生成）",
-                    key=instruction_key,
-                    height=120,
-                )
-        baseline_temporal = st.checkbox(
-            "按时间分区切分（预测未来结果的任务需要，防止把未来信息泄漏进训练）",
-            key=f"baseline_temporal_{session.session_id}",
-        )
-        temporal_policy = None
-        if baseline_temporal:
-            st.caption(
-                "三个时间字段必须互不相同，时间须为带时区的 ISO 格式（如 2026-02-01T00:00:00Z）。"
-                "训练/验证的标签必须在下一分区起点前成熟，未成熟的行会明确保留排除，不随机补数。"
-            )
-            available_options = [
-                column for column in session.source.columns if column != baseline_target
+                if column != baseline_target
+                and column not in baseline_groups
+                and column not in baseline_exclude
             ]
-            if len(available_options) < 3:
-                st.error(
-                    f"当前数据只有 {len(session.source.columns)} 个字段，"
-                    "时间分区需要答案列之外还有 3 个互不相同的时间字段；请补充时间列或关闭时间分区。"
+            if baseline_target and baseline_input_columns:
+                from src.workbench.baseline_analysis import (
+                    compose_instruction,
+                    infer_task_archetype,
                 )
-            else:
-                available_column = st.selectbox(
-                    "信息实际可获得时间字段（每行全部输入最晚可得知的时间）",
-                    available_options,
-                    key=f"baseline_available_at_{session.session_id}",
-                )
-                prediction_column = st.selectbox(
-                    "作出预测时间字段（业务实际下单/决策的时间）",
-                    [column for column in available_options if column != available_column],
-                    key=f"baseline_prediction_at_{session.session_id}",
-                )
-                label_end_column = st.selectbox(
-                    "标签窗口结束时间字段（仅用于分区，不会作为模型输入）",
-                    [
-                        column
-                        for column in available_options
-                        if column not in {available_column, prediction_column}
-                    ],
-                    key=f"baseline_label_end_at_{session.session_id}",
-                )
-                validation_start = st.text_input(
-                    "验证起点（含时区 ISO 时间）",
-                    placeholder="2026-02-01T00:00:00Z",
-                    key=f"baseline_validation_start_{session.session_id}",
-                )
-                test_start = st.text_input(
-                    "测试起点（含时区 ISO 时间）",
-                    placeholder="2026-03-01T00:00:00Z",
-                    key=f"baseline_test_start_{session.session_id}",
-                )
-                observation_end = st.text_input(
-                    "观察截止（含时区 ISO 时间）",
-                    placeholder="2026-04-01T00:00:00Z",
-                    key=f"baseline_observation_end_{session.session_id}",
-                )
-                # 边界就地校验：与服务/物化同一套 parse_timestamp 规则，
-                # 输入期即可看到哪个边界错，而不是点击后才收到原始报错。
-                from src.workbench.temporal_split import parse_timestamp
 
-                boundary_errors = []
-                parsed_boundaries = {}
-                for name, raw in (
-                    ("验证起点", validation_start),
-                    ("测试起点", test_start),
-                    ("观察截止", observation_end),
+                inference = infer_task_archetype(session, baseline_target, baseline_input_columns)
+                archetype_names = {
+                    "classification": "分类",
+                    "extraction": "抽取/归一",
+                    "generation": "开放生成",
+                }
+                with st.expander(
+                    f"数据推断的任务形态：{archetype_names[inference['archetype']]}（点击展开依据，指令可修改）"
                 ):
-                    value = raw.strip()
-                    if not value:
-                        continue
-                    try:
-                        parsed_boundaries[name] = parse_timestamp(value, label=name)
-                    except ValueError as exc:
-                        boundary_errors.append(str(exc))
-                if len(parsed_boundaries) == 3 and not (
-                    parsed_boundaries["验证起点"]
-                    < parsed_boundaries["测试起点"]
-                    < parsed_boundaries["观察截止"]
-                ):
-                    boundary_errors.append("时间边界需满足：验证起点 < 测试起点 < 观察截止。")
-                for message in boundary_errors:
-                    st.error(message)
-                if label_end_column and not boundary_errors and len(parsed_boundaries) == 3:
-                    temporal_policy = {
-                        "available_at_column": available_column,
-                        "prediction_at_column": prediction_column,
-                        "label_end_at_column": label_end_column,
-                        "validation_start": validation_start.strip(),
-                        "test_start": test_start.strip(),
-                        "observation_end": observation_end.strip(),
-                    }
-        if st.button(
-            "生成基础分析并预览",
-            key=f"baseline_apply_{session.session_id}",
-            disabled=not baseline_target,
-        ):
-            if baseline_temporal and temporal_policy is None:
-                st.error(
-                    "已选择按时间分区切分：请选择三个互不相同的时间字段，并填写三个带时区的时间边界。"
-                )
-            else:
-                try:
-                    from src.workbench.baseline_analysis import propose_baseline_analysis
-
-                    edited_instruction = st.session_state.get(
-                        f"baseline_instruction_{session.session_id}"
+                    st.caption(
+                        f"推断依据（来自你的数据实测）：答案列不同取值 "
+                        f"{len(inference['distinct_values'])} 个、唯一率 {inference['unique_ratio']:.0%}、"
+                        f"平均长度 {inference['avg_target_len']:.0f} 字；"
+                        f"输入渲染取「{'纯文本直出' if inference['input_render'] == 'plain' else '字段名标注'}」"
+                        f"（{'单一长文本输入，字段前缀不携带信息' if inference['input_render'] == 'plain' else '多字段需要标注区分'}）。"
                     )
-                    session = service.apply_analysis(
-                        session,
-                        propose_baseline_analysis(
-                            session,
-                            instruction=(edited_instruction or "").strip() or None,
-                            target_column=baseline_target,
-                            group_columns=baseline_groups,
-                            excluded_columns=baseline_exclude,
-                            temporal_policy=temporal_policy,
-                        ),
-                        model="baseline-deterministic",
+                    # 草稿刷新规则:字段选择变化即重写草稿;用户编辑过(选择未变)则保留。
+                    # 不能用 value=——它只在组件首次创建时生效,改列后草稿会残留旧列内容。
+                    instruction_key = f"baseline_instruction_{session.session_id}"
+                    signature_key = f"baseline_instruction_sig_{session.session_id}"
+                    signature = (
+                        f"{baseline_target}|{'+'.join(sorted(baseline_groups))}"
+                        f"|-{','.join(sorted(baseline_exclude))}"
                     )
-                    st.rerun()
-                except (ValueError, RuntimeError, OSError) as exc:
-                    st.error(str(exc))
-
-if session.preview:
-    st.subheader("真实转换预览")
-    st.caption(session.preview.scope_note)
-
-    if session.analysis and session.analysis.recipe and session.analysis.recipe.temporal_split:
-        from src.workbench.temporal_split import is_pending_label
-
-        pending_labels = [
-            row.row_id
-            for row in session.preview.rows
-            if is_pending_label(row, session.analysis.recipe.temporal_split)
-        ]
-        if pending_labels:
-            st.info(
-                f"其中 {len(pending_labels)} 条记录截至观察截止时标签尚未成熟，将明确保留排除。仍需至少一条已成熟、真实有标签的样例才能确认。"
-            )
-    st.write(f"**任务指令：** {session.preview.instruction}")
-    status_names = {
-        "ready": "已生成预览",
-        "needs_label": "缺少答案",
-        "invalid": "需修正处理",
-        "conflict": "答案有冲突",
-    }
-    summary = st.columns(4)
-    for column, (state, label) in zip(summary, status_names.items()):
-        column.metric(label, session.preview.counts[state])
-    for entry in session.tool_trace:
-        if entry.get("tool") == "validate_business_examples" and not entry.get("ok"):
-            st.warning(
-                "新方案改变了此前认可的样例，请重新核对业务含义：" + "；".join(entry["errors"])
-            )
-    sample_rows_to_show = select_preview_rows(
-        session.preview.rows,
-        key=f"sample_preview_{session.session_id}_{session.revision}",
-        label="样例",
-    )
-    show_missing_label_next_step(session.preview.rows)
-    for row in sample_rows_to_show:
-        with st.expander(
-            f"{row.row_id} · {status_names[row.status]}", expanded=len(session.preview.rows) <= 3
-        ):
-            before, after = st.columns(2)
-            with before:
-                st.write("原始记录")
-                st.json(row.original)
-            with after:
-                st.write("模型实际输入")
-                st.code(row.input, language=None)
-                st.write("监督答案")
-                st.code(
-                    preview_answer(row),
-                    language=None,
-                )
-            for issue in row.issues:
-                st.warning(issue)
-    status = next_action(session)
-    if status == "review_preview":
-        st.subheader("对比核验（确认前先配对一次，防止盲点头）")
-        contrast = service.contrast_check_status(session.session_id)
-
-        def render_contrast_round() -> None:
-            with st.form("contrast_check_form"):
-                st.write("开始配对对比：抽取两条答案不同的输入，把答案配到正确的输入上。")
-                start_contrast = st.form_submit_button("开始配对对比", type="primary")
-            if start_contrast:
-                try:
-                    pending = service.start_contrast_check(session.session_id, session.revision)
-                    st.session_state["pending_contrast_check"] = pending
-                    st.rerun()
-                except (ValueError, RuntimeError, OSError) as exc:
-                    st.error(str(exc))
-            pending_contrast = st.session_state.get("pending_contrast_check")
-            if pending_contrast:
-                st.write(f"**配对题（verification {pending_contrast['check_id'][:8]}）**")
-
-                # 长选项(开放生成目标)截断显示;选中提交的仍是完整原文。
-                # 截断必须保头尾:两个长答案常只差尾缀(如「（2）」),只砍尾部
-                # 会让选项标签完全相同——用户无法分辨,配对退化成掷硬币。
-                def _contrast_option_label(value: str) -> str:
-                    if value == "":
-                        return "请选择"
-                    if len(value) <= 34:
-                        return f"「{value}」"
-                    return f"「{value[:10]}…{value[-16:]}」"
-
-                with st.form(f"contrast_answer_{pending_contrast['check_id']}"):
-                    mapping = {}
-                    for item in pending_contrast["items"]:
-                        st.code(item["input"], language=None)
-
-                        # 默认不预选任何答案:漏选提交不记录核验轮次,瞎点不算配对证据。
-                        mapping[item["row_id"]] = st.selectbox(
-                            f"这条输入的正确答案（{item['row_id']}）",
-                            ["", *pending_contrast["options"]],
-                            format_func=_contrast_option_label,
-                            key=f"cc_{pending_contrast['check_id']}_{item['row_id']}",
+                    if st.session_state.get(signature_key) != signature:
+                        st.session_state[signature_key] = signature
+                        st.session_state[instruction_key] = compose_instruction(
+                            session.goal, baseline_target, baseline_input_columns, inference
                         )
-                    submitted_contrast = st.form_submit_button("提交配对", type="primary")
-                if submitted_contrast:
-                    if any(value == "" for value in mapping.values()):
-                        st.error("请为每条输入选择答案；未选择不算作答，也不会记录核验轮次。")
-                    else:
-                        try:
-                            service.submit_contrast_check(
-                                session.session_id, pending_contrast["check_id"], mapping
-                            )
-                            st.session_state["pending_contrast_check"] = None
-                            st.rerun()
-                        except (ValueError, RuntimeError, OSError) as exc:
-                            st.error(str(exc))
-
-        def render_contrast_history() -> None:
-            """轮次历史逐轮可查:第几轮、题目、你的选择、正确答案、对错。"""
-            history = (contrast or {}).get("history") or []
-            if not history:
-                return
-            st.caption("核验轮次历史：每一轮的题目、你的选择与对错都可回查，二连对有据可依。")
-            st.dataframe(
-                [
-                    {
-                        "轮次": f"第 {entry['round']} 轮",
-                        "题目": item["input"],
-                        "你的选择": item["chosen"],
-                        "正确答案": item["correct_answer"],
-                        "对错": "对" if item["match"] else "错",
-                    }
-                    for entry in history
-                    for item in entry["items"]
-                ],
-                hide_index=True,
-                width="stretch",
+                    st.text_area(
+                        "任务指令（由推断组装，可直接修改；清空则按最新推断自动生成）",
+                        key=instruction_key,
+                        height=120,
+                    )
+            baseline_temporal = st.checkbox(
+                "按时间分区切分（预测未来结果的任务需要，防止把未来信息泄漏进训练）",
+                key=f"baseline_temporal_{session.session_id}",
             )
-
-        verified_streak = (
-            contrast.get("streak", 0) if contrast and contrast.get("verdict") == "verified" else 0
-        )
-        # 连胜三档词汇与 CLI 同源(contrast_streak_banner):还差一轮/二连对/N 轮连胜,
-        # 页面横幅与 CLI stderr 不各说各话。
-        from src.workbench.intake_service import contrast_streak_banner
-
-        banner = contrast_streak_banner(contrast)
-        if banner:
-            if verified_streak >= 2:
-                st.success(banner)
-            elif contrast and contrast.get("verdict") == "mismatch":
-                st.error(banner)
-            else:
-                st.info(banner)
-        render_contrast_history()
-        if verified_streak < 2:
-            render_contrast_round()
-        if verified_streak >= 2:
-            # 二连对后核验已达标;第三轮起只是自愿加练,不强制——文案必须与行为一致。
-            with st.expander(f"可选：继续第 {verified_streak + 1} 轮对比核验提高置信度（不强制）"):
+            temporal_policy = None
+            if baseline_temporal:
                 st.caption(
-                    "核验已达标，不需要再核验；多配一轮只是自愿加练——碰巧连续蒙对的概率会越来越低。"
+                    "三个时间字段必须互不相同，时间须为带时区的 ISO 格式（如 2026-02-01T00:00:00Z）。"
+                    "训练/验证的标签必须在下一分区起点前成熟，未成熟的行会明确保留排除，不随机补数。"
                 )
-                render_contrast_round()
-        accepted = st.checkbox(
-            "已核对预览：输入是模型实际可获得的信息，答案与我希望模型学会的目标一致。",
-            key=f"sample_review_{session.session_id}_{session.revision}_{','.join(row.row_id for row in sample_rows_to_show)}",
-        )
-        if st.button("确认当前转换含义", disabled=not accepted or not sample_rows_to_show):
-            try:
-                service.confirm(
-                    session.session_id,
-                    session.revision,
-                    [r.row_id for r in sample_rows_to_show],
-                )
-                st.rerun()
-            except ValueError as exc:
-                st.error(str(exc))
-    elif status == "awaiting_full_data":
-        st.success(
-            "样例转换含义已确认，提供全量文件并运行 full-validate 验证覆盖、冲突与独立分组"
-            "（多资料任务用 full-sources）；尚未认定可以正式训练。"
-        )
-    elif status == "awaiting_full_validation":
-        st.info(
-            "转换含义已确认，运行 full-validate 完成全量业务质量、分区与训练消费检查"
-            "（已声明全量可省略 --input；多资料任务用 full-sources）。"
-        )
-    elif status == "needs_data_revision":
-        st.warning(
-            "转换存在异常或同输入答案冲突：查看问题行后重新分析——配置了 Agent 运行 analyze；"
-            "此前的基础分析可调整字段重跑 baseline-analyze（零密钥）。"
-        )
-    with st.expander("处理规则与工具记录"):
-        st.json(
-            session.analysis.recipe.model_dump()
-            if session.analysis and session.analysis.recipe
-            else {}
-        )
-        from src.workbench.report_summary import summarize_tool_trace
+                available_options = [
+                    column for column in session.source.columns if column != baseline_target
+                ]
+                if len(available_options) < 3:
+                    st.error(
+                        f"当前数据只有 {len(session.source.columns)} 个字段，"
+                        "时间分区需要答案列之外还有 3 个互不相同的时间字段；请补充时间列或关闭时间分区。"
+                    )
+                else:
+                    available_column = st.selectbox(
+                        "信息实际可获得时间字段（每行全部输入最晚可得知的时间）",
+                        available_options,
+                        key=f"baseline_available_at_{session.session_id}",
+                    )
+                    prediction_column = st.selectbox(
+                        "作出预测时间字段（业务实际下单/决策的时间）",
+                        [column for column in available_options if column != available_column],
+                        key=f"baseline_prediction_at_{session.session_id}",
+                    )
+                    label_end_column = st.selectbox(
+                        "标签窗口结束时间字段（仅用于分区，不会作为模型输入）",
+                        [
+                            column
+                            for column in available_options
+                            if column not in {available_column, prediction_column}
+                        ],
+                        key=f"baseline_label_end_at_{session.session_id}",
+                    )
+                    validation_start = st.text_input(
+                        "验证起点（含时区 ISO 时间）",
+                        placeholder="2026-02-01T00:00:00Z",
+                        key=f"baseline_validation_start_{session.session_id}",
+                    )
+                    test_start = st.text_input(
+                        "测试起点（含时区 ISO 时间）",
+                        placeholder="2026-03-01T00:00:00Z",
+                        key=f"baseline_test_start_{session.session_id}",
+                    )
+                    observation_end = st.text_input(
+                        "观察截止（含时区 ISO 时间）",
+                        placeholder="2026-04-01T00:00:00Z",
+                        key=f"baseline_observation_end_{session.session_id}",
+                    )
+                    # 边界就地校验：与服务/物化同一套 parse_timestamp 规则，
+                    # 输入期即可看到哪个边界错，而不是点击后才收到原始报错。
+                    from src.workbench.temporal_split import parse_timestamp
 
-        for line in summarize_tool_trace(session.tool_trace, "分析"):
-            st.write(line)
-        st.json(session.tool_trace)
+                    boundary_errors = []
+                    parsed_boundaries = {}
+                    for name, raw in (
+                        ("验证起点", validation_start),
+                        ("测试起点", test_start),
+                        ("观察截止", observation_end),
+                    ):
+                        value = raw.strip()
+                        if not value:
+                            continue
+                        try:
+                            parsed_boundaries[name] = parse_timestamp(value, label=name)
+                        except ValueError as exc:
+                            boundary_errors.append(str(exc))
+                    if len(parsed_boundaries) == 3 and not (
+                        parsed_boundaries["验证起点"]
+                        < parsed_boundaries["测试起点"]
+                        < parsed_boundaries["观察截止"]
+                    ):
+                        boundary_errors.append("时间边界需满足：验证起点 < 测试起点 < 观察截止。")
+                    for message in boundary_errors:
+                        st.error(message)
+                    if label_end_column and not boundary_errors and len(parsed_boundaries) == 3:
+                        temporal_policy = {
+                            "available_at_column": available_column,
+                            "prediction_at_column": prediction_column,
+                            "label_end_at_column": label_end_column,
+                            "validation_start": validation_start.strip(),
+                            "test_start": test_start.strip(),
+                            "observation_end": observation_end.strip(),
+                        }
+            if action_button(
+                "生成基础分析并预览",
+                key=f"baseline_apply_{session.session_id}",
+                disabled=not baseline_target,
+            ):
+                if baseline_temporal and temporal_policy is None:
+                    st.error(
+                        "已选择按时间分区切分：请选择三个互不相同的时间字段，并填写三个带时区的时间边界。"
+                    )
+                else:
+                    try:
+                        from src.workbench.baseline_analysis import propose_baseline_analysis
+
+                        edited_instruction = st.session_state.get(
+                            f"baseline_instruction_{session.session_id}"
+                        )
+                        session = service.apply_analysis(
+                            session,
+                            propose_baseline_analysis(
+                                session,
+                                instruction=(edited_instruction or "").strip() or None,
+                                target_column=baseline_target,
+                                group_columns=baseline_groups,
+                                excluded_columns=baseline_exclude,
+                                temporal_policy=temporal_policy,
+                            ),
+                            model="baseline-deterministic",
+                        )
+                        st.rerun()
+                    except (ValueError, RuntimeError, OSError) as exc:
+                        st.error(str(exc))
+
 
 if session.confirmed_revision is not None or session.full_data is not None:
     st.subheader("全量数据验证")
@@ -2628,7 +2638,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
             can_reuse = all(
                 alias in reusable and reusable[alias].scope == "full" for alias in required_sources
             )
-            if can_reuse and st.button("验证已提供的全部全量资料"):
+            if can_reuse and action_button("验证已提供的全部全量资料"):
                 try:
                     with st.spinner("正在验证全部全量资料…"):
                         service.validate_full_sources(session.session_id, session.revision)
@@ -2638,7 +2648,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
             # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
             # 按上传的文件类型显示 sheet 选择。
             full_files = {
-                alias: st.file_uploader(
+                alias: action_upload(
                     f"全量原始资料：{alias}",
                     type=["csv", "xlsx", "xls", "jsonl"],
                     key=f"full_source_{session.session_id}_{alias}",
@@ -2650,7 +2660,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     alias: excel_sheet_input(upload, key=f"full_sheet_{session.session_id}_{alias}")
                     for alias, upload in full_files.items()
                 }
-                validate_sources = st.form_submit_button("按组合方案验证全部全量资料")
+                validate_sources = action_submit("按组合方案验证全部全量资料")
             if validate_sources:
                 missing_sources = [alias for alias, upload in full_files.items() if upload is None]
                 if missing_sources:
@@ -2681,7 +2691,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     except (ValueError, OSError) as exc:
                         st.error(str(exc))
         else:
-            if session.source.scope == "full" and st.button("验证首次上传的全量文件"):
+            if session.source.scope == "full" and action_button("验证首次上传的全量文件"):
                 try:
                     with st.spinner("正在验证全量数据…"):
                         service.validate_full_data(session.session_id, session.revision)
@@ -2705,7 +2715,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
             variant_full_pair = (
                 demo_variant_full(PROJECT_ROOT, demo_variant) if demo_variant else None
             )
-            if variant_full_pair is not None and st.button(
+            if variant_full_pair is not None and action_button(
                 f"使用配套演示全量数据（{demo_variant}原型，虚构，{len(variant_full_pair[1])} 字节）",
                 key=f"demo_variant_full_{demo_variant}",
             ):
@@ -2720,7 +2730,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
-            if demo_full_pair is not None and st.button(DEMO_FULL_BUTTON):
+            if demo_full_pair is not None and action_button(DEMO_FULL_BUTTON):
                 try:
                     with st.spinner("正在验证全量数据…"):
                         service.validate_full_data(
@@ -2734,7 +2744,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     st.error(str(exc))
             # 上传控件放在表单外：表单内部件要到提交才提交值，放里面就无法在提交前
             # 按上传的文件类型显示 sheet 选择。
-            full_upload = st.file_uploader(
+            full_upload = action_upload(
                 "提供本次任务的全量文件", type=["csv", "xlsx", "xls", "jsonl"]
             )
             with st.form(f"full_upload_{session.session_id}"):
@@ -2746,7 +2756,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     full_sheet = excel_sheet_input(
                         full_upload, key=f"full_sheet_{session.session_id}"
                     )
-                validate_full = st.form_submit_button("按已确认方案验证全量数据")
+                validate_full = action_submit("按已确认方案验证全量数据")
             if validate_full:
                 if full_upload is None:
                     st.error("请提供全量文件；不会自动把样例当作全量。")
@@ -2877,7 +2887,9 @@ if session.confirmed_revision is not None or session.full_data is not None:
                     "已核对全量报告和展示的记录，新增类别与字段符合业务理解。",
                     key=f"full_review_{session.session_id}_{session.revision}_{','.join(row.row_id for row in rows_to_show)}",
                 )
-                if st.button("确认全量数据含义", disabled=not full_accepted or not rows_to_show):
+                if action_button(
+                    "确认全量数据含义", disabled=not full_accepted or not rows_to_show
+                ):
                     try:
                         service.confirm_full_data(
                             session.session_id, session.revision, [r.row_id for r in rows_to_show]
@@ -2957,7 +2969,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                         f"30 条约 {wilson_lower_bound(30, 30):.0%}。"
                         "核验强度由你按业务风险决定，系统不替你设定。"
                     )
-                    started = st.form_submit_button("抽取盲标核验题目", type="primary")
+                    started = action_submit("抽取盲标核验题目", type="primary")
                 if started:
                     try:
                         pending = service.start_label_verification(
@@ -3006,7 +3018,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                                 f"你的答案（{item['row_id']}）",
                                 key=f"lv_{pending_items['verification_id']}_{item['row_id']}",
                             )
-                    submitted = st.form_submit_button(
+                    submitted = action_submit(
                         "提交逐条审阅结论" if blind_mode == "review" else "提交盲标核验答案",
                         type="primary",
                     )
@@ -3074,7 +3086,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                         "独立测试集比例", min_value=0.01, max_value=0.49, value=0.1, step=0.01
                     )
                     split_seed = st.number_input("可复现分区种子", min_value=0, value=42, step=1)
-            if st.button("生成数据集版本", disabled=not groups and not independent_rows):
+            if action_button("生成数据集版本", disabled=not groups and not independent_rows):
                 try:
                     with st.spinner("正在生成独立训练与评测分区…"):
                         service.materialize_dataset(
@@ -3150,7 +3162,7 @@ if dataset is not None:
         )
     elif next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
         st.caption("需要进行多轮改进时，先固定当前开发与测试题目，使后续提升可在同一题集上验证。")
-        if st.button("固定当前开发与测试题集"):
+        if action_button("固定当前开发与测试题集"):
             try:
                 with st.spinner("正在固定开发与测试题集…"):
                     reference = suite_service.freeze(session)
@@ -3192,8 +3204,9 @@ if dataset is not None:
             probe_model = st.text_input(
                 "本地基础模型目录（已准备好权重）",
                 key=f"probe_model_{session.session_id}",
+                disabled=DISPLAY_ONLY,
             )
-            if st.button(
+            if action_button(
                 "运行可学性探针",
                 key=f"probe_run_{session.session_id}",
                 disabled=not probe_model.strip(),
@@ -3235,12 +3248,13 @@ if dataset is not None:
                     "②或已下载到本机缓存的模型名（形如 Qwen/Qwen3-1.7B）。"
                     "本检查只读取、不自动下载。"
                 ),
+                disabled=DISPLAY_ONLY,
             )
             max_length = st.number_input("训练最大 token 长度", min_value=1, value=2048, step=1)
             preflight_supervision = st.selectbox(
                 "预检的训练监督范围", list(SFT_PROTOCOL_LABELS), format_func=supervision_label
             )
-            run_preflight = st.form_submit_button("检查实际截断与答案保留")
+            run_preflight = action_submit("检查实际截断与答案保留")
         if run_preflight:
             if not tokenizer_path.strip():
                 st.error(
@@ -3357,7 +3371,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
             if lr_key not in st.session_state:
                 st.session_state[lr_key] = 0.0002  # 表单默认值：与「推荐起步值」2e-4 一致
             # Streamlit 表单内不能放普通按钮：采用按钮放在表单上方，点击后把建议值填入表单内学习率输入。
-            if st.button(
+            if action_button(
                 "采用建议学习率",
                 key=f"adopt_lr_{session.session_id}",
                 help=f"按全量 {total_rows} 条填入建议起步值 {suggested_lr:.7f}；填入后仍可手改。",
@@ -3365,7 +3379,9 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                 st.session_state[lr_key] = suggested_lr
             with st.form(f"prepare_training_{session.session_id}"):
                 training_model_path = st.text_input(
-                    "本地基础模型目录", placeholder="包含基础模型权重、配置和 tokenizer 的目录"
+                    "本地基础模型目录",
+                    placeholder="包含基础模型权重、配置和 tokenizer 的目录",
+                    disabled=DISPLAY_ONLY,
                 )
                 training_length = st.number_input(
                     "本轮训练最大 token 长度", min_value=1, value=1024, step=1
@@ -3390,7 +3406,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     training_quantized = st.checkbox(
                         "使用 4-bit 量化（仅适用兼容的 NVIDIA CUDA 环境）"
                     )
-                prepare_training = st.form_submit_button("准备本轮训练方案")
+                prepare_training = action_submit("准备本轮训练方案")
             if prepare_training:
                 if not training_model_path.strip():
                     st.error("请选择已准备好的本地基础模型目录。")
@@ -3548,7 +3564,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     if (
                         recovery_can_stop
                         and not run_execution_managed
-                        and st.button("停止此训练及其自动恢复", key=f"stop_recovery_{run_id}")
+                        and action_button("停止此训练及其自动恢复", key=f"stop_recovery_{run_id}")
                     ):
                         try:
                             training_service.stop(run_id)
@@ -3603,7 +3619,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                             "已核对任务规约与预检提示，按当前方案开始训练。",
                             key=f"train_warnings_{run_id}",
                         )
-                    if st.button(
+                    if action_button(
                         "启动这轮训练",
                         key=f"start_{run_id}",
                         disabled=preflight.get("status") == "warnings" and not acknowledge,
@@ -3629,7 +3645,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                 if (
                     run["status"] in {"running", "unknown"}
                     and not run_execution_managed
-                    and st.button("停止这轮训练", key=f"stop_{run_id}")
+                    and action_button("停止这轮训练", key=f"stop_{run_id}")
                 ):
                     try:
                         training_service.stop(run_id)
@@ -3770,6 +3786,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                     "llama.cpp 本地目录",
                                     help="需包含 convert_hf_to_gguf.py 和已编译的 llama-quantize；不自动下载工具。",
                                     key=f"export_llama_cpp_{run_id}",
+                                    disabled=DISPLAY_ONLY,
                                 ).strip()
                                 or None
                             )
@@ -3783,6 +3800,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                             "导出目录（留空使用默认目录）",
                             placeholder=str(default_target),
                             key=f"export_output_{run_id}_{export_format}",
+                            disabled=DISPLAY_ONLY,
                         ).strip()
                         export_plan = plan_model_export(
                             run,
@@ -3808,7 +3826,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                         )
                         result_key = f"export_result_{run_id}"
                         executed_now = False
-                        if st.button(
+                        if action_button(
                             "导出模型",
                             key=f"export_execute_{run_id}",
                             disabled=export_plan["status"]
@@ -4005,12 +4023,14 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                 "GGUF 对照使用的导出目录",
                                 key=f"eval_gguf_dir_{run_id}",
                                 help="选择本次训练已有的 GGUF 导出目录；旧目录缺少 HF tokenizer 时需重新导出到新目录。",
+                                disabled=DISPLAY_ONLY,
                             ).strip()
                             gguf_runtime_path = st.text_input(
                                 "GGUF 评测运行器路径",
                                 placeholder="/path/to/tunesmith-gguf-eval",
                                 key=f"eval_gguf_runtime_{run_id}",
                                 help="使用本地 GGUF 工具准备结果中的评测运行器；评测时不会自动下载或编译。",
+                                disabled=DISPLAY_ONLY,
                             ).strip()
                         with st.form(f"evaluate_run_{run_id}"):
                             parent_choice = ""
@@ -4042,8 +4062,8 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                 value=True,
                                 key=f"eval_whitespace_{run_id}",
                             )
-                            compare_models = st.form_submit_button("比较基座与本轮微调效果")
-                            compare_gguf = st.form_submit_button(
+                            compare_models = action_submit("比较基座与本轮微调效果")
+                            compare_gguf = action_submit(
                                 "GGUF 与本轮模型同题对照",
                                 disabled=not (gguf_export_dir and gguf_runtime_path),
                             )

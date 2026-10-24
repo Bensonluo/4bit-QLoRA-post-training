@@ -110,7 +110,7 @@ def test_comparison_empty_branch_exit_before_stop():
     接线死了只有旅程钉能抓,补上后结构钉也抓。"""
     source = _source(PAGE_CMP)
     assert "len(data) < 2" in source
-    block = source.split("len(data) < 2", 1)[1]
+    block = source.split('st.warning("还没有任何模型的评测结果。")', 1)[1]
     stop_pos = block.find("st.stop()")
     btn_pos = block.find('st.button("🏋️ 去训练实验室"')
     switch_pos = block.find('st.switch_page("pages/00_Training_Lab.py")')

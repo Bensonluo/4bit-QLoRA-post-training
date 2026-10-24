@@ -9,6 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
+from ui.components.shell import display_navigation
+from ui.runtime import DISPLAY_ONLY, action_button
+
 st.set_page_config(page_title="模型注册表", page_icon="🏛️", layout="wide")
 st.title("🏛️ 模型注册表")
 
@@ -46,6 +49,9 @@ except Exception as exc:
     st.stop()
 
 if versions_df.empty:
+    if DISPLAY_ONLY:
+        display_navigation("展示环境尚未登记模型权重，可浏览已有的业务任务与历史训练记录。")
+        st.stop()
     st.info(
         "暂无已注册的模型。最省事的路：去训练实验室，在配置页展开「高级参数」→"
         "「模型注册表」区勾选「训练后自动注册」，训练完成后模型会自动登记到这里。"
@@ -104,13 +110,13 @@ with a1:
 with a2:
     alias_name = st.selectbox("别名", ["champion", "challenger"], key="alias_name")
 with a3:
-    if st.button("🏷 设置", width="stretch"):
+    if action_button("🏷 设置", width="stretch"):
         _tracker().set_model_alias(model_name, alias_version, alias_name)
         fetch_model_versions.clear()
         st.success(f"已设置别名 `{alias_name}` → v{alias_version}")
         st.rerun()
 with a4:
-    if st.button("🗑 移除", width="stretch"):
+    if action_button("🗑 移除", width="stretch"):
         _tracker().delete_model_alias(model_name, alias_name)
         fetch_model_versions.clear()
         st.success(f"已移除别名 `{alias_name}`")
@@ -133,7 +139,7 @@ with st.expander("⚙️ 阶段迁移（旧版）"):
         )
     with s3:
         st.markdown("<div style='padding-top:1.8rem'></div>", unsafe_allow_html=True)
-        if st.button("应用", width="stretch"):
+        if action_button("应用", width="stretch"):
             _tracker().transition_model_stage(model_name, stage_version, stage)
             fetch_model_versions.clear()
             st.success(f"已迁移 v{stage_version} → {stage}")

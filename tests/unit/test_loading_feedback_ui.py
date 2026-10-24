@@ -162,9 +162,9 @@ def test_wizard_entry_pointer_names_real_buttons():
     )
     assert "「试试演示数据」" not in source, "幽灵按钮名必须退场"
     # 指路句点名的按钮必须真实在场(r108 语义的实锚化)
-    assert 'st.button("🗂️ 通用演示（供应商名）")' in source
-    assert 'st.button("💊 案例：药品名（医疗）")' in source
-    assert 'st.button("🏭 案例：主数据")' in source
+    assert 'action_button("🗂️ 通用演示（供应商名）")' in source
+    assert 'action_button("💊 案例：药品名（医疗）")' in source
+    assert 'action_button("🏭 案例：主数据")' in source
 
 
 def test_wizard_handoff_send_side_wired():

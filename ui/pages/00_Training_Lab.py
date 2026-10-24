@@ -15,7 +15,9 @@ import yaml
 
 from src.utils.platform_utils import get_platform
 from ui.components.charts import make_metric_timeseries
+from ui.components.shell import display_navigation
 from ui.config import CONFIGS_DIR, MLFLOW_TRACKING_URI, MODEL_OPTIONS, PROJECT_ROOT
+from ui.runtime import DISPLAY_ONLY, action_button, action_submit
 
 logger = logging.getLogger("qlora")
 
@@ -126,7 +128,9 @@ def _render_next_steps(run_id: str, info: dict) -> None:
                             "「评测结果」「模型对比」两页自动可看。"
                             "Apple Silicon 约需数分钟。"
                         )
-                    if st.button("⚡ 用我的 test 集评测", key=f"eval_btn_{run_id}", type="primary"):
+                    if action_button(
+                        "⚡ 用我的 test 集评测", key=f"eval_btn_{run_id}", type="primary"
+                    ):
                         try:
                             _rid = _eval_runner.launch_entity_eval(
                                 run_id, str(arts.output_dir), str(_wizard_test)
@@ -177,7 +181,7 @@ def _render_next_steps(run_id: str, info: dict) -> None:
                             "完成后「评测结果」「模型对比」两页自动可看。"
                             "Apple Silicon 约需数分钟到数十分钟。"
                         )
-                    if st.button("⚡ 生成评测文件", key=f"eval_btn_{run_id}", type="primary"):
+                    if action_button("⚡ 生成评测文件", key=f"eval_btn_{run_id}", type="primary"):
                         try:
                             _rid = _eval_runner.launch_eval(run_id, str(arts.output_dir))
                             st.toast(f"评测已启动：{_rid}")
@@ -204,8 +208,9 @@ def _render_next_steps(run_id: str, info: dict) -> None:
                     base_override = st.text_input(
                         "底座路径覆盖（可选；adapter_config 记录的底座不在本机时填本地目录或 HF 名）",
                         key=f"merge_base_{run_id}",
+                        disabled=DISPLAY_ONLY,
                     )
-                    if st.button("📦 合并导出", key=f"merge_btn_{run_id}", type="primary"):
+                    if action_button("📦 合并导出", key=f"merge_btn_{run_id}", type="primary"):
                         from src.models.merger import merge_adapter_to_dir
 
                         try:
@@ -244,24 +249,12 @@ else:
 
 # ── Header + Presets ────────────────────────────────────────────
 
-col_title, col_presets = st.columns([2, 3])
-with col_title:
-    st.title("🏋️ 训练实验室")
-with col_presets:
-    st.markdown("<div style='padding-top:0.8rem'></div>", unsafe_allow_html=True)
-    pcols = st.columns(3)
-    with pcols[0]:
-        if st.button("⚡ 快速测试", width="stretch", help="小模型，100 条样本，1 轮"):
-            st.session_state["preset"] = "quick"
-            st.rerun()
-    with pcols[1]:
-        if st.button("🔥 标准", width="stretch", help="完整模型，1,000 条样本，3 轮"):
-            st.session_state["preset"] = "standard"
-            st.rerun()
-    with pcols[2]:
-        if st.button("🚀 完整运行", width="stretch", help="完整模型，10,000 条样本，5 轮"):
-            st.session_state["preset"] = "full"
-            st.rerun()
+st.caption("训练与证据 / 自定义训练")
+st.title("🏋️ 训练实验室")
+if DISPLAY_ONLY:
+    st.caption("可浏览 SFT、DPO、GRPO 配置；此环境不执行训练。历史验证记录在「实验记录」中查看。")
+else:
+    st.caption("为已准备好的训练集选择底座、训练方式与资源配置。")
 
 # Preset defaults
 preset = st.session_state.get("preset", None)
@@ -309,6 +302,21 @@ tab_configure, tab_activity = st.tabs(["⚙️ 配置", "📋 训练动态"])
 # ── Configure Tab ───────────────────────────────────────────────
 
 with tab_configure:
+    with st.expander("选择训练预设"):
+        pcols = st.columns(3)
+        with pcols[0]:
+            if st.button("⚡ 快速测试", width="stretch", help="小模型，100 条样本，1 轮"):
+                st.session_state["preset"] = "quick"
+                st.rerun()
+        with pcols[1]:
+            if st.button("🔥 标准", width="stretch", help="完整模型，1,000 条样本，3 轮"):
+                st.session_state["preset"] = "standard"
+                st.rerun()
+        with pcols[2]:
+            if st.button("🚀 完整运行", width="stretch", help="完整模型，10,000 条样本，5 轮"):
+                st.session_state["preset"] = "full"
+                st.rerun()
+
     # 向导交接横幅：Data Wizard 点「送去训练」跳转而来时，dataset 字段已预填
     handoff = st.session_state.pop("wizard_handoff", None)
     if handoff:
@@ -318,7 +326,7 @@ with tab_configure:
             f"确认下方参数后点「开始训练」即可。"
         )
 
-    col_form, col_preview = st.columns([2, 1])
+    col_form, col_preview = st.columns([7, 4], gap="large")
 
     with col_form:
         platform_choice = (
@@ -335,13 +343,16 @@ with tab_configure:
         # Radio lives OUTSIDE the form so switching technique re-renders the
         # form (technique-specific sections) immediately, without a submit.
         st.subheader("技术")
-        technique_label = st.radio(
-            "训练后技术",
-            ["SFT", "DPO", "GRPO"],
-            index=0,
-            horizontal=True,
-            help="DPO 需要偏好数据集（prompt/chosen/rejected）；GRPO 需要 prompt+答案数据。",
-        )
+        technique_column, advanced_column = st.columns([3, 2], vertical_alignment="bottom")
+        with technique_column:
+            technique_label = st.radio(
+                "训练后技术",
+                ["SFT", "DPO", "GRPO"],
+                index=0,
+                horizontal=True,
+                label_visibility="collapsed",
+                help="DPO 需要偏好数据集（prompt/chosen/rejected）；GRPO 需要 prompt+答案数据。",
+            )
         technique = technique_label.lower()
 
         # Registry 开关的兜底初值：GRPO 技术不渲染该区块（grpo_trainer 未实现自动注册），
@@ -352,11 +363,12 @@ with tab_configure:
 
         # 高级参数 toggle 置表单外（与技术单选同理：表单内 toggle 须提交才
         # 生效，无法即时展开专家区块）
-        advanced = st.toggle(
-            "高级参数",
-            value=False,
-            help="默认隐藏专家参数（学习率/批大小/LoRA 等），预设值即可开跑；需要精调时展开。",
-        )
+        with advanced_column:
+            advanced = st.toggle(
+                "高级参数",
+                value=False,
+                help="默认隐藏专家参数（学习率/批大小/LoRA 等），预设值即可开跑；需要精调时展开。",
+            )
 
         # 高级隐藏时的预设兜底（上面临近的 GRPO 机制同一范式）：config_dict
         # 无条件读这些变量，隐藏的专家参数以预设值流入契约，而不是凭空消失
@@ -373,12 +385,12 @@ with tab_configure:
         # 双数据门路牌（R133）：dataset 输入在表单内、且预填演示数据集——手上有
         # 原始表格的用户从这页看不到两扇数据门的存在（00/05 对 07 零提及，审计证
         # 实）。表单内禁普通按钮，路牌置于表单开始前。
-        st.caption(
-            "数据还没准备好？数据向导（Data Wizard）把一张原始表格转成训练集；"
-            "数据入口从业务目标出发，引导完成准备→训练→评测全流程。"
-        )
-        if st.button("🚪 去数据入口"):
-            st.switch_page("pages/07_Data_Intake.py")
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.caption(
+                "数据还没准备好？原始表格用数据向导（Data Wizard）；业务目标从数据入口开始。"
+            )
+            if st.button("🚪 去数据入口", type="tertiary"):
+                st.switch_page("pages/07_Data_Intake.py")
         with st.form("training_config"):
             st.subheader("模型与数据")
             c1, c2 = st.columns([3, 1])
@@ -402,41 +414,39 @@ with tab_configure:
                 "数据集（HF 名称或本地路径）",
                 value="yahma/alpaca-cleaned",
                 key="dataset_input",
+                disabled=DISPLAY_ONLY,
             )
-            ds1, ds2, ds3 = st.columns(3)
-            with ds1:
-                max_samples = st.number_input("最大样本数", 10, 100000, p_samples, 100)
-            if advanced:
-                with ds2:
-                    validation_split = st.slider("验证集比例", 0.05, 0.3, 0.1, 0.05)
-                with ds3:
-                    max_length = st.number_input(
-                        "最大长度", 128, 8192, 512, 64, help="序列长度预算（token）"
-                    )
-
             st.subheader("训练参数")
-            t1, t2, t3, t4 = st.columns(4)
-            with t1:
+            sample_col, epoch_col = st.columns(2)
+            with sample_col:
+                max_samples = st.number_input("最大样本数", 10, 100000, p_samples, 100)
+            with epoch_col:
                 epochs = st.number_input("轮数", 1, 50, p_epochs)
-            if advanced:
-                with t2:
-                    # 学习率挡位化：非专家不必懂「2e-4」记法，解析错误路径
-                    # 随自由文本整体退场；挡位覆盖两个预设值（1e-4/2e-4）
-                    lr_tiers = [1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3]
-                    lr_value = st.select_slider(
-                        "学习率",
-                        options=lr_tiers,
-                        value=float(p_lr) if float(p_lr) in lr_tiers else 2e-4,
-                        format_func=lambda v: f"{v:.0e}".replace("e-0", "e-"),
-                        help="预设与教程常用挡位；不确定就保持默认",
-                    )
-                with t3:
-                    batch_size = st.number_input("批大小", 1, 8, 1)
-                with t4:
-                    grad_accum = st.number_input("梯度累积", 1, 32, p_grad_accum)
 
-                effective_bs = batch_size * grad_accum
-                st.caption(f"实际批大小：**{effective_bs}**")
+            if advanced:
+                with st.expander("数据与优化参数", expanded=True):
+                    data_cols = st.columns(2)
+                    with data_cols[0]:
+                        validation_split = st.slider("验证集比例", 0.05, 0.3, 0.1, 0.05)
+                    with data_cols[1]:
+                        max_length = st.number_input(
+                            "最大长度", 128, 8192, 512, 64, help="序列长度预算（token）"
+                        )
+                    optimizer_cols = st.columns(3)
+                    with optimizer_cols[0]:
+                        lr_tiers = [1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3]
+                        lr_value = st.select_slider(
+                            "学习率",
+                            options=lr_tiers,
+                            value=float(p_lr) if float(p_lr) in lr_tiers else 2e-4,
+                            format_func=lambda v: f"{v:.0e}".replace("e-0", "e-"),
+                            help="预设与教程常用挡位；不确定就保持默认",
+                        )
+                    with optimizer_cols[1]:
+                        batch_size = st.number_input("批大小", 1, 8, 1)
+                    with optimizer_cols[2]:
+                        grad_accum = st.number_input("梯度累积", 1, 32, p_grad_accum)
+                    st.caption(f"实际批大小：**{batch_size * grad_accum}**")
 
             if advanced:
                 st.subheader("LoRA")
@@ -531,7 +541,7 @@ with tab_configure:
             elif not is_cuda:
                 st.info("全精度 LoRA——4-bit 量化仅在 NVIDIA CUDA 可用", icon="💡")
 
-            submitted = st.form_submit_button("🚀 开始训练", type="primary", width="stretch")
+            submitted = action_submit("🚀 开始训练", type="primary", width="stretch")
 
     with col_preview:
         st.subheader("配置预览")
@@ -582,7 +592,21 @@ with tab_configure:
             ),
             **technique_sections,
         }
-        st.code(yaml.dump(config_dict, default_flow_style=False), language="yaml")
+        with st.container(border=True):
+            st.caption("底座模型")
+            st.write(model_name)
+            st.caption("训练方式与资源")
+            st.write(
+                f"{technique.upper()} · {'4-bit QLoRA' if quant_bits == 4 else 'LoRA'} · {platform_choice}"
+            )
+            st.caption("数据与训练预算")
+            st.write(f"最多 {max_samples:,} 条 · {epochs} 轮 · 长度 {max_length} tokens")
+            st.caption("优化参数")
+            st.write(
+                f"学习率 {lr_value:.0e} · LoRA r={lora_r} · 实际批大小 {batch_size * grad_accum}"
+            )
+        with st.expander("完整配置（YAML）"):
+            st.code(yaml.dump(config_dict, default_flow_style=False), language="yaml")
         if not advanced:
             st.caption("高级参数未展开：使用预设默认值（展开「高级参数」可调整）。")
 
@@ -607,10 +631,11 @@ with tab_configure:
                 value=st.session_state.get("dataset_input", ""),
                 key="preflight_dataset_input",
                 placeholder="outputs/wizard/demo_drugs/train.json",
+                disabled=DISPLAY_ONLY,
             )
         with pv2:
             st.markdown("<div style='padding-top:1.55rem'></div>", unsafe_allow_html=True)
-            pv_check = st.button("🔍 体检", width="stretch")
+            pv_check = action_button("🔍 体检", width="stretch")
         if pv_check:
             from src.data.preflight import check_dataset_for_sft, load_preview_records
 
@@ -774,12 +799,14 @@ def _render_activity() -> None:
                                 st.caption(
                                     "将终止该运行的训练进程；已保存的 checkpoint 与日志保留。"
                                 )
-                            if st.button("确认停止", key=f"stop_confirm_{run_id}", type="primary"):
+                            if action_button(
+                                "确认停止", key=f"stop_confirm_{run_id}", type="primary"
+                            ):
                                 runner.stop_training(run_id)
                                 st.rerun()
                 with c4, st.popover("🗑 删除", key=f"del_{run_id}", use_container_width=True):
                     st.caption("移除本地运行记录；config、日志与 MLflow 数据保留。")
-                    if st.button("确认删除", key=f"del_confirm_{run_id}", type="primary"):
+                    if action_button("确认删除", key=f"del_confirm_{run_id}", type="primary"):
                         with suppress(KeyError):
                             runner.delete_run(run_id)  # already gone → nothing left to do
                         st.rerun()
@@ -861,10 +888,15 @@ with tab_activity:
     # 30s TTL 缓存对齐,更短只会放大 TTL 过期时的整段重查卡顿);run_every
     # 无数据驱动的停止条件,活跃与否只能在全量重跑时探测。Stop/Delete/刷新
     # 保持全应用 st.rerun() 不变(scope="fragment" 会让它们只重跑局部)。
-    from src.tracking.runner import TrainingRunner
-
-    _probe = TrainingRunner(project_root=str(PROJECT_ROOT))
-    if _probe.list_active():
-        st.fragment(run_every="30s")(_render_activity)()
+    if DISPLAY_ONLY:
+        display_navigation(
+            "此环境不运行训练进程。可查看样例任务的数据核验，或浏览已收录的历史实验与曲线。"
+        )
     else:
-        _render_activity()
+        from src.tracking.runner import TrainingRunner
+
+        _probe = TrainingRunner(project_root=str(PROJECT_ROOT))
+        if _probe.list_active():
+            st.fragment(run_every="30s")(_render_activity)()
+        else:
+            _render_activity()

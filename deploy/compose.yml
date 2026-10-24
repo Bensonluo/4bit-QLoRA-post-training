@@ -1,0 +1,25 @@
+services:
+  tunesmith:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: tunesmith-display:${TUNESMITH_RELEASE:-local}
+    container_name: tunesmith-display
+    ports:
+      - "127.0.0.1:8501:8501"
+    restart: unless-stopped
+    mem_limit: 1100m
+    cpus: 1.0
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - display-data:/app/outputs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/qlora-dashboard/_stcore/health', timeout=5)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+volumes:
+  display-data:
