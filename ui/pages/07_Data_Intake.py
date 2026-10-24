@@ -1575,6 +1575,28 @@ st.subheader(session.goal)
 st.caption(
     f"{session.source.name} · {len(session.source.rows)} 条记录 · 任务 {session.session_id[:8]}"
 )
+
+# 旅程进度指示器:让用户在任何时刻都知道"走到哪了、还差什么"。
+_JOURNEY_STEPS = [
+    ("awaiting_analysis", "① 分析目标与数据"),
+    ("review_preview", "② 核对真实转换预览"),
+    ("awaiting_full_data", "③ 提供全量数据"),
+    ("awaiting_full_validation", "④ 验证全量数据"),
+    ("review_full_data", "⑤ 确认全量数据"),
+    ("awaiting_dataset_split", "⑥ 生成独立分区"),
+    ("ready_for_training_preflight", "⑦ 训练前检查"),
+    ("ready_for_training", "⑧ 启动训练"),
+]
+_current_action = next_action(session)
+_step_order = [step[0] for step in _JOURNEY_STEPS]
+_current_index = _step_order.index(_current_action) if _current_action in _step_order else None
+if _current_index is not None:
+    done_marks = "✓ " + " → ✓ ".join(step[1] for step in _JOURNEY_STEPS[:_current_index])
+    current_mark = f"→ **{_JOURNEY_STEPS[_current_index][1]}**"
+    remaining = [step[1] for step in _JOURNEY_STEPS[_current_index + 1 :]]
+    tail = " → " + " → ".join(remaining) if remaining else ""
+    st.caption(f"{done_marks} {current_mark}{tail}")
+
 st.info(session.profile["scope_note"])
 show_fact_notes(session.profile)
 if iterations:
