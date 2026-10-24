@@ -1,6 +1,6 @@
 {
   "kind": "scenario_matrix",
-  "created_at": "2026-10-03T13:38:52.956440+00:00",
+  "created_at": "2026-10-24T14:16:13.447751+00:00",
   "scenarios": [
     {
       "scenario_id": "clean-classification",
@@ -779,11 +779,404 @@
       "blocked_message": "",
       "verdict": "as_expected",
       "detail": ""
+    },
+    {
+      "scenario_id": "open-text-generation-target",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "extraction-near-unique-target",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "archetype-mixed-json-target",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "whitespace-only-input-cells",
+      "expect": "blocked_at:confirm_sample",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "blocked"
+      },
+      "blocked_at": "confirm_sample",
+      "blocked_message": "当前方案仍有业务问题、缺标签或转换问题，不能确认数据就绪。",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "numeric-looking-group-column",
+      "expect": "passes",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "passed",
+        "confirm_full": "passed",
+        "blind_verification": "passed",
+        "materialize": "passed"
+      },
+      "blocked_at": null,
+      "blocked_message": "",
+      "verdict": "as_expected",
+      "detail": ""
+    },
+    {
+      "scenario_id": "label-drift-between-sample-and-full",
+      "expect": "blocked_at:validate_full",
+      "stages": {
+        "create": "passed",
+        "baseline_analysis": "passed",
+        "contrast_check": "passed",
+        "confirm_sample": "passed",
+        "validate_full": "blocked"
+      },
+      "blocked_at": "validate_full",
+      "blocked_message": "部分全量记录与已认可业务样例具有相同模型输入，但答案不同。请澄清标签或修改业务规则；按实际输入比对，未混用两份文件的行 ID。",
+      "verdict": "as_expected",
+      "detail": ""
     }
   ],
+  "coverage_by_tags": {
+    "ambiguous": {
+      "total": 2,
+      "as_expected": 2,
+      "deviation": 0
+    },
+    "answer-coverage": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "archetype": {
+      "total": 3,
+      "as_expected": 3,
+      "deviation": 0
+    },
+    "blank-rows": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "bom": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "boundary": {
+      "total": 4,
+      "as_expected": 4,
+      "deviation": 0
+    },
+    "boundary-note": {
+      "total": 11,
+      "as_expected": 11,
+      "deviation": 0
+    },
+    "case-variants": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "classification": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "column-selection": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "conflicting-labels": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "csv-format": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "dirty-data": {
+      "total": 15,
+      "as_expected": 15,
+      "deviation": 0
+    },
+    "duplicates": {
+      "total": 2,
+      "as_expected": 2,
+      "deviation": 0
+    },
+    "empty-labels": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "empty-target": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "encoding": {
+      "total": 4,
+      "as_expected": 4,
+      "deviation": 0
+    },
+    "excel": {
+      "total": 10,
+      "as_expected": 10,
+      "deviation": 0
+    },
+    "extraction": {
+      "total": 2,
+      "as_expected": 2,
+      "deviation": 0
+    },
+    "forecast": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "formula-cells": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "full-data": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "full-width": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "gbk": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "generation": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "header-hygiene": {
+      "total": 4,
+      "as_expected": 4,
+      "deviation": 0
+    },
+    "hidden-rows": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "high-cardinality": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "imbalance": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "json-target": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "jsonl": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "known-limitation": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "label-drift": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "label-variants": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "lineage": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "long-text": {
+      "total": 5,
+      "as_expected": 5,
+      "deviation": 0
+    },
+    "materialize": {
+      "total": 2,
+      "as_expected": 2,
+      "deviation": 0
+    },
+    "merged-cells": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "mixed-type": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "multi-sheet": {
+      "total": 3,
+      "as_expected": 3,
+      "deviation": 0
+    },
+    "multi-source": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "multiline": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "negative-scenario": {
+      "total": 6,
+      "as_expected": 6,
+      "deviation": 0
+    },
+    "numeric": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "numeric-group": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "punctuation": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "rare-category": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "regression": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "row-order": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "semantic-drift": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "sheet-selection": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "single-class": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "small-sample": {
+      "total": 2,
+      "as_expected": 2,
+      "deviation": 0
+    },
+    "utf16": {
+      "total": 2,
+      "as_expected": 2,
+      "deviation": 0
+    },
+    "utf8": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "whitespace": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "whitespace-input": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    },
+    "wide-table": {
+      "total": 1,
+      "as_expected": 1,
+      "deviation": 0
+    }
+  },
   "summary": {
-    "total": 47,
-    "as_expected": 47,
+    "total": 53,
+    "as_expected": 53,
     "unexpected_pass": 0,
     "unexpected_block": 0,
     "error": 0,

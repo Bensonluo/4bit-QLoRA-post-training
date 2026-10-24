@@ -997,7 +997,10 @@ def test_100k_single_cell_passes_full_journey(tmp_path):
     analysis = propose_baseline_analysis(session, target_column="类别", group_columns=("编号",))
     session = service.apply_analysis(session, analysis, model="scenario-matrix")
     long_row = max(session.preview.rows, key=lambda row: len(row.input))
-    assert len(long_row.input) == 100_000 + len("客户描述: ")
+    # 单一长文本输入由数据结构推理为 plain 渲染:原文直出,无「字段: 」前缀
+    assert analysis.recipe.input_render == "plain"
+    assert len(long_row.input) == 100_000
+    assert long_row.input == max((row.values["客户描述"] for row in session.source.rows), key=len)
     assert long_row.status == "ready", long_row
 
 
@@ -1406,3 +1409,87 @@ def test_exact_duplicate_rows_disclosed_in_materialize_statistics(tmp_path):
         )
     }
     assert locations == {"train"}, "相同输入连接成同一分组,重复例题必须同分区"
+
+
+def test_open_generation_scenario_exercises_review_mode_and_text_contract(tmp_path):
+    """场景 42 的 e2e 声称必须为真:文本契约指令 + 盲标逐条审阅模式。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+    from src.workbench.scenario_matrix import run_scenario
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    spec = next(s for s in builtin_scenarios() if s.scenario_id == "open-text-generation-target")
+    result = run_scenario(spec, tmp_path)
+    assert result.verdict == "as_expected", result.to_dict()
+    assert all(stage == "passed" for stage in result.stages.values())
+
+    # 同源夹具走服务,钉住两个关键声称
+    service = IntakeService(tmp_path / "svc")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",))
+    assert "完整答复内容" in analysis.recipe.instruction
+    assert analysis.recipe.input_render == "plain"
+    assert "以下之一" not in analysis.recipe.instruction
+    session = service.apply_analysis(session, analysis, model="pin")
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(session.session_id, session.revision, "f.csv", spec.full)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=2)
+    assert pending["mode"] == "review", "开放目标必须走逐条审阅,不是复现"
+
+
+def test_extraction_scenario_pinned_contract_and_journey(tmp_path):
+    """抽取原型 e2e 钉死:短值契约+不列值集+高基数预警不阻断。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+    from src.workbench.scenario_matrix import run_scenario
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    spec = next(s for s in builtin_scenarios() if s.scenario_id == "extraction-near-unique-target")
+    result = run_scenario(spec, tmp_path)
+    assert result.verdict == "as_expected", result.to_dict()
+
+    service = IntakeService(tmp_path / "svc")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="工单号", group_columns=("编号",))
+    assert "具体值" in analysis.recipe.instruction and "以下之一" not in analysis.recipe.instruction
+    assert any("几乎每行唯一" in f.message for f in analysis.findings)  # 高基数预警在但不阻断
+
+
+def test_json_target_scenario_uses_extraction_contract(tmp_path):
+    """结构化目标场景钉死:短值契约(非类别、非值集列举)。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+    from src.workbench.intake_service import IntakeService
+    from src.workbench.scenario_matrix import run_scenario
+    from src.workbench.scenario_specs import builtin_scenarios
+
+    spec = next(s for s in builtin_scenarios() if s.scenario_id == "archetype-mixed-json-target")
+    assert run_scenario(spec, tmp_path).verdict == "as_expected"
+    service = IntakeService(tmp_path / "svc")
+    session = service.create(spec.goal, spec.sample_name, spec.sample)
+    analysis = propose_baseline_analysis(session, target_column="收件信息", group_columns=("编号",))
+    instruction = analysis.recipe.instruction
+    assert "具体值" in instruction
+    assert "以下之一" not in instruction and "类别" not in instruction
+
+
+def test_extraction_archetype_specs_require_minimum_rows():
+    """护栏钉死:抽取原型场景样例 <8 行直接构造报错(防'静默走分类'再犯)。"""
+    from src.workbench.scenario_matrix import ScenarioSpec, validate_spec_minimum_sample
+
+    tiny = ScenarioSpec(
+        scenario_id="tiny-extraction",
+        goal="对应编号",
+        sample="编号,描述,工单号\nr1,问题一,GD-001\nr2,问题二,GD-002\n".encode(),
+        sample_name="t.csv",
+        full="编号,描述,工单号\nr1,a,GD-001\n".encode(),
+        target_column="工单号",
+        group_columns=("编号",),
+        expect="passes",
+        tags=("extraction", "archetype"),
+    )
+    with pytest.raises(ValueError, match="至少 8 行"):
+        validate_spec_minimum_sample(tiny)
+    # 非抽取原型不受行数约束
+    generation_like = tiny.__class__(**{**tiny.__dict__, "tags": ("generation", "archetype")})
+    validate_spec_minimum_sample(generation_like)  # 不抛

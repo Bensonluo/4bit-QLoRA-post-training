@@ -84,11 +84,31 @@ def _answers_from_preview(session, source: str = "full_data") -> dict[str, str]:
     return {row.row_id: row.target for row in rows if row.target is not None}
 
 
+def validate_spec_minimum_sample(spec: ScenarioSpec) -> None:
+    """声称走原型路径的场景,样例需 ≥8 行已标注数据(唯一率阈值)。
+
+    2 行样例必然全唯一但样本不足,抽取分支会被判成分类——场景"通过"却没走
+    expect_note 声称的原型路径(生成/抽取场景各踩一次)。只约束自称原型场景
+    (tags 含 archetype),拦截类小样例场景不受影响。
+    """
+    # 抽取分支依赖唯一率(需 ≥8 行);生成分支按答案长度触发,不受行数约束
+    if "archetype" not in spec.tags or "extraction" not in spec.tags:
+        return
+    rows = spec.sample.decode("utf-8", errors="replace").strip().splitlines()
+    data_rows = [line for line in rows[1:] if line.strip()] if len(rows) > 1 else []
+    if len(data_rows) < 8:
+        raise ValueError(
+            f"原型场景 {spec.scenario_id} 样例仅 {len(data_rows)} 行数据——原型推断需要"
+            "至少 8 行(唯一率阈值),否则场景会静默走分类路径与 expect_note 不符。"
+        )
+
+
 def run_scenario(spec: ScenarioSpec, root: str | Path) -> ScenarioResult:
     """Walk one scenario through the zero-agent journey; record stage-by-stage truth."""
     from src.workbench.baseline_analysis import propose_baseline_analysis
     from src.workbench.intake_service import IntakeService
 
+    validate_spec_minimum_sample(spec)
     result = ScenarioResult(scenario_id=spec.scenario_id, expect=spec.expect)
     service = IntakeService(Path(root) / "intake")
     session = None
@@ -146,13 +166,19 @@ def run_scenario(spec: ScenarioSpec, root: str | Path) -> ScenarioResult:
 
         if result.blocked_at is None:
             pending = service.start_label_verification(session.session_id, session.revision)
-            answer_source = (
-                spec.user_answers(session) if spec.user_answers else _answers_from_preview(session)
-            )
-            answers = {
-                item["row_id"]: answer_source.get(item["row_id"], item["row_id"])
-                for item in pending["items"]
-            }
+            if pending.get("mode") == "review":
+                # 开放文本目标:核验方式是逐条审阅,模拟业务用户全部认可
+                answers = {item["row_id"]: "是" for item in pending["items"]}
+            else:
+                answer_source = (
+                    spec.user_answers(session)
+                    if spec.user_answers
+                    else _answers_from_preview(session)
+                )
+                answers = {
+                    item["row_id"]: answer_source.get(item["row_id"], item["row_id"])
+                    for item in pending["items"]
+                }
             verdict = service.submit_label_verification(
                 session.session_id, pending["verification_id"], answers
             )
@@ -199,6 +225,22 @@ def run_scenario(spec: ScenarioSpec, root: str | Path) -> ScenarioResult:
     return result
 
 
+def _coverage_by_tags(
+    specs: list[ScenarioSpec], results: list[ScenarioResult]
+) -> dict[str, dict[str, int]]:
+    """按标签分组的覆盖视图:每组通过/偏离计数——覆盖率的可读形式。"""
+    grouped: dict[str, dict[str, int]] = {}
+    for spec, result in zip(specs, results):
+        for tag in spec.tags:
+            entry = grouped.setdefault(tag, {"total": 0, "as_expected": 0, "deviation": 0})
+            entry["total"] += 1
+            if result.verdict == "as_expected":
+                entry["as_expected"] += 1
+            else:
+                entry["deviation"] += 1
+    return dict(sorted(grouped.items()))
+
+
 def run_matrix(specs: list[ScenarioSpec], root: str | Path) -> dict[str, Any]:
     """Run all scenarios and summarize coverage×independence truthfully."""
     results = [run_scenario(spec, Path(root) / spec.scenario_id) for spec in specs]
@@ -207,6 +249,7 @@ def run_matrix(specs: list[ScenarioSpec], root: str | Path) -> dict[str, Any]:
         "kind": "scenario_matrix",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "scenarios": [result.to_dict() for result in results],
+        "coverage_by_tags": _coverage_by_tags(specs, results),
         "summary": {
             "total": len(results),
             "as_expected": verdicts.count("as_expected"),

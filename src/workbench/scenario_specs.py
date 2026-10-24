@@ -6,6 +6,11 @@
 
 from src.workbench.scenario_matrix import ScenarioSpec
 
+_GEN_QUESTION = (
+    "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。"
+)
+_GEN_ANSWER = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 2
+
 _CLEAN_SAMPLE = ("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n").encode()
 _CLEAN_FULL = (
     "编号,客户描述,类别\n"
@@ -1583,6 +1588,139 @@ def builtin_scenarios() -> list[ScenarioSpec]:
                 "分界:相同输入配不同答案会被全量验证硬拦,不会出现在任何分区"
             ),
             tags=("materialize", "duplicates"),
+        ),
+        ScenarioSpec(
+            scenario_id="open-text-generation-target",
+            goal="根据客户问题生成标准答复",
+            sample=(
+                "编号,客户问题,标准答复\n"
+                f"001,{_GEN_QUESTION}（情形1）,{_GEN_ANSWER}（变体1）\n"
+                f"002,{_GEN_QUESTION}（情形2）,{_GEN_ANSWER}（变体2）\n"
+            ).encode(),
+            sample_name="客服问答.csv",
+            full=(
+                "编号,客户问题,标准答复\n"
+                + "".join(
+                    f"{i:03d},{_GEN_QUESTION}（情形{i}）,{_GEN_ANSWER}（变体{i}）\n"
+                    for i in range(1, 11)
+                )
+            ).encode(),
+            target_column="标准答复",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "开放生成原型端到端(矩阵首次覆盖):指令为文本契约(完整答复内容,不列值集)、"
+                "单一长文本输入 plain 渲染、盲标核验切换逐条审阅模式(是/否裁决,不要求逐字复现)、"
+                "可学性探针对开放目标略去多数类基线只报失败模式"
+            ),
+            tags=("generation", "archetype"),
+        ),
+        ScenarioSpec(
+            scenario_id="extraction-near-unique-target",
+            goal="根据客户描述对应工单编号",
+            sample=(
+                "编号,客户描述,工单号\n"
+                + "".join(f"r{i},问题描述第{i}种,GD-{i:03d}\n" for i in range(1, 9))
+            ).encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,工单号\n"
+                + "".join(f"r{i},问题描述第{i}种,GD-{i:03d}\n" for i in range(1, 11))
+            ).encode(),
+            target_column="工单号",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "抽取/归一原型端到端(近全唯一短值):指令为短值契约(具体值/名称或编号),"
+                "不列值集不称类别;高基数答案列会得到「可能选错答案列」预警(不阻断,抽取合法)"
+            ),
+            tags=("extraction", "archetype"),
+        ),
+        ScenarioSpec(
+            scenario_id="archetype-mixed-json-target",
+            goal="从客户描述中提取结构化收件信息",
+            sample=(
+                "编号,客户描述,收件信息\n"
+                + "".join(
+                    f"r{i},寄到样例城市{i}区路{i}号用户{i}收,{{name:样例用户{i}|city:样例城市{i}}}\n"
+                    for i in range(1, 9)
+                )
+            ).encode(),
+            sample_name="收件.csv",
+            full=(
+                "编号,客户描述,收件信息\n"
+                + "".join(
+                    f"r{i},寄到城市{i}区zz路{i}号用户{i}收,{{name:用户{i}|city:城市{i}}}\n"
+                    for i in range(1, 11)
+                )
+            ).encode(),
+            target_column="收件信息",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "结构化目标文本(近全唯一+短值→抽取原型):短值契约生效;"
+                "JSON 引号在 CSV 中需转义,此处用无引号结构文本验证同一路径;"
+                "json_fields_exact 评分需 CLI 显式选择,默认旅程只验证数据层通过"
+            ),
+            tags=("extraction", "json-target", "archetype"),
+        ),
+        ScenarioSpec(
+            scenario_id="whitespace-only-input-cells",
+            goal="根据客户首次描述判断售后类别",
+            sample=("编号,客户描述,类别\n001,   ,质量\n002,物流未更新,物流\n").encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                "001,   ,质量\n002,物流未更新,物流\n003,屏幕碎裂,质量\n"
+                "004,快递丢失,物流\n005,开不了机,质量\n006,地址填错,物流\n"
+                "007,异味,质量\n008,延迟送达,物流\n009,无法充电,质量\n010,包装破损,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:confirm_sample",
+            expect_note="纯空格输入按缺失判(与空值同路),确认被拦直至修数据——不静默当作有效输入",
+            tags=("dirty-data", "whitespace-input"),
+        ),
+        ScenarioSpec(
+            scenario_id="numeric-looking-group-column",
+            goal="根据客户首次描述判断售后类别",
+            sample=("编号,客户描述,类别\n1001,杯子破损,质量\n1002,物流未更新,物流\n").encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                "1001,杯子破损,质量\n1002,物流未更新,物流\n1003,屏幕碎裂,质量\n"
+                "1004,快递丢失,物流\n1005,开不了机,质量\n1006,地址填错,物流\n"
+                "1007,异味,质量\n1008,延迟送达,物流\n1009,无法充电,质量\n1010,包装破损,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="passes",
+            expect_note=(
+                "分组列值为纯数字字符串:入口保留原始文本(前导零不丢),"
+                "分组按字符串精确匹配——数字语义不做推断,边界如实"
+            ),
+            tags=("boundary", "numeric-group"),
+        ),
+        ScenarioSpec(
+            scenario_id="label-drift-between-sample-and-full",
+            goal="根据客户首次描述判断售后类别",
+            sample=("编号,客户描述,类别\n001,杯子破损,质量\n002,物流未更新,物流\n").encode(),
+            sample_name="工单.csv",
+            full=(
+                "编号,客户描述,类别\n"
+                "001,杯子破损,物流\n002,物流未更新,物流\n003,屏幕碎裂,质量\n"
+                "004,快递丢失,物流\n005,开不了机,质量\n006,地址填错,物流\n"
+                "007,异味,质量\n008,延迟送达,物流\n009,无法充电,质量\n010,包装破损,物流\n"
+            ).encode(),
+            target_column="类别",
+            group_columns=("编号",),
+            expect="blocked_at:validate_full",
+            expect_note=(
+                "同一输入在样例确认后于全量中改了答案(001:质量→物流)——"
+                "sample_answer_disagreement 硬拦:要么全量录错了,要么样例确认时的"
+                "业务理解变了;两条路都要求用户显式重新核对,不能带病进训练"
+            ),
+            tags=("dirty-data", "label-drift"),
         ),
     ]
 

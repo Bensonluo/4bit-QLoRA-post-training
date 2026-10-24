@@ -35,6 +35,12 @@ def main() -> int:
         f"意外通过 {summary['unexpected_pass']}, 意外拦截 {summary['unexpected_block']}, "
         f"错误 {summary['error']}\n报告: {path}"
     )
+    coverage = report.get("coverage_by_tags") or {}
+    if coverage:
+        print("\n覆盖分组(标签: 通过/总数):")
+        for tag, entry in sorted(coverage.items()):
+            mark = "✓" if entry["deviation"] == 0 else "✗"
+            print(f"  {mark} {tag}: {entry['as_expected']}/{entry['total']}")
     return (
         0 if summary["unexpected_pass"] + summary["unexpected_block"] + summary["error"] == 0 else 1
     )
