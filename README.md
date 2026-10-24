@@ -2,7 +2,7 @@
 
 # TuneSmith 🔨
 
-**A fine-tuning workbench for small businesses and individuals who cannot hire an algorithm engineer. Start with a business goal and sample data; an Agent helps clarify the task, diagnose data gaps and preview a processing recipe. A built-in semantic safety layer — blind label verification, contrast checks and a learnability probe — keeps the business judgments only you can make from silently passing. Existing local training, evaluation and model management support the next steps.**
+**A fine-tuning workbench for small businesses and individuals who cannot hire an algorithm engineer. Start with a business goal and sample data; the task archetype (classification / extraction / open generation) is inferred from your measured data with an editable instruction draft — no fixed templates. A built-in semantic safety layer — blind label verification (reproduce for short answers, per-row review for open text), contrast checks and a learnability probe — keeps the business judgments only you can make from silently passing. Existing local training, evaluation and model management support the next steps.**
 
 The goal-and-data workflow is under active development. Sample analysis, real conversion previews, full-data validation, training and iteration are connected and have been exercised with fictional data on local hardware. Real customer acceptance and demonstrated business benefit remain open. [North star & product goals](docs/plans/north-star.md) · [Configure your Agent provider (BYOK)](docs/agent-setup.md)
 
