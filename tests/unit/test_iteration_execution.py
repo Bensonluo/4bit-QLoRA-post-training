@@ -536,3 +536,28 @@ def test_authorize_requires_verified_label_verification(harness):
     with pytest.raises(ValueError, match="盲标核验"):
         service.start(identity, live)
     assert len(harness["launches"]) == 0
+
+
+def test_protocol_reconstruction_preserves_open_review():
+    """P3.4 worker 重建协议:open_review(含 None 字段)逐字段还原,不带默认值漂移。"""
+    from src.workbench.business_evaluation import EvaluationProtocol
+    from src.workbench.iteration_execution import _protocol_from_iteration
+
+    record = {
+        "evaluation_protocol": {
+            "scorer": "open_review",
+            "max_new_tokens": 64,
+            "strip_whitespace": True,
+            "fields": [],
+            "custom_scoring": None,
+            "generation": "greedy_v1",
+            "prompt_digest": "abc",
+            "answers_digest": "def",
+        }
+    }
+    protocol = _protocol_from_iteration(record)
+    assert isinstance(protocol, EvaluationProtocol)
+    assert protocol.scorer == "open_review"
+    assert protocol.max_new_tokens == 64
+    assert protocol.custom_scoring is None
+    protocol.validate()  # open_review 是合法协议

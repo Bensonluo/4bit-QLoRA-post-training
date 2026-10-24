@@ -557,3 +557,42 @@ def test_probe_stores_label_vocabulary_and_weak_signal_threshold(store):
     assert "人工核对后仍不认同才修正数据" in result["candidates_note"]
     header = describe_candidates(result["label_error_candidates"])[0]
     assert "人工核对后仍不认同才修正数据" in header
+
+
+def test_open_target_probe_omits_baseline_and_candidates(store, tmp_path):
+    """开放目标探针诚实化:不报多数类基线/差异/候选,note 转向失败模式。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    service = IntakeService(tmp_path / "open")
+    long_q = (
+        "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。" * 2
+    )
+    long_a = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 2
+    sample = f"编号,问题,答复\n001,{long_q},{long_a}\n".encode()
+    full = (
+        "编号,问题,答复\n"
+        + "".join(f"{i:03d},{long_q}（{i}）,{long_a}（{i}）\n" for i in range(1, 11))
+    ).encode()
+    session = service.create("生成答复", "q.csv", sample)
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="答复", group_columns=("编号",)),
+        model="t",
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(session.session_id, session.revision, "f.csv", full)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    session = service.materialize_dataset(session.session_id, session.revision)
+
+    result = probe_learnability(
+        session, "/tmp/base", runtime_factory=_factory("任意输出"), sample_size=3
+    )
+    assert result["open_target"] is True
+    assert result["majority_baseline"] is None
+    assert result["difference"] is None
+    assert result["label_error_candidates"] == []
+    assert "不产出标签问题候选" in result["candidates_note"]
+    assert "几乎不可能逐字一致" in result["note"]
+    from src.workbench.learnability_probe import probe_verdict_phrase
+
+    assert "开放生成目标" in probe_verdict_phrase(result)

@@ -118,8 +118,8 @@ def test_data_intake_heavy_buttons_wrapped_in_spinner():
     ), "两处全量组合验证都必须包 spinner"
     assert (
         len(re.findall(r"with st\.spinner\([^)]*\):\n\s+service\.validate_full_data\(", source))
-        == 3
-    ), "三处全量验证(首次上传/演示全量/表单上传)都必须包 spinner"
+        == 4
+    ), "四处全量验证(首次上传/演示全量/泛化演示全量/表单上传)都必须包 spinner"
     assert re.search(
         r"with st\.spinner\([^)]*\):\n\s+reference = suite_service\.freeze\(session\)", source
     ), "「固定当前开发与测试题集」必须包 spinner"

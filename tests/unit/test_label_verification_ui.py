@@ -489,3 +489,85 @@ def test_insufficient_verification_page_renders_stored_triage_lines(verify_page)
     assert any(text.startswith("对号修正") for text in rendered)
     # 通用指引保留:三因词汇仍出现在页面,分辨行是补充而不是替换
     assert any("标签错误、业务歧义或任务定义不清" in text for text in rendered)
+
+
+@pytest.fixture()
+def verify_open_page(data_page):
+    """开放生成目标推进到全量确认(盲标区可见)。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    service, _, page = data_page
+    long_q = (
+        "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。" * 2
+    )
+    long_a = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 2
+    sample = (
+        f"编号,客户问题,标准答复\n001,{long_q},{long_a}\n002,{long_q}（2）,{long_a}（2）\n".encode()
+    )
+    full = (
+        "编号,客户问题,标准答复\n"
+        + "".join(f"{i:03d},{long_q}（{i}）,{long_a}（{i}）\n" for i in range(1, 11))
+    ).encode()
+    session = service.create("根据客户问题生成标准答复", "qa.csv", sample)
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",)),
+        model="ui",
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", full)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    return service, session, page
+
+
+def test_open_target_blind_form_uses_review_radio(verify_open_page):
+    """页面审阅模式:出示数据答复,是/否单选,提交后经业务认可通过。"""
+    service, session, page = verify_open_page
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "抽取盲标核验题目").click().run()
+    assert not page.exception
+    assert any("逐条审阅" in c.value for c in page.caption)
+    radios = [r for r in page.radio if r.label == "该答复是否符合业务"]
+    assert radios
+    for radio in radios:
+        radio.set_value("是").run()
+    next(b for b in page.button if b.label == "提交逐条审阅结论").click().run()
+    assert not page.exception
+    assert any("盲标核验已通过" in m.value for m in page.success)
+    current = service.load(session.session_id)
+    assert current.label_verification["mode"] == "review"
+    assert current.label_verification["verdict"] == "verified"
+
+
+def test_long_contrast_options_are_truncated_but_submit_full_text(data_page):
+    """生成目标的配对选项截断显示;提交的仍是完整原文,配对正确可过。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    service, session, page = data_page
+    long_q = (
+        "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。" * 2
+    )
+    long_a = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 2
+    sample = (
+        f"编号,客户问题,标准答复\n001,{long_q},{long_a}\n002,{long_q}（2）,{long_a}（2）\n".encode()
+    )
+    session = service.create("根据客户问题生成标准答复", "qa.csv", sample)
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",)),
+        model="ui",
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(b for b in page.button if b.label == "开始配对对比").click().run()
+    assert not page.exception
+    boxes = [s for s in page.selectbox if s.key and str(s.key).startswith("cc_")]
+    assert boxes
+    targets = {row.row_id: row.target for row in service.load(session.session_id).preview.rows}
+    for box in boxes:
+        row_id = str(box.key).rsplit("_", 1)[-1]
+        box.select(targets[row_id]).run()
+    next(b for b in page.button if b.label == "提交配对").click().run()
+    assert not page.exception
+    assert any("第一轮配对正确" in i.value for i in page.info)

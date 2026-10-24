@@ -837,6 +837,9 @@ def inspect_model_training_evidence(
     metrics = read(adapter / "workbench_metrics.json")
     require(metrics == result["metrics"], "训练指标与成功回执不一致。")
     preflight = run["preflight"]
+    from src.workbench.model_export import _verified_training_protocol
+
+    training_protocol = _verified_training_protocol(config, preflight)
     require(
         preflight["version"] == training_dataset.version
         and preflight["source_digest"] == training_dataset.source_digest
@@ -861,17 +864,20 @@ def inspect_model_training_evidence(
         "config": config,
         "metrics": metrics,
         "preflight": {
-            key: preflight[key]
-            for key in (
-                "status",
-                "max_length",
-                "supervision_strategy",
-                "tokenizer",
-                "splits",
-                "scope_note",
-                "issues",
-            )
-            if key in preflight
+            **training_protocol,
+            **{
+                key: preflight[key]
+                for key in (
+                    "status",
+                    "max_length",
+                    "supervision_strategy",
+                    "tokenizer",
+                    "splits",
+                    "scope_note",
+                    "issues",
+                )
+                if key in preflight
+            },
         },
         "mlflow": {
             "run_id": result.get("mlflow_run_id"),

@@ -23,6 +23,20 @@ from src.workbench.training_runs import TrainingRunService
 ITERATION_DECISIONS = ("adopt", "continue", "stop", "insufficient_evidence")
 
 
+def decision_metric_for_protocol(protocol: dict) -> str:
+    """轮次决策指标的单一来源:按评分协议选择,开放任务如实记人工核对。
+
+    exact_match/pass_rate 对 open_review 协议不存在——写死会在轮次记录里
+    存一个不存在的指标名,误导后续呈现与导出。
+    """
+    scorer = protocol.get("scorer")
+    if scorer == "custom_rules":
+        return "pass_rate"
+    if scorer == "open_review":
+        return "manual_review"
+    return "exact_match"
+
+
 class IterationService:
     def __init__(self, root, training_root, evaluation_root):
         self.root = Path(root).resolve()
@@ -128,6 +142,7 @@ class IterationService:
         lora_options=None,
         model_options=None,
         max_length=None,
+        sft_protocol=None,
     ):
         if session.dataset is None:
             raise ValueError("请先物化当前确认的数据。")
@@ -135,6 +150,10 @@ class IterationService:
             raise ValueError("数据修改范围必须明确为布尔值。")
         if max_length is not None and (type(max_length) is not int or max_length <= 0):
             raise ValueError("max_length 必须是正整数。")
+        from config.base import SFT_TRAINING_PROTOCOLS
+
+        if sft_protocol is not None and sft_protocol not in SFT_TRAINING_PROTOCOLS:
+            raise ValueError("改进方案的训练监督协议无效。")
         for value in (hypothesis, expected_outcome, changes):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError("请写清改进假设、预期业务结果与具体修改。")
@@ -160,6 +179,11 @@ class IterationService:
                 if k not in {"name", "max_length", "trust_remote_code"}
             },
             "max_length": config["model"]["max_length"] if max_length is None else max_length,
+            "sft_protocol": (
+                config["data"].get("sft_protocol", "alpaca_full_prompt_v1")
+                if sft_protocol is None
+                else sft_protocol
+            ),
         }
         overrides = {
             "training_options": training_options,
@@ -331,7 +355,18 @@ class IterationService:
         ):
             raise ValueError("技术重试与原业务轮次的数据或模型身份不一致。")
         original, retried = parent["config"], child["config"]
-        if any(original[key] != retried[key] for key in ("model", "lora", "data")):
+        original_data = {
+            **original["data"],
+            "sft_protocol": original["data"].get("sft_protocol", "alpaca_full_prompt_v1"),
+        }
+        retried_data = {
+            **retried["data"],
+            "sft_protocol": retried["data"].get("sft_protocol", "alpaca_full_prompt_v1"),
+        }
+        if (
+            any(original[key] != retried[key] for key in ("model", "lora"))
+            or original_data != retried_data
+        ):
             raise ValueError("技术重试不能改变基座、LoRA方案或数据。")
         before, after = original["training"], retried["training"]
         changed = {key for key in set(before) | set(after) if before.get(key) != after.get(key)}
@@ -401,9 +436,7 @@ class IterationService:
                 "content_verified" if record.get("parent_report_digest") else "legacy_unbound"
             ),
             comparison_key=report.comparison_key,
-            decision_metric="pass_rate"
-            if report.protocol["scorer"] == "custom_rules"
-            else "exact_match",
+            decision_metric=decision_metric_for_protocol(report.protocol),
             results=[
                 {"label": model["label"], "metrics": model["metrics"]} for model in report.models
             ],

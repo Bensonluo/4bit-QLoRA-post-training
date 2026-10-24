@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.workbench.evaluation_diagnostics import output_echoes_prompt
 from src.workbench.intake_models import IntakeSession
 from src.workbench.sources import content_digest
 
@@ -105,6 +106,8 @@ def probe_learnability(
         if closer is not None:
             closer()
 
+    recipe = session.analysis.recipe if session.analysis else None
+    open_target = bool(recipe and recipe.targets and recipe.targets[0].value_kind == "open_text")
     label_counts: dict[str, int] = {}
     for row in rows:
         label_counts[row["output"]] = label_counts.get(row["output"], 0) + 1
@@ -112,6 +115,9 @@ def probe_learnability(
     accuracy = correct / len(sampled)
     failures = sum(item["error"] is not None for item in observations)
     truncated_count = sum(item["truncated"] for item in observations)
+    echo_count = sum(
+        output_echoes_prompt(item.get("generated"), item.get("prompt")) for item in observations
+    )
 
     # 标签问题候选:基座零样本与数据标签矛盾的行。基座没见过这些数据,
     # 它的分歧不带训练利益;若盲标核验中用户也不同意数据标签,则是强证据
@@ -123,7 +129,7 @@ def probe_learnability(
         if isinstance(item, dict) and item.get("match") is False
     }
     candidates = []
-    for observation in observations:
+    for observation in [] if open_target else observations:
         if observation["match"] or observation["truncated"] or observation["error"]:
             continue  # 未完成或失败的生成不算标签分歧证据
         row_id = observation["row_id"]
@@ -151,29 +157,44 @@ def probe_learnability(
         "protocol": {"generation": "greedy_v1", "max_new_tokens": max_new_tokens, "shots": 0},
         "sample_size": len(sampled),
         "dev_total": len(rows),
+        "open_target": open_target,
         "zero_shot_accuracy": accuracy,
-        "majority_baseline": majority_share,
-        "majority_label": majority_label,
+        "majority_baseline": None if open_target else majority_share,
+        "majority_label": None if open_target else majority_label,
         "baseline_protocol": {
-            "kind": "train_majority_same_sample_v1",
+            "kind": (
+                "not_applicable_open_target" if open_target else "train_majority_same_sample_v1"
+            ),
             "train_total": len(partitions["train"]),
             "sample_size": len(sampled),
         },
         "generation_failures": failures,
         "truncated_count": truncated_count,
-        "label_vocabulary": sorted(label_counts),
-        "difference": accuracy - majority_share,
+        "label_vocabulary": [] if open_target else sorted(label_counts),
+        "label_vocabulary_omitted": open_target,
+        "difference": None if open_target else accuracy - majority_share,
         "observations": observations,
         "label_error_candidates": candidates,
         "candidates_note": (
-            f"{len(candidates)} 行是标签问题候选(基座零样本与数据标签不一致;"
+            "开放生成目标不产出标签问题候选：零样本输出与长文本标签几乎必然不一致，"
+            "分歧不构成标签错误证据；标签质量由盲标核验的逐条审阅把关。"
+            if open_target
+            else f"{len(candidates)} 行是标签问题候选(基座零样本与数据标签不一致;"
             f"其中 {sum(1 for c in candidates if c['user_blind_answer'])} 行与用户盲标也不一致)。"
             "候选不等于错误——模型可能错;但优先人工核对这些行是性价比最高的数据清理。"
             "与盲标也不一致的强证据行,建议对照原始来源行(row original 与来源文件行号)"
             f"溯源确认标签后再决定改不改,不要只凭模型输出下结论。{WEAK_SIGNAL_RULE}。"
         ),
         "note": (
-            f"基座零样本 {accuracy:.0%} vs 训练集多数类固定猜测「{majority_label}」{majority_share:.0%}"
+            (
+                f"开放生成目标：零样本与长文本标签几乎不可能逐字一致，"
+                f"精确一致率 {accuracy:.0%} 仅作参考，不作可学性结论；"
+                "多数类基线对开放目标无意义，已略去。请关注失败模式——"
+                f"本次生成失败 {failures} 条、截断 {truncated_count} 条、"
+                f"复述题目 {echo_count} 条；效果判断以逐条人工审阅为准。"
+            )
+            if open_target
+            else f"基座零样本 {accuracy:.0%} vs 训练集多数类固定猜测「{majority_label}」{majority_share:.0%}"
             "（双方回答同一组开发题；基线标签只从训练集选择）"
             f"（抽样 {len(sampled)}/{len(rows)} 条）。这只是数据与任务是否存在可学关联的"
             "最便宜证据：样本量小、零样本差异不能预测微调效果，也不构成业务达标结论；"
@@ -292,7 +313,11 @@ def probe_verdict_phrase(result: dict) -> str:
     """
     delta = result.get("difference")
     if delta is None:
-        return "没有可比较的探针结果"
+        return (
+            "开放生成目标：精确一致率仅参考，请看失败模式与人工审阅"
+            if result.get("open_target")
+            else "没有可比较的探针结果"
+        )
     if delta > 0:
         return "零样本高于瞎猜基线"
     if delta == 0:

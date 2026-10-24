@@ -2267,3 +2267,47 @@ def test_gguf_open_and_custom_summaries_keep_the_actual_scoring_contract():
             assert "生成了 3/4 条回答" in joined
             assert "开放任务尚待业务评分" in joined
             assert "独立计分" not in joined
+
+
+def test_iteration_summary_open_review_gets_honest_manual_line():
+    """open_review 轮次:无分数差可算时明确说人工核对,不静默留空。"""
+    from src.workbench.report_summary import summarize_iteration
+
+    record = {
+        "status": "evaluated",
+        "hypothesis": "补充样例提升答复质量",
+        "evaluation_protocol": {"scorer": "open_review", "max_new_tokens": 256},
+        "results": [
+            {"label": "基座", "metrics": {"total": 5, "generated": 5}},
+            {"label": "本轮微调", "metrics": {"total": 5, "generated": 5}},
+        ],
+        "decision_metric": "exact_match",
+    }
+    lines = summarize_iteration(record)
+    assert any("没有自动分数差可算" in line and "逐条人工核对" in line for line in lines)
+    # 分类协议不出现该行
+    record["evaluation_protocol"] = {"scorer": "classification_exact", "max_new_tokens": 4}
+    lines = summarize_iteration(record)
+    assert not any("没有自动分数差" in line for line in lines)
+
+
+def test_decision_metric_for_protocol_and_delta_guard():
+    """决策指标单一来源:custom→pass_rate,open→manual_review,其余 exact_match;
+    manual_review 的题数差行直接为空(人工核对提示由摘要层给)。"""
+    from src.workbench.iterations import decision_metric_for_protocol
+    from src.workbench.report_summary import three_model_delta_lines
+
+    assert decision_metric_for_protocol({"scorer": "custom_rules"}) == "pass_rate"
+    assert decision_metric_for_protocol({"scorer": "open_review"}) == "manual_review"
+    assert decision_metric_for_protocol({"scorer": "classification_exact"}) == "exact_match"
+    results = [
+        {"label": "基座", "metrics": {"total": 5, "generated": 5}},
+        {"label": "本轮微调", "metrics": {"total": 5, "generated": 5}},
+    ]
+    assert three_model_delta_lines(results, "manual_review") == []
+    assert three_model_delta_lines(results, "exact_match") == []
+    comparable = [
+        {"label": "基座", "metrics": {"total": 5, "exact_match": 0.4}},
+        {"label": "本轮微调", "metrics": {"total": 5, "exact_match": 0.8}},
+    ]
+    assert three_model_delta_lines(comparable, "exact_match")

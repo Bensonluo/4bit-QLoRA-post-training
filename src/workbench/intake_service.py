@@ -15,7 +15,13 @@ from uuid import uuid4
 from src.agent.intake import ChatClient, analyze_intake
 from src.workbench.answer_sheet import missing_answer_rows
 from src.workbench.full_data import full_data_is_current, validate_full_source
-from src.workbench.intake_models import BusinessExample, IntakeAnalysis, IntakeSession, PreviewRow
+from src.workbench.intake_models import (
+    BusinessExample,
+    Finding,
+    IntakeAnalysis,
+    IntakeSession,
+    PreviewRow,
+)
 from src.workbench.materialize import dataset_is_current, materialize_dataset
 from src.workbench.recipes import check_examples, preview_recipe, validate_analysis
 from src.workbench.sources import profile_source, read_source
@@ -117,6 +123,19 @@ def next_action_phrase(status: str) -> str:
     return _NEXT_ACTION_PHRASES.get(status, "")
 
 
+def _blind_verification_mode(session) -> str:
+    """盲标核验模式由任务原型推导:开放文本答案无法逐字复现,改逐条审阅。
+
+    reproduce(默认):隐藏答案,用户复现——适用于类别/短值目标。
+    review:出示输入与数据中的答复,用户逐条裁决「是否符合业务」——
+    适用于开放生成目标。审阅过的行同样计入已揭示,不能复用作复现证据。
+    """
+    recipe = session.analysis.recipe if session.analysis else None
+    if recipe and recipe.targets and recipe.targets[0].value_kind == "open_text":
+        return "review"
+    return "reproduce"
+
+
 def _stratified_sample(rows: list, size: int, seed: int) -> list[int]:
     """分层抽样:样本少于类别数时,按标签轮转保证每个类别至少一条被抽到。
 
@@ -206,8 +225,14 @@ def mismatch_triage_lines(items: list[dict], known_labels: set[str] | None = Non
     答案——更像两个类别的口径或边界没对齐）、分散错位（更像逐条的问题）。末行给
     对号修正映射（改数据 or 改方案），不替用户决定哪边该改。
     """
+    # 审阅模式的条目键不同(stored_answer/judgment);复现模式为 data_label/submitted_answer。
     mismatches = [
-        (item["data_label"], item["submitted_answer"]) for item in items if not item["match"]
+        (
+            item.get("data_label", item.get("stored_answer", "")),
+            item.get("submitted_answer", item.get("judgment", "")),
+        )
+        for item in items
+        if not item["match"]
     ]
     if not mismatches:
         return []
@@ -525,7 +550,39 @@ class IntakeService:
     def analyze(self, session_id: str, client: ChatClient) -> IntakeSession:
         session = self.load(session_id)
         analysis, trace = analyze_intake(session, client)
-        return self.apply_analysis(session, analysis, model=client.model, trace=trace)
+        updated = self.apply_analysis(session, analysis, model=client.model, trace=trace)
+        # Agent 路径同样存档任务形态徽标:零密钥与 Agent 两条路径的
+        # 业务理解区呈现同一结论,依据文案区分来源(数据实测 vs Agent 判断)。
+        if updated.analysis and updated.analysis.recipe and updated.analysis.recipe.targets:
+            target_column = updated.analysis.recipe.targets[0].column
+            input_columns = [b.column for b in updated.analysis.recipe.inputs]
+            try:
+                from src.workbench.baseline_analysis import infer_task_archetype
+
+                inferred = infer_task_archetype(updated, target_column, input_columns)
+                names = {
+                    "classification": "分类",
+                    "extraction": "抽取/归一",
+                    "generation": "开放生成",
+                }
+                updated.analysis.findings.insert(
+                    0,
+                    Finding(
+                        kind="observed",
+                        message=(
+                            f"任务形态推断（Agent 路径，同引擎）："
+                            f"{names[inferred['archetype']]}。依据（数据实测）：答案列不同取值 "
+                            f"{len(inferred['distinct_values'])} 个、唯一率 "
+                            f"{inferred['unique_ratio']:.0%}、平均长度 "
+                            f"{inferred['avg_target_len']:.0f} 字。"
+                        ),
+                        evidence_row_ids=[row.row_id for row in updated.source.rows[:2]],
+                    ),
+                )
+                updated = self._save(updated, updated.revision)
+            except ValueError:
+                pass
+        return self._attach_label_verification(updated)
 
     def start_contrast_check(self, session_id: str, expected_revision: int) -> dict:
         """配对对比:两行输入+打乱的两个答案,用户配对——确认不再是盲点头。"""
@@ -976,12 +1033,20 @@ class IntakeService:
                         datetime.now(timezone.utc).isoformat(),
                     ),
                 )
+        mode = _blind_verification_mode(session)
+        if mode == "review":
+            items = [
+                {"row_id": row.row_id, "input": row.input, "answer": row.target} for row in rows
+            ]
+        else:
+            items = [{"row_id": row.row_id, "input": row.input} for row in rows]
         return {
             "verification_id": verification_id,
+            "mode": mode,
             "sample_size": size,
             "requested_sample_size": requested,
             "seed": seed,
-            "items": [{"row_id": row.row_id, "input": row.input} for row in rows],
+            "items": items,
             "evidence_note": sample_evidence_note(size),
             # 选择的强度没有被满足时如实说明,不静默按更小的样本量缩水。
             **(
@@ -995,11 +1060,18 @@ class IntakeService:
                 else {}
             ),
             "note": (
-                "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。"
-                "重新核验会换一组题：排除此任务历史上公布过答案的输入，重复输入只算一道。"
-                "更换文件、行号、标签或配方不会恢复旧题的盲标资格。"
-                "尚未提交时再次抽题会复用当前题目和原抽样数量。"
-            ),
+                (
+                    "开放文本答案无法逐字复现，本任务采用逐条审阅：题目连同数据中的答复一起出示，"
+                    "由你逐条裁决「该答复是否符合业务」。审阅过的行计入已揭示，不能复用作复现式盲标。"
+                )
+                if mode == "review"
+                else (
+                    "请仅根据输入作答，不要查看数据中的现有答案；答案不会随题目显示。"
+                    "重新核验会换一组题：排除此任务历史上公布过答案的输入，重复输入只算一道。"
+                    "更换文件、行号、标签或配方不会恢复旧题的盲标资格。"
+                )
+            )
+            + "尚未提交时再次抽题会复用当前题目和原抽样数量。",
         }
 
     @staticmethod
@@ -1074,13 +1146,32 @@ class IntakeService:
         row_ids = json.loads(row_ids_json)
         if not isinstance(answers, dict) or set(answers) != set(row_ids):
             raise ValueError(f"请恰好对抽样的 {len(row_ids)} 条作答，不能多答或漏答。")
-        if any(not isinstance(value, str) or not value.strip() for value in answers.values()):
+        mode = _blind_verification_mode(session)
+        if mode == "review":
+            if any(answers[row_id].strip() not in {"是", "否"} for row_id in row_ids):
+                raise ValueError(
+                    "开放答复采用逐条审阅：每条请选择「是」或「否」，判断数据中的答复是否符合业务。"
+                )
+        elif any(not isinstance(value, str) or not value.strip() for value in answers.values()):
             raise ValueError("每条都需要作答；无法判断时请照实填写，不要留空。")
         by_id = {preview_row.row_id: preview_row for preview_row in report.preview.rows}
         items, matched = [], 0
         for row_id in row_ids:
             target = by_id[row_id].target
             submitted = answers[row_id].strip()
+            if mode == "review":
+                match = submitted == "是"
+                matched += match
+                items.append(
+                    {
+                        "row_id": row_id,
+                        "input": by_id[row_id].input,
+                        "stored_answer": target,
+                        "judgment": submitted,
+                        "match": match,
+                    }
+                )
+                continue
             match = submitted == target
             matched += match
             items.append(
@@ -1094,6 +1185,7 @@ class IntakeService:
             )
         verdict = "verified" if matched == len(row_ids) else "insufficient_agreement"
         result = {
+            "mode": mode,
             "sample_size": len(row_ids),
             "matched": matched,
             "agreement": matched / len(row_ids),
@@ -1101,7 +1193,11 @@ class IntakeService:
             "evidence_note": agreement_evidence_note(matched, len(row_ids)),
             "items": items,
             "verdict_note": (
-                "抽样行全部一致：监督信号的业务含义经用户独立复现。"
+                (
+                    "抽样行全部经业务审阅认可：开放答复的监督信号由你逐条确认符合业务。"
+                    if mode == "review"
+                    else "抽样行全部一致：监督信号的业务含义经用户独立复现。"
+                )
                 if verdict == "verified"
                 else "存在不一致：数据标签与业务理解有分歧，请逐条核对原因（标签错误、歧义或任务定义不清），修正后重新核验。"
             ),
@@ -1310,13 +1406,17 @@ class IntakeService:
         expected_revision: int,
         tokenizer: object,
         max_length: int,
+        *,
+        sft_protocol: str = "alpaca_full_prompt_v1",
     ) -> IntakeSession:
         from src.workbench.training_preflight import preflight_dataset
 
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("数据或方案已更新，请读取最新版本后再检查。")
-        session.training_preflight = preflight_dataset(session, tokenizer, max_length)
+        session.training_preflight = preflight_dataset(
+            session, tokenizer, max_length, sft_protocol=sft_protocol
+        )
         return self._save(session, session.revision)
 
 

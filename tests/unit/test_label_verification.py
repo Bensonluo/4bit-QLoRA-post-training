@@ -897,3 +897,79 @@ def test_failed_verification_stores_triage_and_verified_does_not(store):
     )
     assert verified["verdict"] == "verified"
     assert "mismatch_triage" not in verified
+
+
+def _open_store(tmp_path):
+    """开放生成目标的完整任务:长文本答案,走真实分析→全量确认链。"""
+    from src.workbench.baseline_analysis import propose_baseline_analysis
+
+    service = IntakeService(tmp_path / "intake")
+    long_q = (
+        "客户在收货后发现商品存在质量问题并且多次联系客服没有得到满意答复情绪激动要求立即处理。"
+    )
+    long_a = "根据您的反馈我们已安排专员跟进处理并将持续关注解决进度直到问题闭环。" * 2
+    sample = (
+        "编号,客户问题,标准答复\n"
+        f"001,{long_q}（情形1）,{long_a}（变体1）\n"
+        f"002,{long_q}（情形2）,{long_a}（变体2）\n"
+    ).encode()
+    full = (
+        "编号,客户问题,标准答复\n"
+        + "".join(f"{i:03d},{long_q}（情形{i}）,{long_a}（变体{i}）\n" for i in range(1, 11))
+    ).encode()
+    session = service.create("根据客户问题生成标准答复", "qa.csv", sample)
+    session = service.apply_analysis(
+        session,
+        propose_baseline_analysis(session, target_column="标准答复", group_columns=("编号",)),
+        model="test",
+    )
+    session = service.confirm(session.session_id, session.revision)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", full)
+    session = service.confirm_full_data(session.session_id, session.revision)
+    return service, session
+
+
+def test_open_target_blind_check_uses_review_mode(tmp_path):
+    """开放文本目标:盲标切换逐条审阅——出示答案,是/否裁决,全认可才过。"""
+    service, session = _open_store(tmp_path)
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=3)
+    assert pending["mode"] == "review"
+    assert all("answer" in item and item["answer"] for item in pending["items"])
+    assert "逐条审阅" in pending["note"]
+
+    answers = {item["row_id"]: "是" for item in pending["items"]}
+    result = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert result["verdict"] == "verified"
+    assert result["mode"] == "review"
+    assert "逐条确认" in result["verdict_note"]
+
+
+def test_review_mode_rejects_invalid_judgment_and_flags_disagreement(tmp_path):
+    service, session = _open_store(tmp_path)
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=2)
+    first = pending["items"][0]["row_id"]
+    with pytest.raises(ValueError, match="是」或「否」"):
+        service.submit_label_verification(
+            session.session_id,
+            pending["verification_id"],
+            {item["row_id"]: "也许" for item in pending["items"]},
+        )
+    answers = {item["row_id"]: "是" for item in pending["items"]}
+    answers[first] = "否"
+    result = service.submit_label_verification(
+        session.session_id, pending["verification_id"], answers
+    )
+    assert result["verdict"] == "insufficient_agreement"
+    bad = next(item for item in result["items"] if not item["match"])
+    assert bad["judgment"] == "否" and bad["stored_answer"]
+
+
+def test_classification_target_still_uses_reproduce_mode(store):
+    """分类目标不受影响:仍为隐藏答案的复现模式。"""
+    service, session = store
+    session = service.materialize_dataset(session.session_id, session.revision)
+    pending = service.start_label_verification(session.session_id, session.revision, sample_size=2)
+    assert pending["mode"] == "reproduce"
+    assert all("answer" not in item for item in pending["items"])

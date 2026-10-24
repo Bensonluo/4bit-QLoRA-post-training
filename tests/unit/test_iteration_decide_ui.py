@@ -199,3 +199,48 @@ def test_blocked_iteration_points_to_parent_evidence_with_honest_no_retry(decide
         assert door in pointer, f"指路必须点名真实门牌：{door}"
     assert "本次评测版本" in pointer, "必须如实标注数据版本门槛"
     assert "不需要重新训练" in pointer, "父轮产物保留是诚实出路的一部分"
+
+
+def test_open_review_decision_table_shows_manual_note_not_accuracy(decide_page):
+    """open_review 轮次:决策表说明为人工核对,不显示准确率话术。"""
+    _, session, page, _, iteration = decide_page
+    iteration["evaluation_protocol"] = {"scorer": "open_review", "max_new_tokens": 256}
+    iteration["results"] = [
+        {"label": "基座", "metrics": {"total": 3, "generated": 3}},
+        {"label": "本轮微调", "metrics": {"total": 3, "generated": 3}},
+    ]
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any("开放生成任务" in c.value and "逐条人工核对" in c.value for c in page.caption)
+    assert not any("不作美化" in c.value for c in page.caption)
+
+
+def test_open_review_decision_header_names_manual_review(decide_page):
+    """open_review 轮次的决策表标题明说无自动分数,与分类话术区分。"""
+    _, session, page, _, iteration = decide_page
+    iteration["evaluation_protocol"] = {"scorer": "open_review", "max_new_tokens": 64}
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any("开放生成任务——无自动分数" in block.value for block in page.markdown)
+    assert not any(
+        "同一评分协议）：**" in b.value and "开放生成" not in b.value for b in page.markdown
+    )
+
+
+def test_manual_review_iteration_table_hides_accuracy_columns(decide_page):
+    """manual_review 轮次:结果表只显示生成完成统计,不显示 accuracy 话术。"""
+    _, session, page, _, iteration = decide_page
+    iteration["decision_metric"] = "manual_review"
+    iteration["evaluation_protocol"] = {"scorer": "open_review", "max_new_tokens": 64}
+    iteration["results"] = [
+        {"label": "基座", "metrics": {"total": 3, "generated": 3}},
+        {"label": "父轮模型", "metrics": {"total": 3, "generated": 3}},
+        {"label": "本轮微调", "metrics": {"total": 3, "generated": 3}},
+    ]
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    # 结果表渲染(metrics 数字都在)但 decision reason 不含准确率话术
+    assert any("同题三模型结果" in b.value for b in page.markdown)

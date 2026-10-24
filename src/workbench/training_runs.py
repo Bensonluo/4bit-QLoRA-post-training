@@ -147,6 +147,7 @@ class TrainingRunService:
         model_path: str | Path,
         *,
         max_length: int = 1024,
+        sft_protocol: str = "alpaca_full_prompt_v1",
         training_options: dict | None = None,
         lora_options: dict | None = None,
         model_options: dict | None = None,
@@ -247,10 +248,12 @@ class TrainingRunService:
                 mlflow_experiment_name="workbench-sft",
                 mlflow_run_name=run_id,
             )
-            data = DataConfig(**session.dataset.data_config)
+            data = DataConfig(**{**session.dataset.data_config, "sft_protocol": sft_protocol})
             SFTConfig(model=model, training=training, lora=lora, logging=logging, data=data)
             record["model_identity"] = model_identity(path)
-            preflight = preflight_dataset(session, training_tokenizer(path), max_length)
+            preflight = preflight_dataset(
+                session, training_tokenizer(path), max_length, sft_protocol=data.sft_protocol
+            )
             record["preflight"] = preflight
             record["issues"] = preflight["issues"]
             config = {
@@ -301,6 +304,7 @@ class TrainingRunService:
             session,
             training_tokenizer(record["model_path"]),
             record["config"]["model"]["max_length"],
+            sft_protocol=record["config"]["data"].get("sft_protocol", "alpaca_full_prompt_v1"),
         )
         if report["status"] == "blocked":
             raise ValueError("启动前数据校验未通过，请处理预检问题。")

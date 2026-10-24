@@ -467,6 +467,95 @@ def test_training_evidence_reads_verified_receipts_not_raw_partitions(task, mode
     assert "rows" not in tuned["preflight"]
 
 
+def _answer_only_receipt(report, directory):
+    from src.workbench.business_evaluation import _model_identity
+
+    run_path = directory / "run.json"
+    run = json.loads(run_path.read_text())
+    run["config"]["data"]["sft_protocol"] = "alpaca_answer_only_v1"
+    run["config_digest"] = content_digest(run["config"])
+    run["preflight"].update(
+        sft_protocol="alpaca_answer_only_v1",
+        supervision_strategy="answer_and_eos_only",
+        splits={"train": {"rows": 1}},
+        rows=[
+            {
+                "split": "train",
+                "row_id": "row-1",
+                "answer_boundary_verified": True,
+                "answer_supervision_complete": True,
+                "terminal_eos_supervised": True,
+                "prompt_supervised_tokens": 0,
+                "answer_supervised_tokens": 2,
+                "supervised_tokens": 3,
+            }
+        ],
+    )
+    manifest_path = directory / "model" / "workbench_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config_digest"] = run["config_digest"]
+    manifest_path.write_text(json.dumps(manifest))
+    (directory / "config.json").write_text(json.dumps(run["config"]))
+    run_path.write_text(json.dumps(run))
+    report.models[1]["identity"]["adapter"] = _model_identity(directory / "model")
+    return run
+
+
+def test_answer_only_training_evidence_exposes_verified_objective_without_changing_comparison(
+    task, model_paths, tmp_path
+):
+    report, directory = training_report(task, model_paths, tmp_path)
+    original_key, original_protocol = report.comparison_key, deepcopy(report.protocol)
+    _answer_only_receipt(report, directory)
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][1]
+    assert entry["status"] == "available", entry
+    assert entry["config"]["data"]["sft_protocol"] == "alpaca_answer_only_v1"
+    assert entry["preflight"]["sft_protocol"] == "alpaca_answer_only_v1"
+    assert entry["preflight"]["supervision_strategy"] == "answer_and_eos_only"
+    assert entry["preflight"]["supervision_totals"] == {
+        "verified_rows": 1,
+        "prompt_supervised_tokens": 0,
+        "answer_supervised_tokens": 2,
+        "terminal_eos_supervised_tokens": 1,
+        "supervised_tokens": 3,
+    }
+    assert "rows" not in entry["preflight"]
+    assert report.comparison_key == original_key
+    assert report.protocol == original_protocol
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_protocol", "wrong_strategy", "wrong_protocol", "prompt_loss"]
+)
+def test_training_evidence_rejects_answer_protocol_preflight_mismatch(
+    task, model_paths, tmp_path, mutation
+):
+    report, directory = training_report(task, model_paths, tmp_path)
+    run = _answer_only_receipt(report, directory)
+    if mutation == "missing_protocol":
+        del run["preflight"]["sft_protocol"]
+    elif mutation == "wrong_protocol":
+        run["preflight"]["sft_protocol"] = "alpaca_full_prompt_v1"
+    elif mutation == "wrong_strategy":
+        run["preflight"]["supervision_strategy"] = "full_prompt_padding_masked"
+    else:
+        run["preflight"]["rows"][0]["prompt_supervised_tokens"] = 7
+    (directory / "run.json").write_text(json.dumps(run))
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][1]
+    assert entry["status"] == "invalid"
+    assert "config" not in entry
+    assert "监督" in entry["reason"]
+
+
+def test_legacy_missing_protocol_is_displayed_as_full_prompt_evidence(task, model_paths, tmp_path):
+    report, _ = training_report(task, model_paths, tmp_path)
+    entry = EvaluationDiagnostics(report, task[1]).training_evidence()["models"][1]
+    assert entry["status"] == "available"
+    assert entry["preflight"]["sft_protocol"] == "alpaca_full_prompt_v1"
+    assert entry["preflight"]["supervision_strategy"] == "full_prompt_padding_masked"
+    assert "supervision_totals" not in entry["preflight"]
+
+
 def gguf_training_report(task, model_paths, tmp_path, monkeypatch):
     """Stub the native/export boundary; keep real receipts and token-proof checks."""
     from dataclasses import asdict

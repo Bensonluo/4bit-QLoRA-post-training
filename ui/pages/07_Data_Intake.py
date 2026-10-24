@@ -31,7 +31,12 @@ from src.workbench.intake_service import (
     wilson_lower_bound,
 )
 from src.workbench.iterations import IterationService
-from src.workbench.training_guidance import LR_TIER_DISCLAIMER, learning_rate_suggestion
+from src.workbench.training_guidance import (
+    LR_TIER_DISCLAIMER,
+    SFT_PROTOCOL_LABELS,
+    learning_rate_suggestion,
+    supervision_label,
+)
 from src.workbench.training_runs import TrainingRunService
 from ui.components.agent_settings import render_agent_settings
 from ui.config import PROJECT_ROOT
@@ -241,11 +246,15 @@ def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = N
     from src.workbench.learnability_probe import low_baseline_triage_lines, probe_verdict_phrase
 
     verdict = probe_verdict_phrase(result)
-    st.metric(
-        f"零样本 {result['zero_shot_accuracy']:.0%} vs 基线 {result['majority_baseline']:.0%}",
-        f"{delta:+.0%}",
-        delta_color="normal" if delta >= 0 else "inverse",
-    )
+    if result.get("majority_baseline") is None:
+        # 开放生成目标:多数类基线无意义,只报精确一致率(仅参考)与失败模式。
+        st.metric("零样本精确一致率（开放目标仅参考）", f"{result['zero_shot_accuracy']:.0%}")
+    else:
+        st.metric(
+            f"零样本 {result['zero_shot_accuracy']:.0%} vs 基线 {result['majority_baseline']:.0%}",
+            f"{delta:+.0%}",
+            delta_color="normal" if delta >= 0 else "inverse",
+        )
     st.info(f"{verdict}。{result['note']}")
     # 低于瞎猜基线时按记录内事实逐行给出核查方向分辨(单一来源,与 CLI stderr 同一份行):
     # 截断→先加长度重测;词汇外→模板方向;同答→两方向都要核;其余→任务定义方向。
@@ -904,6 +913,9 @@ def show_training_recommendations() -> None:
             model_parameters = proposal.get("model_options") or {}
             parameters = {
                 "每条训练样本最大 token 长度": proposal.get("max_length"),
+                "训练监督范围": supervision_label(
+                    proposal.get("sft_protocol", "alpaca_full_prompt_v1")
+                ),
                 "训练轮数": training_parameters.get("num_epochs"),
                 "每设备 batch size": training_parameters.get("batch_size"),
                 "梯度累积步数": training_parameters.get("gradient_accumulation_steps"),
@@ -1290,6 +1302,14 @@ def show_business_comparison(report, *, key: str) -> None:
                     step=1,
                     disabled=not change_training,
                 )
+                supervision_override = st.selectbox(
+                    "改进轮次监督范围",
+                    [None, *SFT_PROTOCOL_LABELS],
+                    format_func=lambda value: (
+                        "继承父轮" if value is None else supervision_label(value)
+                    ),
+                    disabled=not change_training,
+                )
                 propose_iteration = st.form_submit_button("保存改进提案，进入确认")
             if propose_iteration:
                 try:
@@ -1308,6 +1328,7 @@ def show_business_comparison(report, *, key: str) -> None:
                         if change_training
                         else None,
                         max_length=int(max_length_override) if change_training else None,
+                        sft_protocol=supervision_override if change_training else None,
                     )
                     st.rerun()
                 except (ValueError, RuntimeError, OSError) as exc:
@@ -1456,6 +1477,28 @@ if "intake_id" not in st.session_state:
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
+            # 泛化演示:另两种任务原型的内置数据,体验不同形态的关卡差异
+            from src.workbench.demo_task import demo_variant_sample
+
+            for variant_key in ("generation", "extraction"):
+                variant_pair = demo_variant_sample(PROJECT_ROOT, variant_key)
+                if variant_pair is None:
+                    continue
+                variant_name, variant_bytes, variant_spec = variant_pair
+                st.caption(variant_spec["description"])
+                if st.button(variant_spec["button"], key=f"demo_{variant_key}"):
+                    try:
+                        demo_session = service.create(
+                            variant_spec["goal"],
+                            variant_name,
+                            variant_bytes,
+                            data_description=variant_spec["description"],
+                            scope="sample",
+                        )
+                        st.session_state["intake_id"] = demo_session.session_id
+                        st.rerun()
+                    except (ValueError, OSError) as exc:
+                        st.error(str(exc))
     # 零密钥路牌（R130）：基础分析入口在任务创建后才渲染（本 st.stop 之下），新用户
     # 第一屏若不知道这条路存在，页面读起来是「先配 Agent 才能用」——北极星契约
     # 「无密钥可走通基础路径」必须在第一屏可见，不能等碰壁后才发现。
@@ -1779,7 +1822,12 @@ if iterations:
             if iteration["status"] == "evaluated" and not iteration.get("decision"):
                 results = iteration.get("results") or []
                 if results:
-                    st.write("**同题三模型结果（固定开发集，同一评分协议）：**")
+                    scorer = (iteration.get("evaluation_protocol") or {}).get("scorer")
+                    st.write(
+                        "**同题三模型结果（固定开发集，同一评分协议）：**"
+                        if scorer != "open_review"
+                        else "**同题三模型结果（固定开发集，开放生成任务——无自动分数，需逐条人工核对）：**"
+                    )
                     st.dataframe(
                         [
                             {
@@ -1796,9 +1844,15 @@ if iterations:
                         hide_index=True,
                         width="stretch",
                     )
-                    st.caption(
-                        "分数未提高也可能是有价值证据；截断与生成失败的行都在分母内，不作美化。"
-                    )
+                    if (iteration.get("evaluation_protocol") or {}).get("scorer") == "open_review":
+                        st.caption(
+                            "开放生成任务：表中是生成完成统计（无自动准确率）；"
+                            "三个模型的完整输出需逐条人工核对后再决定。"
+                        )
+                    else:
+                        st.caption(
+                            "分数未提高也可能是有价值证据；截断与生成失败的行都在分母内，不作美化。"
+                        )
                 if iteration.get("evaluation_id"):
                     st.caption(f"开发集报告：{iteration['evaluation_id']}")
                 st.write(
@@ -2033,6 +2087,12 @@ with st.expander("本地数据事实与原始行", expanded=session.analysis is 
 if session.analysis:
     analysis = session.analysis
     st.subheader("业务理解")
+    # 任务形态徽标:从 findings 单一来源提取,不重算(推断结论随分析存档)
+    archetype_finding = next(
+        (f for f in analysis.findings if f.message.startswith("任务形态推断：")), None
+    )
+    if archetype_finding:
+        st.success(archetype_finding.message.split("。依据")[0] + "。")
     st.write(f"**实际使用输入：** {analysis.task.usage_input}")
     st.write(f"**希望输出：** {analysis.task.desired_output}")
     st.write(f"**每行含义：** {analysis.task.row_meaning}")
@@ -2153,6 +2213,53 @@ if session.analysis is None or session.agent_model == "baseline-deterministic":
             ],
             key=f"baseline_exclude_{session.session_id}",
         )
+        baseline_input_columns = [
+            column
+            for column in session.source.columns
+            if column != baseline_target
+            and column not in baseline_groups
+            and column not in baseline_exclude
+        ]
+        if baseline_target and baseline_input_columns:
+            from src.workbench.baseline_analysis import (
+                compose_instruction,
+                infer_task_archetype,
+            )
+
+            inference = infer_task_archetype(session, baseline_target, baseline_input_columns)
+            archetype_names = {
+                "classification": "分类",
+                "extraction": "抽取/归一",
+                "generation": "开放生成",
+            }
+            with st.expander(
+                f"数据推断的任务形态：{archetype_names[inference['archetype']]}（点击展开依据，指令可修改）"
+            ):
+                st.caption(
+                    f"推断依据（来自你的数据实测）：答案列不同取值 "
+                    f"{len(inference['distinct_values'])} 个、唯一率 {inference['unique_ratio']:.0%}、"
+                    f"平均长度 {inference['avg_target_len']:.0f} 字；"
+                    f"输入渲染取「{'纯文本直出' if inference['input_render'] == 'plain' else '字段名标注'}」"
+                    f"（{'单一长文本输入，字段前缀不携带信息' if inference['input_render'] == 'plain' else '多字段需要标注区分'}）。"
+                )
+                # 草稿刷新规则:字段选择变化即重写草稿;用户编辑过(选择未变)则保留。
+                # 不能用 value=——它只在组件首次创建时生效,改列后草稿会残留旧列内容。
+                instruction_key = f"baseline_instruction_{session.session_id}"
+                signature_key = f"baseline_instruction_sig_{session.session_id}"
+                signature = (
+                    f"{baseline_target}|{'+'.join(sorted(baseline_groups))}"
+                    f"|-{','.join(sorted(baseline_exclude))}"
+                )
+                if st.session_state.get(signature_key) != signature:
+                    st.session_state[signature_key] = signature
+                    st.session_state[instruction_key] = compose_instruction(
+                        session.goal, baseline_target, baseline_input_columns, inference
+                    )
+                st.text_area(
+                    "任务指令（由推断组装，可直接修改；清空则按最新推断自动生成）",
+                    key=instruction_key,
+                    height=120,
+                )
         baseline_temporal = st.checkbox(
             "按时间分区切分（预测未来结果的任务需要，防止把未来信息泄漏进训练）",
             key=f"baseline_temporal_{session.session_id}",
@@ -2254,10 +2361,14 @@ if session.analysis is None or session.agent_model == "baseline-deterministic":
                 try:
                     from src.workbench.baseline_analysis import propose_baseline_analysis
 
+                    edited_instruction = st.session_state.get(
+                        f"baseline_instruction_{session.session_id}"
+                    )
                     session = service.apply_analysis(
                         session,
                         propose_baseline_analysis(
                             session,
+                            instruction=(edited_instruction or "").strip() or None,
                             target_column=baseline_target,
                             group_columns=baseline_groups,
                             excluded_columns=baseline_exclude,
@@ -2343,16 +2454,27 @@ if session.preview:
             pending_contrast = st.session_state.get("pending_contrast_check")
             if pending_contrast:
                 st.write(f"**配对题（verification {pending_contrast['check_id'][:8]}）**")
+
+                # 长选项(开放生成目标)截断显示;选中提交的仍是完整原文。
+                # 截断必须保头尾:两个长答案常只差尾缀(如「（2）」),只砍尾部
+                # 会让选项标签完全相同——用户无法分辨,配对退化成掷硬币。
+                def _contrast_option_label(value: str) -> str:
+                    if value == "":
+                        return "请选择"
+                    if len(value) <= 34:
+                        return f"「{value}」"
+                    return f"「{value[:10]}…{value[-16:]}」"
+
                 with st.form(f"contrast_answer_{pending_contrast['check_id']}"):
                     mapping = {}
                     for item in pending_contrast["items"]:
                         st.code(item["input"], language=None)
+
                         # 默认不预选任何答案:漏选提交不记录核验轮次,瞎点不算配对证据。
-                        # 答案加引号展示:仅差空白的两个答案肉眼可辨。
                         mapping[item["row_id"]] = st.selectbox(
                             f"这条输入的正确答案（{item['row_id']}）",
                             ["", *pending_contrast["options"]],
-                            format_func=lambda value: "请选择" if value == "" else f"「{value}」",
+                            format_func=_contrast_option_label,
                             key=f"cc_{pending_contrast['check_id']}_{item['row_id']}",
                         )
                     submitted_contrast = st.form_submit_button("提交配对", type="primary")
@@ -2542,6 +2664,31 @@ if session.confirmed_revision is not None or session.full_data is not None:
                 if is_demo_session(session.source.digest, PROJECT_ROOT)
                 else None
             )
+            # 泛化演示:非分类原型的演示任务走各自的配套全量
+            from src.workbench.demo_task import (
+                demo_variant_full,
+                variant_of_sample_source,
+            )
+
+            demo_variant = variant_of_sample_source(session.source.digest, PROJECT_ROOT)
+            variant_full_pair = (
+                demo_variant_full(PROJECT_ROOT, demo_variant) if demo_variant else None
+            )
+            if variant_full_pair is not None and st.button(
+                f"使用配套演示全量数据（{demo_variant}原型，虚构，{len(variant_full_pair[1])} 字节）",
+                key=f"demo_variant_full_{demo_variant}",
+            ):
+                try:
+                    with st.spinner("正在验证全量数据…"):
+                        service.validate_full_data(
+                            session.session_id,
+                            session.revision,
+                            variant_full_pair[0],
+                            variant_full_pair[1],
+                        )
+                    st.rerun()
+                except (ValueError, OSError) as exc:
+                    st.error(str(exc))
             if demo_full_pair is not None and st.button(DEMO_FULL_BUTTON):
                 try:
                     with st.spinner("正在验证全量数据…"):
@@ -2800,21 +2947,38 @@ if session.confirmed_revision is not None or session.full_data is not None:
                 st.write(
                     f"**本轮核验（{pending_items['sample_size']} 条，verification {pending_items['verification_id'][:8]}）**"
                 )
+                mode_note = pending_items.get("note")
+                if mode_note:
+                    st.caption(mode_note)
                 start_note = pending_items.get("evidence_note")
                 if start_note:
                     st.caption(start_note)
                 shortfall = pending_items.get("shortfall_note")
                 if shortfall:
                     st.caption(shortfall)
+                blind_mode = pending_items.get("mode", "reproduce")
                 with st.form(f"label_verification_answer_{pending_items['verification_id']}"):
                     answers = {}
                     for item in pending_items["items"]:
                         st.code(item["input"], language=None)
-                        answers[item["row_id"]] = st.text_input(
-                            f"你的答案（{item['row_id']}）",
-                            key=f"lv_{pending_items['verification_id']}_{item['row_id']}",
-                        )
-                    submitted = st.form_submit_button("提交盲标核验答案", type="primary")
+                        if blind_mode == "review":
+                            st.caption("数据中的答复：")
+                            st.code(item.get("answer", ""), language=None)
+                            answers[item["row_id"]] = st.radio(
+                                "该答复是否符合业务",
+                                ["是", "否"],
+                                key=f"lv_{pending_items['verification_id']}_{item['row_id']}",
+                                horizontal=True,
+                            )
+                        else:
+                            answers[item["row_id"]] = st.text_input(
+                                f"你的答案（{item['row_id']}）",
+                                key=f"lv_{pending_items['verification_id']}_{item['row_id']}",
+                            )
+                    submitted = st.form_submit_button(
+                        "提交逐条审阅结论" if blind_mode == "review" else "提交盲标核验答案",
+                        type="primary",
+                    )
                 if submitted:
                     try:
                         service.submit_label_verification(
@@ -3042,6 +3206,9 @@ if dataset is not None:
                 ),
             )
             max_length = st.number_input("训练最大 token 长度", min_value=1, value=2048, step=1)
+            preflight_supervision = st.selectbox(
+                "预检的训练监督范围", list(SFT_PROTOCOL_LABELS), format_func=supervision_label
+            )
             run_preflight = st.form_submit_button("检查实际截断与答案保留")
         if run_preflight:
             if not tokenizer_path.strip():
@@ -3059,7 +3226,11 @@ if dataset is not None:
                             tokenizer_path.strip(), local_files_only=True
                         )
                         service.preflight_training(
-                            session.session_id, session.revision, tokenizer, int(max_length)
+                            session.session_id,
+                            session.revision,
+                            tokenizer,
+                            int(max_length),
+                            sft_protocol=preflight_supervision,
                         )
                     st.rerun()
                 except (ValueError, RuntimeError, OSError, ImportError) as exc:
@@ -3169,6 +3340,12 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     "本轮训练最大 token 长度", min_value=1, value=1024, step=1
                 )
                 training_epochs = st.number_input("训练轮数", min_value=1, value=1, step=1)
+                training_supervision = st.selectbox(
+                    "本轮训练监督范围",
+                    list(SFT_PROTOCOL_LABELS),
+                    format_func=supervision_label,
+                    help="仅答案监督只学习完整答案与结束标记；输入提示仍供模型阅读，但不计入损失。需用同题对照判断效果。",
+                )
                 training_batch = st.number_input("每设备 batch size", min_value=1, value=1, step=1)
                 with st.expander("基础训练参数"):
                     st.caption(f"学习率分档建议：{lr_reason}{LR_TIER_DISCLAIMER}")
@@ -3193,6 +3370,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                 session,
                                 training_model_path.strip(),
                                 max_length=int(training_length),
+                                sft_protocol=training_supervision,
                                 training_options={
                                     "num_epochs": int(training_epochs),
                                     "batch_size": int(training_batch),

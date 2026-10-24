@@ -361,6 +361,10 @@ def summarize_plan(record: dict) -> list[str]:
     lora = proposal.get("lora_options") or {}
     model_options = proposal.get("model_options") or {}
     parts: list[str] = []
+    if "sft_protocol" in proposal:
+        from src.workbench.training_guidance import supervision_label
+
+        parts.append(supervision_label(proposal["sft_protocol"]))
     if proposal.get("max_length") is not None:
         parts.append(f"最大长度 {proposal['max_length']}")
     if training.get("num_epochs") is not None:
@@ -426,6 +430,10 @@ def summarize_preflight(preflight: dict) -> list[str]:
         lines.append("训练前检查有需要你核对的风险，确认理解后才能启动训练。")
     else:
         lines.append("训练前检查发现阻断问题，训练不能开始；按下面列出的原因修复数据或配置。")
+    if "sft_protocol" in preflight:
+        from src.workbench.training_guidance import supervision_label
+
+        lines.append("本轮训练监督：" + supervision_label(preflight["sft_protocol"]) + "。")
     if truncated:
         detail = "、".join(
             f"{name} {split.get('truncated_rows', 0)} 行"
@@ -722,6 +730,8 @@ def three_model_delta_lines(
     """
     if not results:
         return []
+    if decision_metric == "manual_review":
+        return []  # 开放任务:无自动指标,人工核对提示由调用方(summarize_iteration)给出
     verb = "通过" if decision_metric == "pass_rate" else "答对"
 
     def answered(item: dict) -> tuple[int, int] | None:
@@ -799,11 +809,18 @@ def summarize_iteration(record: dict) -> list[str]:
             "采用、继续、停止或证据不足。"
         )
         # 题数差算术与页面决策卡同源（three_model_delta_lines 单一来源）。
-        lines.extend(
-            three_model_delta_lines(
-                record.get("results"), record.get("decision_metric") or "exact_match"
-            )
+        delta_lines = three_model_delta_lines(
+            record.get("results"), record.get("decision_metric") or "exact_match"
         )
+        lines.extend(delta_lines)
+        if (
+            not delta_lines
+            and (record.get("evaluation_protocol") or {}).get("scorer") == "open_review"
+        ):
+            lines.append(
+                "开放生成任务：本对照没有自动分数差可算——三个模型的完整输出都已保留，"
+                "请逐条人工核对质量后再作业务决定。"
+            )
     elif status == "running":
         lines.append("本轮训练已启动；训练完成只说明产出模型，效果要看三模型同题对照。")
     elif status == "preparing":
