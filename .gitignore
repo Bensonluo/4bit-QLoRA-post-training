@@ -120,3 +120,6 @@ EOF
 amp
 mlflow.db
 /.playwright-mcp
+
+# Loop bookkeeping (agent 循环的过程状态,不是产品代码)
+.milestones/
