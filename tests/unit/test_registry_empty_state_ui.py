@@ -31,7 +31,7 @@ pytest.importorskip("mlflow")
 
 ROOT = Path(__file__).resolve().parents[2]
 UI = ROOT / "ui"
-PAGE_REG = UI / "pages/04_Registry.py"
+PAGE_REG = UI / "views/04_Registry.py"
 
 
 def _source(path: Path) -> str:
@@ -50,7 +50,7 @@ def _nav_to_registry_empty(monkeypatch):
     at.run()
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(ui.queries, "fetch_model_versions", lambda *a, **k: pd.DataFrame())
-    return at.switch_page("pages/04_Registry.py").run()
+    return at.switch_page("views/04_Registry.py").run()
 
 
 def test_registry_empty_state_offers_training_exit(monkeypatch):
@@ -87,7 +87,7 @@ def test_registry_empty_branch_exit_before_stop():
     block = source.split("暂无已注册的模型", 1)[1]
     stop_pos = block.find("st.stop()")
     btn_pos = block.find('st.button("🏋️ 去训练实验室"')
-    switch_pos = block.find('st.switch_page("pages/00_Training_Lab.py")')
+    switch_pos = block.find('st.switch_page("views/00_Training_Lab.py")')
     assert stop_pos != -1, "空态分支必须保持 st.stop 封页语义"
     assert btn_pos != -1 and btn_pos < stop_pos, "出路按钮必须在 st.stop 之前"
     assert switch_pos != -1 and btn_pos < switch_pos, "按钮必须接线到 00 页"
@@ -122,7 +122,7 @@ def test_registry_nonempty_page_renders(monkeypatch):
             ]
         ),
     )
-    at.switch_page("pages/04_Registry.py").run()
+    at.switch_page("views/04_Registry.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert not any("暂无已注册的模型" in i.value for i in at.info), "非空不得渲染空态分支"
     assert any(m.value == "1" for m in at.metric if m.label == "版本数"), "版本数 metric 必须真渲染"
@@ -143,7 +143,7 @@ def test_registry_corrupt_store_shows_error_not_crash(monkeypatch):
         raise RuntimeError("模拟存储损坏")
 
     monkeypatch.setattr(ui.queries, "fetch_model_versions", _boom)
-    at.switch_page("pages/04_Registry.py").run()
+    at.switch_page("views/04_Registry.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert any("读取模型注册表失败" in e.value for e in at.error), "必须如实报错而非裸栈"
     assert any(b.label == "🏋️ 去训练实验室" for b in at.button), "报错态也必须有出路按钮"

@@ -69,7 +69,7 @@ def test_probe_candidates_table_with_strong_evidence_first(probe_page, monkeypat
     textbox = next(t for t in page.text_input if "本地基础模型目录" in t.label)
     textbox.input("/tmp/local-base").run()
 
-    import ui.pages  # noqa: F401  确保模块路径已初始化
+    import ui.views  # noqa: F401  确保模块路径已初始化
 
     captured = {}
 

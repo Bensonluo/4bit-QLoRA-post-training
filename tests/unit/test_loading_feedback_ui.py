@@ -26,10 +26,10 @@ import pytest
 pytest.importorskip("streamlit")
 
 UI = Path(__file__).resolve().parents[2] / "ui"
-PAGE_WIZARD = UI / "pages/05_Data_Wizard.py"
-PAGE_LAB = UI / "pages/00_Training_Lab.py"
-PAGE_EVAL = UI / "pages/02_Evaluation.py"
-PAGE_INTAKE = UI / "pages/07_Data_Intake.py"
+PAGE_WIZARD = UI / "views/05_Data_Wizard.py"
+PAGE_LAB = UI / "views/00_Training_Lab.py"
+PAGE_EVAL = UI / "views/02_Evaluation.py"
+PAGE_INTAKE = UI / "views/07_Data_Intake.py"
 
 
 def _source(path: Path) -> str:
@@ -174,7 +174,7 @@ def test_wizard_handoff_send_side_wired():
     source = _source(PAGE_WIZARD)
     assert 'st.session_state["dataset_input"] = str(train_path)' in source
     assert 'st.session_state["wizard_handoff"]' in source
-    assert 'st.switch_page("pages/00_Training_Lab.py")' in source
+    assert 'st.switch_page("views/00_Training_Lab.py")' in source
 
 
 def test_wizard_handoff_receive_side_wired():

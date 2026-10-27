@@ -87,7 +87,7 @@ def test_data_wizard_blocks_path_reads_and_uploads_in_display_mode(monkeypatch, 
         raise AssertionError("A hosted visitor must not read server paths")
 
     monkeypatch.setattr(importers, "import_table", forbidden_read)
-    page = Path(__file__).resolve().parents[2] / "ui/pages/05_Data_Wizard.py"
+    page = Path(__file__).resolve().parents[2] / "ui/views/05_Data_Wizard.py"
     app = AppTest.from_file(str(page)).run(timeout=30)
     assert not app.exception
     path_input = next(item for item in app.text_input if item.label == "或输入服务器上的文件路径")
@@ -134,7 +134,7 @@ def test_registry_keeps_browsing_but_blocks_mutations_in_display_mode(monkeypatc
         raise AssertionError("Registry writes must not execute in display mode")
 
     monkeypatch.setattr(tracking, "get_tracker", forbidden_tracker)
-    page = Path(__file__).resolve().parents[2] / "ui/pages/04_Registry.py"
+    page = Path(__file__).resolve().parents[2] / "ui/views/04_Registry.py"
     app = AppTest.from_file(str(page)).run(timeout=30)
     assert not app.exception
     app.segmented_control(key="registry-source").set_value("本地注册版本").run(timeout=30)

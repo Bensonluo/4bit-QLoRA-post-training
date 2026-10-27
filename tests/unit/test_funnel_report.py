@@ -289,7 +289,7 @@ def test_ui_sidebar_funnel_snapshot_matches_cli_wording(tmp_path, monkeypatch):
     from src.workbench.intake_service import IntakeService
     from tests.unit.test_data_intake import CSV
 
-    PAGE = Path(__file__).resolve().parents[2] / "ui/pages/07_Data_Intake.py"
+    PAGE = Path(__file__).resolve().parents[2] / "ui/views/07_Data_Intake.py"
     for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
         monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
     monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
@@ -322,7 +322,7 @@ def test_training_names_unified_with_page_iteration_chips():
     等待训练与同题评测。历史曾用 已准备未启动/训练中 各说各话（R136 审计 Q1，
     R138 产品取向：侧栏镜像主视图，主视图名信息量严格更大——动作导向 +
     「与同题评测」防「训练完为何还在跑」误解）。"""
-    page = Path(__file__).resolve().parents[2] / "ui" / "pages" / "07_Data_Intake.py"
+    page = Path(__file__).resolve().parents[2] / "ui" / "views" / "07_Data_Intake.py"
     source = page.read_text(encoding="utf-8")
     assert '"prepared": "待启动训练"' in source, "07 迭代芯片 canonical 名必须在场"
     assert '"running": "等待训练与同题评测"' in source

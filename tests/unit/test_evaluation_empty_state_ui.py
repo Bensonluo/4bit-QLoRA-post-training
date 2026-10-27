@@ -25,8 +25,8 @@ import pytest
 pytest.importorskip("streamlit")
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE_EVAL = ROOT / "ui" / "pages" / "02_Evaluation.py"
-PAGE_CHAT = ROOT / "ui" / "pages" / "06_Chat.py"
+PAGE_EVAL = ROOT / "ui" / "views" / "02_Evaluation.py"
+PAGE_CHAT = ROOT / "ui" / "views" / "06_Chat.py"
 
 
 def _source(path: Path) -> str:

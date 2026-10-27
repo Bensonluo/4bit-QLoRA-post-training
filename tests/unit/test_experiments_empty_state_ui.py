@@ -7,9 +7,9 @@
 空态指路质量登记 R110。
 
 TDD 坑与实证(R108/R109 双实证在案):01 页内按钮的 switch click 旅程钉
-必须入口锚定——ui/pages/ 目录下无嵌套 pages/,AppTest.from_file(01 页
+必须入口锚定——ui/views/ 目录下无嵌套 views/,AppTest.from_file(01 页
 文件)直点 switch 按钮会抛 StreamlitAPIException「Could not find page」;
-须 from_file(ui/app.py) 后 at.switch_page("pages/01_Experiments.py")
+须 from_file(ui/app.py) 后 at.switch_page("views/01_Experiments.py")
 进入(scout 场景 C 同机制)。
 
 非空分支保活双钉并用:源码钉直锁本轮结构 delta(info 文案+按钮先于
@@ -28,7 +28,7 @@ pytest.importorskip("mlflow")
 
 ROOT = Path(__file__).resolve().parents[2]
 UI = ROOT / "ui"
-PAGE_EXP = UI / "pages/01_Experiments.py"
+PAGE_EXP = UI / "views/01_Experiments.py"
 
 
 def _source(path: Path) -> str:
@@ -48,7 +48,7 @@ def _nav_to_experiments_empty(monkeypatch):
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(ui.queries, "fetch_runs", lambda *a, **k: pd.DataFrame())
     monkeypatch.setattr(ui.queries, "fetch_experiments", lambda *a, **k: [])
-    return at.switch_page("pages/01_Experiments.py").run()
+    return at.switch_page("views/01_Experiments.py").run()
 
 
 def test_experiments_empty_state_offers_training_exit(monkeypatch):
@@ -84,7 +84,7 @@ def test_experiments_empty_branch_exit_before_stop():
     ]
     stop_pos = block.find("st.stop()")
     btn_pos = block.find('st.button("🏋️ 去训练实验室"')
-    switch_pos = block.find('st.switch_page("pages/00_Training_Lab.py")')
+    switch_pos = block.find('st.switch_page("views/00_Training_Lab.py")')
     assert stop_pos != -1, "空态分支必须保持 st.stop 封页语义"
     assert btn_pos != -1 and btn_pos < stop_pos, "出路按钮必须在 st.stop 之前"
     assert switch_pos != -1 and btn_pos < switch_pos, "按钮必须接线到 00 页"
@@ -109,6 +109,6 @@ def test_experiments_nonempty_page_renders(monkeypatch):
         lambda *a, **k: pd.DataFrame([{"run_id": "abcdef1234567890", "status": "FINISHED"}]),
     )
     monkeypatch.setattr(ui.queries, "fetch_experiments", lambda *a, **k: [])
-    at.switch_page("pages/01_Experiments.py").run()
+    at.switch_page("views/01_Experiments.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert not any("暂无实验记录" in i.value for i in at.info), "非空不得渲染空态分支"

@@ -294,7 +294,7 @@ def test_ui_task_spec_card_matches_cli_wording(tmp_path, monkeypatch):
     from src.workbench.intake_service import IntakeService
     from tests.unit.test_full_data import FULL, approved
 
-    PAGE = Path(__file__).resolve().parents[2] / "ui/pages/07_Data_Intake.py"
+    PAGE = Path(__file__).resolve().parents[2] / "ui/views/07_Data_Intake.py"
     for name in ("PROVIDER", "BASE_URL", "MODEL", "API_KEY"):
         monkeypatch.delenv(f"TUNESMITH_AGENT_{name}", raising=False)
     monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)

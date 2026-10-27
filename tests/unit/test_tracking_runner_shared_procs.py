@@ -1,5 +1,5 @@
 """跨实例进程注册表(R104):Streamlit 每次重跑都新建 TrainingRunner
-(ui/pages/00_Training_Lab.py Activity 标签),实例级 _active 字典在页面
+(ui/views/00_Training_Lab.py Activity 标签),实例级 _active 字典在页面
 第一次重跑后即丢失 Popen 句柄,造成两个实测缺陷:
 
 ① 退出码永远无人记录——训练进程死后 get_status 走「pid 不存活 → unknown」,

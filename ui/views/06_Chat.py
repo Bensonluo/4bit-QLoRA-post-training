@@ -131,7 +131,7 @@ if not loaded_base:
             "也可以在左侧「⌨️ 自定义」填底座名（如 Qwen/Qwen2.5-0.5B-Instruct）直接聊。"
         )
         if st.button("🏋️ 去训练一个模型", type="primary"):
-            st.switch_page("pages/00_Training_Lab.py")
+            st.switch_page("views/00_Training_Lab.py")
     else:
         st.info("在左侧选择模型并点 **⚡ 加载模型**，然后开始对话。")
     st.stop()

@@ -390,7 +390,7 @@ with tab_configure:
                 "数据还没准备好？原始表格用数据向导（Data Wizard）；业务目标从数据入口开始。"
             )
             if st.button("🚪 去数据入口", type="tertiary"):
-                st.switch_page("pages/07_Data_Intake.py")
+                st.switch_page("views/07_Data_Intake.py")
         with st.form("training_config"):
             st.subheader("模型与数据")
             c1, c2 = st.columns([3, 1])

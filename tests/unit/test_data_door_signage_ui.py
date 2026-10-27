@@ -32,7 +32,7 @@ def _nav_and_run(page_path: str):
 
 def test_training_lab_signposts_guided_intake():
     """00 路牌钉：配置表单前 caption 点名两扇数据门 + 按钮真实切到 07。"""
-    page = _nav_and_run("pages/00_Training_Lab.py")
+    page = _nav_and_run("views/00_Training_Lab.py")
     captions = " ".join(c.value for c in page.caption)
     assert "数据还没准备好" in captions, "路牌必须回应「表单里数据集从哪来」的即时困惑"
     assert "数据入口" in captions and "Data Wizard" in captions
@@ -45,7 +45,7 @@ def test_training_lab_signposts_guided_intake():
 
 def test_wizard_signposts_guided_intake():
     """05 路牌钉：顶部 caption 区分两扇门定位 + 按钮真实切到 07。"""
-    page = _nav_and_run("pages/05_Data_Wizard.py")
+    page = _nav_and_run("views/05_Data_Wizard.py")
     captions = " ".join(c.value for c in page.caption)
     assert "你找对了" in captions, "路牌必须先确认用户没走错门（有表直转就是本页）"
     assert "数据入口" in captions

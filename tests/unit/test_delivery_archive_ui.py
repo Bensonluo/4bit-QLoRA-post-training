@@ -58,7 +58,7 @@ def boot(monkeypatch, tmp_path, *, display=True, fetch=None):
     monkeypatch.setattr(tracking, "get_tracker", forbidden_tracker)
     page = AppTest.from_file(str(REAL_ROOT / "ui/app.py"), default_timeout=45).run()
     assert_clean(page)
-    page.switch_page("pages/04_Registry.py").run()
+    page.switch_page("views/04_Registry.py").run()
     assert_clean(page)
     return page, calls
 

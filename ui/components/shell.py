@@ -40,6 +40,6 @@ def display_navigation(message: str, *, experiments: bool = True) -> None:
     st.info(message)
     with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
         if st.button("浏览示例任务", type="primary", key="display-browse-task"):
-            st.switch_page("pages/07_Data_Intake.py")
+            st.switch_page("views/07_Data_Intake.py")
         if experiments and st.button("浏览实验记录", key="display-browse-experiments"):
-            st.switch_page("pages/01_Experiments.py")
+            st.switch_page("views/01_Experiments.py")

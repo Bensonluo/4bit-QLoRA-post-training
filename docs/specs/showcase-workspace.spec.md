@@ -76,3 +76,13 @@ R152 验证：391 passed、4 warnings、143.15s（前端/示例/产品旅程）�
 MLflow SQLite 实证：`search_model_versions` 返回的版本别名为空，但注册模型的绑定为 champion→2；版本表改从注册模型读取真实绑定，按模型名称和版本关联；读取失败仍报错，不显示为未绑定。别名写入使用指定 URI 的客户端，不创建训练实验；回调固定用户点击前看到的模型、别名和绑定，避免重跑先更新画面后丢失旧操作身份。
 
 R154 验证：412 passed、4 warnings、143.96s（前端/示例/产品旅程）；新增14项覆盖真实SQLite绑定与版本保留、按模型隔离、缓存刷新、读取失败、无操作/写入失败/读回未知，以及真实AppTest设置、移除、旧页面冲突和展示伪点击。既有文案源码断言改为AST读取实际按钮标签，避免调用换行导致误报；相关22项先独立通过后完整复跑通过。Ruff/格式/diff通过，registry_actions/queries/Registry三个模块scoped mypy通过。实际Chrome隔离验证设置与移除，并保留8501预览；本轮未复验手机布局。
+
+## R155 首次直达与统一导航（2026-10-28，已实现并验证）
+
+- 全新服务/浏览器首次直接打开 Registry、Showcase 或 Training_Lab 时，也应先执行统一入口，显示 TuneSmith 标志、共用样式、中文导航分组与运行环境，并打开原目标页面。
+- 以显式 st.navigation 注册全部页面，页面代码改置 ui/views，消除物理 pages 目录触发的旧版自动路由；同步真实跳转、页内入口与测试路径。页面文件名与现有公开 URL 不变，不使用 Streamlit 私有状态开关。
+- 验收包含全新进程首个请求的回归与实际浏览器验证；已有首页导航、展示只读模式、历史档案选择、跨页面返回与数据流程继续通过。
+
+R155 验证：441 passed、4 warnings、147.81s（前端/示例/产品旅程及迁移涉及的数据投影/报告/runner测试）。新增3项独立进程首次按URL名称请求Registry/Showcase/Training_Lab：没有先打开首页，实际ForwardMsg中同时存在正确选中路由、logo、完整共用CSS、中文分组导航和环境；MLflow不可用、禁止query且临时store零写入。旧布局一次临时反证同样请求缺少shell，未将镜像app固化进测试。Chrome对独立8502进程复现旧问题，再验证相同Registry地址修复、跳转Showcase及浏览器返回；8502已停止，8501新进程预览健康。九个页面内容独立逐一比对原版，差异仅为内部跳转路径。Ruff/格式/diff通过，app/shell/archive_navigation/delivery_archive/Registry五模块scoped mypy通过。
+
+升级范围：当前工作区已整体移走旧目录及缓存，干净clone/Docker使用新布局。其他已有Git工作区可能遗留ignored的ui/pages/__pycache__；README记录停服、先迁移自定义文件、清理生成缓存并移除退休目录后重启的一次迁移步骤。本轮不自动删除未知文件，也不宣称Git拉取会自动清理ignored目录。

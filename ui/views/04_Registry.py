@@ -64,7 +64,7 @@ except Exception as exc:
         "模型可能仍在——修复目录权限后刷新本页即可。"
     )
     if st.button("🏋️ 去训练实验室", type="primary"):
-        st.switch_page("pages/00_Training_Lab.py")
+        st.switch_page("views/00_Training_Lab.py")
     st.stop()
 
 if versions_df.empty:
@@ -78,7 +78,7 @@ if versions_df.empty:
     )
     # st.stop 封页前给出最后一条出路（R108/R109 空态死端范式）：否则用户只能靠侧栏自救
     if st.button("🏋️ 去训练实验室", type="primary"):
-        st.switch_page("pages/00_Training_Lab.py")
+        st.switch_page("views/00_Training_Lab.py")
     st.stop()
 
 # ── Model selector + KPI cards ──────────────────────────────────

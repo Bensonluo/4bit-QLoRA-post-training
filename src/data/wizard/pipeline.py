@@ -2,7 +2,7 @@
 
 编排层只做流程控制与报告汇总；领域逻辑在模板，质量规则在 checks，
 切分/写盘在 exporter。CLI（scripts/data_wizard.py）与后续 Streamlit
-页面（ui/pages/05_Data_Wizard.py）都只调 WizardPipeline。
+页面（ui/views/05_Data_Wizard.py）都只调 WizardPipeline。
 """
 
 import json

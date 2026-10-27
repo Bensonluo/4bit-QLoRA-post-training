@@ -31,6 +31,6 @@ def test_existing_pages_remain_reachable_from_the_shared_entry(monkeypatch, tmp_
     monkeypatch.setattr(queries, "fetch_runs", lambda *a, **k: pd.DataFrame())
     page = AppTest.from_file(str(ROOT / "ui/app.py"), default_timeout=45).run()
     assert not page.exception
-    page.switch_page("pages/" + target).run()
+    page.switch_page("views/" + target).run()
     assert not page.exception, [e.message for e in page.exception]
     assert page.title

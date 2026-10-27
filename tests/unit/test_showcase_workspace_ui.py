@@ -131,7 +131,7 @@ def test_public_history_is_reachable_without_writing_local_or_original_evidence(
     )
     # AppTest retains its original page hash after a button-driven switch.
     # The assertions above prove that button navigation; anchor subsequent reruns.
-    page.switch_page("pages/08_Showcase.py").run()
+    page.switch_page("views/08_Showcase.py").run()
     assert_clean(page)
     report = json.loads(
         (REAL_ROOT / "docs/validation/complete-output-handoff-live-2026-10-22.json").read_text()
@@ -170,7 +170,7 @@ def test_other_historical_records_can_be_selected(monkeypatch, tmp_path, record_
 
     expected = next(item for item in history_catalog(REAL_ROOT) if item["id"] == record_id)
     page = boot(monkeypatch, tmp_path)
-    page.switch_page("pages/08_Showcase.py").run()
+    page.switch_page("views/08_Showcase.py").run()
     page.selectbox(key="archive-selection").set_value(record_id).run()
     assert_clean(page)
     table = next(item.value for item in page.dataframe if "答对 / 固定题数" in item.value.columns)

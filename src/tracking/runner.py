@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import yaml
 
-# Supported techniques → entry scripts. Kept in sync with ui/pages/00_Training_Lab.py.
+# Supported techniques → entry scripts. Kept in sync with ui/views/00_Training_Lab.py.
 SCRIPTS = {
     "sft": "scripts/train_sft.py",
     "dpo": "scripts/train_dpo.py",

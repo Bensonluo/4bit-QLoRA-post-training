@@ -27,7 +27,7 @@ from src.workbench.intake_service import IntakeService, next_action
 from tests.unit.test_data_intake import CSV, analysis, model_for
 from tests.unit.test_full_data import FULL
 
-PAGE = Path(__file__).resolve().parents[2] / "ui/pages/07_Data_Intake.py"
+PAGE = Path(__file__).resolve().parents[2] / "ui/views/07_Data_Intake.py"
 REPO_EXAMPLES = Path(__file__).resolve().parents[2] / "data" / "custom" / "examples"
 
 

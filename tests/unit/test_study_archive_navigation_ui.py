@@ -127,7 +127,7 @@ def boot(monkeypatch, tmp_path, *, display):
     page.button(key="showcase-history").click().run()
     assert_clean(page)
     # Button navigation is proven above; anchor AppTest's next widget reruns.
-    page.switch_page("pages/08_Showcase.py").run()
+    page.switch_page("views/08_Showcase.py").run()
     assert_clean(page)
     return page
 

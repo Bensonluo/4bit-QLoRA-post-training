@@ -34,7 +34,7 @@ else:
         "分析→核对→训练→评测？去数据入口。"
     )
     if st.button("🚪 去数据入口"):
-        st.switch_page("pages/07_Data_Intake.py")
+        st.switch_page("views/07_Data_Intake.py")
 
 with st.expander("数据向导配置（只读）") if DISPLAY_ONLY else st.container():
     try:
@@ -462,7 +462,7 @@ with st.expander("数据向导配置（只读）") if DISPLAY_ONLY else st.conta
                 "path": str(train_path),
                 "samples": report.split_counts.get("train", 0),
             }
-            st.switch_page("pages/00_Training_Lab.py")
+            st.switch_page("views/00_Training_Lab.py")
         st.caption(
             f"或走 CLI：`python scripts/train_sft.py -d {train_path}`"
             f"（训练时 Validation Split 会从 train.json 内部再切验证集，向导导出的 val/test 供评测用）。"

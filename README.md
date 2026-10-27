@@ -76,7 +76,7 @@ goal + samples ─▶ joint diagnosis & clarifying questions ─▶ data recipe 
   ─▶ base / parent / round 3-model comparison ─▶ adopt / iterate / stop ─▶ final acceptance on held-out test
 ```
 
-The whole loop lives on one page (**目标与数据**, `ui/pages/07_Data_Intake.py`) or the equivalent CLI (`python scripts/data_intake.py create / analyze / materialize / plan-recommend / train-start / eval-compare / iteration-* / acceptance-*`).
+The whole loop lives on one page (**目标与数据**, `ui/views/07_Data_Intake.py`) or the equivalent CLI (`python scripts/data_intake.py create / analyze / materialize / plan-recommend / train-start / eval-compare / iteration-* / acceptance-*`).
 
 **Design properties:**
 
@@ -362,6 +362,12 @@ pip install -e ".[ui]"
 streamlit run ui/app.py
 ```
 
+When upgrading an existing Git checkout, stop Streamlit and check for a leftover
+`ui/pages/` directory. Move any custom files elsewhere, then remove generated
+bytecode caches and the retired directory before restarting. Streamlit detects
+even an empty `pages` directory as legacy navigation; current scripts live in
+`ui/views/`. Fresh checkouts do not need this migration.
+
 ---
 
 ## 🏥 Domain Adaptation
@@ -412,7 +418,7 @@ Fine-tune Qwen3 to normalize drug names and hospital names — with **difficulty
 ├── ui/                     # Streamlit dashboard
 │   ├── app.py              # Entry point
 │   ├── components/         # Reusable charts, filters, adapters
-│   └── pages/              # 8 dashboard pages
+│   └── views/              # 9 explicitly registered dashboard views
 ├── domains/                # Self-contained domain modules
 ├── scripts/                # CLI entry points (train/eval/merge)
 ├── notebooks/              # Educational Jupyter notebooks

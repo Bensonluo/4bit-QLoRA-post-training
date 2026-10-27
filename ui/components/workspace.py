@@ -30,7 +30,7 @@ def open_task(session_id: str | None = None) -> None:
         st.session_state["intake_id"] = session_id
     else:
         st.session_state.pop("intake_id", None)
-    st.switch_page("pages/07_Data_Intake.py")
+    st.switch_page("views/07_Data_Intake.py")
 
 
 def load_tasks():
@@ -62,7 +62,7 @@ def render_workspace() -> None:
             elif st.button("创建业务任务", type="primary", icon=":material/add:"):
                 open_task()
             st.page_link(
-                "pages/08_Showcase.py",
+                "views/08_Showcase.py",
                 label="查看历史成果",
                 icon=":material/auto_stories:",
             )
@@ -80,7 +80,7 @@ def render_workspace() -> None:
             key="showcase-history",
             icon=":material/arrow_forward:",
         ):
-            st.switch_page("pages/08_Showcase.py")
+            st.switch_page("views/08_Showcase.py")
 
         st.html(
             '<ol class="ts-workflow" aria-label="业务任务完整流程">'

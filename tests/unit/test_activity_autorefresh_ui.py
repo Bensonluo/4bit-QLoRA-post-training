@@ -30,7 +30,7 @@ import pytest
 pytest.importorskip("streamlit")
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE_LAB = ROOT / "ui/pages/00_Training_Lab.py"
+PAGE_LAB = ROOT / "ui/views/00_Training_Lab.py"
 
 
 def _source(path: Path) -> str:

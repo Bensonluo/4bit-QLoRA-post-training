@@ -26,11 +26,11 @@ import pytest
 pytest.importorskip("streamlit")
 
 UI = Path(__file__).resolve().parents[2] / "ui"
-PAGE_EXP = UI / "pages/01_Experiments.py"
-PAGE_CMP = UI / "pages/03_Model_Comparison.py"
-PAGE_REG = UI / "pages/04_Registry.py"
+PAGE_EXP = UI / "views/01_Experiments.py"
+PAGE_CMP = UI / "views/03_Model_Comparison.py"
+PAGE_REG = UI / "views/04_Registry.py"
 PAGE_HOME = UI / "app.py"
-PAGE_EVAL = UI / "pages/02_Evaluation.py"
+PAGE_EVAL = UI / "views/02_Evaluation.py"
 
 
 def _source(path: Path) -> str:

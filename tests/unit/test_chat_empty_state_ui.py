@@ -11,9 +11,9 @@ switch_page 零指路。发现层无辜:test_inference_discovery.py:82-86 已钉
 AppTest switch_page 双场景实证(r108-scout /tmp 实验,streamlit 1.57.0,
 与 R107 select_slider 专用访问器同型教训——按实证形态写钉,不猜 API):
 - 直接 AppTest.from_file(页文件)点页内 switch 按钮 → StreamlitAPIException
-  「Could not find page: pages/00_Training_Lab.py」(switch_page 按
-  entrypoint 目录解析相对路径,页文件目录下无嵌套 pages/)
-- 入口锚定 AppTest.from_file(ui/app.py) → at.switch_page("pages/06_Chat.py")
+  「Could not find page: views/00_Training_Lab.py」(switch_page 按
+  entrypoint 目录解析相对路径,页文件目录下无嵌套 views/)
+- 入口锚定 AppTest.from_file(ui/app.py) → at.switch_page("views/06_Chat.py")
   → 点页内按钮 → 树切到目标页(titles 含 00 页标题),零异常
 ⇒ switch 旅程钉必须入口锚定;官方 docstring 同调(app_test.py:133-137
 「single page … use AppTest.switch_page()」)。全库首例页内 switch 按钮
@@ -35,7 +35,7 @@ pytest.importorskip("streamlit")
 
 ROOT = Path(__file__).resolve().parents[2]
 UI = ROOT / "ui"
-PAGE_CHAT = UI / "pages/06_Chat.py"
+PAGE_CHAT = UI / "views/06_Chat.py"
 
 
 def _source(path: Path) -> str:
@@ -54,7 +54,7 @@ def _nav_to_chat(tmp_path, monkeypatch):
     at.run()
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(ui.config, "PROJECT_ROOT", tmp_path)
-    return at.switch_page("pages/06_Chat.py").run()
+    return at.switch_page("views/06_Chat.py").run()
 
 
 def test_chat_empty_state_offers_training_path(tmp_path, monkeypatch):
@@ -101,4 +101,4 @@ def test_chat_nonempty_branch_guidance_preserved(tmp_path, monkeypatch):
     )
     assert not any("还没有可对话的训练产物" in i.value for i in at.info), "非空分支不得渲染空态指路"
     source = _source(PAGE_CHAT)
-    assert 'st.switch_page("pages/00_Training_Lab.py")' in source, "跳转目标必须钉住"
+    assert 'st.switch_page("views/00_Training_Lab.py")' in source, "跳转目标必须钉住"

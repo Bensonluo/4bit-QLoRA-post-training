@@ -23,7 +23,7 @@ import pytest
 pytest.importorskip("streamlit")
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE_WIZARD = ROOT / "ui" / "pages" / "05_Data_Wizard.py"
+PAGE_WIZARD = ROOT / "ui" / "views" / "05_Data_Wizard.py"
 
 
 def _source() -> str:

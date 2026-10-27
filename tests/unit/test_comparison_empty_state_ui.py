@@ -48,7 +48,7 @@ pytest.importorskip("streamlit")
 
 ROOT = Path(__file__).resolve().parents[2]
 UI = ROOT / "ui"
-PAGE_CMP = UI / "pages/03_Model_Comparison.py"
+PAGE_CMP = UI / "views/03_Model_Comparison.py"
 
 
 def _source(path: Path) -> str:
@@ -67,7 +67,7 @@ def _nav_to_comparison(monkeypatch, records):
     at.run()
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(da, "load_eval_data", lambda *a, **k: list(records))
-    return at.switch_page("pages/03_Model_Comparison.py").run()
+    return at.switch_page("views/03_Model_Comparison.py").run()
 
 
 def test_comparison_len0_empty_state_offers_training_exit(monkeypatch):
@@ -113,7 +113,7 @@ def test_comparison_empty_branch_exit_before_stop():
     block = source.split('st.warning("还没有任何模型的评测结果。")', 1)[1]
     stop_pos = block.find("st.stop()")
     btn_pos = block.find('st.button("🏋️ 去训练实验室"')
-    switch_pos = block.find('st.switch_page("pages/00_Training_Lab.py")')
+    switch_pos = block.find('st.switch_page("views/00_Training_Lab.py")')
     assert stop_pos != -1, "空态分支必须保持 st.stop 封页语义"
     assert btn_pos != -1 and btn_pos < stop_pos, "出路按钮必须在 st.stop 之前"
     assert switch_pos != -1 and btn_pos < switch_pos, "按钮必须接线到 00 页"
@@ -166,7 +166,7 @@ def test_comparison_no_domains_branch_wired_not_dead_end(monkeypatch):
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(da, "list_domains", lambda: [])
     monkeypatch.setattr(ui_config, "DOMAINS_DIR", ROOT / "nonexistent-domains-dir")
-    at.switch_page("pages/03_Model_Comparison.py").run()
+    at.switch_page("views/03_Model_Comparison.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert any("训练实验室" in i.value for i in at.info), "幽灵分支 info 必须指路"
     btn = next(b for b in at.button if b.label == "🏋️ 去训练实验室")
@@ -200,7 +200,7 @@ def test_comparison_corrupt_newest_falls_back_with_honest_warning(monkeypatch, t
     at.run()
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(da, "DOMAINS_DIR", tmp_path)
-    at.switch_page("pages/03_Model_Comparison.py").run()
+    at.switch_page("views/03_Model_Comparison.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert any("损坏" in w.value and "更早" in w.value for w in at.warning), (
         "跳过损坏的新文件必须如实告知,且说明当前显示的是更早结果"
@@ -226,7 +226,7 @@ def test_comparison_all_corrupt_keeps_empty_state_recovery(monkeypatch, tmp_path
     at.run()
     assert not at.exception, [e.message for e in at.exception]
     monkeypatch.setattr(da, "DOMAINS_DIR", tmp_path)
-    at.switch_page("pages/03_Model_Comparison.py").run()
+    at.switch_page("views/03_Model_Comparison.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert any("全部跳过" in w.value for w in at.warning), "全部损坏必须如实告知并给修法"
     assert any("还没有任何模型的评测结果" in w.value for w in at.warning), "空态兜底必须接住"

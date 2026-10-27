@@ -50,7 +50,7 @@ if not domains:
     # 必给出路——注册表未来变化时不留死端
     st.info("暂无包含评测数据的领域——先去训练实验室发起一次训练。")
     if st.button("🏋️ 去训练实验室", type="primary"):
-        st.switch_page("pages/00_Training_Lab.py")
+        st.switch_page("views/00_Training_Lab.py")
     st.stop()
 
 domain = st.selectbox("领域", domains, format_func=get_domain_display_name)
@@ -100,7 +100,7 @@ if len(data) < 2:
     st.info("去训练实验室发起（下一个）训练吧。已有的评测结果可在「评测结果」页查看。")
     # st.stop 封页前给出最后一条出路（R108-R110 空态死端范式）：否则用户只能靠侧栏自救
     if st.button("🏋️ 去训练实验室", type="primary"):
-        st.switch_page("pages/00_Training_Lab.py")
+        st.switch_page("views/00_Training_Lab.py")
     st.stop()
 
 # ── Select distinct records, including repeated display names ──────────────

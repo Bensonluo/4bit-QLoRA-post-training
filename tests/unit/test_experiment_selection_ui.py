@@ -11,7 +11,7 @@ pytest.importorskip("mlflow")
 from streamlit.testing.v1 import AppTest
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE = ROOT / "ui/pages/01_Experiments.py"
+PAGE = ROOT / "ui/views/01_Experiments.py"
 RUN_A, RUN_B, RUN_C = "11111111-actual-a", "22222222-actual-b", "33333333-actual-c"
 
 

@@ -92,7 +92,7 @@ def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery"
             key=f"{key_prefix}-open-comparison",
         ):
             st.session_state["archive-selection"] = data["id"]
-            st.switch_page("pages/08_Showcase.py")
+            st.switch_page("views/08_Showcase.py")
         st.download_button(
             "下载交付元数据 JSON",
             json.dumps(lineage, ensure_ascii=False, indent=2),

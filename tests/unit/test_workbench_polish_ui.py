@@ -48,7 +48,7 @@ def comparison(monkeypatch, tmp_path, records):
     monkeypatch.setattr(config, "DOMAINS_DIR", tmp_path)
     monkeypatch.setattr(adapters, "load_eval_data", lambda domain: records)
     return AppTest.from_file(
-        str(ROOT / "ui/pages/03_Model_Comparison.py"), default_timeout=30
+        str(ROOT / "ui/views/03_Model_Comparison.py"), default_timeout=30
     ).run()
 
 
@@ -143,7 +143,7 @@ def test_display_pages_offer_an_available_task_without_execution(monkeypatch, tm
     monkeypatch.setattr(queries, "fetch_experiments", lambda *a, **k: [])
     monkeypatch.setattr(queries, "fetch_model_versions", lambda *a, **k: pd.DataFrame())
     monkeypatch.setattr(adapters, "load_eval_data", lambda domain: [])
-    page.switch_page(f"pages/{page_path}").run()
+    page.switch_page(f"views/{page_path}").run()
     assert not page.exception
     navigation_label = (
         "查看完整同题对照"

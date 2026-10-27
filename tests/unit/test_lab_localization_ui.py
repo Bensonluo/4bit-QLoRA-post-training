@@ -30,10 +30,10 @@ import pytest
 pytest.importorskip("streamlit")
 
 UI = Path(__file__).resolve().parents[2] / "ui"
-PAGE_LAB = UI / "pages/00_Training_Lab.py"
-PAGE_INTAKE = UI / "pages/07_Data_Intake.py"
-PAGE_CHAT = UI / "pages/06_Chat.py"
-PAGE_CMP = UI / "pages/03_Model_Comparison.py"
+PAGE_LAB = UI / "views/00_Training_Lab.py"
+PAGE_INTAKE = UI / "views/07_Data_Intake.py"
+PAGE_CHAT = UI / "views/06_Chat.py"
+PAGE_CMP = UI / "views/03_Model_Comparison.py"
 ADAPTERS = UI / "components/domain_adapters.py"
 
 

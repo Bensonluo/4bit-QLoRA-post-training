@@ -13,7 +13,7 @@ from streamlit.testing.v1 import AppTest
 from ui.registry_actions import change_alias
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE = ROOT / "ui/pages/04_Registry.py"
+PAGE = ROOT / "ui/views/04_Registry.py"
 
 
 @pytest.fixture
