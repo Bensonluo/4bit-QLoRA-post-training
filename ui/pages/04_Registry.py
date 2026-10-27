@@ -15,6 +15,20 @@ from ui.runtime import DISPLAY_ONLY, action_button
 st.set_page_config(page_title="模型注册表", page_icon="🏛️", layout="wide")
 st.title("🏛️ 模型注册表")
 
+source = st.segmented_control(
+    "记录来源",
+    ["本地注册版本", "公开交付档案"],
+    default="公开交付档案" if DISPLAY_ONLY else "本地注册版本",
+    selection_mode="single",
+    required=True,
+    key="registry-source",
+)
+if source == "公开交付档案":
+    from ui.components.delivery_archive import render_delivery_archive
+
+    render_delivery_archive(Path(__file__).resolve().parents[2])
+    st.stop()
+
 try:
     from mlflow.tracking import MlflowClient  # noqa: F401  (availability probe)
 
@@ -70,8 +84,17 @@ model_versions = versions_df[versions_df["name"] == model_name].sort_values(
     "version", ascending=False
 )
 
-champion_row = model_versions[model_versions["aliases"].str.contains("champion", na=False)]
-challenger_row = model_versions[model_versions["aliases"].str.contains("challenger", na=False)]
+
+def _has_alias(value: object, name: str) -> bool:
+    return isinstance(value, str) and name in {part.strip() for part in value.split(",")}
+
+
+champion_row = model_versions[
+    model_versions["aliases"].map(lambda value: _has_alias(value, "champion"))
+]
+challenger_row = model_versions[
+    model_versions["aliases"].map(lambda value: _has_alias(value, "challenger"))
+]
 
 k1, k2, k3 = st.columns(3)
 with k1:

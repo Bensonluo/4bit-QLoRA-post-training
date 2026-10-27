@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 import plotly.graph_objects as go
 
 from ui.config import CHART_COLORS
@@ -39,10 +41,10 @@ def make_metric_timeseries(
 
 def make_bar_comparison(
     models: list[str],
-    metrics: dict[str, list[float]],
+    metrics: Mapping[str, Sequence[float | None]],
     metric_name: str = "Accuracy",
 ) -> go.Figure:
-    """Horizontal grouped bar chart for metric comparison."""
+    """Compare recorded metrics; None stays a gap and numeric zero stays zero."""
     fig = go.Figure()
     for i, (metric_key, values) in enumerate(metrics.items()):
         fig.add_trace(

@@ -137,6 +137,8 @@ def test_registry_keeps_browsing_but_blocks_mutations_in_display_mode(monkeypatc
     page = Path(__file__).resolve().parents[2] / "ui/pages/04_Registry.py"
     app = AppTest.from_file(str(page)).run(timeout=30)
     assert not app.exception
+    app.segmented_control(key="registry-source").set_value("本地注册版本").run(timeout=30)
+    assert not app.exception
     assert any(item.label == "已注册模型" for item in app.selectbox)
     assert all(item.disabled for item in app.button)
     next(item for item in app.button if item.label == "🏷 设置").click().run(timeout=30)

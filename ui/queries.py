@@ -56,14 +56,24 @@ def fetch_metric_names_by_name(tracking_uri: str, run_name: str) -> list[str]:
     """Return the sorted metric names logged for a run (resolved by runName tag)."""
     from mlflow.tracking import MlflowClient
 
+    run_id = _unique_run_id_by_name(tracking_uri, run_name)
+    if run_id is None:
+        return []
+    run = MlflowClient(tracking_uri=tracking_uri).get_run(run_id)
+    return sorted(run.data.metrics.keys())
+
+
+def _unique_run_id_by_name(tracking_uri: str, run_name: str) -> str | None:
     runs = fetch_runs(tracking_uri)
     if runs.empty or "tags.mlflow.runName" not in runs.columns:
-        return []
-    runs = runs[runs["tags.mlflow.runName"] == run_name]
-    if runs.empty:
-        return []
-    run = MlflowClient(tracking_uri=tracking_uri).get_run(runs.iloc[0]["run_id"])
-    return sorted(run.data.metrics.keys())
+        return None
+    matching = runs[runs["tags.mlflow.runName"] == run_name]
+    if len(matching) > 1:
+        raise ValueError(
+            "有多个同名实验，不能确定这次训练对应哪条曲线；"
+            "请到「实验记录」按运行 ID 查看，不会代选第一条记录。"
+        )
+    return None if matching.empty else str(matching.iloc[0]["run_id"])
 
 
 @st.cache_data(ttl=_TTL_SECONDS, show_spinner=False)
@@ -76,15 +86,10 @@ def fetch_metric_history_by_name(
     """
     from mlflow.tracking import MlflowClient
 
-    runs = fetch_runs(tracking_uri)
-    if runs.empty or "tags.mlflow.runName" not in runs.columns:
+    run_id = _unique_run_id_by_name(tracking_uri, run_name)
+    if run_id is None:
         return []
-    runs = runs[runs["tags.mlflow.runName"] == run_name]
-    if runs.empty:
-        return []
-    history = MlflowClient(tracking_uri=tracking_uri).get_metric_history(
-        runs.iloc[0]["run_id"], metric
-    )
+    history = MlflowClient(tracking_uri=tracking_uri).get_metric_history(run_id, metric)
     return [(m.step, m.value) for m in history]
 
 

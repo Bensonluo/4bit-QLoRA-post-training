@@ -146,7 +146,9 @@ def test_display_pages_offer_an_available_task_without_execution(monkeypatch, tm
     page.switch_page(f"pages/{page_path}").run()
     assert not page.exception
     navigation_label = (
-        "打开目标与数据"
+        "查看完整同题对照"
+        if page_path == "04_Registry.py"
+        else "打开目标与数据"
         if page_path in {"01_Experiments.py", "02_Evaluation.py", "03_Model_Comparison.py"}
         else "浏览示例任务"
     )
@@ -157,5 +159,6 @@ def test_display_pages_offer_an_available_task_without_execution(monkeypatch, tm
         assert not any(item.label == "⚡ 加载模型" for item in page.button)
     next(item for item in page.button if item.label == navigation_label).click().run()
     assert not page.exception
-    assert any(item.value == session.goal for item in page.title)
+    expected_title = "示例与历史" if page_path == "04_Registry.py" else session.goal
+    assert any(item.value == expected_title for item in page.title)
     assert service.load(session.session_id).revision == session.revision
