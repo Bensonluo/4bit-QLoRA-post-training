@@ -18,6 +18,7 @@ Runs" 而非裸词,避免误伤 MLflow 列名/代码注释);01 删除确认另�
 此处冗余重锁防本轮误改)。
 """
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -134,9 +135,16 @@ def test_registry_localized():
     控件文案(设置/移除/应用)。"""
     source = _source(PAGE_REG)
     assert 'st.subheader("别名（Aliases）")' in source
-    assert 'action_button("🏷 设置"' in source
-    assert 'action_button("🗑 移除"' in source
-    assert 'action_button("应用"' in source
+    labels = {
+        call.args[0].value
+        for call in ast.walk(ast.parse(source))
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "action_button"
+        and call.args
+        and isinstance(call.args[0], ast.Constant)
+    }
+    assert {"🏷 设置", "🗑 移除", "应用"}.issubset(labels)
     assert "阶段迁移（旧版）" in source
     assert "champion" in source and "challenger" in source, "别名术语保留不译"
     assert "本页需要 mlflow" in source, "mlflow 缺失错误句必须中文化(审查 should-fix-2)"

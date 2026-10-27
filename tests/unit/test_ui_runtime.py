@@ -140,7 +140,8 @@ def test_registry_keeps_browsing_but_blocks_mutations_in_display_mode(monkeypatc
     app.segmented_control(key="registry-source").set_value("本地注册版本").run(timeout=30)
     assert not app.exception
     assert any(item.label == "已注册模型" for item in app.selectbox)
-    assert all(item.disabled for item in app.button)
+    assert all(item.disabled for item in app.button if item.key != "registry-refresh")
+    assert not app.button(key="registry-refresh").disabled
     next(item for item in app.button if item.label == "🏷 设置").click().run(timeout=30)
     assert not app.exception
     assert attempts == []

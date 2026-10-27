@@ -95,11 +95,11 @@ def fetch_metric_history_by_name(
 
 @st.cache_data(ttl=_TTL_SECONDS, show_spinner=False)
 def fetch_model_versions(tracking_uri: str, name: str | None = None) -> pd.DataFrame:
-    """Return registered model versions as a DataFrame (newest version per name kept).
+    """Return all registered model versions as a DataFrame.
 
     Columns: name, version(int), current_stage, aliases (comma-joined string),
-    run_id, status, created. ``aliases`` comes from ModelVersion.aliases —
-    the registry-native replacement for deprecated stages.
+    run_id, status, created. Bindings come from RegisteredModel.aliases:
+    search_model_versions can omit aliases even when a binding exists.
     """
     import mlflow
     from mlflow.tracking import MlflowClient
@@ -112,12 +112,22 @@ def fetch_model_versions(tracking_uri: str, name: str | None = None) -> pd.DataF
         versions = client.search_model_versions(f"name='{escaped}'")
     else:
         versions = client.search_model_versions()
+    aliases_by_model = {
+        model_name: client.get_registered_model(model_name).aliases or {}
+        for model_name in {v.name for v in versions}
+    }
     rows = [
         {
             "name": v.name,
             "version": int(v.version),
             "current_stage": v.current_stage,
-            "aliases": ", ".join(getattr(v, "aliases", None) or []),
+            "aliases": ", ".join(
+                sorted(
+                    alias
+                    for alias, version in aliases_by_model[v.name].items()
+                    if str(version) == str(v.version)
+                )
+            ),
             "run_id": v.run_id,
             "status": v.status,
             "created": pd.to_datetime(int(v.creation_timestamp), unit="ms").strftime("%m-%d %H:%M"),
