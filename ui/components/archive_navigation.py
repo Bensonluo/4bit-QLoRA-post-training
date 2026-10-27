@@ -21,8 +21,13 @@ def render_archive_source(*, key: str, local_label: str) -> bool:
         return False
     from ui.components.showcase import render_history
 
-    if st.button("打开目标与数据", key=f"{key}-browse-task", icon=":material/assignment:"):
-        st.switch_page("pages/07_Data_Intake.py")
+    with st.container(horizontal=True, gap="medium"):
+        if st.button(
+            "浏览全部历史档案", key=f"{key}-browse-archive", icon=":material/auto_stories:"
+        ):
+            st.switch_page("pages/08_Showcase.py")
+        if st.button("打开目标与数据", key=f"{key}-browse-task", icon=":material/assignment:"):
+            st.switch_page("pages/07_Data_Intake.py")
     render_history(Path(__file__).resolve().parents[2], key_prefix=key)
     return True
 

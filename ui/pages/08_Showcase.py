@@ -55,36 +55,6 @@ else:
         if selected["kind"] == "workbench_handoff":
             render_history(SHOWCASE_ROOT, key_prefix="archive")
         else:
-            import pandas as pd
+            from ui.components.study_archive import render_study
 
-            labels = {
-                "alpaca_full_prompt_v1": "全提示监督",
-                "alpaca_answer_only_v1": "仅答案监督 · Alpaca",
-                "native_chat_answer_only_v1": "仅答案监督 · 原生聊天（实验）",
-                "base": "基础模型",
-                "trained": "训练适配器",
-            }
-            st.subheader(selected["title"])
-            st.caption(selected["scope"])
-            results = pd.DataFrame(
-                {
-                    "模型 / 监督方式": labels.get(result["label"], result["label"]),
-                    "答对 / 固定题数": f"{result['correct']} / {result['total']}",
-                    "截断": result["truncated"],
-                }
-                for result in selected["results"]
-            )
-            st.dataframe(results, hide_index=True, width="stretch")
-            st.caption(
-                "这是同一开发题集上的机制验证。受控三臂属于同次实验，"
-                "产品集成使用另一训练与推理路径，不将它们拼成连续提升的迭代曲线。"
-            )
-            source_name = selected["source"]["name"]
-            source_path = SHOWCASE_ROOT / "docs/validation" / source_name
-            st.download_button(
-                "下载原始历史证据 JSON",
-                source_path.read_bytes(),
-                file_name=source_name,
-                mime="application/json",
-            )
-            st.caption(f"来源：{source_name} · SHA-256 {selected['source']['sha256']}")
+            render_study(SHOWCASE_ROOT, selection, key_prefix="archive-study")
