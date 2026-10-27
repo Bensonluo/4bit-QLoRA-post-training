@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
+from ui.components.archive_navigation import archive_link, render_archive_source
 from ui.components.domain_adapters import (
     get_adapter,
     get_domain_display_name,
@@ -27,6 +28,9 @@ st.set_page_config(page_title="评测结果", page_icon="🎯", layout="wide")
 st.title("🎯 评测结果")
 st.caption("查看评测指标、分组差异与错误样本；业务验收在对应任务中完成。")
 
+if render_archive_source(key="evaluation-history", local_label="本地领域评测"):
+    st.stop()
+
 # ── Domain Selector ─────────────────────────────────────────────
 
 domains = list_domains()
@@ -34,6 +38,7 @@ if not domains and DOMAINS_DIR.exists():
     domains = [d.name for d in DOMAINS_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")]
 
 if not domains:
+    archive_link()
     if DISPLAY_ONLY:
         display_navigation("展示环境尚未收录领域评测结果，可先浏览样例任务与历史实验。")
         st.stop()

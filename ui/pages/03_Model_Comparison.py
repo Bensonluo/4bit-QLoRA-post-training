@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import pandas as pd
 import streamlit as st
 
+from ui.components.archive_navigation import archive_link, render_archive_source
 from ui.components.domain_adapters import (
     difficulty_label,
     entity_type_label,
@@ -30,6 +31,9 @@ st.set_page_config(page_title="模型对比", page_icon="⚖️", layout="wide")
 st.title("⚖️ 模型对比")
 st.caption("选择两条评测记录，先看指标差值，再检查分组与错误样本。")
 
+if render_archive_source(key="comparison-history", local_label="本地模型对照"):
+    st.stop()
+
 # ── Domain Selector ─────────────────────────────────────────────
 
 domains = list_domains()
@@ -37,6 +41,7 @@ if not domains and DOMAINS_DIR.exists():
     domains = [d.name for d in DOMAINS_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")]
 
 if not domains:
+    archive_link()
     if DISPLAY_ONLY:
         display_navigation("展示环境尚未收录模型对照结果，可先浏览样例任务与历史实验。")
         st.stop()
@@ -52,6 +57,7 @@ domain = st.selectbox("领域", domains, format_func=get_domain_display_name)
 data = load_eval_data(domain)
 
 if len(data) < 2:
+    archive_link()
     if DISPLAY_ONLY:
         display_navigation("当前领域不足两条模型评测记录，暂不能对照。可浏览已有的任务与实验记录。")
         st.stop()

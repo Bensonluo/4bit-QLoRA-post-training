@@ -92,14 +92,23 @@ def test_preview_invalidated_when_mapping_changes(monkeypatch, tmp_path):
 
 def test_preview_honesty_pins_in_source():
     """诚实性钉：①预览行数局限 caption（负例池小说明——预览不是完整生成
-    的等价物）；②按钮 disabled 门控（映射/比例不合法时不可点，与生成按钮
-    同门）；③新数据载入让旧预览失效（两处载入路径都 pop）。"""
+    的等价物）；②新数据载入让旧预览失效（两处载入路径都 pop）。
+    disabled 门控在下方通过无效分区比例实际验证，不锁格式缩进。"""
     source = _source()
     assert "负例池小，候选数可能少于设置值" in source, "预览局限 caption 必须在场"
-    assert '"👀 试生成前 2 条样本",\n    disabled=not ready,' in source, (
-        "试生成按钮必须与生成按钮同门（ready 门控）"
-    )
     assert source.count('st.session_state.pop("wizard_preview", None)') >= 3, (
         "上传/路径/试生成失败三处都必须失效旧预览"
     )
     assert "样本 {_i}（试生成）" in source, "试生成样本标签钉"
+
+
+def test_invalid_split_disables_preview_and_generation(monkeypatch, tmp_path):
+    page = _boot(monkeypatch, tmp_path)
+    _load_demo(page)
+    next(item for item in page.number_input if item.label == "train 比例").set_value(0.5).run()
+    assert not page.exception, [item.message for item in page.exception]
+    assert any("三个比例之和应为 1.0" in item.value for item in page.warning)
+    preview = next(item for item in page.button if "试生成" in item.label)
+    generate = next(item for item in page.button if "生成训练集" in item.label)
+    assert preview.disabled and generate.disabled
+    assert not (tmp_path / "outputs/wizard").exists()

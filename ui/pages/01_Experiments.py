@@ -9,11 +9,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
+from ui.components.archive_navigation import archive_link, render_archive_source
 from ui.components.shell import display_navigation
 from ui.runtime import DISPLAY_ONLY, action_button
 
 st.set_page_config(page_title="实验记录", page_icon="📊", layout="wide")
 st.title("📊 实验记录")
+
+if render_archive_source(key="experiments-history", local_label="本地实验"):
+    st.stop()
 
 try:
     import mlflow  # noqa: F401  (still needed: delete_run + metric history)
@@ -39,6 +43,7 @@ def _status_label(value: str) -> str:
 
 
 if runs.empty:
+    archive_link()
     if DISPLAY_ONLY:
         display_navigation(
             "展示环境暂无实验记录，可先浏览示例任务的数据与核验过程。", experiments=False

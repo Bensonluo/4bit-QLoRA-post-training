@@ -57,13 +57,13 @@ def is_demo_session(source_digest: str, project_root: Path) -> bool:
 DEMO_VARIANTS = {
     "generation": {
         "goal": "根据客户问题生成标准答复",
-        "description": "演示数据（虚构）：开放生成任务——客户问题对应一段完整的标准答复文本。",
+        "description": "演示数据（虚构）：不同售后咨询对应完整客服答复，用于体验开放生成；答复为虚构示范口径，不是实际服务承诺。",
         "sample": "generation_qa_sample.csv",
         "button": "创建演示任务（客服答复生成·开放生成）",
     },
     "extraction": {
-        "goal": "根据客户描述对应工单编号",
-        "description": "演示数据（虚构）：抽取任务——从客户描述对应出唯一的工单编号。",
+        "goal": "从客户留言中提取工单编号",
+        "description": "演示数据（虚构）：留言内已包含工单号，模型只输出原文中的编号，用于体验信息抽取。",
         "sample": "extraction_id_sample.csv",
         "button": "创建演示任务（工单编号对应·抽取）",
     },

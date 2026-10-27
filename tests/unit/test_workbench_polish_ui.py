@@ -145,12 +145,17 @@ def test_display_pages_offer_an_available_task_without_execution(monkeypatch, tm
     monkeypatch.setattr(adapters, "load_eval_data", lambda domain: [])
     page.switch_page(f"pages/{page_path}").run()
     assert not page.exception
-    assert any(item.label == "浏览示例任务" and not item.disabled for item in page.button)
+    navigation_label = (
+        "打开目标与数据"
+        if page_path in {"01_Experiments.py", "02_Evaluation.py", "03_Model_Comparison.py"}
+        else "浏览示例任务"
+    )
+    assert any(item.label == navigation_label and not item.disabled for item in page.button)
     assert not any("先训练一个模型" in item.value for item in page.info)
     if page_path == "06_Chat.py":
         assert not page.get("chat_input")
         assert not any(item.label == "⚡ 加载模型" for item in page.button)
-    next(item for item in page.button if item.label == "浏览示例任务").click().run()
+    next(item for item in page.button if item.label == navigation_label).click().run()
     assert not page.exception
     assert any(item.value == session.goal for item in page.title)
     assert service.load(session.session_id).revision == session.revision

@@ -66,8 +66,10 @@ def test_eval_button_block_wiring_and_placement():
     # 按钮块位置:Chat 指路 < wizard test 门 < 通用按钮 < 医疗回退按钮
     chat_pos = source.find("想先直观感受效果")
     gate_pos = source.find('_wizard_test = arts.eval_sets.get("test")')
-    generic_btn_pos = source.find('st.button("⚡ 用我的 test 集评测"')
-    medical_btn_pos = source.find('st.button("⚡ 生成评测文件"')
+    # Click tests below verify actual actions; placement is independent of
+    # the Streamlit/read-only wrapper used to render those buttons.
+    generic_btn_pos = source.find('"⚡ 用我的 test 集评测"')
+    medical_btn_pos = source.find('"⚡ 生成评测文件"')
     assert chat_pos != -1, "Chat 指路锚必须在场"
     assert gate_pos != -1, "wizard test 门锚必须在场"
     assert generic_btn_pos != -1, "通用评测主按钮必须在场"

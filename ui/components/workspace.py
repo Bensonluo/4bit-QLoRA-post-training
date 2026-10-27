@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from html import escape
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -11,6 +12,8 @@ import streamlit as st
 from src.workbench.intake_service import IntakeService
 from ui import config, runtime
 from ui.components.task_state import task_state
+
+SHOWCASE_ROOT = Path(__file__).resolve().parents[2]
 
 WORKFLOW = (
     ("业务目标与数据", "明确输入、答案与业务要求"),
@@ -59,10 +62,25 @@ def render_workspace() -> None:
             elif st.button("创建业务任务", type="primary", icon=":material/add:"):
                 open_task()
             st.page_link(
-                "pages/01_Experiments.py",
-                label="浏览实验与验证记录",
-                icon=":material/science:",
+                "pages/08_Showcase.py",
+                label="查看历史成果",
+                icon=":material/auto_stories:",
             )
+
+        from ui.components.examples import render_examples
+        from ui.components.showcase import render_history_summary
+
+        render_examples(SHOWCASE_ROOT)
+
+        st.subheader("从训练到交接，看一份完整记录")
+        st.caption("2026.10.22 · Qwen3-1.7B · Apple Silicon · 已公开的本地合成验证")
+        render_history_summary(SHOWCASE_ROOT, key_prefix="home-history")
+        if st.button(
+            "打开历史档案",
+            key="showcase-history",
+            icon=":material/arrow_forward:",
+        ):
+            st.switch_page("pages/08_Showcase.py")
 
         st.html(
             '<ol class="ts-workflow" aria-label="业务任务完整流程">'

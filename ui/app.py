@@ -24,6 +24,7 @@ page = st.navigation(
         "业务任务": [
             st.Page(render_workspace, title="任务总览", icon=":material/workspaces:", default=True),
             st.Page("pages/07_Data_Intake.py", title="目标与数据", icon=":material/assignment:"),
+            st.Page("pages/08_Showcase.py", title="示例与历史", icon=":material/auto_stories:"),
         ],
         "训练与证据": [
             st.Page(

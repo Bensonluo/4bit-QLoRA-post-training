@@ -27,7 +27,9 @@ def test_empty_workspace_leads_with_business_goal(monkeypatch, tmp_path):
     assert not page.exception
     assert any("业务模型工作台" in t.value for t in page.title)
     assert any(b.label == "创建业务任务" for b in page.button)
-    assert len(page.metric) == 0
+    # Public historical scores are visible even when the user's local store is empty.
+    assert any("公开历史验证" in item.value for item in page.caption)
+    assert not any(item.label in {"运行总数", "运行中"} for item in page.metric)
     assert all(fmt in " ".join(m.value for m in page.markdown) for fmt in ("CSV", "Excel", "JSONL"))
 
 
@@ -54,7 +56,7 @@ def test_recorded_evidence_is_distinct_from_business_acceptance(monkeypatch, tmp
     )
     page = boot(monkeypatch, tmp_path, runs)
     assert not page.exception
-    table = page.dataframe[0].value
+    table = next(item.value for item in page.dataframe if "来源" in item.value.columns)
     assert table.iloc[0]["来源"] == "公开历史验证"
     assert table.iloc[0]["状态"] == "已完成"
     assert not any("业务达标" in str(x) for x in table.iloc[0].values)
