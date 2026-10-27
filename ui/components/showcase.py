@@ -65,66 +65,6 @@ def render_history_summary(root: Path, *, key_prefix: str = "history-summary") -
         )
 
 
-def _outputs(data: dict[str, Any], key_prefix: str) -> None:
-    report = data["report"]
-    models = report["models"]
-    references = {row["index"]: row for row in models[0]["rows"]}
-
-    def label(index: int) -> str:
-        row = references[index]
-        group = row.get("source", {}).get("group", {})
-        context = " · ".join(str(value) for value in group.values())
-        return f"开发题 {index + 1} · {context} · 期望 {row['expected']}"
-
-    selected = st.selectbox(
-        "选择开发题，查看完整原始输出",
-        sorted(references),
-        format_func=label,
-        key=f"{key_prefix}-question",
-    )
-    reference = references[selected]
-    prompt = reference["prompt"]
-    _, marker, after_header = prompt.partition("\n\n### Input:\n")
-    business_input, end, remainder = after_header.rpartition("\n\n### Response:\n")
-    if marker and end and not remainder:
-        st.caption("业务输入")
-        st.code(business_input, language=None, wrap_lines=True)
-    with st.expander("完整模型输入（原始提示）"):
-        st.code(reference["prompt"], language=None, wrap_lines=True)
-    st.caption("期望答案")
-    st.code(reference["expected"], language=None, wrap_lines=True)
-    statuses = {
-        "scored": "已评分",
-        "truncated": "输出截断",
-        "failed": "生成或评分失败",
-        "needs_business_review": "待业务评分",
-    }
-    for start in range(0, len(models), 2):
-        columns = st.columns(2)
-        for column, model in zip(columns, models[start : start + 2]):
-            row = next(item for item in model["rows"] if item["index"] == selected)
-            reason = row.get("token_proof", {}).get("finish_reason")
-            end = {"eos": "EOS 结束", "length": "未遇 EOS，达到长度上限"}.get(
-                reason, "结束方式未记录"
-            )
-            with column, st.container(border=True):
-                st.markdown(f"**{model['label']}**")
-                st.caption(
-                    f"{statuses.get(row['status'], row['status'])} · "
-                    f"截断：{'是' if row['truncated'] else '否'} · {end} · "
-                    f"{row['generated_tokens']} token"
-                )
-                st.code(
-                    row["output"] if row["output"] is not None else "未生成输出",
-                    language=None,
-                    wrap_lines=True,
-                )
-                if row["correct"] is not None:
-                    st.caption("与期望一致" if row["correct"] else "未达到当前严格匹配标准")
-                if row.get("error"):
-                    st.caption(row["error"])
-
-
 def _training(data: dict[str, Any]) -> None:
     history = pd.DataFrame(data["history"])
     metrics = st.columns(3)
@@ -138,7 +78,10 @@ def _training(data: dict[str, Any]) -> None:
         height=280,
         color="#a6afff",
     )
-    st.caption(f"{len(history)} 个实际日志点；loss 下降与开发题匹配分别展示。")
+    st.caption(
+        f"{len(history)} 个实际训练日志点；同题对照记录的是第 {data['training']['global_step']} "
+        "次更新结束后的输出，中间步骤没有逐步业务评分或生成快照。"
+    )
     with st.expander("本次训练配置"):
         st.json(data["config"])
 
@@ -246,7 +189,9 @@ def render_history(root: Path, *, key_prefix: str = "history") -> None:
     )
     tabs = st.tabs(["同题对照", "训练过程", "交付与成本", "来源与下载"])
     with tabs[0]:
-        _outputs(data, key_prefix)
+        from ui.components.case_comparison import render_case_comparison
+
+        render_case_comparison(data, key_prefix=key_prefix)
     with tabs[1]:
         _training(data)
     with tabs[2]:

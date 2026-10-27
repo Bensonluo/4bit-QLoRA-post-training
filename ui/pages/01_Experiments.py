@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -55,6 +56,46 @@ if runs.empty:
         st.switch_page("pages/00_Training_Lab.py")
     st.stop()
 
+if (
+    "run_id" not in runs.columns
+    or not runs["run_id"].map(lambda value: isinstance(value, str) and bool(value.strip())).all()
+    or runs["run_id"].duplicated().any()
+):
+    st.error("实验记录缺少唯一的运行 ID，无法可靠选择详情或操作；请检查实验存储。")
+    archive_link()
+    st.stop()
+
+all_run_ids = runs["run_id"].tolist()
+names = {
+    row["run_id"]: name.strip() if isinstance(name, str) and name.strip() else "未命名运行"
+    for _, row in runs.iterrows()
+    for name in [row.get("tags.mlflow.runName")]
+}
+name_counts = Counter(names.values())
+short_ids = {identity: identity[:8] for identity in all_run_ids}
+while True:
+    prefix_counts = Counter(short_ids.values())
+    collisions = {prefix for prefix, count in prefix_counts.items() if count > 1}
+    if not collisions:
+        break
+    short_ids = {
+        identity: identity[: len(prefix) + 1] if prefix in collisions else prefix
+        for identity, prefix in short_ids.items()
+    }
+run_labels = {}
+for identity in all_run_ids:
+    name = names[identity]
+    run_labels[identity] = (
+        f"{name}（{short_ids[identity]}）"
+        if name_counts[name] > 1 or name == "未命名运行"
+        else name
+    )
+
+
+def run_label(identity: str) -> str:
+    return run_labels[identity]
+
+
 # ── KPI Cards ───────────────────────────────────────────────────
 
 total = len(runs)
@@ -103,11 +144,15 @@ with st.expander("🔍 筛选", expanded=False):
         runs = runs[runs["experiment_id"].isin(wanted_ids)]
 
 st.subheader(f"全部运行（{len(runs)}）")
+if runs.empty:
+    st.info("没有符合筛选条件的实验记录，请调整状态、模型或实验筛选。")
+    st.stop()
 
 # ── Runs Table ──────────────────────────────────────────────────
 
 display_map = {
     "tags.mlflow.runName": "运行名",
+    "run_id": "运行 ID",
     "status": "状态",
     "start_time": "开始时间",
     "params.model.name": "模型",
@@ -133,19 +178,21 @@ st.divider()
 
 st.subheader("对比运行")
 
-run_name_col = "tags.mlflow.runName" if "tags.mlflow.runName" in runs.columns else "run_id"
-run_names = runs[run_name_col].tolist()
-selected = st.multiselect("选择 2–5 个运行进行对比", run_names, max_selections=5)
+run_ids = runs["run_id"].tolist()
+run_rows = runs.set_index("run_id", drop=False)
+selected = st.multiselect(
+    "选择 2–5 个运行进行对比", run_ids, format_func=run_label, max_selections=5
+)
 
 if len(selected) >= 2:
-    selected_runs = runs[runs[run_name_col].isin(selected)]
+    selected_runs = run_rows.loc[selected]
 
     # Metric comparison
     metric_cols = [c for c in runs.columns if c.startswith("metrics.")]
     if metric_cols:
         compare_metrics = st.multiselect("指标", metric_cols, default=metric_cols[:3])
         if compare_metrics:
-            models = selected_runs[run_name_col].tolist()
+            models = [run_label(identity) for identity in selected]
             metrics_data = {}
             for mc in compare_metrics:
                 # None (not 0.0) for missing metrics — never fabricate data points.
@@ -167,7 +214,9 @@ if len(selected) >= 2:
                 if len(set(str(v) for v in vals)) > 1:
                     diff_data[pc.replace("params.", "")] = vals
             if diff_data:
-                diff_df = pd.DataFrame(diff_data, index=selected_runs[run_name_col].tolist())
+                diff_df = pd.DataFrame(
+                    diff_data, index=[run_label(identity) for identity in selected]
+                )
                 st.dataframe(diff_df.T, width="stretch")
             else:
                 st.info("所选运行的参数完全相同。")
@@ -177,10 +226,13 @@ st.divider()
 # ── Run Details ─────────────────────────────────────────────────
 
 st.subheader("运行详情")
-selected_run = st.selectbox("选择一个运行", run_names)
+selected_run = st.selectbox("选择一个运行", run_ids, format_func=run_label)
 if selected_run:
-    run_row = runs[runs[run_name_col] == selected_run].iloc[0]
-    run_id = run_row["run_id"]
+    run_row = run_rows.loc[selected_run]
+    run_id = selected_run
+    source = run_row.get("tags.evidence.source")
+    source_label = "公开历史验证" if isinstance(source, str) and source.strip() else "本地实验"
+    st.caption(f"{run_label(run_id)} · {source_label} · 运行 ID：{run_id}")
 
     d1, d2 = st.columns(2)
     with d1, st.expander("参数"):
@@ -218,7 +270,7 @@ if selected_run:
                 if history:
                     from ui.components.charts import make_metric_timeseries
 
-                    fig = make_metric_timeseries({selected_run: history}, chosen)
+                    fig = make_metric_timeseries({run_label(selected_run): history}, chosen)
                     st.plotly_chart(fig, width="stretch")
         except Exception as e:
             st.warning(f"加载指标历史失败：{e}")
