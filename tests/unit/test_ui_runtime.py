@@ -93,7 +93,7 @@ def test_data_wizard_blocks_path_reads_and_uploads_in_display_mode(monkeypatch, 
     path_input = next(item for item in app.text_input if item.label == "或输入服务器上的文件路径")
     assert path_input.disabled
     assert app.get("file_uploader")[0].proto.disabled
-    navigation = next(item for item in app.button if item.label == "浏览示例任务")
+    navigation = next(item for item in app.button if item.label == "查看目标与数据")
     assert not navigation.disabled
     path_input.set_value(str(tmp_path / "not-public.csv"))
     read_button = next(item for item in app.button if item.label == "读取该路径")

@@ -66,7 +66,7 @@ def test_existing_task_keeps_its_identity_when_opened(monkeypatch, tmp_path):
 def test_display_mode_browses_the_same_task_without_advancing_it(monkeypatch, tmp_path):
     service, session = task(tmp_path)
     page = boot(monkeypatch, tmp_path, display=True)
-    next(b for b in page.button if b.label == "浏览示例任务").click().run()
+    next(b for b in page.button if b.label == "浏览最近创建的任务").click().run()
     assert not page.exception
     assert any(t.value == session.goal for t in page.title)
     assert service.load(session.session_id).revision == session.revision

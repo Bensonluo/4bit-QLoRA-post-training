@@ -150,7 +150,7 @@ def test_display_pages_offer_an_available_task_without_execution(monkeypatch, tm
         if page_path == "04_Registry.py"
         else "打开目标与数据"
         if page_path in {"01_Experiments.py", "02_Evaluation.py", "03_Model_Comparison.py"}
-        else "浏览示例任务"
+        else "查看目标与数据"
     )
     assert any(item.label == navigation_label and not item.disabled for item in page.button)
     assert not any("先训练一个模型" in item.value for item in page.info)

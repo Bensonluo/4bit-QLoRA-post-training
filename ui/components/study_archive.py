@@ -125,7 +125,9 @@ def _cases(primary: dict, comparison: dict, cases: list[dict], namespace: str) -
     )
     row = references[selected]
     logical = next(case for case in cases if (case["case_id"], case["form"]) == selected)
-    st.caption(f"业务输入 · 分组 {logical['group_id']}")
+    group = logical.get("group_id")
+    group_label = group if isinstance(group, str) and group.strip() else "未记录或不可核验"
+    st.caption(f"业务输入 · 分组 {group_label}")
     st.code(logical["input"], language=None, wrap_lines=True)
     with st.expander("业务任务要求"):
         st.code(logical["instruction"], language=None, wrap_lines=True)

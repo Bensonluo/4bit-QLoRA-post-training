@@ -105,6 +105,21 @@ def _removed_environment() -> list[str]:
     return [name for name in os.environ if name not in allowed and not name.startswith(prefixes)]
 
 
+def _require_verified_labels(session: IntakeSession, *, action: str) -> None:
+    """Apply the same blind-label gate when preparing and starting a run."""
+    verification = getattr(session, "label_verification", None)
+    if not (
+        isinstance(verification, dict)
+        and verification.get("verdict") == "verified"
+        and verification.get("stale") in (None, False)
+        and ("status" not in verification or verification["status"] == "completed")
+    ):
+        raise ValueError(
+            "请先完成盲标核验：对抽样的已标注行隐藏答案独立作答，并与数据标签一致，"
+            f"再{action}训练。这是确认监督信号业务含义的必要步骤，不能跳过。"
+        )
+
+
 def _validate_browsable_run(record: dict) -> None:
     """Reject malformed nested values that task views cannot safely interpret."""
     for name in ("config", "preflight", "failure", "recovery", "metrics", "artifacts"):
@@ -250,12 +265,7 @@ class TrainingRunService:
                 raise ValueError("请先确认当前全量数据并生成独立分区。")
             # 盲标核验门禁：监督信号的业务含义必须经用户独立复现（隐藏答案对抽样行作答
             # 并与数据标签一致）。核验与全量来源/配方摘要绑定，数据或方案变化后自动失效。
-            verification = getattr(session, "label_verification", None)
-            if not (isinstance(verification, dict) and verification.get("verdict") == "verified"):
-                raise ValueError(
-                    "请先完成盲标核验：对抽样的已标注行隐藏答案独立作答，并与数据标签一致，"
-                    "再准备训练。这是确认监督信号业务含义的必要步骤，不能跳过。"
-                )
+            _require_verified_labels(session, action="准备")
             if type(max_length) is not int or max_length <= 0:
                 raise ValueError("max_length 必须是正整数。")
             train_options, model_overrides = dict(training_options or {}), dict(model_options or {})
@@ -365,6 +375,9 @@ class TrainingRunService:
             or session.dataset.model_dump() != record["dataset"]
         ):
             raise ValueError("业务方案或数据版本已变化，请重新准备训练。")
+        # Verification can change independently of the immutable dataset and
+        # revision. Recheck the latest supplied session before any launch.
+        _require_verified_labels(session, action="启动")
         if model_identity(Path(record["model_path"])) != record["model_identity"]:
             raise ValueError("本地模型或 tokenizer 文件发生变化，请重新准备训练。")
         report = preflight_dataset(

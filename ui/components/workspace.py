@@ -103,7 +103,7 @@ def render_workspace() -> None:
         with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
             if runtime.DISPLAY_ONLY:
                 if st.button(
-                    "浏览示例任务" if sessions else "查看目标与数据",
+                    "浏览最近创建的任务" if sessions else "查看目标与数据",
                     type="primary",
                     icon=":material/arrow_forward:",
                 ):
@@ -115,6 +115,9 @@ def render_workspace() -> None:
                 label="查看历史成果",
                 icon=":material/auto_stories:",
             )
+        if runtime.DISPLAY_ONLY and sessions:
+            recent = sessions[0]
+            st.text(f"最近创建：{recent.goal} · {recent.session_id[:8]}")
 
         from ui.components.examples import render_examples
         from ui.components.showcase import render_history_summary

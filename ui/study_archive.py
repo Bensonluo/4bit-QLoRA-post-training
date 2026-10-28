@@ -259,6 +259,29 @@ def _bind_baselines(variants: list[dict]) -> None:
             variant["baseline_id"] = matches[0]
 
 
+def _verify_case_prompts(cases: list[dict], variants: list[dict]) -> None:
+    """Bind the displayed business text to every recorded generation prompt."""
+    from src.data.sft_protocol import render_sft_prompt
+
+    by_id = {(case["case_id"], case["form"]): case for case in cases}
+    for variant in variants:
+        protocol = variant["protocol"]
+        for row in variant["rows"]:
+            case = by_id[(row["case_id"], row["form"])]
+            if protocol == PROTOCOLS[2]:
+                # R148 records Qwen's actual non-thinking generation wrapper;
+                # no tokenizer or regenerated model input is needed to verify it.
+                content = case["instruction"] + ("\n\n" + case["input"] if case["input"] else "")
+                prompt = (
+                    "<|im_start|>user\n"
+                    + content
+                    + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+                )
+            else:
+                prompt = render_sft_prompt(case, None, protocol)
+            _require(row["prompt"] == prompt, "业务输入或任务要求与实际模型提示不一致。")
+
+
 def load_study(root: Path, study_id: str) -> dict:
     """Return one immutable study view, not a fabricated BusinessEvaluationReport."""
     if study_id not in {"r148-controlled-v2", "r148-product-smoke"}:
@@ -394,6 +417,7 @@ def load_study(root: Path, study_id: str) -> dict:
                 == expected,
                 "业务输入与版本的题目或标准答案不一致。",
             )
+        _verify_case_prompts(cases, variants)
         return {
             "id": study_id,
             "title": title,
