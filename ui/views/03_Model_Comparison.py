@@ -232,8 +232,13 @@ with cost_tab:
         st.subheader("执行摘要")
         st.caption("领域归档摘要，供补充阅读；可能涉及其他模型与评测批次。")
         results_dir = DOMAINS_DIR / domain / "data" / "results"
-        summaries = sorted(results_dir.glob("executive_summary_*.md"), reverse=True)
-        if summaries:
-            st.markdown(summaries[0].read_text())
+        try:
+            summaries = sorted(results_dir.glob("executive_summary_*.md"), reverse=True)
+            summary = summaries[0].read_text(encoding="utf-8") if summaries else None
+        except (OSError, UnicodeError):
+            st.warning("领域历史摘要暂不可读；当前模型对照仍可查看，请检查摘要文件。")
         else:
-            st.info("未找到执行摘要文件。")
+            if summary is None:
+                st.info("未找到执行摘要文件。")
+            else:
+                st.markdown(summary)

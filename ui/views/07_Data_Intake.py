@@ -155,6 +155,7 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
     from src.workbench.answer_sheet import (
         answer_sheet_csv,
         answer_sheet_lines,
+        answer_sheet_source,
         missing_answer_rows,
     )
 
@@ -174,7 +175,7 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
     )
     st.info(
         f"需补齐 {len(missing)} 条记录的答案（字段：{columns}）。"
-        "请保留原编号，由了解业务的人填写后，"
+        "请保留清单中的预览编号，由了解业务的人填写后，"
         + upload_step
         + "不确定答案含义时，先在「回答问题或修正理解」补充说明。"
     )
@@ -183,7 +184,9 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
     if field_names:
         st.download_button(
             "导出待补答案清单（交给填写人）",
-            data=answer_sheet_csv(missing, field_names),
+            data=answer_sheet_csv(
+                missing, field_names, source=answer_sheet_source(session, full=full)
+            ),
             file_name=f"待补答案清单-{'全量' if full else '样例'}.csv",
             mime="text/csv",
             key=f"answer_sheet_{'full' if full else 'sample'}",

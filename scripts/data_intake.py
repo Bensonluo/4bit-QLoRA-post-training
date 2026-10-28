@@ -2021,6 +2021,7 @@ def main() -> int:
             from src.workbench.answer_sheet import (
                 answer_sheet_csv,
                 answer_sheet_lines,
+                answer_sheet_source,
                 missing_answer_rows,
             )
             from src.workbench.full_data import full_data_is_current
@@ -2055,7 +2056,11 @@ def main() -> int:
             if args.export_csv is not None:
                 if missing and field_names:
                     args.export_csv.parent.mkdir(parents=True, exist_ok=True)
-                    args.export_csv.write_bytes(answer_sheet_csv(missing, field_names))
+                    args.export_csv.write_bytes(
+                        answer_sheet_csv(
+                            missing, field_names, source=answer_sheet_source(session, full=use_full)
+                        )
+                    )
                     print(f"待补答案清单已导出：{args.export_csv}", file=sys.stderr)
                 else:
                     print("没有待补行或答案列待业务确认，未生成清单 CSV。", file=sys.stderr)

@@ -38,22 +38,34 @@ def running(tmp_path):
 
 
 def valid_success(directory, identity):
-    artifact = directory / "adapter.bin"
-    artifact.write_bytes(b"valid adapter")
+    output = directory / "model"
+    output.mkdir(exist_ok=True)
+    paths = {
+        "adapter_config": output / "adapter_config.json",
+        "adapter_weights": output / "adapter_model.bin",
+        "tokenizer_config": output / "tokenizer_config.json",
+    }
+    for artifact in paths.values():
+        artifact.write_bytes(b"valid artifact")
     manifest = {
         "run_id": identity,
         "dataset_version": "dataset-v1",
         "config_digest": "config-v1",
         "files": {
-            "adapter": {
+            key: {
                 "path": str(artifact),
                 "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
             }
+            for key, artifact in paths.items()
         },
     }
-    path = directory / "manifest.json"
+    path = output / "workbench_manifest.json"
     path.write_text(json.dumps(manifest))
-    return {"run_id": identity, "status": "succeeded", "artifacts": {"manifest": str(path)}}
+    return {
+        "run_id": identity,
+        "status": "succeeded",
+        "artifacts": {**{key: str(value) for key, value in paths.items()}, "manifest": str(path)},
+    }
 
 
 @pytest.mark.parametrize("initial", ["missing", "running"])
@@ -97,6 +109,35 @@ def test_final_receipt_wins_if_published_between_first_read_and_process_exit(
     assert after == before
 
 
+@pytest.mark.parametrize(
+    "damage", ["missing_entry", "missing_weight", "redirected_weight", "bad_files"]
+)
+def test_succeeded_receipt_requires_bound_adapter_evidence(running, damage, tmp_path):
+    service, directory, identity = running
+    result = valid_success(directory, identity)
+    manifest_path = directory / "model" / "workbench_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if damage == "missing_entry":
+        del manifest["files"]["adapter_weights"]
+    elif damage == "missing_weight":
+        (directory / "model" / "adapter_model.bin").unlink()
+    elif damage == "redirected_weight":
+        other = tmp_path / "adapter_model.bin"
+        other.write_bytes(b"valid artifact")
+        manifest["files"]["adapter_weights"]["path"] = str(other)
+        result["artifacts"]["adapter_weights"] = str(other)
+    else:
+        manifest["files"] = []
+    manifest_path.write_text(json.dumps(manifest))
+    (directory / "result.json").write_text(json.dumps(result))
+    before = snapshot(tmp_path)
+    status = service.get_status(identity)
+    assert status["status"] == "failed"
+    assert status["failure"]["stage"] == "artifacts"
+    assert status["failure"]["type"] == "ArtifactMismatch"
+    assert snapshot(tmp_path) == before
+
+
 def test_newly_published_receipt_still_checks_identity(running):
     service, directory, identity = running
 
@@ -119,7 +160,7 @@ def test_newly_published_receipt_still_checks_identity(running):
 def test_newly_published_success_still_verifies_artifacts(running):
     service, directory, identity = running
     final = valid_success(directory, identity)
-    (directory / "adapter.bin").write_bytes(b"modified adapter")
+    (directory / "model" / "adapter_model.bin").write_bytes(b"modified adapter")
 
     def child_finishes(_run_id):
         (directory / "result.json").write_text(json.dumps(final))

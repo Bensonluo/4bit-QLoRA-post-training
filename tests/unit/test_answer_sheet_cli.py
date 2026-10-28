@@ -7,6 +7,8 @@ stdout 纯 JSON(口径/行数/行ID/答案字段),stderr 人话(清单口径行+
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import subprocess
 import sys
@@ -58,9 +60,11 @@ def test_answer_sheet_cli_exports_handoff_sheet_for_business_filler(tmp_path):
     data = target.read_bytes()
     assert data.startswith(b"\xef\xbb\xbf")
     lines = data.decode("utf-8-sig").strip("\r\n").splitlines()
-    assert lines[0] == "行ID,题目输入（模型将看到的内容）,待填答案（类别）"
+    assert lines[0] == "行ID,题目输入（模型将看到的内容）,待填答案（类别）,原始记录位置"
     assert lines[1].startswith("r000002,")
-    assert lines[1].endswith(",")
+    record = list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))[1]
+    assert record[2] == ""
+    assert record[3] == "文件 工单.csv · 第 3 行（记录起始行）"
     assert "物流未更新" in lines[1]
 
 
@@ -95,10 +99,73 @@ def test_answer_sheet_cli_uses_current_full_preview_when_available(tmp_path):
         session.session_id, session.revision, "full.csv", FULL_MISSING
     )
     assert session.full_data is not None and session.full_data.preview is not None
-    done = invoke(service, "answer-sheet", session.session_id)
+    target = tmp_path / "full-sheet.csv"
+    done = invoke(service, "answer-sheet", session.session_id, "--export-csv", target)
     assert done.returncode == 0, done.stderr
     result = json.loads(done.stdout)
     assert result["scope"] == "full"
     assert result["missing_count"] == 1
     assert result["row_ids"] == ["r000002"]  # 全量文件自己的行ID 空间
     assert "清单口径：全量真实转换预览" in done.stderr
+    record = list(csv.reader(io.StringIO(target.read_text(encoding="utf-8-sig"))))[1]
+    assert record[-1] == "文件 full.csv · 第 3 行（记录起始行）"
+
+
+def test_sheet_locates_original_record_after_blank_and_multiline_rows(tmp_path):
+    raw = (
+        '编号,客户描述,类别,处理结果\n001,"杯子\n破损",质量,补发\n\n002,物流未更新,,查询\n'
+    ).encode()
+    service, session = _store(tmp_path, raw)
+    target = tmp_path / "sheet.csv"
+    done = invoke(service, "answer-sheet", session.session_id, "--export-csv", target)
+    assert done.returncode == 0, done.stderr
+    row = list(csv.reader(io.StringIO(target.read_text(encoding="utf-8-sig"))))[1]
+    assert row[0] == "r000002"
+    assert row[-1] == "文件 工单.csv · 第 5 行（记录起始行）"
+    assert "清单不能直接上传回填" in done.stderr
+
+
+def test_excel_sheet_location_survives_cli_handoff(tmp_path):
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    workbook.active.title = "其他"
+    sheet = workbook.create_sheet(" 数据 ")
+    sheet.append(["编号", "客户描述", "类别", "处理结果"])
+    sheet.append(["001", "杯子破损", "质量", "补发"])
+    sheet.append(["002", "物流未更新", "", "查询"])
+    data = io.BytesIO()
+    workbook.save(data)
+    service = IntakeService(tmp_path / "intake")
+    session = service.create("判断类别", "book.xlsx", data.getvalue(), sheet=" 数据 ")
+    session = service.apply_analysis(session, analysis())
+    target = tmp_path / "sheet.csv"
+    done = invoke(service, "answer-sheet", session.session_id, "--export-csv", target)
+    assert done.returncode == 0, done.stderr
+    row = list(csv.reader(io.StringIO(target.read_text(encoding="utf-8-sig"))))[1]
+    assert row[-1] == "文件 book.xlsx · 工作表  数据  · 第 3 行（记录起始行）"
+
+
+def test_composed_preview_does_not_claim_synthetic_row_is_original_location(tmp_path):
+    from src.workbench.answer_sheet import answer_sheet_csv, answer_sheet_source
+
+    _, session = _store(tmp_path, MISSING)
+    session.composition_report = {"origins": {}}
+    source = answer_sheet_source(session)
+    assert source is None
+    raw = answer_sheet_csv([session.preview.rows[1]], ["类别"], source=source)
+    row = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))[1]
+    assert row[-1] == "未记录或不可核验，请查看来源血缘"
+
+
+def test_mismatched_preview_does_not_claim_an_original_row(tmp_path):
+    from copy import deepcopy
+
+    from src.workbench.answer_sheet import answer_sheet_csv, answer_sheet_source
+
+    _, session = _store(tmp_path, MISSING)
+    changed = deepcopy(session.preview.rows[1])
+    changed.original["客户描述"] = "另一份资料"
+    raw = answer_sheet_csv([changed], ["类别"], source=answer_sheet_source(session))
+    row = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))[1]
+    assert row[-1] == "未记录或不可核验，请查看来源血缘"

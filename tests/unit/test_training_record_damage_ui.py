@@ -1,5 +1,6 @@
 """Damaged timing and curve evidence must not crash task browsing."""
 
+import hashlib
 import json
 import math
 import sys
@@ -96,14 +97,27 @@ def test_display_page_isolates_corrupt_curve_and_incomparable_time(data_page, mo
             [{"step": 1, "loss": 2.0}, {"step": "bad", "loss": 1.0}, {"step": 3, "loss": 0.5}]
         )
     )
-    manifest = directory / "manifest.json"
+    artifacts = {
+        "adapter_config": output / "adapter_config.json",
+        "adapter_weights": output / "adapter_model.bin",
+        "tokenizer_config": output / "tokenizer_config.json",
+    }
+    for artifact in artifacts.values():
+        artifact.write_text("valid artifact")
+    manifest = output / "workbench_manifest.json"
     manifest.write_text(
         json.dumps(
             {
                 "run_id": run_id,
                 "dataset_version": session.dataset.version,
                 "config_digest": "fixture",
-                "files": {},
+                "files": {
+                    key: {
+                        "path": str(path),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                    for key, path in artifacts.items()
+                },
             }
         )
     )
@@ -119,7 +133,10 @@ def test_display_page_isolates_corrupt_curve_and_incomparable_time(data_page, mo
                 "config_digest": "fixture",
                 "config": {},
                 "metrics": {"train_loss": 0.5},
-                "artifacts": {"manifest": str(manifest)},
+                "artifacts": {
+                    **{key: str(path) for key, path in artifacts.items()},
+                    "manifest": str(manifest),
+                },
                 "started_at": "2026-01-01T00:00:00",
                 "finished_at": "2026-01-01T00:00:01+00:00",
             }

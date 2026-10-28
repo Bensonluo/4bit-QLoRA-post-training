@@ -48,6 +48,23 @@ def _label_source_view_digest(report: FullDataValidation) -> str:
     )
 
 
+def _contrast_binding(session: IntakeSession) -> str | None:
+    """Bind contrast checks to the actual parsed source and displayed preview.
+
+    Raw workbook bytes alone cannot identify a worksheet or another parsed
+    view. Legacy bindings are deliberately not treated as current evidence.
+    """
+    if session.preview is None or session.analysis is None or session.analysis.recipe is None:
+        return None
+    return "view-v2:" + content_digest(
+        {
+            "source_view": source_view_digest(session.source),
+            "recipe": session.analysis.recipe.model_dump(mode="json"),
+            "preview": session.preview.model_dump(mode="json"),
+        }
+    )
+
+
 def _mature_ready_ids(preview, recipe) -> set[str]:
     policy = recipe.temporal_split if recipe else None
     eligible = set()
@@ -673,11 +690,9 @@ class IntakeService:
         distinct = {row.target for row in labelled}
         if len(labelled) < 2 or len(distinct) < 2:
             raise ValueError("对比核验需要至少两条答案不同的已标注行。")
-        binding = session.source.digest + (
-            session.analysis.recipe.model_dump_json()
-            if session.analysis and session.analysis.recipe
-            else ""
-        )
+        binding = _contrast_binding(session)
+        if binding is None:
+            raise ValueError("请先完成分析并生成真实预览，再进行对比核验。")
         # 轮次感知抽样:已完成轮数计入种子,每轮换一组题,二连对防瞎蒙。
         with self._connect() as connection:
             round_row = connection.execute(
@@ -736,11 +751,7 @@ class IntakeService:
         stored_session, binding, row_ids_json, options_json, status = row
         if status != "pending":
             raise ValueError("该对比核验已提交过结论，请开始新的核验。")
-        current_binding = session.source.digest + (
-            session.analysis.recipe.model_dump_json()
-            if session.analysis and session.analysis.recipe
-            else ""
-        )
+        current_binding = _contrast_binding(session)
         if binding != current_binding:
             with self._connect() as connection:
                 connection.execute(
@@ -799,11 +810,9 @@ class IntakeService:
         session = self.load(session_id)
         if session.preview is None:
             return None
-        binding = session.source.digest + (
-            session.analysis.recipe.model_dump_json()
-            if session.analysis and session.analysis.recipe
-            else ""
-        )
+        binding = _contrast_binding(session)
+        if binding is None:
+            return None
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT verdict, result FROM contrast_checks "

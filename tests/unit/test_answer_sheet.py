@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from types import SimpleNamespace
 
 import src.workbench.temporal_split as temporal_split_module
@@ -65,15 +67,20 @@ def test_answer_sheet_csv_is_bom_excel_csv_with_blank_fill_columns():
     assert data.startswith(b"\xef\xbb\xbf")  # utf-8-sig BOM
     text = data.decode("utf-8-sig")
     lines = text.strip("\r\n").splitlines()
-    assert lines[0] == "行ID,题目输入（模型将看到的内容）,待填答案（类别）"
-    assert lines[1] == "r000001,输入-r000001,"
-    assert lines[2] == "r000002,输入-r000002,"
+    assert lines[0] == "行ID,题目输入（模型将看到的内容）,待填答案（类别）,原始记录位置"
+    assert list(csv.reader(io.StringIO(text)))[1] == [
+        "r000001",
+        "输入-r000001",
+        "",
+        "未记录或不可核验，请查看来源血缘",
+    ]
+    assert lines[2].startswith("r000002,输入-r000002,,")
     # 多字段时每字段一列,顺序与 recipe.targets 一致。
     multi = answer_sheet_csv(rows, ["类别", "紧急度"]).decode("utf-8-sig")
     assert multi.splitlines()[0] == (
-        "行ID,题目输入（模型将看到的内容）,待填答案（类别）,待填答案（紧急度）"
+        "行ID,题目输入（模型将看到的内容）,待填答案（类别）,待填答案（紧急度）,原始记录位置"
     )
-    assert multi.splitlines()[1].endswith(",,")
+    assert list(csv.reader(io.StringIO(multi)))[1][2:4] == ["", ""]
     # 结构上不泄露答案:表内没有 target 列,只有输入原文与空待填格。
 
 
@@ -81,9 +88,11 @@ def test_answer_sheet_lines_pin_handoff_no_guessing_and_insufficient_input():
     """三条规则逐条钉住:交接机制、防编造门槛、输入不足的如实处置。"""
     lines = answer_sheet_lines(7)
     assert len(lines) == 3
-    assert lines[0] == (
-        "共 7 条待补：交给填写人后只填「待填答案」列，行ID 与题目输入列保持原样——回传后按行ID 对号回填。"
-    )
+    assert "共 7 条待补" in lines[0]
+    assert "行ID 是当前预览编号" in lines[0]
+    assert "手动回填预览时的原文件" in lines[0]
+    assert "文件已修改或重排时请重新预览" in lines[0]
+    assert "清单不能直接上传回填" in lines[0]
     assert "不要凭猜测填" in lines[1]
     assert "监督信号" in lines[1]
     assert "错一条教错一条" in lines[1]

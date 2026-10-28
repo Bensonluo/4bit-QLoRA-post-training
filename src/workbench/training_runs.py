@@ -695,17 +695,40 @@ class TrainingRunService:
                 record["status"] = "stopping"
         if record["status"] == "succeeded":
             try:
-                manifest = json.loads(Path(record["artifacts"]["manifest"]).read_text())
+                output = (self._directory(run_id) / "model").resolve()
+                artifacts = record["artifacts"]
+                manifest_path = Path(artifacts["manifest"]).resolve()
+                if manifest_path != output / "workbench_manifest.json":
+                    raise ValueError("训练产物清单不在本次运行的模型目录中。")
+                manifest = json.loads(manifest_path.read_text())
                 if (
                     manifest["run_id"] != run_id
                     or manifest["dataset_version"] != record["dataset_version"]
                     or manifest["config_digest"] != record["config_digest"]
                 ):
                     raise ValueError("训练产物身份不匹配。")
-                for artifact in manifest["files"].values():
-                    if file_digest(Path(artifact["path"])) != artifact["sha256"]:
+                files = manifest["files"]
+                if not isinstance(files, dict):
+                    raise ValueError("训练产物清单缺少文件记录。")
+                required = {
+                    "adapter_config": {"adapter_config.json"},
+                    "adapter_weights": {"adapter_model.safetensors", "adapter_model.bin"},
+                    "tokenizer_config": {"tokenizer_config.json"},
+                }
+                for name, filenames in required.items():
+                    entry = files[name]
+                    path = Path(entry["path"]).resolve()
+                    if (
+                        path.parent != output
+                        or path.name not in filenames
+                        or Path(artifacts[name]).resolve() != path
+                    ):
+                        raise ValueError(f"训练产物缺少或错误绑定必要文件：{name}。")
+                for artifact in files.values():
+                    path = Path(artifact["path"]).resolve()
+                    if not path.is_relative_to(output) or file_digest(path) != artifact["sha256"]:
                         raise ValueError("训练产物已修改，内容哈希不匹配。")
-            except (OSError, ValueError, KeyError) as exc:
+            except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
                 record["status"] = "failed"
                 record["failure"] = {
                     "stage": "artifacts",

@@ -1375,7 +1375,7 @@ def test_answer_sheet_docs_pinned():
     assert "`answer-sheet SESSION_ID" in section, "CLI 命令名必须写明"
     assert "导出待补答案清单（交给填写人）" in section, "页面按钮文案必须写明"
     assert "待填答案" in section, "填写表列结构必须写明"
-    assert "按行ID 对号回填" in section, "回传对号机制必须写明"
+    assert "预览编号" in section and "手动回填原文件" in section, "回填方式必须写明"
     assert "不要凭猜测填" in section, "防编造门槛必须写明"
     assert "监督信号" in section, "监督信号后果必须写明"
     assert "留空" in section and "任务定义问题" in section, "输入不足处置必须写明"
