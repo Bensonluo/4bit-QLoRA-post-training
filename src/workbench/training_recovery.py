@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.tracking.runner import _metadata_lock
 from src.workbench.materialize import dataset_is_current
-from src.workbench.training_runs import TrainingRunService, write_json
+from src.workbench.training_runs import TrainingRunService, load_bound_intake_session, write_json
 
 
 def failure_evidence(exc):
@@ -141,8 +141,72 @@ class TrainingRecoveryService:
     def recover(self, run_id, session, acknowledge_warnings=False):
         directory = self.training._directory(run_id)
         with _metadata_lock(directory / "recovery.lock"):
-            report = self.inspect(run_id, session)
-            if report["status"] != "eligible":
+            is_dispatch = session is None
+            recovery_path = directory / "recovery.json"
+
+            def finish_unclaimed_dispatch(report):
+                # The lock serializes recovery and stop state updates; a claim
+                # or existing child belongs to another attempt and must win.
+                try:
+                    existing = (
+                        json.loads(recovery_path.read_text()) if recovery_path.exists() else {}
+                    )
+                    if not isinstance(existing, dict):
+                        raise ValueError("invalid recovery state")
+                except (OSError, ValueError):
+                    return {
+                        **report,
+                        "status": "retry_blocked",
+                        "reason": "恢复状态记录不可读，未修改；请在本地核查。",
+                    }
+                if (directory / "recovery.claim").exists() or existing.get("child_run_id"):
+                    return existing or report
+                if (directory / "stop.request").exists():
+                    report.update(status="cancelled", reason="用户停止请求已取消技术恢复。")
+                elif report.get("status") != "cancelled":
+                    report["status"] = "retry_blocked"
+                result = {**existing, **report}
+                write_json(recovery_path, result)
+                return result
+
+            if is_dispatch and (directory / "recovery.claim").exists():
+                return finish_unclaimed_dispatch(
+                    {
+                        "status": "retry_blocked",
+                        "parent_run_id": run_id,
+                        "child_run_id": None,
+                        "reason": "已有恢复声明，不能重复启动。",
+                        "changes": {},
+                        "evidence": None,
+                    }
+                )
+            if session is not None:
+                report = self.inspect(run_id, session)
+                if report["status"] != "eligible":
+                    return report
+            else:
+                report = {
+                    "status": "retry_blocked",
+                    "parent_run_id": run_id,
+                    "child_run_id": None,
+                    "reason": "",
+                    "changes": {},
+                    "evidence": None,
+                }
+            try:
+                # The original session.json is a historical snapshot; a blind
+                # check can change without changing the dataset or revision.
+                # Never infer a store path for legacy runs.
+                parent = self.training._load(run_id)
+                session = load_bound_intake_session(parent, directory)
+                report = self.inspect(run_id, session)
+                if report["status"] != "eligible":
+                    return finish_unclaimed_dispatch(report) if is_dispatch else report
+            except (ValueError, OSError) as exc:
+                report.update(status="retry_blocked", reason=str(exc))
+                if is_dispatch:
+                    return finish_unclaimed_dispatch(report)
+                write_json(recovery_path, report)
                 return report
             try:
                 (directory / "recovery.claim").touch(exist_ok=False)
@@ -306,17 +370,20 @@ def dispatch_after_exit(run_dir, parent_pid, parent_created, timeout=120):
         with _metadata_lock(directory / "recovery.lock"):
             path = directory / "recovery.json"
             report = json.loads(path.read_text())
+            if (directory / "stop.request").exists():
+                status, reason = "cancelled", "用户已取消自动技术恢复。"
+            elif (directory / "recovery.claim").exists() or report.get("child_run_id"):
+                # Another attempt already owns this recovery; a timeout or PID
+                # observation must not replace its recorded progress.
+                return report
             report.update(status=status, reason=reason)
             write_json(path, report)
             return report
-    from src.workbench.intake_models import IntakeSession
-
     record = json.loads((directory / "run.json").read_text())
     execution = record["execution"]
     service = TrainingRecoveryService(
         directory.parent, execution["project_root"], execution["python_executable"]
     )
-    session = IntakeSession.model_validate_json((directory / "session.json").read_text())
     return service.recover(
-        record["run_id"], session, acknowledge_warnings=record.get("acknowledge_warnings", False)
+        record["run_id"], None, acknowledge_warnings=record.get("acknowledge_warnings", False)
     )

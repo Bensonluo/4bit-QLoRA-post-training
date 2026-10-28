@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 from pathlib import Path
 
 DEMO_GOAL = "根据客户首次咨询判断售后问题类型"
@@ -25,6 +27,44 @@ DEMO_SAMPLE_BUTTON = "创建演示任务（售后工单分类）"
 DEMO_FULL_BUTTON = "使用配套演示全量数据（虚构，10 条）"
 
 _EXAMPLES_DIR = Path("data") / "custom" / "examples"
+_SAMPLE_FIELDS = {
+    None: (("客户描述",), "类别"),
+    "extraction": (("客户描述",), "工单号"),
+    "generation": (("客户问题",), "标准答复"),
+}
+
+
+def parse_demo_sample(raw: bytes, variant: str | None = None) -> list[dict[str, str]]:
+    """Validate sample CSV for every creation entrypoint without changing its bytes."""
+    if variant not in _SAMPLE_FIELDS:
+        raise ValueError("未知演示样例类型。")
+    inputs, target = _SAMPLE_FIELDS[variant]
+    try:
+        reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
+        headers = next(reader, [])
+        if (
+            not headers
+            or any(not header.strip() for header in headers)
+            or len({header.strip() for header in headers}) != len(headers)
+            or target not in headers
+            or any(key not in headers for key in inputs)
+        ):
+            raise ValueError("示例字段缺失、空白或重复。")
+        rows = []
+        for values in reader:
+            if not values:
+                continue
+            if len(values) != len(headers):
+                raise ValueError("示例 CSV 记录的列数与表头不一致。")
+            row = dict(zip(headers, values, strict=True))
+            if any(not row[key].strip() for key in (*inputs, target)):
+                raise ValueError("示例输入或期望答案为空。")
+            rows.append(row)
+        if not rows:
+            raise ValueError("示例 CSV 没有数据记录。")
+        return rows
+    except (UnicodeError, csv.Error) as exc:
+        raise ValueError("示例 CSV 编码或格式无效。") from exc
 
 
 def _demo_bytes(project_root: Path, name: str) -> bytes | None:
@@ -113,6 +153,7 @@ def demo_create_payload(
         sample = demo_sample(project_root)
         if sample is None:
             return None
+        parse_demo_sample(sample[1])
         return (DEMO_GOAL, sample[1], sample[0], DEMO_DESCRIPTION)
     spec = DEMO_VARIANTS.get(variant)
     if spec is None:
@@ -120,4 +161,5 @@ def demo_create_payload(
     data = _demo_bytes(project_root, spec["sample"])
     if data is None:
         return None
+    parse_demo_sample(data, variant)
     return (spec["goal"], data, spec["sample"], spec["description"])

@@ -344,6 +344,7 @@ class IterationService:
         *,
         acknowledge_warnings=False,
         recover_technical_failures=False,
+        recovery_intake_root=None,
         execution_id=None,
     ):
         require_writable(self.read_only)
@@ -355,6 +356,7 @@ class IterationService:
         options = {"acknowledge_warnings": acknowledge_warnings}
         if recover_technical_failures:
             options["recover_technical_failures"] = True
+            options["recovery_intake_root"] = recovery_intake_root
         run = self.training.start(record["new_run_id"], session, **options)
         record.update(status="running", training_run=run)
         return self._save(record, record["revision"])

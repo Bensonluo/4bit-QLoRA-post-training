@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import io
 import json
-import math
 import re
 from pathlib import Path
 from typing import Any
 
-from src.workbench.demo_task import demo_create_payload
+from src.workbench.demo_task import demo_create_payload, parse_demo_sample
+from ui.components.format import finite_number
 from ui.study_archive import PROTOCOLS, _verify_scores
 
 R149_SOURCE = "complete-output-handoff-live-2026-10-22.json"
@@ -46,7 +45,7 @@ def _read(root: Path, name: str) -> tuple[dict, dict]:
 
 
 def _number(value: Any) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+    return type(value) in (int, float) and finite_number(value)
 
 
 def _verify_report(report: dict) -> None:
@@ -333,6 +332,7 @@ def load_showcase(root: Path) -> dict:
             _require(item["weight_files"], "交付模型缺少权重文件记录。")
             _require(
                 type(item["directory_bytes"]) is int
+                and finite_number(item["directory_bytes"])
                 and item["directory_bytes"]
                 >= sum(meta["size"] for meta in item["weight_files"].values()),
                 "交付目录大小小于已记录的模型文件。",
@@ -341,13 +341,28 @@ def load_showcase(root: Path) -> dict:
                 _require(
                     metadata == receipt["output_files"][name]
                     and type(metadata["size"]) is int
+                    and finite_number(metadata["size"])
                     and metadata["size"] > 0
                     and re.fullmatch(r"[0-9a-f]{64}", metadata["sha256"]) is not None,
                     "模型大小或内容摘要与导出回执不一致。",
                 )
+            _require(
+                finite_number(sum(meta["size"] for meta in item["weight_files"].values())),
+                "模型权重总大小超出可核验范围。",
+            )
         _require(
             data["export_receipts"]["gguf"]["business_evaluation_status"] == "not_run",
             "导出回执不应继承后续评测分数。",
+        )
+        costs = data["costs"]
+        _require(
+            isinstance(costs, dict)
+            and all(
+                value is None or (_number(value) and value >= 0)
+                for key, value in costs.items()
+                if key.endswith("_seconds") or key == "electricity_kwh"
+            ),
+            "阶段耗时或电量记录不完整。",
         )
         return {
             "id": "r149",
@@ -381,7 +396,7 @@ def load_showcase(root: Path) -> dict:
                 )
                 if key in training
             },
-            "costs": data["costs"],
+            "costs": costs,
             "artifacts": artifacts,
             "source": source,
             "limitations": data["limitations"],
@@ -399,23 +414,16 @@ _EXAMPLE_SPECS = (
 
 def _example_task(root: Path, spec: tuple) -> dict:
     task_id, variant, title, target, inputs, accent, icon = spec
-    payload = demo_create_payload(Path(root), variant)
+    try:
+        payload = demo_create_payload(Path(root), variant)
+    except ValueError as exc:
+        raise ValueError(f"内置示例 {title} 无法读取：{exc}") from exc
     if payload is None:
         raise ValueError(f"内置示例 {title} 的 CSV 文件缺失。")
     goal, raw, name, description = payload
     try:
-        rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
-        _require(
-            rows
-            and all(
-                target in row
-                and all(key in row for key in inputs)
-                and all(isinstance(value, str) for value in row.values())
-                for row in rows
-            ),
-            "示例字段或 CSV 记录不完整。",
-        )
-    except (UnicodeError, csv.Error, ValueError) as exc:
+        rows = parse_demo_sample(raw, variant)
+    except ValueError as exc:
         raise ValueError(f"内置示例 {title} 无法读取：{exc}") from exc
     return {
         "id": task_id,

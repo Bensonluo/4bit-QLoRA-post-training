@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -118,6 +119,63 @@ def _require_verified_labels(session: IntakeSession, *, action: str) -> None:
             "请先完成盲标核验：对抽样的已标注行隐藏答案独立作答，并与数据标签一致，"
             f"再{action}训练。这是确认监督信号业务含义的必要步骤，不能跳过。"
         )
+
+
+def load_bound_intake_session(
+    record: dict, directory: Path, *, intake_root: str | Path | None = None
+) -> IntakeSession:
+    """Reload the exact prepared task store, never initializing a missing store.
+
+    Legacy records without a store binding cannot authorize automatic recovery.
+    This is a preflight check, not an atomic lock across training and intake.
+    """
+    binding_path = directory / "intake-store.json"
+    if intake_root is None and not binding_path.is_file():
+        raise ValueError("原任务存储未绑定，无法安全自动恢复；请在本地重新准备训练。")
+    try:
+        from src.workbench.intake_service import IntakeService
+
+        binding = (
+            {"root": str(Path(intake_root).resolve()), "session_id": record["session_id"]}
+            if intake_root is not None
+            else json.loads(binding_path.read_text(encoding="utf-8"))
+        )
+        store = binding.get("root")
+        if (
+            not isinstance(store, str)
+            or not Path(store).is_absolute()
+            or binding.get("session_id") != record["session_id"]
+        ):
+            raise ValueError("invalid intake store binding")
+        if intake_root is None and (
+            binding.get("run_id") != record["run_id"]
+            or record.get("recovery_binding_digest") != content_digest(binding)
+        ):
+            raise ValueError("intake store binding mismatch")
+        root = Path(store)
+        if not root.is_dir() or not (root / "intake.sqlite").is_file():
+            raise ValueError("missing intake store")
+        current = IntakeService(root, read_only=True).load(record["session_id"])
+        snapshot = IntakeSession.model_validate_json((directory / "session.json").read_text())
+        if (
+            current.session_id != record["session_id"]
+            or snapshot.session_id != current.session_id
+            or current.goal != snapshot.goal
+            or current.source != snapshot.source
+            or current.sources != snapshot.sources
+            or current.analysis != snapshot.analysis
+            or current.full_data != snapshot.full_data
+            or current.dataset is None
+            or current.dataset.model_dump() != record["dataset"]
+            or not dataset_is_current(current)
+        ):
+            raise ValueError("task changed")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, sqlite3.Error):
+        raise ValueError(
+            "原任务存储不可读或任务已变化，无法安全自动恢复；请检查后重新准备训练。"
+        ) from None
+    _require_verified_labels(current, action="自动恢复")
+    return current
 
 
 def _validate_browsable_run(record: dict) -> None:
@@ -360,6 +418,7 @@ class TrainingRunService:
         *,
         acknowledge_warnings: bool = False,
         recover_technical_failures: bool = False,
+        recovery_intake_root: str | Path | None = None,
     ) -> dict:
         require_writable(self.read_only)
         record = self._load(run_id)
@@ -378,6 +437,12 @@ class TrainingRunService:
         # Verification can change independently of the immutable dataset and
         # revision. Recheck the latest supplied session before any launch.
         _require_verified_labels(session, action="启动")
+        recovery_store = None
+        if recover_technical_failures:
+            if recovery_intake_root is None:
+                raise ValueError("原任务存储未绑定，无法授权自动恢复；请指定当前任务存储。")
+            recovery_store = Path(recovery_intake_root).expanduser().resolve()
+            load_bound_intake_session(record, self._directory(run_id), intake_root=recovery_store)
         if model_identity(Path(record["model_path"])) != record["model_identity"]:
             raise ValueError("本地模型或 tokenizer 文件发生变化，请重新准备训练。")
         report = preflight_dataset(
@@ -406,9 +471,22 @@ class TrainingRunService:
             "project_root": str(self.project_root),
             "python_executable": self.python_executable,
         }
-        # Worker must see authorization before launch, even if it fails immediately.
-        write_json(directory / "run.json", record)
         try:
+            if recover_technical_failures:
+                # Only the exclusive-start owner may write the private binding.
+                assert recovery_store is not None
+                binding = {
+                    "root": str(recovery_store),
+                    "session_id": session.session_id,
+                    "run_id": run_id,
+                }
+                write_json(
+                    directory / "intake-store.json",
+                    binding,
+                )
+                record["recovery_binding_digest"] = content_digest(binding)
+            # Worker must see authorization before launch, even if it fails immediately.
+            write_json(directory / "run.json", record)
             self.runner.launch_training(
                 "workbench_sft",
                 config,

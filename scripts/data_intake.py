@@ -1073,7 +1073,10 @@ def main() -> int:
                         session,
                         acknowledge_warnings=args.acknowledge_warnings,
                         **(
-                            {"recover_technical_failures": True}
+                            {
+                                "recover_technical_failures": True,
+                                "recovery_intake_root": service.root,
+                            }
                             if args.recover_technical_failures
                             else {}
                         ),
@@ -1354,7 +1357,10 @@ def main() -> int:
                         session,
                         acknowledge_warnings=args.acknowledge_warnings,
                         **(
-                            {"recover_technical_failures": True}
+                            {
+                                "recover_technical_failures": True,
+                                "recovery_intake_root": service.root,
+                            }
                             if args.recover_technical_failures
                             else {}
                         ),
@@ -1499,17 +1505,22 @@ def main() -> int:
                         "与数据说明来自仓库单一来源（src/workbench/demo_task.py），"
                         "自定义值不会被采用，逐一点名并直接报错，不静默忽略。"
                     )
-                from src.workbench.demo_task import demo_create_payload
+                from src.workbench.demo_task import (
+                    DEMO_SAMPLE_NAME,
+                    DEMO_VARIANTS,
+                    demo_create_payload,
+                )
 
                 if args.demo_variant and not args.demo:
                     raise ValueError("--demo-variant 需要与 --demo 同用。")
                 payload = demo_create_payload(PROJECT_ROOT, args.demo_variant)
                 if payload is None:
-                    missing = (
-                        f"data/custom/examples/{args.demo_variant}_sample.csv"
+                    name = (
+                        DEMO_VARIANTS[args.demo_variant]["sample"]
                         if args.demo_variant
-                        else "data/custom/examples/aftercare_tickets_sample.csv"
+                        else DEMO_SAMPLE_NAME
                     )
+                    missing = f"data/custom/examples/{name}"
                     raise ValueError(f"演示文件不在场（{missing}）；如实报错，不编造演示数据。")
                 demo_goal, demo_content, demo_name, demo_description = payload
                 session = service.create(

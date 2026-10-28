@@ -14,13 +14,12 @@ import streamlit as st
 
 from src.agent.intake import CompatibleChatClient, is_local_endpoint
 from src.workbench.demo_task import (
-    DEMO_DESCRIPTION,
     DEMO_FULL_BUTTON,
-    DEMO_GOAL,
     DEMO_SAMPLE_BUTTON,
     DEMO_SAMPLE_ENTRY_LABEL,
+    DEMO_VARIANTS,
+    demo_create_payload,
     demo_full,
-    demo_sample,
     is_demo_session,
 )
 from src.workbench.evaluation_suites import EvalSuiteService
@@ -1505,50 +1504,40 @@ if "intake_id" not in st.session_state:
                 st.error(str(exc))
     # 内置演示任务:只代替「找文件 + 填表」的冷启动;创建后的每一道关卡
     # 与真实任务完全相同(单一来源 src/workbench/demo_task.py)。
-    demo_pair = demo_sample(PROJECT_ROOT)
-    if demo_pair is not None:
-        with st.expander(DEMO_SAMPLE_ENTRY_LABEL):
-            st.caption(
-                "演示数据是虚构的售后工单（样例 2 条、配套全量 10 条），"
-                "与《用户试用记录》的试点任务同一份文件。创建后的每一步"
-                "（分析、预览核对、对比核验、盲标核验）与真实任务完全相同，"
-                "没有预设结论。"
-            )
-            if action_button(DEMO_SAMPLE_BUTTON):
+    with st.expander(DEMO_SAMPLE_ENTRY_LABEL):
+        st.caption(
+            "演示数据是虚构的售后工单。创建后的每一步"
+            "（分析、预览核对、对比核验、盲标核验）与真实任务完全相同，没有预设结论。"
+        )
+        for variant_key, title in (
+            (None, "售后工单分类"),
+            ("generation", "客服答复生成"),
+            ("extraction", "工单编号抽取"),
+        ):
+            try:
+                payload = demo_create_payload(PROJECT_ROOT, variant_key)
+            except ValueError:
+                st.warning(f"{title}演示样例内容不可读或不完整，已隐藏该入口。")
+                continue
+            if payload is None:
+                st.caption(f"{title}演示样例文件暂不可用。")
+                continue
+            goal, content, filename, description = payload
+            if variant_key is None:
+                label, options = DEMO_SAMPLE_BUTTON, {}
+            else:
+                label = DEMO_VARIANTS[variant_key]["button"]
+                options = {"key": f"demo_{variant_key}"}
+            st.caption(description)
+            if action_button(label, **options):
                 try:
                     demo_session = service.create(
-                        DEMO_GOAL,
-                        demo_pair[0],
-                        demo_pair[1],
-                        data_description=DEMO_DESCRIPTION,
-                        scope="sample",
+                        goal, filename, content, data_description=description, scope="sample"
                     )
                     st.session_state["intake_id"] = demo_session.session_id
                     st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))
-            # 泛化演示:另两种任务原型的内置数据,体验不同形态的关卡差异
-            from src.workbench.demo_task import demo_variant_sample
-
-            for variant_key in ("generation", "extraction"):
-                variant_pair = demo_variant_sample(PROJECT_ROOT, variant_key)
-                if variant_pair is None:
-                    continue
-                variant_name, variant_bytes, variant_spec = variant_pair
-                st.caption(variant_spec["description"])
-                if action_button(variant_spec["button"], key=f"demo_{variant_key}"):
-                    try:
-                        demo_session = service.create(
-                            variant_spec["goal"],
-                            variant_name,
-                            variant_bytes,
-                            data_description=variant_spec["description"],
-                            scope="sample",
-                        )
-                        st.session_state["intake_id"] = demo_session.session_id
-                        st.rerun()
-                    except (ValueError, OSError) as exc:
-                        st.error(str(exc))
     # 零密钥路牌（R130）：基础分析入口在任务创建后才渲染（本 st.stop 之下），新用户
     # 第一屏若不知道这条路存在，页面读起来是「先配 Agent 才能用」——北极星契约
     # 「无密钥可走通基础路径」必须在第一屏可见，不能等碰壁后才发现。
@@ -3660,7 +3649,12 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                             "仅尝试缩小微批次并增加梯度累积，或启用梯度检查点。其他失败与重试失败会保留错误，停止操作会取消后续恢复。"
                         )
                     recovery_options = (
-                        {"recover_technical_failures": True} if recover_technical else {}
+                        {
+                            "recover_technical_failures": True,
+                            "recovery_intake_root": service.root,
+                        }
+                        if recover_technical
+                        else {}
                     )
                     acknowledge = False
                     if preflight.get("status") == "warnings":

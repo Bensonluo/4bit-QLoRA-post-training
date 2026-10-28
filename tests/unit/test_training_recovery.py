@@ -10,6 +10,7 @@ from unittest.mock import patch
 import psutil
 import pytest
 
+from src.workbench.sources import content_digest
 from src.workbench.training_recovery import (
     TrainingRecoveryService,
     dispatch_after_exit,
@@ -33,7 +34,7 @@ def _exception(message="CUDA out of memory. Tried to allocate 10 MiB", frame="tr
 
 @pytest.fixture
 def failed(environment):  # noqa: F811
-    _, session, training, model = environment
+    intake, session, training, model = environment
     parent = training.prepare(
         session,
         model,
@@ -58,6 +59,13 @@ def failed(environment):  # noqa: F811
         },
     )
     directory = training._directory(parent["run_id"])
+    binding = {
+        "root": str(intake.root.resolve()),
+        "session_id": session.session_id,
+        "run_id": parent["run_id"],
+    }
+    parent["recovery_binding_digest"] = content_digest(binding)
+    write_json(directory / "intake-store.json", binding)
     write_json(directory / "run.json", parent)
     write_json(
         directory / "result.json",

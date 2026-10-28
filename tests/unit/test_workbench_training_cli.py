@@ -171,7 +171,9 @@ def test_train_status_prints_plain_language_summary(training_cli, capsys):
     assert "对照" in err
 
 
-def test_train_start_forwards_explicit_technical_recovery_authorization(training_cli, capsys):
+def test_train_start_forwards_explicit_technical_recovery_authorization(
+    training_cli, capsys, tmp_path
+):
     run, session, calls = training_cli
     assert (
         run(
@@ -185,6 +187,7 @@ def test_train_start_forwards_explicit_technical_recovery_authorization(training
         == 0
     )
     assert calls[-1][3]["recover_technical_failures"] is True
+    assert calls[-1][3]["recovery_intake_root"] == tmp_path / "intake"
     assert json.loads(capsys.readouterr().out)["status"] == "running"
 
 

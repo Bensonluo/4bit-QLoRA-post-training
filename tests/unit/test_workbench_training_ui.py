@@ -64,10 +64,17 @@ def training_page(data_page, monkeypatch):
             )
 
         def start(
-            self, run_id, current, *, acknowledge_warnings=False, recover_technical_failures=False
+            self,
+            run_id,
+            current,
+            *,
+            acknowledge_warnings=False,
+            recover_technical_failures=False,
+            recovery_intake_root=None,
         ):
             if recover_technical_failures:
                 calls.append(("recovery_opt_in", run_id, True))
+                calls.append(("recovery_store", recovery_intake_root))
             calls.append(("start", run_id, current.session_id, acknowledge_warnings))
             records[0]["status"] = "running"
             return deepcopy(records[0])
@@ -521,7 +528,7 @@ def test_confirmed_iteration_rebinds_existing_dataset_before_preparing_and_start
 
 
 def test_technical_recovery_requires_opt_in_and_keeps_failed_parent_visible(training_page):
-    _, session, page, calls, records = training_page
+    service, session, page, calls, records = training_page
     records.append(
         {
             "run_id": "fixture-run",
@@ -540,6 +547,7 @@ def test_technical_recovery_requires_opt_in_and_keeps_failed_parent_visible(trai
     button(page, "启动这轮训练").click().run()
     assert not page.exception
     assert ("recovery_opt_in", "fixture-run", True) in calls
+    assert ("recovery_store", service.root) in calls
     records[0].update(
         status="failed",
         failure={"stage": "training", "message": "CUDA out of memory"},

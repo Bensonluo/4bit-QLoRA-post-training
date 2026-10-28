@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import math
 import tarfile
 from pathlib import Path
 from typing import Any
+
+from ui.components.format import finite_number
 
 SOURCE = "sft-answer-supervision-live-2026-10-22.json"
 ARCHIVE = "sft-answer-supervision-evidence-2026-10-22.tar.gz"
@@ -33,6 +34,7 @@ def _sha(raw: bytes) -> str:
 
 
 def _history(points: list[dict], rate: float) -> list[dict]:
+    _require(type(rate) in (int, float) and finite_number(rate) and rate > 0, "学习率记录无效。")
     history = [
         {
             "step": point["step"],
@@ -48,7 +50,7 @@ def _history(points: list[dict], rate: float) -> list[dict]:
         and [point["step"] for point in history] == list(range(1, 65))
         and all(
             type(point["loss"]) in (int, float)
-            and math.isfinite(point["loss"])
+            and finite_number(point["loss"])
             and point["loss"] >= 0
             and point["learning_rate"] == rate
             for point in history
