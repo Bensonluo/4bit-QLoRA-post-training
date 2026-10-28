@@ -15,8 +15,8 @@ def _load(root: Path) -> dict[str, Any] | None:
 
     try:
         return load_showcase(root)
-    except (ValueError, OSError) as exc:
-        st.warning(f"公开历史记录暂不可读：{exc}。已有本地任务仍可继续。")
+    except (ValueError, OSError):
+        st.warning("公开历史记录暂不可读或核验失败；请检查公开来源文件。已有本地任务仍可继续。")
         return None
 
 

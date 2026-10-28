@@ -207,8 +207,8 @@ def render_study(root: Path, study_id: str, *, key_prefix: str = "study") -> Non
 
     try:
         data = load_study(root, study_id)
-    except (OSError, ValueError) as exc:
-        st.warning(f"这份历史记录暂不可读：{exc}")
+    except (OSError, ValueError):
+        st.warning("这份历史记录暂不可读或核验失败；请检查公开来源与训练日志补件。")
         return
     namespace = f"{key_prefix}-{study_id}"
     st.subheader(data["title"])

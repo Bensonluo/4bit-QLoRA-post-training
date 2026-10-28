@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from src.workbench.demo_task import demo_create_payload
+from ui.study_archive import PROTOCOLS, _verify_scores
 
 R149_SOURCE = "complete-output-handoff-live-2026-10-22.json"
 R148_SOURCE = "sft-answer-supervision-live-2026-10-22.json"
@@ -172,6 +173,81 @@ def _verify_report(report: dict) -> None:
     )
 
 
+def _handoff_development_groups(report: dict, preparation: dict) -> int | None:
+    """Count observed groups only when the preparation metadata corroborates them."""
+    try:
+        groups = [row["source"]["group"] for row in report["models"][0]["rows"]]
+        if not groups or any(
+            not isinstance(group, dict)
+            or len(group) != 1
+            or any(not isinstance(value, str) or not value.strip() for value in group.values())
+            for group in groups
+        ):
+            return None
+        observed = {_digest(group) for group in groups}
+        recorded = preparation["development_groups"]
+        if (
+            not isinstance(recorded, list)
+            or any(not isinstance(value, str) or not value.strip() for value in recorded)
+            or len(recorded) != len(set(recorded))
+            or len(recorded) != len(observed)
+            or {next(iter(group.values())) for group in groups} != set(recorded)
+        ):
+            return None
+        return len(observed)
+    except (KeyError, TypeError, IndexError, AttributeError):
+        return None
+
+
+def _study_development_groups(data: dict, evaluations: list[tuple[str, dict]]) -> int | None:
+    """Optional group metadata must bind to this study's actual questions and prompts."""
+    from src.data.sft_protocol import render_sft_prompt
+
+    try:
+        cases = data["controlled_v2"]["data"]["development"]
+        if not isinstance(cases, list) or len(cases) != 16:
+            return None
+        by_id = {}
+        for case in cases:
+            if (
+                any(
+                    not isinstance(case[key], str)
+                    for key in ("case_id", "form", "input", "instruction", "output", "group_id")
+                )
+                or not case["group_id"].strip()
+            ):
+                return None
+            key = (case["case_id"], case["form"])
+            if key in by_id:
+                return None
+            by_id[key] = case
+        for protocol, evaluation in evaluations:
+            rows = evaluation["rows"]
+            if len(rows) != len(by_id) or {(row["case_id"], row["form"]) for row in rows} != set(
+                by_id
+            ):
+                return None
+            for row in rows:
+                case = by_id[(row["case_id"], row["form"])]
+                if row["expected"] != case["output"]:
+                    return None
+                if protocol == PROTOCOLS[2]:
+                    # The recorded Qwen native prompt has a distinct user block.
+                    # Do not pretend it is an Alpaca prompt or load a tokenizer.
+                    prefix = "<|im_start|>user\n"
+                    content, marker, _ = row["prompt"][len(prefix) :].partition("<|im_end|>")
+                    expected = case["instruction"] + (
+                        "\n\n" + case["input"] if case["input"] else ""
+                    )
+                    if not row["prompt"].startswith(prefix) or not marker or content != expected:
+                        return None
+                elif row["prompt"] != render_sft_prompt(case, None, protocol):
+                    return None
+        return len({case["group_id"] for case in cases})
+    except (KeyError, TypeError, IndexError, AttributeError, ValueError):
+        return None
+
+
 def load_showcase(root: Path) -> dict:
     """Load the original sanitized R149 report and safe presentation metadata."""
     data, source = _read(root, R149_SOURCE)
@@ -275,7 +351,7 @@ def load_showcase(root: Path) -> dict:
                 "optimizer_steps": training["global_step"],
                 "training_rows": data["preparation"]["row_counts"]["train"],
                 "development_rows": report["dataset"]["row_count"],
-                "development_groups": len(data["preparation"]["development_groups"]),
+                "development_groups": _handoff_development_groups(report, data["preparation"]),
                 "models": len(report["models"]),
             },
             "config": config,
@@ -352,107 +428,174 @@ def example_tasks(root: Path) -> list[dict]:
     return tasks
 
 
-def history_catalog(root: Path) -> list[dict]:
-    """Three archival studies, never three fictional improvement iterations."""
+_CATALOG_RECORDS = (
+    ("r149", "完整分类任务 · HF 与 GGUF 交接", R149_SOURCE),
+    ("r148-controlled-v2", "监督协议受控对照 · 同次三臂", R148_SOURCE),
+    ("r148-product-smoke", "仅答案监督 · 产品链路验证", R148_SOURCE),
+)
+_CATALOG_ERRORS = (
+    OSError,
+    UnicodeError,
+    KeyError,
+    TypeError,
+    IndexError,
+    ValueError,
+    AttributeError,
+)
+
+
+def _handoff_catalog_entry(root: Path) -> dict:
     handoff = load_showcase(root)
-    catalog = [
+    return {
+        "id": "r149",
+        "date": handoff["date"],
+        "title": handoff["title"],
+        "kind": "workbench_handoff",
+        "scope": handoff["scope"],
+        "counts": dict(handoff["counts"]),
+        "results": [
+            {
+                "label": model["label"],
+                "correct": sum(row["correct"] for row in model["rows"]),
+                "total": 8,
+                "truncated": sum(row["truncated"] for row in model["rows"]),
+            }
+            for model in handoff["report"]["models"]
+        ],
+        "sourcefile": handoff["source"]["name"],
+        "source": handoff["source"],
+    }
+
+
+def _controlled_catalog_entry(data: dict, source: dict) -> dict:
+    controlled = data["controlled_v2"]
+    arms = controlled["results"]["arms"]
+    _require(set(arms) == set(PROTOCOLS), "受控实验必须保持同次三臂及其原始协议身份。")
+    baselines = controlled["results"]["baseline"]
+    _require(set(baselines) == {PROTOCOLS[0], PROTOCOLS[2]}, "受控实验的两种提示基座记录不完整。")
+    for evaluation in baselines.values():
+        _verify_scores(evaluation["rows"], evaluation["summary"])
+    for protocol, arm in arms.items():
+        _require(arm["protocol_identity"]["protocol"] == protocol, "训练臂协议身份与名称不一致。")
+    results = [
         {
-            "id": "r149",
-            "date": handoff["date"],
-            "title": handoff["title"],
-            "kind": "workbench_handoff",
-            "scope": handoff["scope"],
-            "counts": {
-                key: value
-                for key, value in handoff["counts"].items()
-                if key != "development_groups"
-            },
-            "results": [
-                {
-                    "label": model["label"],
-                    "correct": sum(row["correct"] for row in model["rows"]),
-                    "total": 8,
-                    "truncated": sum(row["truncated"] for row in model["rows"]),
-                }
-                for model in handoff["report"]["models"]
-            ],
-            "sourcefile": handoff["source"]["name"],
-            "source": handoff["source"],
+            "label": name,
+            "correct": arm["evaluation"]["summary"]["all"]["accepted"],
+            "total": arm["evaluation"]["summary"]["all"]["total"],
+            "truncated": arm["evaluation"]["summary"]["all"]["truncated"],
         }
+        for name, arm in arms.items()
     ]
+    for arm in arms.values():
+        _verify_scores(arm["evaluation"]["rows"], arm["evaluation"]["summary"])
+    return {
+        "id": "r148-controlled-v2",
+        "date": data["date"],
+        "title": "监督协议受控对照 · 同次三臂",
+        "kind": "controlled_experiment",
+        "scope": "合成机制实验；同次三臂，不是三轮业务迭代；native chat 仅实验。",
+        "counts": {
+            "arms": len(arms),
+            "steps_per_arm": controlled["settings"]["steps"],
+            "training_rows": len(controlled["data"]["train"]),
+            "development_rows": len(next(iter(arms.values()))["evaluation"]["rows"]),
+            "development_groups": _study_development_groups(
+                data,
+                [*baselines.items(), *[(name, arm["evaluation"]) for name, arm in arms.items()]],
+            ),
+        },
+        "results": results,
+        "sourcefile": source["name"],
+        "source": dict(source),
+    }
+
+
+def _product_catalog_entry(data: dict, source: dict) -> dict:
+    smoke = data["product_smoke"]
+    evaluations = smoke["results"]["evaluations"]
+    _require(set(evaluations) == {"base", "trained"}, "产品链路必须保留基座与训练模型。")
+    results = [
+        {
+            "label": name,
+            "correct": item["summary"]["all"]["accepted"],
+            "total": item["summary"]["all"]["total"],
+            "truncated": item["summary"]["all"]["truncated"],
+        }
+        for name, item in evaluations.items()
+    ]
+    for item in evaluations.values():
+        _verify_scores(item["rows"], item["summary"])
+    return {
+        "id": "r148-product-smoke",
+        "date": data["date"],
+        "title": "仅答案监督 · 产品链路验证",
+        "kind": "product_smoke",
+        "scope": "独立产品 smoke；不属于前述三臂受控实验，不代表真实业务验收。",
+        "counts": {
+            "optimizer_steps": smoke["results"]["training"]["global_step"],
+            "development_rows": results[0]["total"],
+            "development_groups": (
+                _study_development_groups(
+                    data, [(PROTOCOLS[1], item) for item in evaluations.values()]
+                )
+                if smoke.get("data_source") == "controlled_v2.data"
+                else None
+            ),
+            "models": len(evaluations),
+        },
+        "results": results,
+        "sourcefile": source["name"],
+        "source": dict(source),
+    }
+
+
+def history_catalog(root: Path) -> list[dict]:
+    """Strict three-study catalog: any unavailable record still raises."""
+    handoff = _handoff_catalog_entry(root)
     data, source = _read(root, R148_SOURCE)
     try:
-        controlled, smoke = data["controlled_v2"], data["product_smoke"]
-        arms = controlled["results"]["arms"]
-        _require(len(arms) == 3, "受控实验必须保持同次三臂。")
-        results = [
-            {
-                "label": name,
-                "correct": arm["evaluation"]["summary"]["all"]["accepted"],
-                "total": arm["evaluation"]["summary"]["all"]["total"],
-                "truncated": arm["evaluation"]["summary"]["all"]["truncated"],
-            }
-            for name, arm in arms.items()
+        return [
+            handoff,
+            _controlled_catalog_entry(data, source),
+            _product_catalog_entry(data, source),
         ]
-        for arm, result in zip(arms.values(), results):
-            _verify_catalog_rows(arm["evaluation"]["rows"], result)
-        catalog.append(
-            {
-                "id": "r148-controlled-v2",
-                "date": data["date"],
-                "title": "监督协议受控对照 · 同次三臂",
-                "kind": "controlled_experiment",
-                "scope": "合成机制实验；同次三臂，不是三轮业务迭代；native chat 仅实验。",
-                "counts": {
-                    "arms": len(arms),
-                    "steps_per_arm": controlled["settings"]["steps"],
-                    "training_rows": len(controlled["data"]["train"]),
-                    "development_rows": len(controlled["data"]["development"]),
-                },
-                "results": results,
-                "sourcefile": source["name"],
-                "source": dict(source),
-            }
-        )
-        evaluations = smoke["results"]["evaluations"]
-        results = [
-            {
-                "label": name,
-                "correct": item["summary"]["all"]["accepted"],
-                "total": item["summary"]["all"]["total"],
-                "truncated": item["summary"]["all"]["truncated"],
-            }
-            for name, item in evaluations.items()
-        ]
-        for item, result in zip(evaluations.values(), results):
-            _verify_catalog_rows(item["rows"], result)
-        catalog.append(
-            {
-                "id": "r148-product-smoke",
-                "date": data["date"],
-                "title": "仅答案监督 · 产品链路验证",
-                "kind": "product_smoke",
-                "scope": "独立产品 smoke；不属于前述三臂受控实验，不代表真实业务验收。",
-                "counts": {
-                    "optimizer_steps": smoke["results"]["training"]["global_step"],
-                    "development_rows": results[0]["total"],
-                    "models": len(evaluations),
-                },
-                "results": results,
-                "sourcefile": source["name"],
-                "source": dict(source),
-            }
-        )
-        return catalog
-    except (KeyError, TypeError, IndexError, ValueError) as exc:
+    except _CATALOG_ERRORS as exc:
         raise ValueError(f"公开历史目录 {R148_SOURCE} 缺损或不一致：{exc}") from exc
 
 
-def _verify_catalog_rows(rows: list[dict], summary: dict) -> None:
-    _require(
-        len(rows) == summary["total"] == 16
-        and all(type(row["accepted"]) is bool and type(row["truncated"]) is bool for row in rows)
-        and sum(row["accepted"] for row in rows) == summary["correct"]
-        and sum(row["truncated"] for row in rows) == summary["truncated"],
-        "历史目录分数与完整开发记录不一致。",
-    )
+def available_history_catalog(root: Path) -> tuple[list[dict], list[dict[str, str]]]:
+    """Keep each healthy public study and disclose failed records independently.
+
+    Error text intentionally contains no underlying exception or server path.
+    This is a tolerant presentation API; history_catalog remains strict.
+    """
+    entries: list[dict] = []
+    errors: list[dict[str, str]] = []
+
+    def unavailable(index: int) -> None:
+        identity, title, name = _CATALOG_RECORDS[index]
+        errors.append(
+            {
+                "id": identity,
+                "title": title,
+                "sourcefile": name,
+                "message": "来源文件缺失、不可读或内容核验未通过；未显示该档案。",
+            }
+        )
+
+    try:
+        entries.append(_handoff_catalog_entry(root))
+    except _CATALOG_ERRORS:
+        unavailable(0)
+    try:
+        data, source = _read(root, R148_SOURCE)
+    except _CATALOG_ERRORS:
+        unavailable(1)
+        unavailable(2)
+    else:
+        for index, builder in ((1, _controlled_catalog_entry), (2, _product_catalog_entry)):
+            try:
+                entries.append(builder(data, source))
+            except _CATALOG_ERRORS:
+                unavailable(index)
+    return entries, errors

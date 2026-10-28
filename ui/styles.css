@@ -47,6 +47,7 @@ h3 { font-size:.98rem!important; font-weight:600!important; }
 .ts-example-arrow { color:#64748b;font-size:.75rem;margin:.3rem 0; }
 [class*="st-key-ts-archive-card-"] h3 { min-height:3.5em;line-height:1.7!important; }
 [class*="st-key-ts-archive-card-"] [data-testid="stMarkdownContainer"] p { min-height:3.5em;font-size:.82rem;line-height:1.8; }
+[class*="st-key-ts-archive-card-"] [data-testid="stProgress"] [data-testid="stMarkdownContainer"] p { min-height:0;font-size:.7rem;line-height:1.5; }
 .ts-eyebrow { color:var(--ts-muted);font-size:.7rem; }
 .ts-next { border-left:2px solid var(--ts-accent);padding:.1rem 0 .1rem 1rem;margin:.3rem 0 .9rem; }
 .ts-next h3 { margin:.4rem 0 .3rem; }
