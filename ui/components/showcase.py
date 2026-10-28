@@ -39,12 +39,10 @@ def _scores(data: dict[str, Any]) -> None:
 
 
 def _case_scope(data: dict[str, Any]) -> str:
-    rows = data["report"]["models"][0]["rows"]
-    groups = [row.get("source", {}).get("group") for row in rows]
-    if all(isinstance(group, dict) and group for group in groups):
-        count = len({json.dumps(group, sort_keys=True, ensure_ascii=False) for group in groups})
-        return f"{len(rows)} 道开发题 / {count} 个分组"
-    return f"{len(rows)} 道开发题 · 分组未记录"
+    counts = data["counts"]
+    groups = counts.get("development_groups")
+    scope = f"{groups} 个分组" if groups is not None else "分组信息不可核验"
+    return f"{counts['development_rows']} 道开发题 · {scope}"
 
 
 def render_history_summary(root: Path, *, key_prefix: str = "history-summary") -> None:

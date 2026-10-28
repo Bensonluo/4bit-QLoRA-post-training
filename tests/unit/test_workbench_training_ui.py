@@ -116,13 +116,26 @@ def test_same_page_prepare_start_logs_stop_are_explicit_actions(training_page):
 def test_running_training_shows_live_curve_without_verdict(training_page, tmp_path):
     """环节⑤「实时曲线」:训练中(running)页面读实时序列画曲线并提示刷新,
     不给三态判定——半程数据不足以支持整场结论;成功态才走指标区,两块互斥。"""
+    from types import SimpleNamespace
+
+    from transformers import Trainer
+    from transformers.trainer_callback import CallbackHandler, TrainerControl, TrainerState
+
+    from src.workbench.live_loss import LiveLossWriter
+
     _, session, page, _, records = training_page
     live_output = tmp_path / "live-run"
     live_output.mkdir()
-    (live_output / "workbench_loss_history.json").write_text(
-        json.dumps([{"step": s, "loss": 2.0 - 0.1 * s} for s in range(6)]),
-        encoding="utf-8",
+    trainer = Trainer.__new__(Trainer)
+    trainer.state = TrainerState()
+    trainer.args = SimpleNamespace(include_num_input_tokens_seen="no")
+    trainer.control = TrainerControl()
+    trainer.callback_handler = CallbackHandler(
+        [LiveLossWriter(live_output)], None, None, None, None
     )
+    for step in range(6):
+        trainer.state.global_step = step
+        trainer.log({"loss": 2.0 - 0.1 * step})
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     next(t for t in page.text_input if t.label == "本地基础模型目录").input("/tmp/local-base").run()
@@ -666,7 +679,7 @@ def test_manual_training_parameters_have_plain_language_guidance(training_page):
 
 
 def test_learning_rate_tier_suggestion_fills_lower_tier_on_request(training_page):
-    """<2,000 条全量:默认学习率保持 2e-4,点击「采用建议学习率」才填入 1e-4 档,仍可手改。"""
+    """<2,000 条训练集:默认保持 2e-4，点击「采用建议学习率」才填入 1e-4，仍可手改。"""
     _, session, page, calls, _ = training_page
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
@@ -674,8 +687,8 @@ def test_learning_rate_tier_suggestion_fills_lower_tier_on_request(training_page
     lr_input = next(field for field in page.number_input if field.label == "学习率")
     assert lr_input.value == pytest.approx(0.0002)
     captions = "\n".join(caption.value for caption in page.caption)
-    # 全量夹具共 3 行:建议降档到 5e-5~1e-4,并明示分档依据为外部指南、非本产品实测
-    assert "全量 3 条（< 2,000）" in captions
+    # 夹具各分区 1 行：按训练集降档，并明示依据为外部指南、非本产品实测。
+    assert "训练集 1 条（< 2,000）" in captions
     assert "5e-5~1e-4" in captions
     assert "非本产品实测" in captions
     button(page, "采用建议学习率").click().run()
@@ -690,6 +703,73 @@ def test_learning_rate_tier_suggestion_fills_lower_tier_on_request(training_page
     button(page, "准备本轮训练方案").click().run()
     assert not page.exception
     assert calls[0][3]["training_options"]["learning_rate"] == pytest.approx(0.0003)
+
+
+@pytest.mark.parametrize("bad_count", [None, 0, -1, True, "1"])
+def test_learning_rate_suggestion_does_not_invent_missing_training_count(
+    training_page, monkeypatch, bad_count
+):
+    from src.workbench.intake_service import IntakeService
+
+    _, session, page, _, _ = training_page
+    original_load = IntakeService.load
+
+    def load_with_damaged_statistics(service, session_id):
+        result = original_load(service, session_id)
+        if session_id == session.session_id:
+            result.dataset.statistics["row_counts"]["train"] = bad_count
+        return result
+
+    monkeypatch.setattr(IntakeService, "load", load_with_damaged_statistics)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any("训练集条数缺失或无效" in caption.value for caption in page.caption)
+    assert not any(item.label == "采用建议学习率" for item in page.button)
+    assert next(item for item in page.number_input if item.label == "学习率").value == 0.0002
+
+
+def test_learning_rate_suggestion_counts_train_only_for_temporal_exclusions(data_page):
+    from tests.unit.test_temporal_intake_entrypoints import temporal_session
+
+    service, _, page = data_page
+    session = temporal_session(service)
+    session = service.materialize_dataset(session.session_id, session.revision)
+    assert session.dataset.statistics["total_rows"] == 5
+    assert session.dataset.statistics["included_rows"] == 3
+    assert session.dataset.statistics["row_counts"]["train"] == 1
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any("训练集 1 条（< 2,000）" in caption.value for caption in page.caption)
+    button(page, "采用建议学习率").click().run()
+    assert not page.exception
+    assert next(item for item in page.number_input if item.label == "学习率").value == 0.0001
+
+
+def test_learning_rate_tier_threshold_ignores_validation_and_test(training_page, monkeypatch):
+    from src.workbench.intake_service import IntakeService
+
+    _, session, page, _, _ = training_page
+    original_load = IntakeService.load
+
+    def load_with_large_evaluation_sets(service, session_id):
+        result = original_load(service, session_id)
+        if session_id == session.session_id:
+            result.dataset.statistics["row_counts"] = {
+                "train": 1999,
+                "validation": 100,
+                "test": 100,
+            }
+        return result
+
+    monkeypatch.setattr(IntakeService, "load", load_with_large_evaluation_sets)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception
+    assert any("训练集 1999 条（< 2,000）" in item.value for item in page.caption)
+    button(page, "采用建议学习率").click().run()
+    assert next(item for item in page.number_input if item.label == "学习率").value == 0.0001
 
 
 def test_export_controls_dispatch_only_explicit_gguf_action(training_page, monkeypatch, tmp_path):

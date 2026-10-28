@@ -24,11 +24,13 @@ def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery"
         st.warning(f"公开交付档案暂不可读：{exc}。可切换来源查看本地注册版本。")
         return
     report = data["report"]
+    groups = data["counts"].get("development_groups")
+    group_scope = f"{groups} 个分组" if groups is not None else "分组信息不可核验"
     st.subheader("一份训练，两种真实交付格式")
     st.caption(
         f"{data['date']} · 历史文件档案；权重未包含，不是本地注册模型。"
-        f"{data['counts']['development_rows']} 道开发题 / "
-        f"{data['counts']['development_groups']} 个分组，属于合成验证，尚未做业务验收。"
+        f"{data['counts']['development_rows']} 道开发题 · "
+        f"{group_scope}，属于合成验证，尚未做业务验收。"
     )
     models = {model["label"]: model for model in report["models"]}
     comparisons = []

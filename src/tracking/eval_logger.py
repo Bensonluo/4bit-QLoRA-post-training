@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 
 
-def log_eval_to_mlflow(json_path: str | Path, experiment_name: str = "domain-evaluation") -> None:
+def log_eval_to_mlflow(
+    json_path: str | Path, experiment_name: str = "domain-evaluation", *, domain: str | None = None
+) -> None:
     """Read an eval_detail_*.json and log each model's metrics to MLflow.
 
     Creates one MLflow run per model. Safe no-op if mlflow not installed.
@@ -31,6 +33,8 @@ def log_eval_to_mlflow(json_path: str | Path, experiment_name: str = "domain-eva
             # Tag with source file
             mlflow.set_tag("eval_source", str(path.name))
             mlflow.set_tag("model_name", model_name)
+            if domain:
+                mlflow.set_tag("eval_domain", domain)
 
             # Core metrics
             for metric_key in [

@@ -116,6 +116,7 @@ def test_training_prepare_and_start_preserve_bound_session_and_options(training_
     assert "参数大白话：训练轮数＝" in captured.err
     assert "推荐起步值（小数据）：" in captured.err
     assert "学习率分档建议：" in captured.err
+    assert f"训练集 {session.dataset.statistics['row_counts']['train']} 条" in captured.err
     assert result["status"] == "prepared"
     options = calls[-1][3]
     assert options["training_options"]["num_epochs"] == 2
@@ -134,6 +135,35 @@ def test_training_prepare_and_start_preserve_bound_session_and_options(training_
         == 0
     )
     assert calls[-1] == ("start", "run-1", session.session_id, {"acknowledge_warnings": True})
+
+
+@pytest.mark.parametrize("train_count", [None, 0, True, "1"])
+def test_training_prepare_does_not_suggest_a_tier_from_missing_train_count(
+    training_cli, monkeypatch, capsys, train_count
+):
+    run, session, _ = training_cli
+    original_load = IntakeService.load
+
+    def load_with_damaged_statistics(service, session_id):
+        result = original_load(service, session_id)
+        result.dataset.statistics["row_counts"]["train"] = train_count
+        return result
+
+    monkeypatch.setattr(IntakeService, "load", load_with_damaged_statistics)
+    assert (
+        run(
+            "train-prepare",
+            session.session_id,
+            "--revision",
+            session.revision,
+            "--model-path",
+            "/tmp/base",
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert "训练集条数缺失或无效" in captured.err
+    assert "建议学习率起步" not in captured.err
 
 
 def test_stale_revision_does_not_launch_or_prepare(training_cli, capsys):

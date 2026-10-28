@@ -63,7 +63,11 @@ if not domains:
                         continue
                     for json_file in results_dir.glob("eval_detail_*.json"):
                         try:
-                            log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                            log_eval_to_mlflow(
+                                json_file,
+                                experiment_name="domain-evaluation",
+                                domain=domain_dir.name,
+                            )
                             imported += 1
                         except Exception as e:
                             st.warning(f"导入 {json_file.name} 失败：{e}")
@@ -87,6 +91,7 @@ local_results_unreadable = isinstance(data, UnreadableEvalData)
 # Also try MLflow
 mlflow_data: list[dict] = []
 mlflow_unavailable = False
+mlflow_unattributed = 0
 try:
     import mlflow
 
@@ -103,6 +108,12 @@ try:
             runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
             if not runs.empty:
                 for _, row in runs.iterrows():
+                    run_domain = row.get("tags.eval_domain")
+                    if not isinstance(run_domain, str) or not run_domain.strip():
+                        mlflow_unattributed += 1
+                        continue
+                    if run_domain != selected_domain:
+                        continue
                     mlflow_data.append(
                         {
                             "model": row.get(
@@ -124,19 +135,26 @@ except Exception as exc:
         mlflow_unavailable = True
         st.warning("本地实验存储暂无法在展示环境安全读取；已有评测文件仍可查看。")
 
-if not data and mlflow_data:
-    data = mlflow_data
+if not data:
+    if mlflow_unattributed:
+        st.warning(
+            f"有 {mlflow_unattributed} 条实验评测记录未标明领域，无法确认是否属于当前领域，"
+            "因此未显示；可从原始评测文件重新导入。"
+        )
+    if mlflow_data:
+        data = mlflow_data
+        st.caption("当前显示与所选领域匹配的 MLflow 评测指标；逐条预测请查看原始评测文件。")
 
 if not data:
     if DISPLAY_ONLY:
         display_navigation(
             "无法确认该领域是否有本地实验评测记录。样例任务与历史训练记录仍可浏览。"
-            if mlflow_unavailable or local_results_unreadable
+            if mlflow_unavailable or local_results_unreadable or mlflow_unattributed
             else "该领域尚未收录评测结果。样例任务与历史训练记录仍可浏览。"
         )
         st.stop()
-    if local_results_unreadable:
-        st.warning("评测记录无法读取，当前无法判断该领域是否有结果。")
+    if local_results_unreadable or mlflow_unattributed:
+        st.warning("当前无法确认该领域是否有评测结果。")
     else:
         st.warning("该领域暂无评测数据。")
     if selected_domain == "entity_matching":
@@ -168,7 +186,11 @@ if not data:
                 if results_dir.exists():
                     for json_file in results_dir.glob("eval_detail_*.json"):
                         try:
-                            log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                            log_eval_to_mlflow(
+                                json_file,
+                                experiment_name="domain-evaluation",
+                                domain=selected_domain,
+                            )
                             imported += 1
                         except Exception as e:
                             st.warning(f"导入 {json_file.name} 失败：{e}")
@@ -229,7 +251,11 @@ with records_tab:
                         continue
                     for json_file in results_dir.glob("eval_detail_*.json"):
                         try:
-                            log_eval_to_mlflow(json_file, experiment_name="domain-evaluation")
+                            log_eval_to_mlflow(
+                                json_file,
+                                experiment_name="domain-evaluation",
+                                domain=domain_dir.name,
+                            )
                             imported += 1
                         except Exception as e:
                             st.warning(f"导入 {json_file.name} 失败：{e}")

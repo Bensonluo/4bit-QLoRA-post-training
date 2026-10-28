@@ -10,14 +10,14 @@ from tests.unit import test_data_intake_ui as intake_ui
 BIG_FULL = (
     "编号,客户描述,类别,处理结果\n".encode()
     + "".join(
-        f"{index},客户描述{index},{'质量' if index % 2 else '物流'},补发\n" for index in range(2400)
+        f"{index},客户描述{index},{'质量' if index % 2 else '物流'},补发\n" for index in range(3000)
     ).encode()
 )
 
 
 @pytest.fixture()
 def big_training_page(tmp_path, monkeypatch):
-    """≥2,000 条全量的同款页面夹具（只渲染页面，不启动训练，用真实服务即可）。"""
+    """生成训练集超过 2,000 条的真实数据版本，不启动训练。"""
     import ui.config
     from src.workbench.intake_service import IntakeService
     from tests.unit.test_full_data import approved
@@ -40,7 +40,9 @@ def test_large_dataset_suggests_2e4_tier(big_training_page):
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert not page.exception
     captions = "\n".join(caption.value for caption in page.caption)
-    assert "全量 2400 条（≥ 2,000）" in captions
+    train_count = session.dataset.statistics["row_counts"]["train"]
+    assert train_count >= 2000
+    assert f"训练集 {train_count} 条（≥ 2,000）" in captions
     assert "2e-4" in captions
     assert "非本产品实测" in captions
     lr_input = next(field for field in page.number_input if field.label == "学习率")

@@ -185,6 +185,6 @@ def save_results(reports: list[EvalReport], output_dir: str = None):
     try:
         from src.tracking.eval_logger import log_eval_to_mlflow
 
-        log_eval_to_mlflow(output_dir / f"eval_detail_{timestamp}.json")
+        log_eval_to_mlflow(output_dir / f"eval_detail_{timestamp}.json", domain="medical_entity")
     except ImportError:
         pass

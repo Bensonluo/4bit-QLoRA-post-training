@@ -14,7 +14,10 @@ on_log 追加一个点并整体重写该文件（文件很小，整体重写最�
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 
 from transformers.trainer_callback import TrainerCallback
 
@@ -28,18 +31,36 @@ class LiveLossWriter(TrainerCallback):
         self._path = Path(output_dir) / LOSS_HISTORY_FILENAME
         self._points: list[dict[str, float]] = []
 
-    def on_log(self, args, state, control, logs=None, **kwargs) -> None:
-        if not logs or "loss" not in logs or "step" not in logs:
+    def on_log(
+        self, args: Any, state: Any, control: Any, logs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> None:
+        if not logs or "loss" not in logs:
             return
-        point: dict[str, float] = {"step": float(logs["step"]), "loss": float(logs["loss"])}
+        # Trainer.log adds step to log_history, but passes the original logs to
+        # callbacks. The callback's state is therefore the authoritative step.
+        step = getattr(state, "global_step", None)
+        if step is None:
+            step = logs.get("step")
+        if step is None:
+            return
+        try:
+            point: dict[str, float] = {"step": float(step), "loss": float(logs["loss"])}
+        except (TypeError, ValueError, OverflowError):
+            return
         if logs.get("learning_rate") is not None:
-            point["learning_rate"] = float(logs["learning_rate"])
+            with suppress(TypeError, ValueError, OverflowError):
+                point["learning_rate"] = float(logs["learning_rate"])
         self._points.append(point)
         self._points.sort(key=lambda item: item["step"])
+        temporary = self._path.with_name(f".{self._path.name}.{uuid4().hex}.tmp")
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(
+            temporary.write_text(
                 json.dumps(self._points, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            temporary.replace(self._path)
         except OSError:
             pass
+        finally:
+            with suppress(OSError):
+                temporary.unlink(missing_ok=True)

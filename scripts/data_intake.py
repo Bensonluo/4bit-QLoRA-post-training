@@ -1302,22 +1302,19 @@ def main() -> int:
                     # （training_guidance 单一来源），落配置前先看口径；stdout 仍是纯 JSON。
                     from src.workbench.training_guidance import (
                         LR_TIER_DISCLAIMER,
-                        learning_rate_suggestion,
+                        learning_rate_from_statistics,
                         manual_training_parameter_lines,
                     )
 
                     for line in manual_training_parameter_lines():
                         print(line, file=sys.stderr)
                     # 已有分区时补学习率分档建议；dataset 缺失时如实不打这一行。
-                    row_counts = (
-                        session.dataset.statistics.get("row_counts")
-                        if session.dataset is not None
-                        else None
-                    )
-                    if row_counts:
-                        total = sum(int(count) for count in row_counts.values())
-                        _, reason = learning_rate_suggestion(total)
-                        print(f"学习率分档建议：{reason}{LR_TIER_DISCLAIMER}", file=sys.stderr)
+                    if session.dataset is not None:
+                        suggested, reason = learning_rate_from_statistics(
+                            session.dataset.statistics
+                        )
+                        disclaimer = LR_TIER_DISCLAIMER if suggested is not None else ""
+                        print(f"学习率分档建议：{reason}{disclaimer}", file=sys.stderr)
                     result = training.prepare(
                         session,
                         str(args.model_path),

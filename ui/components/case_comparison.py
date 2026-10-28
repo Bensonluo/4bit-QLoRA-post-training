@@ -50,14 +50,24 @@ def _status(row: dict) -> str:
     return "待业务审阅" if row["correct"] is None else "未匹配"
 
 
-def case_overview(models: list[dict]) -> pd.DataFrame:
+def case_overview(models: list[dict], *, groups_verified: bool = True) -> pd.DataFrame:
     records = []
     maps = [{row["index"]: row for row in model["rows"]} for model in models]
     for row in models[0]["rows"]:
+        source = row.get("source")
+        group = source.get("group") if isinstance(source, dict) else None
+        group_label = (
+            " · ".join(group.values())
+            if groups_verified
+            and isinstance(group, dict)
+            and len(group) == 1
+            and all(isinstance(v, str) and v.strip() for v in group.values())
+            else "未记录或不可核验"
+        )
         records.append(
             {
                 "题目": f"第 {row['index'] + 1} 题",
-                "业务分组": " · ".join(str(v) for v in row["source"].get("group", {}).values()),
+                "业务分组": group_label,
                 "期望答案": row["expected"],
                 **{
                     model["label"]: _status(rows[row["index"]]) for model, rows in zip(models, maps)
@@ -126,7 +136,9 @@ def render_case_comparison(data: dict, *, key_prefix: str) -> None:
         criterion = st.selectbox("筛选当前模型对", FILTERS, key=f"{key_prefix}-filter")
         visible = pair_indices(models, left, right, criterion)
 
-    st.caption(f"题目总览 · 当前显示 {len(visible)}/{len(references)} 题 · 保留业务分组")
+    groups_verified = data["counts"].get("development_groups") is not None
+    scope = "保留业务分组" if groups_verified else "分组信息不可核验"
+    st.caption(f"题目总览 · 当前显示 {len(visible)}/{len(references)} 题 · {scope}")
     if not visible:
         st.info("当前模型对没有符合筛选条件的题目，可以切回全部题目查看原始输出。")
 
@@ -148,7 +160,7 @@ def render_case_comparison(data: dict, *, key_prefix: str) -> None:
             st.session_state[question_key] = visible[rows[0]]
 
     st.dataframe(
-        case_overview(models).loc[visible],
+        case_overview(models, groups_verified=groups_verified).loc[visible],
         hide_index=True,
         width="stretch",
         on_select=select_row,

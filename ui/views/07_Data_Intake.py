@@ -35,7 +35,7 @@ from src.workbench.readonly import ReadOnlyWalUnsupported
 from src.workbench.training_guidance import (
     LR_TIER_DISCLAIMER,
     SFT_PROTOCOL_LABELS,
-    learning_rate_suggestion,
+    learning_rate_from_statistics,
     supervision_label,
 )
 from src.workbench.training_runs import TrainingRunService
@@ -3393,21 +3393,16 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
 
             for line in manual_training_parameter_lines():
                 st.caption(line)
-            row_counts = (
-                (session.dataset.statistics or {}).get("row_counts") or {}
-                if session.dataset
-                else {}
-            )
-            total_rows = sum(int(count) for count in row_counts.values())
-            suggested_lr, lr_reason = learning_rate_suggestion(total_rows)
+            statistics = session.dataset.statistics if session.dataset else None
+            suggested_lr, lr_reason = learning_rate_from_statistics(statistics)
             lr_key = f"training_lr_{session.session_id}"
             if lr_key not in st.session_state:
                 st.session_state[lr_key] = 0.0002  # 表单默认值：与「推荐起步值」2e-4 一致
             # Streamlit 表单内不能放普通按钮：采用按钮放在表单上方，点击后把建议值填入表单内学习率输入。
-            if action_button(
+            if suggested_lr is not None and action_button(
                 "采用建议学习率",
                 key=f"adopt_lr_{session.session_id}",
-                help=f"按全量 {total_rows} 条填入建议起步值 {suggested_lr:.7f}；填入后仍可手改。",
+                help=f"按训练集条数填入建议起步值 {suggested_lr:.7f}；填入后仍可手改。",
             ):
                 st.session_state[lr_key] = suggested_lr
             with st.form(f"prepare_training_{session.session_id}"):
@@ -3428,7 +3423,10 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                 )
                 training_batch = st.number_input("每设备 batch size", min_value=1, value=1, step=1)
                 with st.expander("基础训练参数"):
-                    st.caption(f"学习率分档建议：{lr_reason}{LR_TIER_DISCLAIMER}")
+                    st.caption(
+                        f"学习率分档建议：{lr_reason}"
+                        f"{LR_TIER_DISCLAIMER if suggested_lr is not None else ''}"
+                    )
                     training_lr = st.number_input(
                         "学习率", min_value=0.0000001, format="%.7f", key=lr_key
                     )

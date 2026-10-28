@@ -28,12 +28,13 @@ def test_manual_training_parameter_lines_cover_every_form_knob() -> None:
 def test_learning_rate_suggestion_tiers_and_disclaimer() -> None:
     low_lr, low_reason = learning_rate_suggestion(500)
     assert low_lr == 0.0001
-    assert "全量 500 条（< 2,000）" in low_reason
+    assert "训练集 500 条（< 2,000）" in low_reason
     assert "建议学习率起步 5e-5~1e-4" in low_reason
     high_lr, high_reason = learning_rate_suggestion(2000)
     assert high_lr == 0.0002
-    assert "全量 2000 条（≥ 2,000）" in high_reason
+    assert "训练集 2000 条（≥ 2,000）" in high_reason
     assert "非本产品实测" in LR_TIER_DISCLAIMER
+    assert learning_rate_suggestion(total_rows=1999)[0] == 0.0001
 
 
 def test_split_settings_guidance_explains_when_to_change() -> None:

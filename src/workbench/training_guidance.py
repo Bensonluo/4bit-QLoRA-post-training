@@ -30,13 +30,22 @@ def supervision_label(sft_protocol: str) -> str:
 
 
 def learning_rate_suggestion(total_rows: int) -> tuple[float, str]:
-    """按 QUICKSTART 第 4 步的外部分档给学习率起步档：<2,000 条 5e-5~1e-4，≥2,000 条 2e-4。"""
+    """按训练集条数给外部分档的起步档；保留 total_rows 参数名兼容已有调用。"""
     if total_rows < 2000:
         return 0.0001, (
-            f"全量 {total_rows} 条（< 2,000），建议学习率起步 5e-5~1e-4——"
+            f"训练集 {total_rows} 条（< 2,000），建议学习率起步 5e-5~1e-4——"
             "小数据集用大学习率易过拟合、训练不稳，业界指南一致建议降档。"
         )
-    return 0.0002, f"全量 {total_rows} 条（≥ 2,000），建议学习率起步 2e-4——通用可靠默认。"
+    return 0.0002, f"训练集 {total_rows} 条（≥ 2,000），建议学习率起步 2e-4——通用可靠默认。"
+
+
+def learning_rate_from_statistics(statistics: dict | None) -> tuple[float | None, str]:
+    """Only recommend from a recorded, positive training split count."""
+    counts = statistics.get("row_counts") if isinstance(statistics, dict) else None
+    train_rows = counts.get("train") if isinstance(counts, dict) else None
+    if type(train_rows) is not int or train_rows <= 0:
+        return None, "训练集条数缺失或无效，暂无法给出分档建议；请检查数据集版本。"
+    return learning_rate_suggestion(train_rows)
 
 
 def manual_training_parameter_lines() -> list[str]:
