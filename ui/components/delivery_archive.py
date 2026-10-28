@@ -42,9 +42,16 @@ def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery"
             if model is not None:
                 rows = model["rows"]
                 correct = sum(row["correct"] is True for row in rows)
-                eos = sum(row.get("token_proof", {}).get("finish_reason") == "eos" for row in rows)
+                eos = sum(
+                    (row.get("token_proof") or {}).get("finish_reason") == "eos" for row in rows
+                )
+                failed = sum(row["status"] == "failed" for row in rows)
                 st.metric("开发集严格匹配", f"{correct} / {len(rows)}")
-                st.caption(f"完整结束 {eos} 题 · 使用实际交付产物独立生成和计分")
+                st.caption(
+                    f"完整结束 {eos} 题"
+                    + (f" · 处理失败 {failed} 题" if failed else "")
+                    + " · 使用实际交付产物的独立开发对照"
+                )
                 comparisons.append({"format": kind, "label": label, "metrics": model["metrics"]})
             else:
                 st.caption("这份文件未找到对应的开发对照记录，分数未知。")

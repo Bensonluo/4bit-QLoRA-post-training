@@ -28,6 +28,24 @@ def registry(tmp_path):
     return uri, client
 
 
+@pytest.fixture
+def file_registry(tmp_path, monkeypatch):
+    from mlflow.tracking._model_registry import utils as registry_utils
+    from mlflow.tracking._tracking_service import utils as tracking_utils
+
+    monkeypatch.setattr(registry_utils, "_registry_uri", None)
+    monkeypatch.setattr(tracking_utils, "_tracking_uri", None)
+    monkeypatch.setenv("MLFLOW_REGISTRY_URI", "")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "")
+    uri = (tmp_path / "mlruns").as_uri()
+    client = MlflowClient(tracking_uri=uri)
+    client.create_registered_model("first-model")
+    for version in (1, 2, 3):
+        client.create_model_version("first-model", source=f"file:///not-loaded/{version}")
+    client.set_registered_model_alias("first-model", "champion", "2")
+    return uri, client
+
+
 def test_real_alias_assignment_removal_and_other_model_isolation(registry):
     uri, client = registry
     result = change_alias(uri, "first-model", "champion", "2", "3")
@@ -203,9 +221,15 @@ def test_ui_set_refresh_and_stale_change_guard(monkeypatch, registry):
     assert any("champion → v2" in item.value for item in app.markdown)
 
 
-def test_display_forged_actions_cannot_write_but_refresh_remains_available(monkeypatch, registry):
-    _, client = registry
-    app = boot(monkeypatch, registry, display=True)
+def test_display_forged_actions_cannot_write_but_refresh_remains_available(
+    monkeypatch, file_registry, tmp_path
+):
+    _, client = file_registry
+    before = {
+        str(path.relative_to(tmp_path)): path.read_bytes() if path.is_file() else None
+        for path in tmp_path.rglob("*")
+    }
+    app = boot(monkeypatch, file_registry, display=True)
     assert action(app, "🏷 设置").disabled
     assert action(app, "🗑 移除").disabled
     assert not app.button(key="registry-refresh").disabled
@@ -213,3 +237,7 @@ def test_display_forged_actions_cannot_write_but_refresh_remains_available(monke
         action(app, label).click().run()
         assert not app.exception
         assert str(client.get_model_version_by_alias("first-model", "champion").version) == "2"
+    assert {
+        str(path.relative_to(tmp_path)): path.read_bytes() if path.is_file() else None
+        for path in tmp_path.rglob("*")
+    } == before

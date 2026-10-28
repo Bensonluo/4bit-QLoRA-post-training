@@ -181,11 +181,14 @@ def test_filtered_empty_set_stops_before_selectors_and_can_be_restored(browser):
     assert widget(page.selectbox, "选择一个运行").value == RUN_A
 
 
-def test_display_only_cannot_delete_selected_local_record(browser, monkeypatch):
-    from ui import runtime
+def test_display_only_cannot_delete_selected_local_record(browser, monkeypatch, tmp_path):
+    from ui import config, runtime
     from ui.components import archive_navigation
 
     page, calls = browser
+    store = tmp_path / "mlruns"
+    (store / ".trash").mkdir(parents=True)
+    monkeypatch.setattr(config, "MLFLOW_TRACKING_URI", store.as_uri())
     monkeypatch.setattr(runtime, "DISPLAY_ONLY", True)
     monkeypatch.setattr(archive_navigation, "render_archive_source", lambda **kwargs: False)
     page.run()

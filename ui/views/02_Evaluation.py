@@ -84,39 +84,54 @@ data = load_eval_data(selected_domain)
 
 # Also try MLflow
 mlflow_data: list[dict] = []
+mlflow_unavailable = False
 try:
     import mlflow
 
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    exp = mlflow.get_experiment_by_name("domain-evaluation")
-    if exp:
-        runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
-        if not runs.empty:
-            for _, row in runs.iterrows():
-                mlflow_data.append(
-                    {
-                        "model": row.get(
-                            "tags.model_name", row.get("tags.mlflow.runName", "unknown")
-                        ),
-                        "source": "mlflow",
-                        **{
-                            k.replace("metrics.", ""): v
-                            for k, v in row.items()
-                            if k.startswith("metrics.")
-                        },
-                    }
-                )
+    if DISPLAY_ONLY:
+        from ui.tracking_readonly import inspect_tracking_uri
+
+        tracking_state = inspect_tracking_uri(MLFLOW_TRACKING_URI)
+    else:
+        tracking_state = "ready"
+    if tracking_state == "ready":
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        exp = mlflow.get_experiment_by_name("domain-evaluation")
+        if exp:
+            runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
+            if not runs.empty:
+                for _, row in runs.iterrows():
+                    mlflow_data.append(
+                        {
+                            "model": row.get(
+                                "tags.model_name", row.get("tags.mlflow.runName", "unknown")
+                            ),
+                            "source": "mlflow",
+                            **{
+                                k.replace("metrics.", ""): v
+                                for k, v in row.items()
+                                if k.startswith("metrics.")
+                            },
+                        }
+                    )
 except Exception as exc:
     # MLflow is a secondary source — local eval files win, and a missing or
     # unreachable store must not break the page. Keep it visible at debug.
     logger.debug("MLflow eval-run import skipped: %s", exc)
+    if DISPLAY_ONLY:
+        mlflow_unavailable = True
+        st.warning("本地实验存储暂无法在展示环境安全读取；已有评测文件仍可查看。")
 
 if not data and mlflow_data:
     data = mlflow_data
 
 if not data:
     if DISPLAY_ONLY:
-        display_navigation("该领域尚未收录评测结果。样例任务与历史训练记录仍可浏览。")
+        display_navigation(
+            "无法确认该领域是否有本地实验评测记录。样例任务与历史训练记录仍可浏览。"
+            if mlflow_unavailable
+            else "该领域尚未收录评测结果。样例任务与历史训练记录仍可浏览。"
+        )
         st.stop()
     st.warning("该领域暂无评测数据。")
     if selected_domain == "entity_matching":

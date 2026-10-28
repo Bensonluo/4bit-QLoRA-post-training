@@ -203,7 +203,17 @@ def render_workspace() -> None:
         try:
             from ui.queries import fetch_runs
 
-            all_runs = fetch_runs(config.MLFLOW_TRACKING_URI)
+            if runtime.DISPLAY_ONLY:
+                from ui.tracking_readonly import inspect_tracking_uri
+
+                tracking_state = inspect_tracking_uri(config.MLFLOW_TRACKING_URI)
+            else:
+                tracking_state = "ready"
+            all_runs = (
+                fetch_runs(config.MLFLOW_TRACKING_URI)
+                if tracking_state == "ready"
+                else pd.DataFrame()
+            )
             runs = all_runs.head(3)
         except Exception:
             st.warning("实验记录暂不可读，请到实验记录页检查数据连接。")

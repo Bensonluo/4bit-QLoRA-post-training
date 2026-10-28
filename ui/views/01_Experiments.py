@@ -12,6 +12,7 @@ import streamlit as st
 
 from ui.components.archive_navigation import archive_link, render_archive_source
 from ui.components.shell import display_navigation
+from ui.config import MLFLOW_TRACKING_URI
 from ui.runtime import DISPLAY_ONLY, action_button
 
 st.set_page_config(page_title="实验记录", page_icon="📊", layout="wide")
@@ -20,20 +21,44 @@ st.title("📊 实验记录")
 if render_archive_source(key="experiments-history", local_label="本地实验"):
     st.stop()
 
+if DISPLAY_ONLY:
+    from ui.tracking_readonly import TrackingStoreUnavailable, inspect_tracking_uri
+
+    try:
+        tracking_state = inspect_tracking_uri(MLFLOW_TRACKING_URI)
+    except TrackingStoreUnavailable:
+        st.warning("实验存储暂无法安全浏览，请在本地工作台检查后重试。")
+        archive_link()
+        display_navigation("仍可浏览示例任务与公开历史。", experiments=False)
+        st.stop()
+    if tracking_state == "missing":
+        archive_link()
+        display_navigation(
+            "展示环境暂无实验记录，可先浏览示例任务的数据与核验过程。", experiments=False
+        )
+        st.stop()
+
 try:
     import mlflow  # noqa: F401  (still needed: delete_run + metric history)
     import pandas as pd
 
-    from ui.config import MLFLOW_TRACKING_URI
     from ui.queries import fetch_experiments, fetch_runs
 except ImportError:
     st.error("本页需要 mlflow：`pip install mlflow`")
     st.stop()
 
 # Fetch all runs (cached 30s — see ui/queries.py)
-all_experiments = fetch_experiments(MLFLOW_TRACKING_URI)
+try:
+    all_experiments = fetch_experiments(MLFLOW_TRACKING_URI)
+    runs = fetch_runs(MLFLOW_TRACKING_URI)
+except Exception:
+    if not DISPLAY_ONLY:
+        raise
+    st.warning("实验记录暂不可读，请在本地工作台检查存储后重试。")
+    archive_link()
+    display_navigation("仍可浏览示例任务与公开历史。", experiments=False)
+    st.stop()
 exp_id_by_name = {name: eid for eid, name in all_experiments}
-runs = fetch_runs(MLFLOW_TRACKING_URI)
 
 # MLflow 状态枚举 → 中文显示(选项值仍为原始枚举,筛选逻辑不动)
 _STATUS_ZH = {"FINISHED": "已完成", "RUNNING": "运行中", "FAILED": "失败"}

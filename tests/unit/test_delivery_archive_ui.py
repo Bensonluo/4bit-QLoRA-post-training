@@ -163,16 +163,21 @@ def test_switch_to_local_preserves_empty_and_read_failure_states(monkeypatch, tm
             raise RuntimeError("test registry unreadable")
         return pd.DataFrame()
 
+    # A display-mode query is permitted only for a pre-existing file store.
+    (tmp_path / "mlruns/.trash").mkdir(parents=True)
+    (tmp_path / "mlruns/models").mkdir()
+    before = snapshot(tmp_path)
     page, calls = boot(monkeypatch, tmp_path, fetch=fetch)
     assert calls == []
     page.segmented_control(key="registry-source").set_value(LOCAL).run()
     assert_clean(page)
     if broken:
-        assert any("test registry unreadable" in entry.value for entry in page.error)
+        assert any("注册记录暂不可读" in entry.value for entry in page.warning)
+        assert not any("test registry unreadable" in entry.value for entry in page.warning)
         assert not any("暂无已注册的模型" in entry.value for entry in page.info)
     else:
         messages = [entry.value for entry in (*page.info, *page.caption, *page.markdown)]
         assert any("暂无已注册的模型" in text or "尚未登记模型" in text for text in messages)
         assert not page.error
     assert calls == ["versions"]
-    assert snapshot(tmp_path) == {}
+    assert snapshot(tmp_path) == before

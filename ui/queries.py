@@ -94,9 +94,12 @@ def fetch_metric_history_by_name(
 
 
 @st.cache_data(ttl=_TTL_SECONDS, show_spinner=False)
-def fetch_model_versions(tracking_uri: str, name: str | None = None) -> pd.DataFrame:
+def fetch_model_versions(
+    tracking_uri: str, name: str | None = None, *, registry_uri: str | None = None
+) -> pd.DataFrame:
     """Return all registered model versions as a DataFrame.
 
+    The explicit registry URI is part of the cache key when supplied.
     Columns: name, version(int), current_stage, aliases (comma-joined string),
     run_id, status, created. Bindings come from RegisteredModel.aliases:
     search_model_versions can omit aliases even when a binding exists.
@@ -105,7 +108,7 @@ def fetch_model_versions(tracking_uri: str, name: str | None = None) -> pd.DataF
     from mlflow.tracking import MlflowClient
 
     mlflow.set_tracking_uri(tracking_uri)
-    client = MlflowClient()
+    client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
     if name:
         # Escape single quotes in the filter string to avoid injection.
         escaped = name.replace("'", "''")

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import streamlit as st
 
 from ui.components.shell import display_navigation
+from ui.config import MLFLOW_TRACKING_URI
 from ui.registry_actions import change_alias
 from ui.runtime import DISPLAY_ONLY, action_button
 
@@ -35,13 +36,37 @@ if source == "公开交付档案":
     st.stop()
 
 try:
+    import mlflow
     from mlflow.tracking import MlflowClient  # noqa: F401  (availability probe)
 
-    from ui.config import MLFLOW_TRACKING_URI
     from ui.queries import fetch_model_versions
 except ImportError:
     st.error("本页需要 mlflow：`pip install mlflow`")
     st.stop()
+
+if DISPLAY_ONLY:
+    from ui.tracking_readonly import TrackingStoreUnavailable, inspect_tracking_uri
+
+    try:
+        tracking_state = inspect_tracking_uri(MLFLOW_TRACKING_URI)
+        # Resolve MLflow's independent registry setting before opening either
+        # store; pass this same URI to the query and its cache key.
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        resolved_registry_uri = mlflow.get_registry_uri()
+        registry_state = inspect_tracking_uri(resolved_registry_uri, registry=True)
+    except TrackingStoreUnavailable:
+        st.warning("模型注册存储暂无法安全浏览，请在本地工作台检查后重试。")
+        st.info("可在上方切换到「公开交付档案」，查看已有训练与交付记录。")
+        display_navigation("仍可浏览已有业务任务与历史训练记录。")
+        st.stop()
+    if registry_state in {"missing", "missing_registry"}:
+        display_navigation("展示环境尚未登记模型权重，可浏览已有的业务任务与历史训练记录。")
+        st.stop()
+    if tracking_state == "missing":
+        st.warning("实验存储不存在，无法安全读取已有模型注册信息。请在本地工作台检查。")
+        st.info("可在上方切换到「公开交付档案」，查看已有训练与交付记录。")
+        display_navigation("仍可浏览已有业务任务与历史训练记录。")
+        st.stop()
 
 
 def _tracker() -> MLflowTracker | _NoOpTracker:
@@ -55,8 +80,17 @@ def _tracker() -> MLflowTracker | _NoOpTracker:
 
 
 try:
-    versions_df = fetch_model_versions(MLFLOW_TRACKING_URI)
+    versions_df = (
+        fetch_model_versions(MLFLOW_TRACKING_URI, registry_uri=resolved_registry_uri)
+        if DISPLAY_ONLY
+        else fetch_model_versions(MLFLOW_TRACKING_URI)
+    )
 except Exception as exc:
+    if DISPLAY_ONLY:
+        st.warning("模型注册记录暂不可读，请在本地工作台检查存储后重试。")
+        st.info("可在上方切换到「公开交付档案」，查看已有训练与交付记录。")
+        display_navigation("仍可浏览已有业务任务与历史训练记录。")
+        st.stop()
     # 注册表读取失败（存储目录损坏/权限拒绝等）不得打崩整页（R129）：如实报错 +
     # 家族范式出口；不落回「暂无已注册的模型」空态——读不到 ≠ 没有，诚实红线
     st.error(

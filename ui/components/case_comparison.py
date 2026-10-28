@@ -74,9 +74,10 @@ def _raw_outputs(models: list[dict], selected: int) -> None:
             complete = (row.get("token_proof") or {}).get("finish_reason") == "eos"
             with column, st.container(border=True):
                 st.markdown(f"**{model['label']}**")
+                token_count = row["generated_tokens"]
+                tokens = "token 数未记录" if token_count is None else f"{token_count} token"
                 st.caption(
-                    f"{_status(row)} · {'完整结束' if complete else '未记录完整结束'} · "
-                    f"{row['generated_tokens']} token"
+                    f"{_status(row)} · {'完整结束' if complete else '未记录完整结束'} · {tokens}"
                 )
                 st.code(
                     row["output"] if row["output"] is not None else "未生成输出",

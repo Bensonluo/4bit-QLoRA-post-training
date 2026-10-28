@@ -93,7 +93,16 @@ def _verify_report(report: dict) -> None:
                 _require(
                     status == "failed"
                     and row.get("token_proof") is None
-                    and row["correct"] is False,
+                    and row["correct"] is False
+                    and row.get("truncated") is False
+                    and "generated_tokens" in row
+                    and (
+                        row["generated_tokens"] is None
+                        or (
+                            type(row["generated_tokens"]) is int
+                            and 0 <= row["generated_tokens"] <= 16
+                        )
+                    ),
                     "失败记录不能冒充有效生成。",
                 )
                 continue

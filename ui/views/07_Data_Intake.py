@@ -3760,27 +3760,30 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     st.json(run["artifacts"])
                 if run["status"] == "succeeded":
                     st.success("本轮训练已完成。先比较开发集表现，独立测试集留待最终业务验收。")
-                    try:
-                        from src.workbench.registry_link import run_registration_status
+                    if DISPLAY_ONLY:
+                        st.caption("展示环境暂不读取本地模型注册状态，请在本地工作台查看。")
+                    else:
+                        try:
+                            from src.workbench.registry_link import run_registration_status
 
-                        registration = run_registration_status(
-                            run_id, f"sqlite:///{Path(training_service.root) / 'mlflow.db'}"
-                        )
-                        # 注册状态人话与 CLI train-lineage 同一份摘要
-                        # (summarize_registration 单一来源),页面与 CLI 同源同词汇;
-                        # 未注册时命令原文收进折叠区,已注册/失败态直接平铺。
-                        from src.workbench.report_summary import summarize_registration
+                            registration = run_registration_status(
+                                run_id, f"sqlite:///{Path(training_service.root) / 'mlflow.db'}"
+                            )
+                            # 注册状态人话与 CLI train-lineage 同一份摘要
+                            # (summarize_registration 单一来源),页面与 CLI 同源同词汇;
+                            # 未注册时命令原文收进折叠区,已注册/失败态直接平铺。
+                            from src.workbench.report_summary import summarize_registration
 
-                        lines = summarize_registration(registration)
-                        if registration["status"] == "not_registered":
-                            with st.expander("把这次训练的模型注册进模型库（可选）"):
+                            lines = summarize_registration(registration)
+                            if registration["status"] == "not_registered":
+                                with st.expander("把这次训练的模型注册进模型库（可选）"):
+                                    for line in lines:
+                                        st.caption(line)
+                            else:
                                 for line in lines:
                                     st.caption(line)
-                        else:
-                            for line in lines:
-                                st.caption(line)
-                    except Exception as exc:  # 血缘查询失败不阻塞训练信息展示
-                        st.caption(f"模型库查询失败：{exc}")
+                        except Exception as exc:  # 血缘查询失败不阻塞训练信息展示
+                            st.caption(f"模型库查询失败：{exc}")
                     # 环节⑨交接出口:北极星旅程的最后一环是「模型 + 证据」离场。
                     # 轻量盘点与显式导出共用 CLI 的来源核验、格式选择和证据链。
                     with st.expander("📦 合并导出：把这次训练的模型带出工作台"):
