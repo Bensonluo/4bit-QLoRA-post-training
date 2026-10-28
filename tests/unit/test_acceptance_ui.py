@@ -34,6 +34,9 @@ def acceptance_page(training_page, monkeypatch):  # noqa: F811
         def list_acceptances(self, session_id=None):
             return deepcopy(records)
 
+        def list_acceptances_tolerant(self, session_id=None):
+            return deepcopy(records), 0
+
         def prepare(self, current, model, protocol, criteria, task_spec=None):
             calls.append(("prepare", model, protocol, criteria))
             records.append(
@@ -122,6 +125,38 @@ def test_business_criteria_have_no_default_and_final_execution_is_separate(accep
     assert any(item.value == "最终独立业务题" for item in page.code)
     assert any(item.value == "实际模型回答" for item in page.code)
     assert not any(item.label == "让 Agent 分析结果与下一步" for item in page.button)
+
+
+def test_damaged_acceptance_does_not_hide_healthy_attempt(acceptance_page, monkeypatch):
+    import src.workbench.acceptance as acceptance_module
+
+    session, page, records, _ = acceptance_page
+    records.append(
+        {
+            "acceptance_id": "healthy-attempt",
+            "session_id": session.session_id,
+            "status": "prepared",
+            "criteria": {
+                "metric": "exact_match",
+                "business_standard": "质量符合要求",
+                "minimum_score": 0.9,
+                "minimum_cases": 1,
+            },
+            "model": {"adapter_path": "/tmp/adapter"},
+            "protocol": {"scorer": "classification_exact"},
+            "result": {"decision": "pending_run"},
+        }
+    )
+    monkeypatch.setattr(
+        acceptance_module.AcceptanceService,
+        "list_acceptances_tolerant",
+        lambda self, session_id=None: (deepcopy(records), 1),
+    )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception, [item.message for item in page.exception]
+    assert any("1 条验收记录无法读取或归属不明" in item.value for item in page.warning)
+    assert any("healthy-attempt" in item.value for item in page.markdown)
 
 
 def test_open_final_review_requires_reason_and_forbids_accepting_truncated_output(acceptance_page):

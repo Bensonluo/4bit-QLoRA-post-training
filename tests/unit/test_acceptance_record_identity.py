@@ -132,7 +132,11 @@ def test_legitimate_concurrent_transition_returns_current_record(attempts, monke
     def other_claim_after_check(*args):
         result = original(*args)
         current = service.get(first["acceptance_id"])
-        current.update(status="blocked", blind_test=False)
+        current.update(
+            status="blocked",
+            blind_test=False,
+            result={"decision": "insufficient_evidence", "reason": "heldout_already_revealed"},
+        )
         with service._connect() as db:
             service._write(db, current)
         return result

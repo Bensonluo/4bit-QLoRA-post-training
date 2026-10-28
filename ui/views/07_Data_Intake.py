@@ -350,18 +350,33 @@ def render_probe_result(result: dict, *, source_hints: dict[str, str] | None = N
         st.caption(
             f"显示第 {start + 1}–{start + len(visible)} 条，共 {len(candidates)} 条候选"
             + (f"（第 {page_number}/{pages} 页，每页 {page_size} 条）" if pages > 1 else "")
-            + "；下方 CSV 导出包含全部候选，不止当前页。"
+            + "；下方导出包含全部候选，不止当前页。"
         )
         st.caption(result.get("candidates_note", ""))
-        from src.workbench.learnability_probe import candidates_to_csv
+        from src.workbench.learnability_probe import candidates_to_csv, candidates_to_xlsx
 
+        try:
+            workbook = candidates_to_xlsx(candidates)
+        except ValueError as exc:
+            st.warning(f"Excel 候选清单暂不可生成：{exc}")
+        except ImportError:
+            st.warning("Excel 候选清单需要安装 openpyxl；仍可下载原始 CSV。")
+        else:
+            st.download_button(
+                "导出候选清单（供人工核对）",
+                data=workbook,
+                file_name="label_issue_candidates.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key=f"probe_candidates_xlsx_{result.get('dataset_version', 'x')}",
+            )
         st.download_button(
-            "导出候选为 CSV(供人工核对)",
+            "导出候选为 CSV（供程序读取）",
             data=candidates_to_csv(candidates),
             file_name="label_issue_candidates.csv",
             mime="text/csv",
             key=f"probe_candidates_csv_{result.get('dataset_version', 'x')}",
         )
+        st.caption("Excel 清单按文本保存；原始 CSV 供程序读取，表格软件可能将部分内容识别为公式。")
     else:
         st.info("没有发现值得优先核对的行。")
 
@@ -673,10 +688,14 @@ def show_final_acceptance(run: dict) -> None:
         else:
             st.info("当前任务数据已变化；这里只展示该模型已保存的验收记录。")
         try:
-            records = acceptance.list_acceptances(session_id=session.session_id)
+            records, unreadable = acceptance.list_acceptances_tolerant(
+                session_id=session.session_id
+            )
         except (ValueError, OSError, sqlite3.DatabaseError) as exc:
             st.error(f"无法读取最终验收记录：{exc}")
             return
+        if unreadable:
+            st.warning(f"有 {unreadable} 条验收记录无法读取或归属不明，已跳过；请检查验收存储。")
         for record in records:
             if record.get("model", {}).get("adapter_path") != run.get("output_dir"):
                 continue

@@ -10,6 +10,7 @@ import json
 import sys
 
 import pytest
+from openpyxl import load_workbook
 
 from src.workbench.intake_service import IntakeService
 from tests.unit.test_data_materialize import _full
@@ -216,7 +217,8 @@ def test_cli_label_verify_review_mode_shows_answers_and_accepts_yes_no(
         return json.loads(captured.out)
 
     target = tmp_path / "review-questions.csv"
-    pending = _run("--size", "2", "--export-csv", target)
+    workbook_path = tmp_path / "review-questions.xlsx"
+    pending = _run("--size", "2", "--export-csv", target, "--export-xlsx", workbook_path)
     assert pending["mode"] == "review"
     first_err = captured_errs[-1]
     assert "逐条审阅" in first_err and "是/否" in first_err
@@ -227,6 +229,11 @@ def test_cli_label_verify_review_mode_shows_answers_and_accepts_yes_no(
     assert exported[1:] == [
         [item["row_id"], item["input"], item["answer"], ""] for item in pending["items"]
     ]
+    sheet = load_workbook(workbook_path, data_only=False).active
+    assert [sheet.cell(2, column).value for column in (1, 2, 3)] == [
+        pending["items"][0][key] for key in ("row_id", "input", "answer")
+    ]
+    assert sheet["C2"].data_type == "s" and sheet["D2"].value is None
     assert "不屏蔽电子表格公式" in first_err
 
     # 提交:第一条认可,第二条否决 → 审阅未通过
@@ -259,7 +266,7 @@ def test_cli_label_verify_export_csv_writes_blind_question_list(
 ):
     """--export-csv 抽题后落盘：题目清单含行ID与题目输入，绝不含数据答案。
 
-    与 learnability-probe 的候选导出同款（BOM 表头、Excel 直开、父目录自动
+    与 learnability-probe 的候选导出同款（BOM 表头、父目录自动
     创建）；差别是盲标清单不许泄露标签——导出文件泄露答案，核验就失效。
     """
     service, session = store
@@ -281,6 +288,55 @@ def test_cli_label_verify_export_csv_writes_blind_question_list(
     listed = [line for line in text.splitlines() if line.strip()]
     assert len(listed) == payload["sample_size"] + 1, "每条抽样题一行，外加表头"
     assert "题目清单已导出" in err
+
+
+def test_cli_label_verify_xlsx_hides_labels(store, tmp_path, monkeypatch, capsys):
+    service, session = store
+    workbook_path = tmp_path / "questions.xlsx"
+    assert _run_verify(monkeypatch, service, session, "--export-xlsx", workbook_path) == 0
+    payload = json.loads(capsys.readouterr().out)
+    sheet = load_workbook(workbook_path, data_only=False).active
+    assert sheet.max_row == payload["sample_size"] + 1
+    for row in list(sheet.values)[1:]:
+        assert row[0] in payload["row_ids"]
+        assert row[2] is None
+        assert "yes" not in str(row)
+
+
+def test_label_verify_rejects_shared_export_path_before_sampling(
+    store, tmp_path, monkeypatch, capsys
+):
+    service, session = store
+    path = tmp_path / "same"
+    assert (
+        _run_verify(monkeypatch, service, session, "--export-csv", path, "--export-xlsx", path) == 2
+    )
+    assert "导出路径不能相同" in capsys.readouterr().err
+    assert service.load(session.session_id).label_verification is None
+    assert not path.exists()
+
+
+def test_failed_label_workbook_keeps_pending_questions_for_retry(
+    store, tmp_path, monkeypatch, capsys
+):
+    from src.workbench import label_sheet
+
+    service, session = store
+    path, raw = tmp_path / "questions.xlsx", tmp_path / "questions.csv"
+
+    def fail(*args, **kwargs):
+        raise ValueError("超过 Excel 单元格长度限制")
+
+    monkeypatch.setattr(label_sheet, "verification_questions_to_xlsx", fail)
+    assert (
+        _run_verify(monkeypatch, service, session, "--export-xlsx", path, "--export-csv", raw) == 2
+    )
+    assert "核验题目已保存" in capsys.readouterr().err
+    previous = service.load(session.session_id).label_verification["verification_id"]
+    assert not path.exists() and not raw.exists()
+    assert _run_verify(monkeypatch, service, session, "--export-csv", raw) == 0
+    assert json.loads(capsys.readouterr().out)["verification_id"] == previous
+    assert raw.exists()
 
 
 def test_cli_label_verify_export_csv_not_written_when_sampling_rejected(

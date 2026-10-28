@@ -87,24 +87,36 @@ def _save_config(args: argparse.Namespace) -> None:
 
 def _verification_questions_to_csv(items: list[dict], *, mode: str = "reproduce") -> bytes:
     """Export the actual verification task without leaking labels in reproduce mode."""
-    import csv
-    import io
+    from src.workbench.label_sheet import verification_questions_to_csv
 
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    if mode == "reproduce":
-        writer.writerow(["行ID", "题目输入（仅根据此列作答）", "你的盲标答案（填写后提交）"])
-        for item in items:
-            writer.writerow([item["row_id"], item["input"], ""])
-    elif mode == "review":
-        writer.writerow(["行ID", "题目输入", "数据中的答复（供审阅）", "审阅结论（填写是或否）"])
-        for item in items:
-            if not isinstance(item.get("answer"), str):
-                raise ValueError("逐条审阅缺少数据中的答复，不能导出审阅清单。")
-            writer.writerow([item["row_id"], item["input"], item["answer"], ""])
-    else:
-        raise ValueError("不支持的核验方式，不能导出题目清单。")
-    return buffer.getvalue().encode("utf-8-sig")
+    return verification_questions_to_csv(items, mode=mode)
+
+
+def _check_export_paths(csv_path: Path | None, xlsx_path: Path | None) -> None:
+    if csv_path is not None and xlsx_path is not None and csv_path.resolve() == xlsx_path.resolve():
+        raise ValueError("CSV 和 Excel 导出路径不能相同。")
+
+
+def _export_candidates(args: argparse.Namespace, candidates: list[dict]) -> None:
+    from src.workbench.learnability_probe import candidates_to_csv, candidates_to_xlsx
+
+    if not candidates:
+        if args.export_csv is not None:
+            print("没有候选，未生成核对清单 CSV。", file=sys.stderr)
+        if args.export_xlsx is not None:
+            print("没有候选，未生成核对清单 Excel。", file=sys.stderr)
+        return
+    exports = []
+    if args.export_csv is not None:
+        exports.append((args.export_csv, candidates_to_csv(candidates)))
+    if args.export_xlsx is not None:
+        exports.append((args.export_xlsx, candidates_to_xlsx(candidates)))
+    for path, content in exports:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        print(f"候选核对清单已导出：{path}", file=sys.stderr)
+    if args.export_csv is not None:
+        print("原始 CSV 供程序读取，表格软件可能将其中内容解释为公式。", file=sys.stderr)
 
 
 def _print_listing(label: str, items: list, first_step: str) -> None:
@@ -346,6 +358,7 @@ def main() -> int:
         type=Path,
         help="导出原始 CSV：复现式核验隐藏数据答案；开放文本审阅包含待审答复。电子表格可能将原始内容解释为公式。",
     )
+    label_verify.add_argument("--export-xlsx", type=Path, help="导出文本单元格 Excel 题目清单")
     verify_submit = sub.add_parser("label-verify-submit", help="提交盲标核验答案并得到一致性判定")
     verify_submit.add_argument("session_id")
     verify_submit.add_argument("--verification-id", required=True)
@@ -399,8 +412,9 @@ def main() -> int:
     probe.add_argument(
         "--export-csv",
         type=Path,
-        help="发现候选时把人工核对清单导出为 CSV 文件（Excel 直开）；没有候选则不写文件",
+        help="导出原始候选 CSV，供程序读取；没有候选则不写文件",
     )
+    probe.add_argument("--export-xlsx", type=Path, help="导出文本单元格的人工核对清单")
     probe_show = sub.add_parser(
         "learnability-probe-show",
         help="回读当前数据版本最近一次已保存的探针结果，不重新加载模型",
@@ -409,8 +423,9 @@ def main() -> int:
     probe_show.add_argument(
         "--export-csv",
         type=Path,
-        help="存盘记录含候选时把人工核对清单导出为 CSV 文件（Excel 直开）；没有候选则不写文件",
+        help="导出原始候选 CSV，供程序读取；没有候选则不写文件",
     )
+    probe_show.add_argument("--export-xlsx", type=Path, help="导出文本单元格的人工核对清单")
     train_prepare = sub.add_parser(
         "train-prepare", help="用本地基础模型准备真实训练配置并重做匹配 tokenizer 预检"
     )
@@ -1803,13 +1818,13 @@ def main() -> int:
                 print(line, file=sys.stderr)
         elif args.command == "learnability-probe-show":
             from src.workbench.learnability_probe import (
-                candidates_to_csv,
                 describe_candidates,
                 describe_probe_verdict,
                 load_latest_probe_record,
                 low_baseline_triage_lines,
             )
 
+            _check_export_paths(args.export_csv, args.export_xlsx)
             session = service.load(args.session_id)
             if session.dataset is None:
                 raise ValueError("当前任务还没有数据集版本，先物化分区再运行探针。")
@@ -1847,17 +1862,11 @@ def main() -> int:
                 print(line, file=sys.stderr)
             # 回读的存盘候选同样可导出 CSV,与 learnability-probe 同一份清单逻辑,
             # 重看证据时不必为了拿核对清单而重新加载模型。
-            if args.export_csv is not None:
-                if saved.get("label_error_candidates"):
-                    args.export_csv.parent.mkdir(parents=True, exist_ok=True)
-                    args.export_csv.write_bytes(candidates_to_csv(saved["label_error_candidates"]))
-                    print(f"候选核对清单已导出：{args.export_csv}", file=sys.stderr)
-                else:
-                    print("没有候选，未生成核对清单 CSV。", file=sys.stderr)
+            if args.export_csv is not None or args.export_xlsx is not None:
+                _export_candidates(args, saved.get("label_error_candidates") or [])
             return 0
         elif args.command == "learnability-probe":
             from src.workbench.learnability_probe import (
-                candidates_to_csv,
                 describe_candidates,
                 describe_probe_verdict,
                 low_baseline_triage_lines,
@@ -1865,6 +1874,7 @@ def main() -> int:
                 save_probe,
             )
 
+            _check_export_paths(args.export_csv, args.export_xlsx)
             session = service.load(args.session_id)
             if session.revision != args.revision:
                 raise ValueError("任务已更新，请读取最新 revision 后重试。")
@@ -1887,15 +1897,11 @@ def main() -> int:
                 print(triage_line, file=sys.stderr)
             for line in describe_candidates(result.get("label_error_candidates") or []):
                 print(line, file=sys.stderr)
-            if args.export_csv is not None:
-                if result.get("label_error_candidates"):
-                    args.export_csv.parent.mkdir(parents=True, exist_ok=True)
-                    args.export_csv.write_bytes(candidates_to_csv(result["label_error_candidates"]))
-                    print(f"候选核对清单已导出：{args.export_csv}", file=sys.stderr)
-                else:
-                    print("没有候选，未生成核对清单 CSV。", file=sys.stderr)
+            if args.export_csv is not None or args.export_xlsx is not None:
+                _export_candidates(args, result.get("label_error_candidates") or [])
             return 0
         elif args.command == "label-verify":
+            _check_export_paths(args.export_csv, args.export_xlsx)
             pending = service.start_label_verification(
                 args.session_id, args.revision, sample_size=args.size
             )
@@ -1918,12 +1924,32 @@ def main() -> int:
                 if pending.get("mode") == "review":
                     print(f"  数据中的答复：{item.get('answer', '')}", file=sys.stderr)
             # 复现式核验不泄露答案；开放文本审阅则必须显示数据中的待审答复。
+            if args.export_csv is not None or args.export_xlsx is not None:
+                from src.workbench.label_sheet import verification_questions_to_xlsx
+
+                exports = []
+                if args.export_csv is not None:
+                    exports.append(
+                        (
+                            args.export_csv,
+                            _verification_questions_to_csv(pending["items"], mode=pending["mode"]),
+                        )
+                    )
+                if args.export_xlsx is not None:
+                    try:
+                        workbook = verification_questions_to_xlsx(
+                            pending["items"], mode=pending["mode"]
+                        )
+                    except (ValueError, ImportError) as exc:
+                        raise ValueError(
+                            f"Excel 清单未生成：{exc}；核验题目已保存，可重试或导出原始 CSV。"
+                        ) from exc
+                    exports.append((args.export_xlsx, workbook))
+                for path, content in exports:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(content)
+                    print(f"题目清单已导出：{path}", file=sys.stderr)
             if args.export_csv is not None:
-                args.export_csv.parent.mkdir(parents=True, exist_ok=True)
-                args.export_csv.write_bytes(
-                    _verification_questions_to_csv(pending["items"], mode=pending["mode"])
-                )
-                print(f"题目清单已导出：{args.export_csv}", file=sys.stderr)
                 print(
                     "原始 CSV 不屏蔽电子表格公式，请勿直接在电子表格中打开不可信内容。",
                     file=sys.stderr,
@@ -2070,12 +2096,7 @@ def main() -> int:
                 print("当前没有缺答案的行，无需导出清单。", file=sys.stderr)
             if args.export_csv is not None or args.export_xlsx is not None:
                 if missing and field_names:
-                    if (
-                        args.export_csv is not None
-                        and args.export_xlsx is not None
-                        and args.export_csv.resolve() == args.export_xlsx.resolve()
-                    ):
-                        raise ValueError("CSV 和 Excel 导出路径不能相同。")
+                    _check_export_paths(args.export_csv, args.export_xlsx)
                     source = answer_sheet_source(session, full=use_full)
                     lineage = answer_sheet_lineage(session, full=use_full, rows=missing)
                     exports = []

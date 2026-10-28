@@ -178,9 +178,36 @@ def test_probe_candidates_over_twenty_paginate_with_honest_counts(probe_page, mo
     ids, _ = visible_ids()
     assert ids == [f"r{index:06d}" for index in range(21, 26)]
 
-    # 探针区还应保留 CSV 导出入口,说明文本如实(导出含全部候选)
+    # 人工核对的 XLSX 与供程序读取的 CSV 都包含全部候选。
+    assert any("导出候选清单（供人工核对）" in b.label for b in page.get("download_button"))
     assert any("导出候选为 CSV" in b.label for b in page.get("download_button"))
     assert any("包含全部候选" in item.value for item in page.caption)
+    assert any("表格软件可能将部分内容识别为公式" in item.value for item in page.caption)
+
+
+def test_candidate_excel_failure_keeps_raw_csv_available(probe_page, monkeypatch):
+    import src.workbench.learnability_probe as probe_module
+
+    _, session, page = probe_page
+    monkeypatch.setattr(
+        probe_module,
+        "probe_learnability",
+        lambda *_args, **_kwargs: _probe_result([_candidate(1)], version=session.dataset.version),
+    )
+
+    def unable_to_export(_candidates):
+        raise ValueError("清单包含超过 Excel 单元格长度限制的内容，请使用原始 CSV。")
+
+    monkeypatch.setattr(probe_module, "candidates_to_xlsx", unable_to_export)
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    next(t for t in page.text_input if "本地基础模型目录" in t.label).input("/tmp/local-base").run()
+    next(b for b in page.button if "运行可学性探针" in b.label).click().run()
+    assert not page.exception
+    assert any("超过 Excel 单元格长度限制" in item.value for item in page.warning)
+    downloads = [item.label for item in page.get("download_button")]
+    assert "导出候选为 CSV（供程序读取）" in downloads
+    assert "导出候选清单（供人工核对）" not in downloads
 
 
 def test_probe_candidates_twenty_exact_needs_no_pager(probe_page, monkeypatch):

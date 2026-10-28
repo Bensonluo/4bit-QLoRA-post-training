@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -414,22 +415,34 @@ def low_baseline_triage_lines(result: dict) -> list[str]:
     return lines
 
 
+def _candidate_rows(candidates: list[dict]) -> Iterator[list[str]]:
+    yield ["行ID", "数据标签", "基座零样本输出", "你的盲标答案", "证据"]
+    for item in candidates:
+        values = [
+            item.get("row_id", ""),
+            item.get("data_label", ""),
+            item.get("base_zero_shot", ""),
+            item.get("user_blind_answer") or "",
+            item.get("evidence", ""),
+        ]
+        yield ["" if value is None else str(value) for value in values]
+
+
 def candidates_to_csv(candidates: list[dict]) -> bytes:
-    """候选表导出为 CSV(带 BOM,Excel 直开);供人工核对的离线清单。"""
+    """Export original candidate values as a BOM CSV for programmatic use."""
     import csv
     import io
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["行ID", "数据标签", "基座零样本输出", "你的盲标答案", "证据"])
-    for item in candidates:
-        writer.writerow(
-            [
-                item.get("row_id", ""),
-                item.get("data_label", ""),
-                item.get("base_zero_shot", ""),
-                item.get("user_blind_answer") or "",
-                item.get("evidence", ""),
-            ]
-        )
+    writer.writerows(_candidate_rows(candidates))
     return buffer.getvalue().encode("utf-8-sig")
+
+
+def candidates_to_xlsx(candidates: list[dict]) -> bytes:
+    """Preserve all candidate values in literal-text spreadsheet cells."""
+    from src.workbench.text_workbook import text_workbook
+
+    if len(candidates) + 1 > 1_048_576:
+        raise ValueError("清单超过 Excel 的行列限制，请使用原始 CSV。")
+    return text_workbook(_candidate_rows(candidates), title="候选核对")

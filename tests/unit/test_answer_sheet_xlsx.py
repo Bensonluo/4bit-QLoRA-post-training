@@ -67,6 +67,18 @@ def test_excel_reader_does_not_treat_literal_formula_as_formula_or_error():
     assert not source.formula_note
 
 
+def test_excel_rejects_too_many_rows_before_iterating():
+    class TooManyRows(list):
+        def __len__(self):
+            return 1_048_576
+
+        def __iter__(self):
+            pytest.fail("oversized export should be rejected before reading rows")
+
+    with pytest.raises(ValueError, match="行列限制"):
+        answer_sheet_xlsx(TooManyRows(), ["类别"])
+
+
 def test_cli_rejects_overlapping_export_paths_without_writing(tmp_path):
     service, session = _store(tmp_path, MISSING)
     target = tmp_path / "same"

@@ -11,7 +11,6 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import Iterator
-from zipfile import ZipFile
 
 from src.workbench.intake_models import IntakeSession, PreviewRow, SampleSource
 from src.workbench.sources import source_view_digest
@@ -156,71 +155,13 @@ def answer_sheet_xlsx(
     lineage: dict[str, str] | None = None,
 ) -> bytes:
     """Keep every cell literal, including text that starts with a formula marker."""
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font
-    from openpyxl.utils import get_column_letter
+    from src.workbench.text_workbook import text_workbook
 
     if len(rows) + 1 > 1_048_576 or len(field_names) + 3 > 16_384:
         raise ValueError("清单超过 Excel 的行列限制，请使用原始 CSV。")
-    workbook = Workbook()
-    sheet = workbook.active
-    assert sheet is not None
-    sheet.title = "待补答案"
-    sheet.freeze_panes = "B2"
-    sheet.column_dimensions["A"].width = 18
-    sheet.column_dimensions["B"].width = 56
-    for column in range(3, len(field_names) + 3):
-        sheet.column_dimensions[get_column_letter(column)].width = 22
-    sheet.column_dimensions[get_column_letter(len(field_names) + 3)].width = 60
-    wrapped = Alignment(vertical="top", wrap_text=True)
-    has_carriage_return = False
-    for index, values in enumerate(
-        _answer_sheet_rows(rows, field_names, source=source, lineage=lineage), 1
-    ):
-        for value in values:
-            has_carriage_return |= "\r" in value
-            try:
-                units = len(value.encode("utf-16-le")) // 2
-            except UnicodeEncodeError:
-                raise ValueError("清单包含无法写入 Excel 的字符，请核对原始资料。") from None
-            if units > 32_767:
-                raise ValueError("清单包含超过 Excel 单元格长度限制的内容，请使用原始 CSV。")
-            if any(
-                not (
-                    char in "\t\n\r"
-                    or 0x20 <= ord(char) <= 0xD7FF
-                    or 0xE000 <= ord(char) <= 0xFFFD
-                    or 0x10000 <= ord(char) <= 0x10FFFF
-                )
-                for char in value
-            ):
-                raise ValueError("清单包含无法写入 Excel 的字符，请使用原始 CSV。")
-        sheet.append(values)
-        for column in range(1, len(values) + 1):
-            cell = sheet.cell(index, column)
-            cell.data_type = "s"
-            if index == 1:
-                cell.font = Font(bold=True)
-            if column in {2, len(values)}:
-                cell.alignment = wrapped
-    sheet.auto_filter.ref = f"A1:{get_column_letter(len(field_names) + 3)}{len(rows) + 1}"
-    output = io.BytesIO()
-    workbook.save(output)
-    if has_carriage_return:
-        # XML parsers normalize literal CR to LF. Character references retain
-        # the exact original text on round-trip through the workbook.
-        escaped = io.BytesIO()
-        with (
-            ZipFile(io.BytesIO(output.getvalue())) as source_zip,
-            ZipFile(escaped, "w") as target_zip,
-        ):
-            for entry in source_zip.infolist():
-                content = source_zip.read(entry)
-                if entry.filename == "xl/worksheets/sheet1.xml":
-                    content = content.replace(b"\r", b"&#13;")
-                target_zip.writestr(entry, content)
-        return escaped.getvalue()
-    return output.getvalue()
+    return text_workbook(
+        _answer_sheet_rows(rows, field_names, source=source, lineage=lineage), title="待补答案"
+    )
 
 
 def answer_sheet_lines(count: int) -> list[str]:

@@ -9,6 +9,7 @@ import json
 import sys
 
 import pytest
+from openpyxl import load_workbook
 
 from src.workbench.business_evaluation import Generation
 from src.workbench.intake_service import IntakeService
@@ -230,6 +231,63 @@ def test_cli_probe_show_export_csv_matches_saved_candidates(store, tmp_path, mon
     for candidate in saved_payload["label_error_candidates"]:
         assert candidate["row_id"] in text
     assert "候选核对清单已导出" in err
+
+
+def test_cli_probe_and_show_export_literal_excel_candidates(store, tmp_path, monkeypatch, capsys):
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    target = tmp_path / "candidates.xlsx"
+    _mock_runtime(monkeypatch, "=1+2")
+    assert _run_probe(monkeypatch, service, evaluation_root, session, "--export-xlsx", target) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["label_error_candidates"]
+    sheet = load_workbook(target, data_only=False).active
+    assert sheet.max_row == len(payload["label_error_candidates"]) + 1
+    assert sheet["C2"].value == "=1+2" and sheet["C2"].data_type == "s"
+    replay = tmp_path / "replay.xlsx"
+    assert _run_show(monkeypatch, service, evaluation_root, session, "--export-xlsx", replay) == 0
+    capsys.readouterr()
+    replay_sheet = load_workbook(replay, data_only=False).active
+    assert list(replay_sheet.values) == list(sheet.values)
+
+
+def test_cli_probe_rejects_shared_export_path_before_running(store, tmp_path, monkeypatch, capsys):
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    target = tmp_path / "same"
+
+    def must_not_load(*args, **kwargs):
+        pytest.fail("invalid export paths must be rejected before the model is loaded")
+
+    monkeypatch.setattr("src.workbench.learnability_probe._default_runtime", must_not_load)
+    assert (
+        _run_probe(
+            monkeypatch,
+            service,
+            evaluation_root,
+            session,
+            "--export-csv",
+            target,
+            "--export-xlsx",
+            target,
+        )
+        == 2
+    )
+    assert "导出路径不能相同" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_cli_probe_empty_candidates_do_not_create_excel(store, tmp_path, monkeypatch, capsys):
+    service, session = store
+    evaluation_root = tmp_path / "eval"
+    target = tmp_path / "none.xlsx"
+    _mock_runtime(monkeypatch, "yes")
+    assert _run_probe(monkeypatch, service, evaluation_root, session, "--export-xlsx", target) == 0
+    assert "没有候选，未生成核对清单 Excel" in capsys.readouterr().err
+    assert not target.exists()
+    assert _run_show(monkeypatch, service, evaluation_root, session, "--export-xlsx", target) == 0
+    assert "没有候选，未生成核对清单 Excel" in capsys.readouterr().err
+    assert not target.exists()
 
 
 def test_cli_probe_show_export_csv_without_candidates_writes_nothing(

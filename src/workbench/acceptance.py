@@ -51,6 +51,10 @@ def _frozen_payload(record):
     return payload
 
 
+def _outcome_payload(record: dict[str, Any]) -> dict[str, Any]:
+    return {key: record.get(key) for key in ("status", "report_digest", "decisions", "result")}
+
+
 def _criteria(value, protocol):
     fields = {"metric", "minimum_score", "minimum_cases", "business_standard"}
     if not isinstance(value, dict) or set(value) != fields:
@@ -111,6 +115,11 @@ class AcceptanceService:
             raise ValueError("已冻结验收模型、数据或业务标准被修改。")
         if content_digest(record["criteria"]) != record["criteria_digest"]:
             raise ValueError("业务验收标准指纹不一致。")
+        if (
+            "outcome_digest" in record
+            and content_digest(_outcome_payload(record)) != record["outcome_digest"]
+        ):
+            raise ValueError("验收结论或人工判断记录与保存时不一致。")
 
     @classmethod
     def _validated_row(cls, row):
@@ -134,6 +143,24 @@ class AcceptanceService:
             cls._verify(record)
         except (KeyError, TypeError, IndexError) as exc:
             raise ValueError("验收记录格式无效。") from exc
+        expected = {
+            "prepared": "pending_run",
+            "running": "pending_run",
+            "blocked": "insufficient_evidence",
+            "failed": "insufficient_evidence",
+        }
+        status = record.get("status")
+        if not isinstance(status, str) or status not in {
+            *expected,
+            "completed",
+            "needs_business_review",
+        }:
+            raise ValueError("验收记录状态无效。")
+        if status in expected and (
+            not isinstance(record.get("result"), dict)
+            or record["result"].get("decision") != expected[status]
+        ):
+            raise ValueError("验收状态与结论不一致。")
         return record
 
     def _write(self, connection, record, *, new=False):
@@ -142,6 +169,7 @@ class AcceptanceService:
         previous = record.get("revision", 0)
         record["revision"] = 0 if new else previous + 1
         record["updated_at"] = datetime.now(timezone.utc).isoformat()
+        record["outcome_digest"] = content_digest(_outcome_payload(record))
         if new:
             connection.execute(
                 "INSERT INTO acceptances VALUES (?, ?, ?)",
@@ -177,6 +205,20 @@ class AcceptanceService:
             ) != record.get("report_digest"):
                 raise ValueError("已保存的最终验收报告被修改，不能继续采用或人工评分。")
             record["report"] = asdict(report)
+        if record.get("status") in {"completed", "needs_business_review"}:
+            try:
+                expected = self._result(record)
+                expected_status = (
+                    "needs_business_review"
+                    if expected["decision"] == "pending_review"
+                    else "completed"
+                )
+                if record["status"] != expected_status or canonical(record["result"]) != canonical(
+                    expected
+                ):
+                    raise ValueError("验收结论与已保存的报告或人工判断不一致。")
+            except (KeyError, TypeError, IndexError, AttributeError) as exc:
+                raise ValueError("验收结论或人工判断记录不完整。") from exc
         return record
 
     def list_acceptances(self, session_id=None):
@@ -192,6 +234,40 @@ class AcceptanceService:
             for record in (self.get(identity) for identity in ids)
             if session_id is None or record["session_id"] == session_id
         ]
+
+    def list_acceptances_tolerant(self, session_id: str | None = None) -> tuple[list[dict], int]:
+        """Return readable records and a count of damaged or unidentifiable rows."""
+        if self.read_only and not self.database.exists():
+            return [], 0
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id, revision, snapshot FROM acceptances ORDER BY rowid DESC"
+            ).fetchall()
+        records: list[dict] = []
+        unreadable = 0
+        for row in rows:
+            try:
+                initial = self._validated_row(row)
+                owner = initial.get("session_id")
+                if not isinstance(owner, str) or not owner.strip():
+                    raise ValueError("验收记录缺少任务身份。")
+                if session_id is not None and owner != session_id:
+                    continue
+                record = self.get(row[0])
+                if record.get("session_id") != owner:
+                    raise ValueError("验收记录任务身份已变化。")
+                records.append(record)
+            except (
+                ValueError,
+                OSError,
+                sqlite3.DatabaseError,
+                KeyError,
+                TypeError,
+                AttributeError,
+                IndexError,
+            ):
+                unreadable += 1
+        return records, unreadable
 
     def _snapshot(self, record):
         path = self.root / record["acceptance_id"] / "session.json"
@@ -412,6 +488,43 @@ class AcceptanceService:
         total = len(rows)
         manual = criteria["metric"] == "manual_acceptance_rate"
         if manual:
+            decisions = record["decisions"]
+            if not isinstance(decisions, list):
+                raise ValueError("人工验收判断记录格式无效。")
+            by_index = {row["index"]: row for row in rows}
+            seen = set()
+            for item in decisions:
+                if not isinstance(item, dict):
+                    raise ValueError("人工验收判断记录格式无效。")
+                index = item.get("index")
+                if (
+                    type(index) is not int
+                    or index not in by_index
+                    or index in seen
+                    or item.get("decision") not in {"accepted", "rejected"}
+                    or not isinstance(item.get("reason"), str)
+                    or not item["reason"].strip()
+                    or type(item.get("locked")) is not bool
+                ):
+                    raise ValueError("人工验收判断题号或内容无效。")
+                seen.add(index)
+                row = by_index[index]
+                if (row["status"] != "needs_business_review" or row["truncated"]) and (
+                    item["decision"] != "rejected" or item["locked"] is not True
+                ):
+                    raise ValueError("失败或截断的输出不能作为人工验收通过。")
+                if (
+                    row["status"] == "needs_business_review"
+                    and not row["truncated"]
+                    and item["locked"]
+                ):
+                    raise ValueError("有效输出的人工判断不能标记为自动锁定。")
+            if any(
+                (row["status"] != "needs_business_review" or row["truncated"])
+                and row["index"] not in seen
+                for row in rows
+            ):
+                raise ValueError("失败或截断的输出必须保留锁定的拒绝判断。")
             judged = {item["index"]: item for item in record["decisions"]}
             if len(judged) != total:
                 return {
