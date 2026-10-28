@@ -43,15 +43,16 @@ def _finish(report):
     return report
 
 
-def _verified_partitions(session, report):
+def _verified_partition_package(session, report):
     from src.data_flywheel.dataset_registry import LocalDatasetRegistry
 
     artifact = session.dataset
+    # Preflight is also used while browsing historical evidence. A missing
+    # registry must not be created as a side effect of an attempted read.
+    if not Path(artifact.registry_root).is_dir():
+        raise ValueError("数据集存储目录不存在，无法核验分区。")
     registry = LocalDatasetRegistry(artifact.registry_root)
-    manifest = registry.get_split_manifest(artifact.name, artifact.version)
-    splits = {
-        split: registry.load_split(artifact.name, artifact.version, split) for split in SPLITS
-    }
+    manifest, splits = registry.load_split_package(artifact.name, artifact.version)
     recipe = session.analysis.recipe
     metadata = manifest["metadata"]
     temporal_policy = getattr(recipe, "temporal_split", None)
@@ -185,7 +186,12 @@ def _verified_partitions(session, report):
                     "metadata"
                 ].get("evaluation_scored") != (case_id is not None):
                     raise ValueError("固定评分题与保留但不评分的行标记不一致。")
-    return splits
+    return manifest, splits
+
+
+def _verified_partitions(session, report):
+    """Return verified partitions while retaining the existing caller contract."""
+    return _verified_partition_package(session, report)[1]
 
 
 def _answer_only_consumption(

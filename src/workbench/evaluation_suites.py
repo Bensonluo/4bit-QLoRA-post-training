@@ -331,11 +331,22 @@ def evaluation_cases(session: IntakeSession, split: str = "validation") -> dict:
 
     if split not in EVALUATION_SPLITS or not dataset_is_current(session):
         raise ValueError("评测必须选择当前有效数据的开发集或最终测试集。")
-    artifact = session.dataset
     report = {"issues": []}
     records = _verified_partitions(session, report)[split]
     if report["issues"]:
         raise ValueError("评测资料存在跨分区泄漏。")
+    return _evaluation_cases_from_verified(session, split, records)
+
+
+def _evaluation_cases_from_verified(
+    session: IntakeSession, split: str, records: list[dict]
+) -> dict:
+    """Select fixed cases from a partition that has already passed full verification."""
+    from src.workbench.materialize import dataset_is_current
+
+    if split not in EVALUATION_SPLITS or not dataset_is_current(session):
+        raise ValueError("评测必须选择当前有效数据的开发集或最终测试集。")
+    artifact = session.dataset
     reference = artifact.evaluation_suite
     if reference is None:
         digest = content_digest([_semantic(row) for row in records])

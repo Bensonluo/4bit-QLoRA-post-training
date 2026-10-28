@@ -306,6 +306,16 @@ class LocalDatasetRegistry(DatasetRegistry):
             raise ValueError("Invalid split artifact") from exc
         return manifest, loaded
 
+    def load_split_package(
+        self, name: str, version: str
+    ) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+        """Load the manifest and all partitions after verifying every content hash.
+
+        Reads share one verification pass; files can still change concurrently
+        while that pass is in progress, so this is not an atomic snapshot.
+        """
+        return self._read_split_package(name, version)
+
     def get_split_manifest(self, name: str, version: str) -> dict[str, Any]:
         """Read a split manifest after verifying all files and their full hashes."""
         manifest, _ = self._read_split_package(name, version)

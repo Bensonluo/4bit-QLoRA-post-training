@@ -850,7 +850,7 @@ _EXECUTION_IN_PROGRESS = {
     "queued": "已受理，等待后台执行开始。",
     "materializing": "正在用本轮固定题集准备数据版本。",
     "preparing": "正在按已确认方案准备训练。",
-    "training": "训练已按确认方案启动。",
+    "training": "正在启动或运行训练。",
     "waiting_for_release": "训练进程已退出，等待释放资源后开始开发集对照。",
     "evaluating": "正在按父轮协议比较基座、父轮与本轮模型。",
 }

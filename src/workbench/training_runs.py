@@ -517,7 +517,10 @@ class TrainingRunService:
             raise ValueError("技术重试不能再次授权自动恢复。")
         if record["status"] != "prepared":
             raise ValueError("只有已准备且未启动的运行可以启动；失败或停止后请准备新的运行。")
-        validate_training_handoff(record, run_id, self._directory(run_id))
+        directory = self._directory(run_id)
+        if (directory / "stop.request").exists():
+            raise ValueError("此运行已取消，不能启动。")
+        validate_training_handoff(record, run_id, directory)
         if (
             not dataset_is_current(session)
             or session.session_id != record["session_id"]
@@ -545,52 +548,62 @@ class TrainingRunService:
             raise ValueError("启动前数据校验未通过，请处理预检问题。")
         if report["status"] == "warnings" and not acknowledge_warnings:
             raise ValueError("预检存在需核对的警告，请查看并明确确认后启动。")
-        directory = self._directory(run_id)
-        if (directory / "stop.request").exists():
-            raise ValueError("此运行已取消，不能启动。")
-        # Exclusive marker prevents duplicate starts from separate UI/CLI requests.
-        try:
-            (directory / "started").touch(exist_ok=False)
-        except FileExistsError:
-            raise ValueError("此运行已经提交启动，不能重复提交。") from None
-        config = dict(record["config"])
-        config["workbench"] = {"run_dir": str(directory), "run_id": run_id}
-        record["recover_technical_failures"] = recover_technical_failures
-        record["acknowledge_warnings"] = acknowledge_warnings
-        record["execution"] = {
-            "project_root": str(self.project_root),
-            "python_executable": self.python_executable,
-        }
-        try:
-            if recover_technical_failures:
-                # Only the exclusive-start owner may write the private binding.
-                assert recovery_store is not None
-                binding = {
-                    "root": str(recovery_store),
-                    "session_id": session.session_id,
-                    "run_id": run_id,
-                }
-                write_json(
-                    directory / "intake-store.json",
-                    binding,
+        from src.tracking.runner import _metadata_lock
+
+        # The slow preflight stays outside this lock. Serialize only the final
+        # cancellation check and subprocess handoff with stop(), so a stop
+        # cannot return while an already-checked launch is still pending.
+        with _metadata_lock(directory / "lifecycle.lock"):
+            latest = self._load(run_id)
+            if canonical(latest) != canonical(record):
+                raise ValueError("运行记录已变化，请重新读取后再启动。")
+            validate_training_handoff(latest, run_id, directory)
+            if (directory / "stop.request").exists():
+                raise ValueError("此运行已取消，不能启动。")
+            # Exclusive marker prevents duplicate starts from separate UI/CLI requests.
+            try:
+                (directory / "started").touch(exist_ok=False)
+            except FileExistsError:
+                raise ValueError("此运行已经提交启动，不能重复提交。") from None
+            config = dict(record["config"])
+            config["workbench"] = {"run_dir": str(directory), "run_id": run_id}
+            record["recover_technical_failures"] = recover_technical_failures
+            record["acknowledge_warnings"] = acknowledge_warnings
+            record["execution"] = {
+                "project_root": str(self.project_root),
+                "python_executable": self.python_executable,
+            }
+            try:
+                if recover_technical_failures:
+                    # Only the exclusive-start owner may write the private binding.
+                    assert recovery_store is not None
+                    binding = {
+                        "root": str(recovery_store),
+                        "session_id": session.session_id,
+                        "run_id": run_id,
+                    }
+                    write_json(directory / "intake-store.json", binding)
+                    record["recovery_binding_digest"] = content_digest(binding)
+                # Worker must see authorization before launch, even if it fails immediately.
+                write_json(directory / "run.json", record)
+                self.runner.launch_training(
+                    "workbench_sft",
+                    config,
+                    run_id,
+                    python_executable=self.python_executable,
+                    env_remove=_removed_environment(),
                 )
-                record["recovery_binding_digest"] = content_digest(binding)
-            # Worker must see authorization before launch, even if it fails immediately.
+                record["status"] = "running"
+                record["started_at"] = datetime.now(timezone.utc).isoformat()
+            except (OSError, ValueError) as exc:
+                record["status"] = "failed"
+                record["failure"] = {
+                    "stage": "launch",
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                }
             write_json(directory / "run.json", record)
-            self.runner.launch_training(
-                "workbench_sft",
-                config,
-                run_id,
-                python_executable=self.python_executable,
-                env_remove=_removed_environment(),
-            )
-            record["status"] = "running"
-            record["started_at"] = datetime.now(timezone.utc).isoformat()
-        except (OSError, ValueError) as exc:
-            record["status"] = "failed"
-            record["failure"] = {"stage": "launch", "type": type(exc).__name__, "message": str(exc)}
-        write_json(directory / "run.json", record)
-        return record
+            return record
 
     def get_status(self, run_id: str) -> dict:
         record = self._load(run_id)
@@ -631,6 +644,19 @@ class TrainingRunService:
         result = read_receipt()
         if result is not None:
             record.update(result)
+        if record["status"] == "prepared" and (self._directory(run_id) / "stop.request").exists():
+            # A start marker can mean launch is still in progress or the
+            # launcher crashed. Delegate to runner/receipt evidence rather
+            # than pretending the process has definitely stopped.
+            if (self._directory(run_id) / "started").exists():
+                record["status"] = "stopping"
+            else:
+                record["status"] = "stopped"
+                record["failure"] = {
+                    "stage": "launch",
+                    "type": "UserStopped",
+                    "message": "训练在启动前已取消。",
+                }
         if record["status"] in {"running", "stopping", "unknown"}:
             status = self.runner.get_status(run_id)
             if status in {"finished", "failed"}:
@@ -685,7 +711,7 @@ class TrainingRunService:
 
     def stop(self, run_id: str) -> dict:
         require_writable(self.read_only)
-        record = self.get_status(run_id)
+        self._load(run_id)
         directory = self._directory(run_id)
         # Cancellation is visible even while dispatcher waits or prepare hashes weights.
         (directory / "stop.request").touch()
@@ -701,12 +727,14 @@ class TrainingRunService:
                     status="cancelled", reason="用户停止请求已取消自动恢复并转发至技术重试。"
                 )
                 write_json(recovery, state)
-        if record["status"] not in {"running", "stopping", "unknown"}:
+        with _metadata_lock(directory / "lifecycle.lock"):
+            record = self.get_status(run_id)
+            if record["status"] not in {"running", "stopping", "unknown"}:
+                return record
+            self.runner.stop_training(run_id)
+            record["status"] = "stopping"
+            write_json(directory / "run.json", record)
             return self.get_status(run_id)
-        self.runner.stop_training(run_id)
-        record["status"] = "stopping"
-        write_json(self._directory(run_id) / "run.json", record)
-        return self.get_status(run_id)
 
     def list_runs(self, session_id: str | None = None) -> list[dict]:
         records = [

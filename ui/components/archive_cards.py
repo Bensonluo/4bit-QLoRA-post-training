@@ -25,6 +25,10 @@ _LABELS = {
 }
 
 
+def _select_archive(identity: str) -> None:
+    st.session_state["archive-selection"] = identity
+
+
 def render_archive_cards(catalog: list[dict[str, Any]]) -> None:
     """Show each study's original order, denominator and retained truncations."""
     if not catalog:
@@ -54,5 +58,14 @@ def render_archive_cards(catalog: list[dict[str, Any]]) -> None:
                             + (f" · 处理失败 {result['failed']} 题" if result.get("failed") else "")
                         ),
                     )
-                if st.button("查看记录", key=f"archive-select-{item['id']}", width="stretch"):
-                    st.session_state["archive-selection"] = item["id"]
+                selected = st.session_state.get("archive-selection") == item["id"]
+                st.button(
+                    "当前查看" if selected else "查看记录",
+                    key=f"archive-select-{item['id']}",
+                    type="primary" if selected else "secondary",
+                    width="stretch",
+                    on_click=_select_archive,
+                    args=(item["id"],),
+                )
+                if selected:
+                    st.markdown("[前往已选详情 ↓](#archive-details)")

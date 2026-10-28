@@ -20,7 +20,6 @@ import subprocess
 import sys
 import time
 import traceback
-from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -215,11 +214,16 @@ class IterationExecutionService:
             if record["status"] in TERMINAL:
                 return record
             (directory / "stop.request").touch()
-            message = "已请求停止自动执行。"
+            message = (
+                "已请求停止自动执行；当前评测调用结束后不会继续。"
+                if record["status"] == "evaluating"
+                else "已请求停止自动执行。"
+            )
             if record.get("run_id"):
                 try:
                     self._training().stop(record["run_id"])
-                    message = "已请求停止自动执行，并停止关联训练。"
+                    if record["status"] != "evaluating":
+                        message = "已请求停止自动执行及关联训练，请刷新确认训练状态。"
                 except (ValueError, OSError) as exc:
                     message = f"已请求停止自动执行；停止关联训练时出现问题：{exc}"
             return self._update(record, status="stopped", message=message)
@@ -325,7 +329,7 @@ class IterationExecutionService:
         def stop_requested() -> bool:
             return (directory / "stop.request").exists()
 
-        def write_transition(status: str, terminal: bool, **fields: object) -> dict | None:
+        def write_transition(status: str, **fields: object) -> dict | None:
             """Write a state change; a stop or terminal state that already landed wins."""
             with _metadata_lock(directory / "claim.lock"):
                 current = self._read(iteration_id)
@@ -333,7 +337,7 @@ class IterationExecutionService:
                     return None
                 if current["status"] in TERMINAL and current["status"] != status:
                     return current
-                if terminal and stop_requested() and status != "stopped":
+                if stop_requested() and status != "stopped":
                     return current
                 current.update(status=status, **fields)
                 self._write(current)
@@ -344,11 +348,28 @@ class IterationExecutionService:
         intake = IntakeService(self.intake_root)
 
         def stop_now(reason: str) -> bool:
-            if record_local.get("run_id"):
-                with suppress(ValueError, OSError):
+            run_id = record_local.get("run_id")
+            if run_id:
+                try:
                     training.stop(record_local["run_id"])
-            write_transition("stopped", terminal=True, message=reason)
+                except (ValueError, OSError) as exc:
+                    reason = f"{reason} 停止关联训练时出现问题：{exc}"
+                else:
+                    reason = f"{reason} 已请求停止关联训练，请刷新确认训练状态。"
+            write_transition(
+                "stopped",
+                message=reason,
+                **({"run_id": run_id} if run_id else {}),
+            )
             return False
+
+        def enter_stage(status: str, **fields: object) -> bool:
+            current = write_transition(status, **fields)
+            if current is None:
+                return False
+            if current["status"] == "stopped" or stop_requested():
+                return stop_now("已请求停止自动执行。")
+            return current["status"] == status
 
         record_local = dict(record)
         try:
@@ -363,7 +384,6 @@ class IterationExecutionService:
             if not authorization_valid(live, snapshot):
                 write_transition(
                     "blocked",
-                    terminal=True,
                     # R100 去重:message 只报事实,「提出新的改进轮次」的行动指向
                     # 由 summarize_execution 的 blocked 尾句单处输出。
                     message="授权后业务目标、资料或数据方案已变化，原授权不能继续。",
@@ -388,15 +408,14 @@ class IterationExecutionService:
                 if live.analysis is None or live.analysis.recipe is None:
                     write_transition(
                         "blocked",
-                        terminal=True,
                         message="当前任务缺少已确认的数据方案，不能准备固定题集数据。",
                     )
                     return False
-                write_transition(
+                if not enter_stage(
                     "materializing",
-                    terminal=False,
                     message="正在用本轮固定题集准备数据版本。",
-                )
+                ):
+                    return False
                 independent = (
                     bool(live.analysis.recipe.group_columns)
                     or record["options"]["independent_rows_confirmed"]
@@ -412,15 +431,17 @@ class IterationExecutionService:
                     return stop_now("已按请求停止自动执行。")
 
             if iteration["status"] == "confirmed":
-                write_transition(
+                if not enter_stage(
                     "preparing",
-                    terminal=False,
                     run_id=iteration.get("new_run_id"),
                     message="正在按已确认方案准备训练。",
-                )
+                ):
+                    return False
                 live = refresh_authorized_session()
                 iteration = iterations.prepare(iteration_id, live, execution_id=iteration_id)
                 record_local["run_id"] = iteration.get("new_run_id")
+                if stop_requested():
+                    return stop_now("已请求停止自动执行。")
 
             if iteration["status"] == "prepared":
                 run = training.get_status(iteration["new_run_id"])
@@ -428,7 +449,6 @@ class IterationExecutionService:
                 if run["status"] == "blocked":
                     write_transition(
                         "blocked",
-                        terminal=True,
                         run_id=iteration["new_run_id"],
                         issues=run["issues"],
                         # R100 去重:message 只报事实,查看问题的建议句退场——
@@ -440,7 +460,6 @@ class IterationExecutionService:
                 if preflight.get("status") == "blocked":
                     write_transition(
                         "blocked",
-                        terminal=True,
                         run_id=iteration["new_run_id"],
                         issues=run["issues"],
                         # R100 去重:同上,message 只报事实。
@@ -457,7 +476,6 @@ class IterationExecutionService:
                     # them before the first submission proceeds.
                     write_transition(
                         "awaiting_warning_ack",
-                        terminal=False,
                         run_id=iteration["new_run_id"],
                         issues=preflight["issues"],
                         # R100 去重:message 只报事实,恢复指引(勾选确认继续+命令行
@@ -467,13 +485,17 @@ class IterationExecutionService:
                     return False
                 if stop_requested():
                     return stop_now("已按请求停止自动执行。")
-                write_transition(
+                if not enter_stage(
                     "training",
-                    terminal=False,
                     run_id=iteration["new_run_id"],
-                    message="训练已按确认方案启动。",
-                )
+                    message="正在按确认方案启动训练。",
+                ):
+                    return False
                 live = refresh_authorized_session()
+                if stop_requested():
+                    return stop_now("已请求停止自动执行。")
+                # The run ID is persisted above. TrainingRunService serializes
+                # its final launch with stop(), without locking slow preflight.
                 iteration = iterations.start(
                     iteration_id,
                     live,
@@ -491,7 +513,6 @@ class IterationExecutionService:
                     failure = run.get("failure") or {}
                     write_transition(
                         "blocked",
-                        terminal=True,
                         run_id=iteration["new_run_id"],
                         issues=run.get("issues") or [],
                         # R99 去重(采纳 should-fix-1):message 只报事实,「处理问题后
@@ -508,12 +529,12 @@ class IterationExecutionService:
                 time.sleep(POLL_SECONDS)
                 run = iterations._effective_training_run(iteration["new_run_id"])
 
-            write_transition(
+            if not enter_stage(
                 "waiting_for_release",
-                terminal=False,
                 run_id=iteration["new_run_id"],
                 message="训练进程已退出，等待释放资源后开始开发集对照。",
-            )
+            ):
+                return False
             while training.runner.get_status(iteration["new_run_id"]) == "running":
                 if stop_requested():
                     return stop_now("已按请求停止自动执行。")
@@ -522,19 +543,18 @@ class IterationExecutionService:
             if stop_requested():
                 return stop_now("已按请求停止自动执行。")
 
-            write_transition(
+            if not enter_stage(
                 "evaluating",
-                terminal=False,
                 run_id=iteration["new_run_id"],
                 message="正在按父轮协议比较基座、父轮与本轮模型。",
-            )
+            ):
+                return False
             live = refresh_authorized_session()
             iteration = iterations.get(iteration_id)
             parent = training.get_status(iteration["parent_run_id"])
             if parent["status"] != "succeeded":
                 write_transition(
                     "blocked",
-                    terminal=True,
                     run_id=iteration["new_run_id"],
                     message="父轮训练产物已不是成功状态，不能完成同题对照。",
                 )
@@ -543,7 +563,6 @@ class IterationExecutionService:
             if current["status"] != "succeeded":
                 write_transition(
                     "blocked",
-                    terminal=True,
                     run_id=iteration["new_run_id"],
                     message="本轮训练未成功产出模型，不能完成同题对照。",
                 )
@@ -564,10 +583,11 @@ class IterationExecutionService:
             report = iterations.evaluations.compare(
                 live, models, _protocol_from_iteration(iteration)
             )
+            if stop_requested():
+                return stop_now("已请求停止自动执行；评测调用已结束。")
             if report.status not in {"completed", "completed_with_failures"}:
                 write_transition(
                     "blocked",
-                    terminal=True,
                     run_id=iteration["new_run_id"],
                     issues=[{"severity": "warning", "message": note} for note in report.notes],
                     # R100 去重(采纳 r100-reviewer nit-2):诊断以 issues 落盘,
@@ -580,7 +600,6 @@ class IterationExecutionService:
             )
             write_transition(
                 "completed",
-                terminal=True,
                 run_id=iteration["new_run_id"],
                 evaluation_id=report.evaluation_id,
                 # R100 去重:message 只报事实;摘要 completed 句是四态口径
@@ -593,7 +612,6 @@ class IterationExecutionService:
         except (ValueError, TypeError, KeyError, OSError, ImportError) as exc:
             write_transition(
                 "blocked",
-                terminal=True,
                 message=f"自动执行被阻断：{exc}",
             )
             return False
@@ -601,7 +619,6 @@ class IterationExecutionService:
             traceback.print_exc()
             write_transition(
                 "failed",
-                terminal=True,
                 message=f"自动执行失败：{type(exc).__name__}：{exc}",
             )
             return False

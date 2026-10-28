@@ -33,10 +33,11 @@ if not catalog:
         st.switch_page("views/07_Data_Intake.py")
     st.stop()
 
-render_archive_cards(catalog)
 by_id = {item["id"]: item for item in catalog}
 if st.session_state.get("archive-selection") not in by_id:
     st.session_state["archive-selection"] = next(iter(by_id))
+render_archive_cards(catalog)
+st.subheader("已选记录", anchor="archive-details")
 selection = st.selectbox(
     "历史记录",
     list(by_id),

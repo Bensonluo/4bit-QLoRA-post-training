@@ -1184,7 +1184,7 @@ def test_execution_summary_state_machine_translates_user_action_states():
 
     training = summarize_execution({"status": "training"})
     joined = "\n".join(training)
-    assert "训练已按确认方案启动" in joined
+    assert "正在启动或运行训练" in joined
     assert "关闭页面不影响执行" in joined
 
     ack = summarize_execution({"status": "awaiting_warning_ack"})

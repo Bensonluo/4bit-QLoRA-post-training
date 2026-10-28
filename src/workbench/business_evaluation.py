@@ -833,19 +833,19 @@ class BusinessEvaluationService:
         ):
             raise ValueError("结构化评分字段必须属于已确认的 JSON 答案方案。")
         from src.data.loaders import render_alpaca_prompt
-        from src.data_flywheel.dataset_registry import LocalDatasetRegistry
-        from src.workbench.training_preflight import _verified_partitions
+        from src.workbench.training_preflight import _verified_partition_package
 
         verification = {"issues": []}
-        records = _verified_partitions(session, verification)[split]
+        manifest, partitions = _verified_partition_package(session, verification)
+        records = partitions[split]
         if any(issue["severity"] == "blocking" for issue in verification["issues"]):
             raise ValueError("当前分区存在交叉泄漏，不能用于独立评测。")
         suite = None
         evaluation_key = None
         if getattr(session.dataset, "evaluation_suite", None):
-            from src.workbench.evaluation_suites import evaluation_cases
+            from src.workbench.evaluation_suites import _evaluation_cases_from_verified
 
-            selected = evaluation_cases(session, split=split)
+            selected = _evaluation_cases_from_verified(session, split, records)
             records = selected["records"]
             # The report carries the full suite reference (manifest location included)
             # so the lineage is auditable from the report alone; the per-split
@@ -861,9 +861,6 @@ class BusinessEvaluationService:
                 if not set(protocol.fields) <= set(target):
                     raise ValueError("评测集标准答案缺少已声明业务评分字段。")
         artifact = session.dataset
-        manifest = LocalDatasetRegistry(artifact.registry_root).get_split_manifest(
-            artifact.name, artifact.version
-        )
         prompts = [render_alpaca_prompt({**row, "output": ""}) for row in records]
         protocol_identity = {
             **protocol_settings(protocol),

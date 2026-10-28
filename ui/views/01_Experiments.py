@@ -147,7 +147,11 @@ with st.expander("🔍 筛选", expanded=False):
     with f1:
         statuses = runs["status"].unique().tolist() if "status" in runs.columns else []
         selected_status = st.multiselect(
-            "状态", statuses, default=statuses, format_func=_status_label
+            "状态",
+            statuses,
+            default=statuses,
+            format_func=_status_label,
+            help="只显示选中的状态；全部取消时没有匹配的运行。",
         )
     with f2:
         model_vals = (
@@ -155,16 +159,23 @@ with st.expander("🔍 筛选", expanded=False):
             if "params.model.name" in runs.columns
             else []
         )
-        selected_models = st.multiselect("模型", model_vals, default=[])
+        selected_models = st.multiselect(
+            "模型", model_vals, default=[], help="不选择时显示所有模型。"
+        )
     with f3:
         exp_names = [name for _, name in all_experiments]
-        selected_exps = st.multiselect("实验", exp_names, default=exp_names)
+        selected_exps = st.multiselect(
+            "实验",
+            exp_names,
+            default=exp_names,
+            help="只显示选中的实验；全部取消时没有匹配的运行。",
+        )
 
-    if selected_status and "status" in runs.columns:
+    if "status" in runs.columns:
         runs = runs[runs["status"].isin(selected_status)]
     if selected_models and "params.model.name" in runs.columns:
         runs = runs[runs["params.model.name"].isin(selected_models)]
-    if selected_exps and "experiment_id" in runs.columns:
+    if exp_names and "experiment_id" in runs.columns:
         wanted_ids = [exp_id_by_name[n] for n in selected_exps if n in exp_id_by_name]
         runs = runs[runs["experiment_id"].isin(wanted_ids)]
 

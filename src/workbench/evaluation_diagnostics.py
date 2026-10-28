@@ -256,17 +256,17 @@ class EvaluationDiagnostics:
         elif any(_is_gguf_model(model) for model in report.models):
             raise ValueError("GGUF 同题诊断必须提供完整的输入 token 与生成协议证据。")
         from src.data.loaders import render_alpaca_prompt
-        from src.data_flywheel.dataset_registry import LocalDatasetRegistry
-        from src.workbench.training_preflight import _verified_partitions
+        from src.workbench.training_preflight import _verified_partition_package
 
         issues = {"issues": []}
-        records = _verified_partitions(session, issues)["validation"]
+        manifest, partitions = _verified_partition_package(session, issues)
+        records = partitions["validation"]
         if any(issue["severity"] == "blocking" for issue in issues["issues"]):
             raise ValueError("开发集分区存在泄漏，不能继续归因或迭代。")
         if report.dataset.get("evaluation_suite"):
-            from src.workbench.evaluation_suites import evaluation_cases
+            from src.workbench.evaluation_suites import _evaluation_cases_from_verified
 
-            selected = evaluation_cases(session, split="validation")
+            selected = _evaluation_cases_from_verified(session, "validation", records)
             if report.dataset["evaluation_suite"] != getattr(
                 session.dataset, "evaluation_suite", None
             ):
@@ -278,9 +278,6 @@ class EvaluationDiagnostics:
                 [row["output"] for row in records]
             ):
                 raise ValueError("报告标准答案与固定评测套件内容不一致。")
-        manifest = LocalDatasetRegistry(artifact.registry_root).get_split_manifest(
-            artifact.name, artifact.version
-        )
         prompts = [render_alpaca_prompt({**row, "output": ""}) for row in records]
         if (
             report.dataset.get("split_sha256") != manifest["splits"]["validation"]["sha256"]
