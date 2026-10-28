@@ -11,6 +11,12 @@ import streamlit as st
 from ui import config, runtime
 
 
+def _preview_example(identity: str) -> None:
+    st.session_state["showcase-example"] = identity
+    st.session_state["showcase-last-example"] = identity
+    st.session_state["showcase-preview-open"] = True
+
+
 def render_examples(root: Path) -> None:
     from ui.showcase import example_tasks_tolerant
 
@@ -28,6 +34,13 @@ def render_examples(root: Path) -> None:
     if not examples:
         st.caption("当前没有可用的示例资料，可直接创建自己的业务任务。")
         return
+
+    by_id = {example["id"]: example for example in examples}
+    if st.session_state.get("showcase-example") not in by_id:
+        last_example = st.session_state.get("showcase-last-example")
+        chosen = last_example if last_example in by_id else next(iter(by_id))
+        st.session_state["showcase-example"] = chosen
+        st.session_state["showcase-last-example"] = chosen
 
     st.subheader("从一份具体的数据开始")
     st.caption("先看不同任务的输入与输出，再带着自己的业务数据开始。")
@@ -47,15 +60,21 @@ def render_examples(root: Path) -> None:
                 f'<span>期望答案</span><p class="ts-example-answer">{escape(answer)}</p></div>'
             )
             st.caption(f"虚构示例 · {example['row_count']} 条样例 · CSV")
-            if st.button(
-                "预览数据",
+            selected = (
+                st.session_state.get("showcase-preview-open", False)
+                and st.session_state["showcase-example"] == example["id"]
+            )
+            st.button(
+                "当前预览" if selected else "预览数据",
                 key=f"showcase-preview-{example['id']}",
+                type="primary" if selected else "secondary",
                 width="stretch",
                 icon=":material/table_view:",
-            ):
-                st.session_state["showcase-example"] = example["id"]
-                st.session_state["showcase-last-example"] = example["id"]
-                st.session_state["showcase-preview-open"] = True
+                on_click=_preview_example,
+                args=(example["id"],),
+            )
+            if selected:
+                st.markdown("[前往已选数据 ↓](#example-data)")
             if runtime.action_button(
                 "用这份数据开始",
                 key=f"showcase-create-{example['id']}",
@@ -79,20 +98,16 @@ def render_examples(root: Path) -> None:
                 else:
                     open_task(session.session_id)
 
+    st.subheader("示例数据预览", anchor="example-data")
     with st.expander(
         "原始示例数据与下载", expanded=st.session_state.get("showcase-preview-open", False)
     ):
-        by_id = {example["id"]: example for example in examples}
-        if st.session_state.get("showcase-example") not in by_id:
-            last_example = st.session_state.get("showcase-last-example")
-            chosen = last_example if last_example in by_id else next(iter(by_id))
-            st.session_state["showcase-example"] = chosen
-            st.session_state["showcase-last-example"] = chosen
 
         def remember_example() -> None:
             # Widget state is removed when leaving the page; retain the user's
             # selection separately so a navigation back opens the same CSV.
             st.session_state["showcase-last-example"] = st.session_state["showcase-example"]
+            st.session_state["showcase-preview-open"] = True
 
         selected = st.selectbox(
             "示例数据",

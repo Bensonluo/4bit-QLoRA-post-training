@@ -73,6 +73,38 @@ def test_prepared_training_still_starts_when_current_blind_verdict_is_verified(
     launch.assert_called_once()
 
 
+@pytest.mark.parametrize("change_during_preflight", [False, True])
+def test_recovery_authorized_start_checks_bound_store_verdict_before_launch(
+    training_environment, monkeypatch, change_during_preflight
+):
+    from src.workbench import training_runs
+
+    intake, verified, training, _ = training_environment
+    record = training_tests._prepare(training_environment)
+    if change_during_preflight:
+        original = training_runs.preflight_dataset
+
+        def preflight_then_revoke(*args, **kwargs):
+            report = original(*args, **kwargs)
+            pending_check(intake, verified)
+            return report
+
+        monkeypatch.setattr(training_runs, "preflight_dataset", preflight_then_revoke)
+    else:
+        pending_check(intake, verified)
+    with patch("src.tracking.runner.TrainingRunner.launch_training") as launch:
+        with pytest.raises(ValueError, match="盲标核验"):
+            training.start(
+                record["run_id"],
+                verified,
+                acknowledge_warnings=True,
+                recover_technical_failures=True,
+                recovery_intake_root=intake.root,
+            )
+        launch.assert_not_called()
+    assert not (training.root / record["run_id"] / "started").exists()
+
+
 @pytest.mark.parametrize(
     "verification",
     [

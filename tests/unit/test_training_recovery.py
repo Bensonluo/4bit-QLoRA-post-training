@@ -113,6 +113,82 @@ def test_inspect_is_read_only_and_changes_keep_effective_batch(failed):
     assert len(training.list_runs()) == 1
 
 
+def test_dispatch_blocks_child_if_verification_changes_during_start_preflight(failed, monkeypatch):
+    from src.workbench import training_runs
+    from src.workbench.intake_service import IntakeService
+    from tests.unit.test_training_label_gate import pending_check
+
+    session, training, recovery, parent = failed
+    directory = training._directory(parent["run_id"])
+    binding = json.loads((directory / "intake-store.json").read_text())
+    intake = IntakeService(binding["root"])
+    original_prepare = recovery.training.prepare
+    original_preflight = training_runs.preflight_dataset
+
+    def change_after_prepare(*args, **kwargs):
+        child = original_prepare(*args, **kwargs)
+
+        def preflight_then_revoke(*args, **kwargs):
+            report = original_preflight(*args, **kwargs)
+            pending_check(intake, session)
+            return report
+
+        monkeypatch.setattr(training_runs, "preflight_dataset", preflight_then_revoke)
+        return child
+
+    monkeypatch.setattr(recovery.training, "prepare", change_after_prepare)
+    with patch.object(recovery.training.runner, "launch_training") as launch:
+        result = recovery.recover(parent["run_id"], None, acknowledge_warnings=True)
+    assert result["status"] == "retry_blocked"
+    assert "盲标核验" in result["reason"]
+    assert result["child_run_id"]
+    assert not (training._directory(result["child_run_id"]) / "started").exists()
+    launch.assert_not_called()
+
+
+def test_dispatch_pins_authenticated_store_before_child_preparation(failed, monkeypatch):
+    session, training, recovery, parent = failed
+    directory = training._directory(parent["run_id"])
+    original_prepare = recovery.training.prepare
+
+    def prepare_then_change_binding(*args, **kwargs):
+        child = original_prepare(*args, **kwargs)
+        binding = json.loads((directory / "intake-store.json").read_text())
+        binding["root"] = str(directory / "different-store")
+        write_json(directory / "intake-store.json", binding)
+        return child
+
+    monkeypatch.setattr(recovery.training, "prepare", prepare_then_change_binding)
+    with patch.object(
+        recovery.training.runner, "launch_training", return_value="started"
+    ) as launch:
+        result = recovery.recover(parent["run_id"], None, acknowledge_warnings=True)
+    assert result["status"] == "retry_started"
+    launch.assert_called_once()
+
+
+def test_dispatch_rejects_binding_changed_before_it_is_pinned(failed, monkeypatch):
+    from src.workbench import training_recovery
+
+    _, training, recovery, parent = failed
+    directory = training._directory(parent["run_id"])
+    original_load = training_recovery.load_bound_intake_session
+
+    def load_then_change_binding(*args, **kwargs):
+        session = original_load(*args, **kwargs)
+        binding = json.loads((directory / "intake-store.json").read_text())
+        binding["root"] = str(directory / "different-store")
+        write_json(directory / "intake-store.json", binding)
+        return session
+
+    monkeypatch.setattr(training_recovery, "load_bound_intake_session", load_then_change_binding)
+    with patch.object(recovery.training.runner, "launch_training") as launch:
+        result = recovery.recover(parent["run_id"], None, acknowledge_warnings=True)
+    assert result["status"] == "retry_blocked"
+    assert not (directory / "recovery.claim").exists()
+    launch.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "batch,accum,checkpoint,expected",
     [(3, 2, False, "eligible"), (1, 2, False, "eligible"), (1, 2, True, "not_eligible")],

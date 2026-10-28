@@ -22,6 +22,12 @@ def detail(root):
     render_history(root)
 
 
+def test_recorded_truncations_are_disclosed_in_detail():
+    page = AppTest.from_function(detail, args=(ROOT,), default_timeout=45).run()
+    assert not page.exception, [item.message for item in page.exception]
+    assert any("8 条截断、0 条处理失败" in item.value for item in page.warning)
+
+
 def test_missing_generation_proof_keeps_failure_and_fixed_denominator(tmp_path):
     """Exercise a valid failure using a copy of the recorded report, never the source."""
     original = ROOT / "docs/validation" / R149_SOURCE
@@ -57,6 +63,7 @@ def test_missing_generation_proof_keeps_failure_and_fixed_denominator(tmp_path):
     assert page.metric[0].value == "0 / 8"
     assert any("未生成" in c.value and "0 token" in c.value for c in page.caption)
     assert any("模拟生成失败" in c.value for c in page.caption)
+    assert any("7 条截断、1 条处理失败" in item.value for item in page.warning)
 
 
 def test_failed_record_with_output_is_not_labeled_as_a_normal_mismatch(tmp_path):
@@ -79,3 +86,4 @@ def test_failed_record_with_output_is_not_labeled_as_a_normal_mismatch(tmp_path)
     assert any("处理失败" in c.value and "完整结束" in c.value for c in page.caption)
     assert any(c.value == "模拟评分失败" for c in page.caption)
     assert any(code.value == raw_output for code in page.code)
+    assert any("8 条截断、1 条处理失败" in item.value for item in page.warning)

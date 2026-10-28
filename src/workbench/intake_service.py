@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -907,6 +908,8 @@ class IntakeService:
             if not original.exists():
                 original = self.root / session_id / f"source.{raw_source.format}"
             data = original.read_bytes()
+            if hashlib.sha256(data).hexdigest() != raw_source.digest:
+                raise ValueError("已保存的全量来源内容异常，请重新提供原始资料。")
             encoding = encoding or raw_source.encoding or None
             delimiter = delimiter or raw_source.delimiter or None
             # 原文件按 Excel 的某个 sheet 读入过:sheet 选择随来源持久化,复用时沿用,
@@ -951,13 +954,13 @@ class IntakeService:
         session.training_preflight = None
         directory = self.root / session_id / "full"
         directory.mkdir(exist_ok=True)
+        path = directory / f"{original_source.digest}.{original_source.format}"
         try:
-            with (directory / f"{original_source.digest}.{original_source.format}").open(
-                "xb"
-            ) as handle:
+            with path.open("xb") as handle:
                 handle.write(data)
         except FileExistsError:
-            pass  # Content-addressed original bytes are shared by repeated validation.
+            if path.read_bytes() != data:
+                raise ValueError("已保存来源内容异常，未覆盖原始资料。") from None
         return self._save(session, session.revision)
 
     def confirm_full_data(

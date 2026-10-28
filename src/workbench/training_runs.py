@@ -207,6 +207,20 @@ def _require_verified_labels(session: IntakeSession, *, action: str) -> None:
         )
 
 
+def _load_recovery_binding(record: dict, directory: Path) -> dict:
+    binding = json.loads((directory / "intake-store.json").read_text(encoding="utf-8"))
+    if (
+        not isinstance(binding, dict)
+        or not isinstance(binding.get("root"), str)
+        or not Path(binding["root"]).is_absolute()
+        or binding.get("session_id") != record["session_id"]
+        or binding.get("run_id") != record["run_id"]
+        or record.get("recovery_binding_digest") != content_digest(binding)
+    ):
+        raise ValueError("intake store binding mismatch")
+    return binding
+
+
 def load_bound_intake_session(
     record: dict, directory: Path, *, intake_root: str | Path | None = None
 ) -> IntakeSession:
@@ -224,7 +238,7 @@ def load_bound_intake_session(
         binding = (
             {"root": str(Path(intake_root).resolve()), "session_id": record["session_id"]}
             if intake_root is not None
-            else json.loads(binding_path.read_text(encoding="utf-8"))
+            else _load_recovery_binding(record, directory)
         )
         store = binding.get("root")
         if (
@@ -233,11 +247,6 @@ def load_bound_intake_session(
             or binding.get("session_id") != record["session_id"]
         ):
             raise ValueError("invalid intake store binding")
-        if intake_root is None and (
-            binding.get("run_id") != record["run_id"]
-            or record.get("recovery_binding_digest") != content_digest(binding)
-        ):
-            raise ValueError("intake store binding mismatch")
         root = Path(store)
         if not root.is_dir() or not (root / "intake.sqlite").is_file():
             raise ValueError("missing intake store")
@@ -531,9 +540,9 @@ class TrainingRunService:
         # revision. Recheck the latest supplied session before any launch.
         _require_verified_labels(session, action="启动")
         recovery_store = None
-        if recover_technical_failures:
-            if recovery_intake_root is None:
-                raise ValueError("原任务存储未绑定，无法授权自动恢复；请指定当前任务存储。")
+        if recover_technical_failures and recovery_intake_root is None:
+            raise ValueError("原任务存储未绑定，无法授权自动恢复；请指定当前任务存储。")
+        if recovery_intake_root is not None:
             recovery_store = Path(recovery_intake_root).expanduser().resolve()
             load_bound_intake_session(record, self._directory(run_id), intake_root=recovery_store)
         if model_identity(Path(record["model_path"])) != record["model_identity"]:
@@ -560,6 +569,10 @@ class TrainingRunService:
             validate_training_handoff(latest, run_id, directory)
             if (directory / "stop.request").exists():
                 raise ValueError("此运行已取消，不能启动。")
+            # Preflight may be slow. Re-read the bound task before committing
+            # the launch, including for a recovery child with no further retry.
+            if recovery_store is not None:
+                load_bound_intake_session(latest, directory, intake_root=recovery_store)
             # Exclusive marker prevents duplicate starts from separate UI/CLI requests.
             try:
                 (directory / "started").touch(exist_ok=False)

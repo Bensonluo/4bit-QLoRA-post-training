@@ -170,6 +170,40 @@ def test_full_initial_upload_can_be_validated_without_uploading_again(service):
     assert not any(i.code == "same_as_sample" for i in session.full_data.issues)
 
 
+@pytest.mark.parametrize("content_addressed", [False, True])
+def test_reused_full_source_rejects_modified_original(service, content_addressed):
+    session = approved(service, scope="full")
+    directory = service.root / session.session_id
+    original = directory / "source.csv"
+    if content_addressed:
+        original = directory / "sources" / f"{session.source.digest}.csv"
+        original.parent.mkdir()
+    original.write_bytes(CSV.replace("质量".encode(), "物流".encode()))
+    modified = original.read_bytes()
+
+    with pytest.raises(ValueError, match="来源.*异常"):
+        service.validate_full_data(session.session_id, session.revision)
+
+    assert original.read_bytes() == modified
+    assert service.load(session.session_id).revision == session.revision
+    assert service.load(session.session_id).full_data is None
+
+
+def test_repeated_full_upload_checks_existing_archive(service):
+    session = approved(service)
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    path = service.root / session.session_id / "full" / f"{session.full_data.source.digest}.csv"
+
+    # An identical, intact archive is safe to reuse.
+    session = service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+    path.write_bytes(b"damaged archive")
+    with pytest.raises(ValueError, match="来源.*异常"):
+        service.validate_full_data(session.session_id, session.revision, "full.csv", FULL)
+
+    assert path.read_bytes() == b"damaged archive"
+    assert service.load(session.session_id).revision == session.revision
+
+
 def test_reanalysis_without_feedback_also_invalidates_existing_report(service):
     session = approved(service)
     session = service.validate_full_data(session.session_id, session.revision, "f.csv", FULL)

@@ -8,7 +8,12 @@ from pathlib import Path
 
 from src.tracking.runner import _metadata_lock
 from src.workbench.materialize import dataset_is_current
-from src.workbench.training_runs import TrainingRunService, load_bound_intake_session, write_json
+from src.workbench.training_runs import (
+    TrainingRunService,
+    _load_recovery_binding,
+    load_bound_intake_session,
+    write_json,
+)
 
 
 def failure_evidence(exc):
@@ -199,6 +204,9 @@ class TrainingRecoveryService:
                 # Never infer a store path for legacy runs.
                 parent = self.training._load(run_id)
                 session = load_bound_intake_session(parent, directory)
+                # Pin an independently authenticated binding before lengthy child
+                # preparation; a later file change must not redirect the retry.
+                bound_store = _load_recovery_binding(parent, directory)["root"]
                 report = self.inspect(run_id, session)
                 if report["status"] != "eligible":
                     return finish_unclaimed_dispatch(report) if is_dispatch else report
@@ -273,11 +281,12 @@ class TrainingRecoveryService:
                         session,
                         acknowledge_warnings=acknowledge_warnings,
                         recover_technical_failures=False,
+                        recovery_intake_root=bound_store,
                     )
                     report["status"] = (
                         "retry_started" if child["status"] == "running" else "retry_blocked"
                     )
-            except (ValueError, TypeError, OSError, ImportError) as exc:
+            except (ValueError, TypeError, KeyError, OSError, ImportError) as exc:
                 report.update(status="retry_blocked", reason=f"技术恢复无法继续：{exc}")
             write_json(directory / "recovery.json", report)
             return report

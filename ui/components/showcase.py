@@ -186,9 +186,17 @@ def render_history(root: Path, *, key_prefix: str = "history") -> None:
     first = data["report"]["models"][0]
     truncated = sum(row["status"] == "truncated" for row in first["rows"])
     st.caption(
-        f"对照已完成，{first['label']} {truncated} 题截断按零分保留；"
+        f"对照已结束，{first['label']} {truncated} 题截断按零分保留；"
         "所有模型使用同题与同一生成协议。原始状态与记录可在「来源与下载」查看。"
     )
+    if data["report"]["status"] == "completed_with_failures":
+        rows = [row for model in data["report"]["models"] for row in model["rows"]]
+        truncated_count = sum(row["status"] == "truncated" for row in rows)
+        failed_count = sum(row["status"] == "failed" for row in rows)
+        st.warning(
+            f"对照包含 {truncated_count} 条截断、{failed_count} 条处理失败"
+            "（按模型和题目计数），均保留在评分分母中。"
+        )
     tabs = st.tabs(["同题对照", "训练过程", "交付与成本", "来源与下载"])
     with tabs[0]:
         from ui.components.case_comparison import render_case_comparison
