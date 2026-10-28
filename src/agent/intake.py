@@ -306,7 +306,7 @@ def _preview_origins(origins: dict[str, list[dict]]) -> dict:
     for row_id, refs in origins.items():
         by_source = {}
         for ref in refs:
-            by_source.setdefault(ref["source_digest"], []).append(ref)
+            by_source.setdefault((ref.get("source_alias"), ref["source_digest"]), []).append(ref)
         selected = [
             ref
             for group in by_source.values()

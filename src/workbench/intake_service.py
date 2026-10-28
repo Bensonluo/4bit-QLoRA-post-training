@@ -26,7 +26,7 @@ from src.workbench.intake_models import (
 from src.workbench.materialize import dataset_is_current, materialize_dataset
 from src.workbench.readonly import open_database, require_writable
 from src.workbench.recipes import check_examples, preview_recipe, validate_analysis
-from src.workbench.sources import content_digest, profile_source, read_source
+from src.workbench.sources import content_digest, profile_source, read_source, source_view_digest
 from src.workbench.temporal_split import parse_timestamp, temporal_row_times
 
 
@@ -1348,12 +1348,14 @@ class IntakeService:
         sources = session.sources or {"main": session.source}
         sources[alias] = source
         session.sources = sources
-        if session.full_data and session.full_data.sources:
+        if session.full_data is not None:
             stored = session.full_data.sources.get(alias)
-            if stored is not None and stored.digest != source.digest:
-                # 具名原始资料已被替换成新内容:此前验证过的全量来源不再是
-                # 当前文件,必须从可复用集合中移除,不能继续冒充当前资料被
-                # 复用校验;用户需重新提供这份资料的全量文件。
+            if source.scope == "full":
+                # 用户已明确声明新视图为全量，保留此视图供重新验证；不覆盖其他来源。
+                session.full_data.sources[alias] = source
+            elif stored is not None and source_view_digest(stored) != source_view_digest(source):
+                # 相同字节也可能因工作表、解码或分隔符不同而解析出不同数据。
+                # 原视图不能继续冒充用户刚选择的样例；样例也不能自动作为全量。
                 session.full_data.sources.pop(alias)
         session.source = sources["main"]
         session.profile = profile_source(session.source)

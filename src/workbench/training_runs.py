@@ -110,6 +110,55 @@ def training_tokenizer(path: str | Path):
     return tokenizer
 
 
+def validate_training_handoff(
+    record: dict, run_id: str, directory: Path, *, launch_config: dict | None = None
+) -> None:
+    """Bind the actual trainer settings to the prepared run and data paths."""
+    try:
+        config = record["config"]
+        dataset = record["dataset"]
+        data = config["data"]
+        training = config["training"]
+        model = config["model"]
+        logging = config["logging"]
+        expected_output = directory / "model"
+        # A new run owns a fresh output directory. Resolving paths alone would
+        # also accept a model symlink into another run and overwrite its files.
+        if (
+            directory.is_symlink()
+            or expected_output.is_symlink()
+            or (
+                expected_output.exists()
+                and (
+                    not expected_output.is_dir()
+                    or next(expected_output.iterdir(), None) is not None
+                )
+            )
+        ):
+            raise ValueError("训练交接的运行或输出目录不安全，不能覆盖已有产物。")
+        if (
+            not isinstance(run_id, str)
+            or not re.fullmatch(r"wb-[0-9a-f]{32}", run_id)
+            or record["run_id"] != run_id
+            or directory.name != run_id
+            or record["dataset_version"] != dataset["version"]
+            or content_digest(config) != record["config_digest"]
+            or (launch_config is not None and canonical(config) != canonical(launch_config))
+            or Path(record["output_dir"]).resolve() != expected_output.resolve()
+            or Path(training["output_dir"]).resolve() != expected_output.resolve()
+            or Path(model["name"]).resolve() != Path(record["model_path"]).resolve()
+            or data.get("dataset_split", "train") != "train"
+            or any(
+                key not in data or canonical(data[key]) != canonical(value)
+                for key, value in dataset["data_config"].items()
+            )
+            or logging.get("mlflow_run_name") not in (None, run_id)
+        ):
+            raise ValueError("训练交接身份、模型、数据或输出目录不一致。")
+    except (KeyError, TypeError, AttributeError, OverflowError, OSError) as exc:
+        raise ValueError("训练交接记录格式不正确。") from exc
+
+
 def _removed_environment() -> list[str]:
     # Explicit runtime allowlist: arbitrary BYOK env names never reach training.
     allowed = {
@@ -314,7 +363,10 @@ class TrainingRunService:
         path = self._directory(run_id) / "run.json"
         if not path.exists():
             raise ValueError("找不到该训练运行。")
-        return json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(record, dict) or record.get("run_id") != run_id:
+            raise ValueError("运行记录身份不匹配。")
+        return record
 
     def prepare(
         self,
@@ -465,6 +517,7 @@ class TrainingRunService:
             raise ValueError("技术重试不能再次授权自动恢复。")
         if record["status"] != "prepared":
             raise ValueError("只有已准备且未启动的运行可以启动；失败或停止后请准备新的运行。")
+        validate_training_handoff(record, run_id, self._directory(run_id))
         if (
             not dataset_is_current(session)
             or session.session_id != record["session_id"]

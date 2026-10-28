@@ -77,6 +77,8 @@ def load_loss_history_with_health(
             points.append({"step": step, "loss": loss})
         except (KeyError, TypeError, ValueError, OverflowError):
             damaged = True
+    if any(left["step"] >= right["step"] for left, right in zip(points, points[1:])):
+        damaged = True
     return points, damaged
 
 
@@ -98,6 +100,14 @@ def _segment_mean(points: list[dict[str, float]]) -> float:
     return scale * max(-1.0, min(1.0, mean))
 
 
+def loss_history_warning(valid_count: int) -> str:
+    """Keep UI and CLI honest when the available series cannot support a trend."""
+    return (
+        f"训练曲线记录存在缺失、无效或步数顺序不明确，保留 {valid_count} 个有效点；"
+        "不能判断完整趋势。"
+    )
+
+
 def loss_trend_lines(history: list[dict[str, float]], *, in_progress: bool = False) -> list[str]:
     """把逐条 loss 序列翻译成趋势人话：先给首末与点数，再给三态判定。
 
@@ -114,6 +124,8 @@ def loss_trend_lines(history: list[dict[str, float]], *, in_progress: bool = Fal
             f"逐条 loss 记录只有 1 个点（第 {point['step']:.0f} 步，loss "
             f"{point['loss']:.4f}），看不出趋势。"
         ]
+    if any(left["step"] >= right["step"] for left, right in zip(history, history[1:])):
+        return ["逐条 loss 记录的步数重复或倒退，不能判断训练趋势。"]
     first, last = history[0], history[-1]
     size = max(1, len(history) // 4)
     head, tail = _segment_mean(history[:size]), _segment_mean(history[-size:])

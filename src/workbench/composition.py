@@ -7,11 +7,11 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from src.workbench.forecast_labels import ForecastLabelsStep, build_forecast_labels
 from src.workbench.intake_models import Contract, SampleSource, SourceRow
-from src.workbench.sources import canonical, content_digest, is_missing
+from src.workbench.sources import canonical, content_digest, is_missing, source_view_digest
 
 
 class JoinStep(Contract):
@@ -80,6 +80,16 @@ def required_sources(recipe: CompositionRecipe | dict) -> set[str]:
 class SourceRef(Contract):
     source_digest: str
     row_id: str
+    source_alias: str | None = None
+    source_view_digest: str | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_ref(self, handler):
+        result = handler(self)
+        for key in ("source_alias", "source_view_digest"):
+            if result.get(key) is None:
+                result.pop(key, None)
+        return result
 
 
 class CompositionIssue(Contract):
@@ -114,7 +124,12 @@ class CompositionResult(Contract):
 
 
 def _refs(refs: list[SourceRef]) -> list[SourceRef]:
-    return list({(ref.source_digest, ref.row_id): ref for ref in refs}.values())
+    return list(
+        {
+            (ref.source_alias, ref.source_view_digest, ref.source_digest, ref.row_id): ref
+            for ref in refs
+        }.values()
+    )
 
 
 def _key(values: dict[str, Any], columns: list[str]) -> str | None:
@@ -131,10 +146,21 @@ def compose_sources(
     if recipe.base_source not in sources:
         raise ValueError("基础数据源不存在。")
     base = sources[recipe.base_source]
+    base_view = source_view_digest(base)
     used_sources = {recipe.base_source}
     columns = list(base.columns)
     rows = [
-        (deepcopy(row.values), [SourceRef(source_digest=base.digest, row_id=row.row_id)])
+        (
+            deepcopy(row.values),
+            [
+                SourceRef(
+                    source_alias=recipe.base_source,
+                    source_view_digest=base_view,
+                    source_digest=base.digest,
+                    row_id=row.row_id,
+                )
+            ],
+        )
         for row in base.rows
     ]
     issues: list[CompositionIssue] = []
@@ -188,8 +214,14 @@ def compose_sources(
                             issue("blocking", "empty_join_key", "左表关联键为空或不是标量。", refs)
                         else:
                             left_keys[key].append((values, refs))
+                    right_view = source_view_digest(right)
                     for row in right.rows:
-                        ref = SourceRef(source_digest=right.digest, row_id=row.row_id)
+                        ref = SourceRef(
+                            source_alias=step.right_source,
+                            source_view_digest=right_view,
+                            source_digest=right.digest,
+                            row_id=row.row_id,
+                        )
                         key = _key(row.values, step.right_on)
                         if key is None:
                             issue("blocking", "empty_join_key", "右表关联键为空或不是标量。", [ref])

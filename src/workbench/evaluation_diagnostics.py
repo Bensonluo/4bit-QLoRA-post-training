@@ -25,7 +25,7 @@ from src.workbench.business_evaluation import (
 )
 from src.workbench.intake_models import DatasetArtifact, IntakeSession
 from src.workbench.materialize import dataset_is_current
-from src.workbench.sources import canonical, content_digest
+from src.workbench.sources import canonical, content_digest, source_view_digest
 
 ERROR_TYPES = (
     "correct",
@@ -304,15 +304,19 @@ class EvaluationDiagnostics:
         source_lookup = {}
         raw_sources = session.full_data.sources or {"main": session.full_data.source}
         for alias, source in raw_sources.items():
+            source_view = source_view_digest(source)
             for row in source.rows:
-                source_lookup[(source.digest, row.row_id)] = {
-                    "alias": alias,
-                    "name": source.name,
-                    "source_digest": source.digest,
-                    "row_id": row.row_id,
-                    "line": row.line,
-                    "values": row.values,
-                }
+                source_lookup.setdefault((source.digest, row.row_id), []).append(
+                    {
+                        "alias": alias,
+                        "name": source.name,
+                        "source_digest": source.digest,
+                        "source_view_digest": source_view,
+                        "row_id": row.row_id,
+                        "line": row.line,
+                        "values": row.values,
+                    }
+                )
         processed = {row.row_id: row for row in session.full_data.source.rows}
         labels = [model["label"] for model in report.models]
         if len(set(labels)) != len(labels):
@@ -374,10 +378,28 @@ class EvaluationDiagnostics:
                 ]
                 original_rows = []
                 for origin in origins:
-                    original = source_lookup.get((origin["source_digest"], origin["row_id"]))
-                    if original is None:
+                    candidates = source_lookup.get((origin["source_digest"], origin["row_id"]), [])
+                    if "source_alias" in origin:
+                        alias = origin["source_alias"]
+                        if not isinstance(alias, str) or not alias:
+                            raise ValueError("坏例来源别名无效，不能编造原数据证据。")
+                        candidates = [
+                            candidate for candidate in candidates if candidate["alias"] == alias
+                        ]
+                    if "source_view_digest" in origin:
+                        view = origin["source_view_digest"]
+                        if not isinstance(view, str) or not view:
+                            raise ValueError("坏例来源视图摘要无效，不能编造原数据证据。")
+                        candidates = [
+                            candidate
+                            for candidate in candidates
+                            if candidate["source_view_digest"] == view
+                        ]
+                    if len(candidates) > 1:
+                        raise ValueError("历史坏例来源存在歧义，无法确认对应原始资料；不能猜测。")
+                    if not candidates:
                         raise ValueError("坏例无法定位到对应的原始全量资料，不能编造原数据证据。")
-                    original_rows.append(original)
+                    original_rows.append(candidates[0])
                 case = {
                     "evidence_id": f"{model['label']}:{index}",
                     "model": model["label"],

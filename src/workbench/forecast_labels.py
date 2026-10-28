@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from src.workbench.intake_models import Contract, SampleSource
+from src.workbench.sources import source_view_digest
 
 
 class ForecastLabelsStep(Contract):
@@ -103,8 +104,16 @@ def build_forecast_labels(
             }
         )
 
-    def ref(source, row):
-        return {"source_digest": source.digest, "row_id": row.row_id}
+    price_view = source_view_digest(prices)
+    calendar_view = source_view_digest(calendar)
+
+    def ref(alias, source, view, row):
+        return {
+            "source_alias": alias,
+            "source_view_digest": view,
+            "source_digest": source.digest,
+            "row_id": row.row_id,
+        }
 
     if any(set(columns) & set(event) for event in events):
         raise ValueError("预测标签输出字段与原始字段冲突，请修改prefix。")
@@ -126,7 +135,11 @@ def build_forecast_labels(
                 raise ValueError("交易日历含重复收盘时点，不能重复计算交易日。")
             schedule[close] = row
         except ValueError as exc:
-            issue("invalid_calendar", str(exc), refs=[ref(calendar, row)])
+            issue(
+                "invalid_calendar",
+                str(exc),
+                refs=[ref(step.calendar_source, calendar, calendar_view, row)],
+            )
     if not schedule:
         issue("empty_calendar", "交易日历为空，不能把行情行数或自然日数当成交易日。")
     quotes = {}
@@ -145,7 +158,7 @@ def build_forecast_labels(
                 raise ValueError("行情收盘时点不在提供的交易日历内，请核对时区与交易所。")
             quotes[(symbol, close)] = (price, row)
         except ValueError as exc:
-            issue("invalid_price", str(exc), refs=[ref(prices, row)])
+            issue("invalid_price", str(exc), refs=[ref(step.price_source, prices, price_view, row)])
     if any(item["severity"] == "blocking" for item in result["issues"]):
         for row in result["rows"]:
             row[step.prefix + "status"] = "invalid_sources"
@@ -174,7 +187,7 @@ def build_forecast_labels(
             output[step.prefix + "prediction_at"] = prediction.isoformat()
             output[step.prefix + "label_end_at"] = label_end.isoformat()
             result["origins"][index].extend(
-                ref(calendar, schedule[close])
+                ref(step.calendar_source, calendar, calendar_view, schedule[close])
                 for close in closes[start - 1 : start + step.horizon_sessions + 1]
             )
             if label_end > observation:
@@ -193,7 +206,9 @@ def build_forecast_labels(
                     f"预测窗口缺少{len(missing)}条行情（首个{missing[0]}）；不跨过缺失交易日计算。"
                 )
             for close in window:
-                result["origins"][index].append(ref(prices, quotes[(symbol, close)][1]))
+                result["origins"][index].append(
+                    ref(step.price_source, prices, price_view, quotes[(symbol, close)][1])
+                )
             baseline, final = quotes[(symbol, prediction)][0], quotes[(symbol, label_end)][0]
             output.update(
                 {

@@ -209,13 +209,16 @@ def test_replacing_named_source_stops_old_full_source_from_reuse(tmp_path):
     session = service.add_source(
         session.session_id, session.revision, "labels", "labels-v2.csv", labels_v2, scope="full"
     )
-    assert "labels" not in (session.full_data.sources or {})
+    assert session.full_data.sources["labels"].digest != old_labels_digest
     assert "main" in session.full_data.sources
     session = service.apply_analysis(session, combined_plan())
     session = service.confirm(session.session_id, session.revision)
-    with pytest.raises(ValueError, match="labels"):
-        service.validate_full_sources(session.session_id, session.revision)
-    # 明确重新提供每份全量文件后仍可正常验证,修复没有把合法路径堵死。
+    session = service.validate_full_sources(session.session_id, session.revision)
+    # 新全量来源与缓存的 main 不匹配时如实报告，不能继续显示旧全量标签。
+    assert session.full_data.sources["labels"].digest != old_labels_digest
+    assert next_action(session) == "needs_full_data_revision"
+    assert all(row.target is None for row in session.full_data.preview.rows)
+    # 明确重新提供匹配的全量文件后仍可正常验证。
     labels_v2_full = "id,category\n10,售后\n11,安装\n12,售后\n".encode()
     session = service.validate_full_sources(
         session.session_id,

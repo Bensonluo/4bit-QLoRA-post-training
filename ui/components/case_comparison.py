@@ -7,16 +7,31 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-FILTERS = ("全部题目", "输出或 token 不同", "至少一侧未通过", "存在截断")
+FILTERS = ("全部题目", "输出或 token 不同", "输出或 token 无法比较", "至少一侧未通过", "存在截断")
 
 
 def pair_facts(left: dict, right: dict) -> dict[str, Any]:
     """Compare raw text and observed token IDs, keeping absent proof unknown."""
     a = (left.get("token_proof") or {}).get("generated_token_ids")
     b = (right.get("token_proof") or {}).get("generated_token_ids")
+    left_output, right_output = left.get("output"), right.get("output")
+    same_output = (
+        left_output == right_output
+        if isinstance(left_output, str) and isinstance(right_output, str)
+        else None
+    )
+    same_tokens = a == b if a and b else None
+    comparison = (
+        "different"
+        if same_output is False or same_tokens is False
+        else "same"
+        if same_output is True and same_tokens is True
+        else "unknown"
+    )
     return {
-        "same_output": left["output"] == right["output"],
-        "same_tokens": a == b if a and b else None,
+        "same_output": same_output,
+        "same_tokens": same_tokens,
+        "comparison": comparison,
         "not_passed": left["correct"] is not True or right["correct"] is not True,
         "truncated": bool(left.get("truncated") or right.get("truncated")),
     }
@@ -29,7 +44,8 @@ def pair_indices(models: list[dict], left: int, right: int, criterion: str) -> l
         facts = pair_facts(row, other[row["index"]])
         matches = {
             "全部题目": True,
-            "输出或 token 不同": not facts["same_output"] or facts["same_tokens"] is False,
+            "输出或 token 不同": facts["comparison"] == "different",
+            "输出或 token 无法比较": facts["comparison"] == "unknown",
             "至少一侧未通过": facts["not_passed"],
             "存在截断": facts["truncated"],
         }
@@ -128,9 +144,12 @@ def render_case_comparison(data: dict, *, key_prefix: str) -> None:
         displayed = [models[left], models[right]]
         all_pairs = zip(models[left]["rows"], models[right]["rows"])
         facts = [pair_facts(a, b) for a, b in all_pairs]
-        identical = sum(f["same_output"] and f["same_tokens"] is True for f in facts)
+        identical = sum(f["comparison"] == "same" for f in facts)
+        different = sum(f["comparison"] == "different" for f in facts)
+        unknown = sum(f["comparison"] == "unknown" for f in facts)
         st.caption(
             f"当前模型对：{identical}/{len(references)} 题的原始文本与生成 token 均一致。"
+            f"{different} 题确认不同，{unknown} 题缺少输出或 token 证据、无法完整比较。"
             "这里比较实际输出，业务匹配仍以期望答案为准。"
         )
         criterion = st.selectbox("筛选当前模型对", FILTERS, key=f"{key_prefix}-filter")

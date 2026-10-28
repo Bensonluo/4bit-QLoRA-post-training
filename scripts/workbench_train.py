@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -64,17 +65,32 @@ def main():
         file_digest,
         model_identity,
         training_tokenizer,
+        validate_training_handoff,
         write_json,
     )
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
-    config = yaml.safe_load(Path(args.config).read_text())
-    directory = Path(config.pop("workbench")["run_dir"])
+    config_path = Path(args.config)
+    config = yaml.safe_load(config_path.read_text())
+    handoff = config.pop("workbench")
+    directory = Path(handoff["run_dir"])
+    # Older launch configurations only contain the run directory. Its name is
+    # the run ID, and is still checked against the saved record below.
+    run_id = handoff.get("run_id", directory.name)
     record = json.loads((directory / "run.json").read_text())
+    # The runner names launch configs after their run. If a corrupted config
+    # redirects both the run ID and directory, its original filename still
+    # identifies the process that was actually launched.
+    configured_name = re.fullmatch(r"(wb-[0-9a-f]{32})\.yaml", config_path.name)
+    if configured_name and configured_name.group(1) != run_id:
+        raise ValueError("训练交接运行 ID 与启动配置文件不一致。")
+    # Verify all identity and destination bindings before the first write;
+    # otherwise even a rejected handoff could overwrite another run's receipt.
+    validate_training_handoff(record, run_id, directory, launch_config=config)
     result = {
-        "run_id": record["run_id"],
+        "run_id": run_id,
         "status": "running",
         "pid": os.getpid(),
         "artifacts": {},
@@ -98,8 +114,6 @@ def main():
     threading.Thread(target=watch_stop, daemon=True).start()
     write_json(result_path, result)
     try:
-        if content_digest(config) != record["config_digest"]:
-            raise ValueError("提交配置与已确认的训练交接不一致。")
         if model_identity(Path(record["model_path"])) != record["model_identity"]:
             raise ValueError("本地模型或 tokenizer 在启动前发生变化。")
         session = IntakeSession.model_validate_json((directory / "session.json").read_text())

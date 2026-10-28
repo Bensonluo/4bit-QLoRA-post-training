@@ -3714,14 +3714,13 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     # 已训练部分。成功态走下方 metrics 块,两块互斥。
                     from src.workbench.training_progress import (
                         load_loss_history_with_health,
+                        loss_history_warning,
                         loss_trend_lines,
                     )
 
                     partial, damaged = load_loss_history_with_health(run["output_dir"])
                     if damaged:
-                        st.warning(
-                            f"训练曲线记录部分损坏或不可读，保留 {len(partial)} 个有效点；不能判断完整趋势。"
-                        )
+                        st.warning(loss_history_warning(len(partial)))
                     if len(partial) >= 2:
                         if run["status"] in {"running", "stopping"}:
                             st.write("**训练中的 loss 曲线**")
@@ -3736,40 +3735,42 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                                     st.caption(line)
                         from ui.components.charts import make_metric_timeseries
 
-                        st.plotly_chart(
-                            make_metric_timeseries(
-                                {"loss": [(int(p["step"]), p["loss"]) for p in partial]}
-                            ),
-                            width="stretch",
+                        chart = make_metric_timeseries(
+                            {"loss": [(int(p["step"]), p["loss"]) for p in partial]}
                         )
+                        if damaged:
+                            chart.update_traces(mode="markers")
+                        st.plotly_chart(chart, width="stretch", key=f"training_loss_{run_id}")
+                    elif len(partial) == 1 and not damaged:
+                        for line in loss_trend_lines(partial):
+                            st.caption(line)
                 if run.get("metrics"):
                     st.write("**本轮训练指标**")
                     # 环节⑤可视化：逐条 loss 序列 → 趋势人话 + 曲线（单一来源
                     # loss_trend_lines，与 CLI train-status 同源同词汇）；
                     # 原始 flat metrics 收进折叠区保透明，不再裸倾倒。
-                    from src.workbench.training_progress import (
-                        load_loss_history_with_health,
-                        loss_trend_lines,
-                    )
-
-                    history, damaged = load_loss_history_with_health(run.get("output_dir"))
-                    if damaged:
-                        if run["status"] == "succeeded":
-                            st.warning(
-                                f"训练曲线记录部分损坏或不可读，保留 {len(history)} 个有效点；不能判断完整趋势。"
-                            )
-                    else:
-                        for line in loss_trend_lines(history):
-                            st.caption(line)
-                    if len(history) >= 2:
-                        from ui.components.charts import make_metric_timeseries
-
-                        st.plotly_chart(
-                            make_metric_timeseries(
-                                {"loss": [(int(p["step"]), p["loss"]) for p in history]}
-                            ),
-                            width="stretch",
+                    if run["status"] == "succeeded":
+                        from src.workbench.training_progress import (
+                            load_loss_history_with_health,
+                            loss_history_warning,
+                            loss_trend_lines,
                         )
+
+                        history, damaged = load_loss_history_with_health(run.get("output_dir"))
+                        if damaged:
+                            st.warning(loss_history_warning(len(history)))
+                        else:
+                            for line in loss_trend_lines(history):
+                                st.caption(line)
+                        if len(history) >= 2:
+                            from ui.components.charts import make_metric_timeseries
+
+                            chart = make_metric_timeseries(
+                                {"loss": [(int(p["step"]), p["loss"]) for p in history]}
+                            )
+                            if damaged:
+                                chart.update_traces(mode="markers")
+                            st.plotly_chart(chart, width="stretch", key=f"training_loss_{run_id}")
                     with st.expander("查看原始指标 JSON"):
                         st.json(run["metrics"])
                 if run.get("output_dir"):

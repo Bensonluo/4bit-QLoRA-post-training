@@ -115,7 +115,7 @@ def test_same_page_prepare_start_logs_stop_are_explicit_actions(training_page):
 
 def test_running_training_shows_live_curve_without_verdict(training_page, tmp_path):
     """环节⑤「实时曲线」:训练中(running)页面读实时序列画曲线并提示刷新,
-    不给三态判定——半程数据不足以支持整场结论;成功态才走指标区,两块互斥。"""
+    不给三态判定——半程数据不足以支持整场结论；即使有临时指标也只画一张曲线。"""
     from types import SimpleNamespace
 
     from transformers import Trainer
@@ -142,12 +142,45 @@ def test_running_training_shows_live_curve_without_verdict(training_page, tmp_pa
     button(page, "准备本轮训练方案").click().run()
     assert not page.exception
     records[0]["output_dir"] = str(live_output)
+    # Some workers publish preliminary metrics while still running; they do
+    # not turn a partial curve into a completed-training trend.
+    records[0]["metrics"] = {"train_loss": 1.0}
     button(page, "启动这轮训练").click().run()
     assert not page.exception
     assert any("训练中的 loss 曲线" in block.value for block in page.markdown)
     assert any("刷新页面查看最新进度" in block.value for block in page.caption)
     assert not any("整体在下降" in block.value for block in page.caption)
-    assert not any("本轮训练指标" in block.value for block in page.markdown)
+    assert any("本轮训练指标" in block.value for block in page.markdown)
+    curves = [json.loads(chart.proto.spec) for chart in page.get("plotly_chart")]
+    assert sum(trace.get("name") == "loss" for chart in curves for trace in chart["data"]) == 1
+
+
+def test_identical_live_curves_from_different_runs_remain_visible(training_page, tmp_path):
+    _, session, page, _, records = training_page
+    for index in range(2):
+        output = tmp_path / f"live-run-{index}"
+        output.mkdir()
+        (output / "workbench_loss_history.json").write_text(
+            json.dumps([{"step": 1, "loss": 2.0}, {"step": 2, "loss": 1.0}]),
+            encoding="utf-8",
+        )
+        records.append(
+            {
+                "run_id": f"fixture-{index}",
+                "session_id": session.session_id,
+                "status": "running",
+                "model_path": "/tmp/local-base",
+                "dataset_version": session.dataset.version,
+                "output_dir": str(output),
+                "config": {},
+                "preflight": {},
+            }
+        )
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception, [item.message for item in page.exception]
+    charts = [json.loads(chart.proto.spec) for chart in page.get("plotly_chart")]
+    assert sum(trace.get("name") == "loss" for chart in charts for trace in chart["data"]) == 2
 
 
 def test_freeze_question_suite_does_not_rewrite_parent_training_data(training_page):

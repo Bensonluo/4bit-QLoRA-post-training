@@ -253,6 +253,31 @@ def test_train_status_running_state_defers_trend_verdict(train_status_cli, tmp_p
     assert "整体在下降" not in err
 
 
+@pytest.mark.parametrize("status", ["succeeded", "running", "failed", "stopped"])
+@pytest.mark.parametrize(
+    "points",
+    [
+        [{"step": 1, "loss": 2.0}, {"step": "bad", "loss": 1.0}, {"step": 3, "loss": 0.5}],
+        [{"step": 5, "loss": 1.0}, {"step": 2, "loss": 2.0}],
+        [{"step": 2, "loss": 2.0}, {"step": 2, "loss": 0.5}],
+    ],
+)
+def test_train_status_does_not_infer_trends_from_damaged_or_ambiguous_curve(
+    train_status_cli, tmp_path, capsys, status, points
+):
+    invoke, record = train_status_cli
+    output = tmp_path / "curve"
+    output.mkdir()
+    (output / "workbench_loss_history.json").write_text(json.dumps(points), encoding="utf-8")
+    record.update(status=status, metrics={"train_loss": 0.5}, output_dir=str(output))
+    assert invoke("train-status", "run-9") == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == status
+    assert "不能判断完整趋势" in captured.err
+    assert "保留 2 个有效点" in captured.err
+    assert not any(term in captured.err for term in ("整体在下降", "整体基本持平", "末段反而更高"))
+
+
 def test_materialize_stderr_carries_dataset_summary(tmp_path, monkeypatch, capsys):
     """materialize stderr 追加分区人话摘要:分组路径此前零人话,现在与页面同口径;
     stdout 仍是纯 JSON 任务记录。"""

@@ -44,6 +44,16 @@ def test_loss_reader_distinguishes_absence_empty_and_bad_points(tmp_path):
     )
 
 
+@pytest.mark.parametrize("steps", [[5, 2], [2, 2]])
+def test_reordered_or_duplicate_steps_cannot_support_overall_trend(tmp_path, steps):
+    path = tmp_path / LOSS_HISTORY_FILENAME
+    path.write_text(json.dumps([{"step": steps[0], "loss": 2}, {"step": steps[1], "loss": 1}]))
+    points, damaged = load_loss_history_with_health(tmp_path)
+    assert [point["step"] for point in points] == steps
+    assert damaged is True
+    assert "不能判断" in "".join(loss_trend_lines(points))
+
+
 def test_extreme_finite_loss_points_do_not_overflow_the_trend():
     points = [{"step": float(i), "loss": sys.float_info.max} for i in range(12)]
     assert math.isfinite(_segment_mean(points))
@@ -125,4 +135,7 @@ def test_display_page_isolates_corrupt_curve_and_incomparable_time(data_page, mo
     assert any("无法比较" in item.value for item in page.markdown)
     assert not any("整体在下降" in item.value for item in page.caption)
     assert any("本轮训练指标" in item.value for item in page.markdown)
+    charts = [json.loads(chart.proto.spec) for chart in page.get("plotly_chart")]
+    loss = next(trace for chart in charts for trace in chart["data"] if trace.get("name") == "loss")
+    assert loss["mode"] == "markers"
     unchanged(service.root.parent.parent.parent, before)

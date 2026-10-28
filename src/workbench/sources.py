@@ -90,6 +90,12 @@ def content_digest(value: Any) -> str:
     return hashlib.sha256(canonical(value).encode("utf-8")).hexdigest()
 
 
+def source_view_digest(source: SampleSource) -> str:
+    """Identify both file bytes and the exact parsed view, independent of name and scope."""
+    fields = {"digest", "format", "encoding", "delimiter", "sheet", "columns", "rows"}
+    return content_digest(source.model_dump(mode="json", include=fields))
+
+
 def is_missing(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 

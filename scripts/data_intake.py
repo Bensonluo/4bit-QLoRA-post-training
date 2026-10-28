@@ -1462,12 +1462,15 @@ def main() -> int:
                     # 未完成态有序列时给训练中/中断口径的同一来源人话
                     # (训练中不做三态判定，等训练完成后再看)。
                     from src.workbench.training_progress import (
-                        load_loss_history,
+                        load_loss_history_with_health,
+                        loss_history_warning,
                         loss_trend_lines,
                     )
 
-                    history = load_loss_history(result.get("output_dir"))
-                    if history or result.get("metrics"):
+                    history, damaged = load_loss_history_with_health(result.get("output_dir"))
+                    if damaged:
+                        print(loss_history_warning(len(history)), file=sys.stderr)
+                    elif history or result.get("metrics"):
                         for line in loss_trend_lines(
                             history,
                             in_progress=result.get("status") in {"running", "stopping"},
