@@ -18,6 +18,7 @@ from src.workbench.full_data import full_data_is_current, validate_full_source
 from src.workbench.intake_models import (
     BusinessExample,
     Finding,
+    FullDataValidation,
     IntakeAnalysis,
     IntakeSession,
     PreviewRow,
@@ -25,8 +26,25 @@ from src.workbench.intake_models import (
 from src.workbench.materialize import dataset_is_current, materialize_dataset
 from src.workbench.readonly import open_database, require_writable
 from src.workbench.recipes import check_examples, preview_recipe, validate_analysis
-from src.workbench.sources import profile_source, read_source
+from src.workbench.sources import content_digest, profile_source, read_source
 from src.workbench.temporal_split import parse_timestamp, temporal_row_times
+
+
+def _label_source_view_digest(report: FullDataValidation) -> str:
+    """Bind label checks to the actual parsed rows and rendered supervision.
+
+    A raw-file digest alone cannot distinguish two worksheets or parsing choices
+    for the same bytes. The version prefix prevents legacy raw-only checks from
+    silently authorizing a potentially different source view.
+    """
+    return "view-v2:" + content_digest(
+        {
+            "source_digest": report.source.digest,
+            "columns": report.source.columns,
+            "rows": [row.model_dump(mode="json") for row in report.source.rows],
+            "preview": report.preview.model_dump(mode="json") if report.preview else None,
+        }
+    )
 
 
 def _mature_ready_ids(preview, recipe) -> set[str]:
@@ -417,17 +435,30 @@ class IntakeService:
             session.label_verification = None
             return session
         with self._connect() as connection:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM label_verifications WHERE session_id=? LIMIT 1",
+                    (session.session_id,),
+                ).fetchone()
+                is None
+            ):
+                session.label_verification = None
+                return session
             row = connection.execute(
                 "SELECT verification_id, status, verdict, result, created_at FROM label_verifications "
                 "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (session.session_id, report.source.digest, report.approved_recipe_digest),
+                "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (
+                    session.session_id,
+                    _label_source_view_digest(report),
+                    report.approved_recipe_digest,
+                ),
             ).fetchone()
             if row is None:
                 stale = connection.execute(
                     "SELECT verdict, created_at FROM label_verifications "
-                    "WHERE session_id=? AND status='completed' "
-                    "ORDER BY created_at DESC LIMIT 1",
+                    "WHERE session_id=? AND status IN ('completed', 'pending', 'stale') "
+                    "ORDER BY created_at DESC, rowid DESC LIMIT 1",
                     (session.session_id,),
                 ).fetchone()
             else:
@@ -436,13 +467,20 @@ class IntakeService:
             if stale is not None:
                 session.label_verification = {
                     "stale": True,
-                    "previous_verdict": stale[0],
+                    "previous_verdict": stale[0] or "未完成",
                     "previous_created_at": stale[1],
                 }
             else:
                 session.label_verification = None
             return session
         verification_id, status, verdict, result, created_at = row
+        if status == "stale":
+            session.label_verification = {
+                "stale": True,
+                "previous_verdict": verdict or "未完成",
+                "previous_created_at": created_at,
+            }
+            return session
         session.label_verification = {
             "verification_id": verification_id,
             "status": status,
@@ -997,17 +1035,20 @@ class IntakeService:
         labelled = [row for row in report.preview.rows if row.target is not None]
         if not labelled:
             raise ValueError("当前全量预览没有已标注的行，无法核验。")
-        binding = report.source.digest + report.approved_recipe_digest
+        source_view_digest = _label_source_view_digest(report)
+        binding = source_view_digest + report.approved_recipe_digest
         by_id = {row.row_id: row for row in labelled}
         with self._connect() as connection:
             # 抽题与待答复用共享写锁，刷新或并发调用不会发出多个同题挑战。
             connection.execute("BEGIN IMMEDIATE")
-            exposed = self._revealed_label_inputs(connection, session, by_id)
+            exposed = self._revealed_label_inputs(
+                connection, session, by_id, source_view_digest=source_view_digest
+            )
             pending = connection.execute(
                 "SELECT verification_id, sample_size, seed, row_ids, result FROM label_verifications "
                 "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
                 "AND status='pending' ORDER BY created_at DESC, rowid DESC",
-                (session.session_id, report.source.digest, report.approved_recipe_digest),
+                (session.session_id, source_view_digest, report.approved_recipe_digest),
             ).fetchall()
             active = None
             for candidate in pending:
@@ -1048,7 +1089,7 @@ class IntakeService:
                     "SELECT COUNT(*) FROM label_verifications "
                     "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
                     "AND status='completed'",
-                    (session.session_id, report.source.digest, report.approved_recipe_digest),
+                    (session.session_id, source_view_digest, report.approved_recipe_digest),
                 ).fetchone()[0]
                 seed = (
                     zlib.crc32(binding.encode("utf-8"))
@@ -1064,7 +1105,7 @@ class IntakeService:
                     (
                         verification_id,
                         session.session_id,
-                        report.source.digest,
+                        source_view_digest,
                         report.approved_recipe_digest,
                         size,
                         seed,
@@ -1123,6 +1164,8 @@ class IntakeService:
         connection: sqlite3.Connection,
         session: IntakeSession,
         by_id: dict[str, PreviewRow],
+        *,
+        source_view_digest: str | None = None,
     ) -> set[str]:
         """Keep exposure across task revisions; labels and row IDs are not question identities.
 
@@ -1132,6 +1175,7 @@ class IntakeService:
         report = session.full_data
         if report is None:
             raise ValueError("当前全量资料缺失，无法核验盲标题目的暴露历史。")
+        current_view_digest = source_view_digest or _label_source_view_digest(report)
         completed = connection.execute(
             "SELECT row_ids,result,full_source_digest,recipe_digest FROM label_verifications "
             "WHERE session_id=? AND status='completed'",
@@ -1146,7 +1190,7 @@ class IntakeService:
                 if isinstance(displayed, str):
                     exposed.add(displayed)
                 elif (
-                    source_digest == report.source.digest
+                    source_digest == current_view_digest
                     and recipe_digest == report.approved_recipe_digest
                     and identity in by_id
                 ):
@@ -1177,9 +1221,10 @@ class IntakeService:
         if status != "pending":
             raise ValueError("该盲标核验已提交过结论，请开始新的核验。")
         report = session.full_data
+        source_view_digest = _label_source_view_digest(report) if report else None
         if (
             report is None
-            or report.source.digest != full_digest
+            or source_view_digest != full_digest
             or report.approved_recipe_digest != recipe_digest
         ):
             with self._connect() as connection:
@@ -1261,7 +1306,9 @@ class IntakeService:
             ).fetchone()[0]
             if current_status != "pending":
                 raise ValueError("该盲标核验已提交过结论或失效，请读取最新核验。")
-            exposed = self._revealed_label_inputs(connection, session, by_id)
+            exposed = self._revealed_label_inputs(
+                connection, session, by_id, source_view_digest=source_view_digest
+            )
             inputs = [by_id[identity].input for identity in row_ids]
             if len(set(inputs)) != len(inputs) or exposed.intersection(inputs):
                 raise ValueError(

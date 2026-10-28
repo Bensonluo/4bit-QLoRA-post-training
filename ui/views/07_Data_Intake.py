@@ -2945,7 +2945,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
             verification = session.label_verification
             if verification and verification.get("stale"):
                 st.warning(
-                    "数据或处理方案修订后，此前完成的盲标核验已失效——监督信号的业务含义可能已经改变，"
+                    "数据或处理方案修订后，此前发起的盲标核验已失效——监督信号的业务含义可能已经改变，"
                     "请重新完成一轮核验后再准备训练。"
                 )
 

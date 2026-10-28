@@ -166,7 +166,12 @@ class MedicalEntityAdapter(DomainChartAdapter):
             if not per_sample:
                 continue
 
-            errors = [s for s in per_sample if not s.get("correct", True)]
+            errors = [s for s in per_sample if s.get("correct") is False]
+            unknown = [
+                s
+                for s in per_sample
+                if s.get("correct") is not False and s.get("correct") is not True
+            ]
             with st.expander(f"{model_name} — {len(errors)} 个错误样本"):
                 difficulty_filter = st.selectbox(
                     "按难度筛选",
@@ -195,18 +200,33 @@ class MedicalEntityAdapter(DomainChartAdapter):
                 if entity_filter != "All":
                     filtered = [e for e in filtered if e.get("entity_type") == entity_filter]
 
+                if len(filtered) > 20:
+                    st.caption(f"筛选后共 {len(filtered)} 条，仅展示前 20 条。")
                 for err in filtered[:20]:
-                    color = "green" if err.get("correct") else "red"
-                    st.markdown(
-                        f"**查询：**`{err.get('query', '')}` | "
-                        f"<span style='color:{color}'>"
-                        f"预测：`{err.get('predicted_name', '')}` | "
-                        f"正确答案：`{err.get('ground_truth', '')}`"
-                        f"</span> | "
-                        f"置信度：{fmt_num(err.get('confidence'))} | "
-                        f"难度：{difficulty_label(err.get('difficulty', ''))}",
-                        unsafe_allow_html=True,
-                    )
+                    _render_sample(err)
+            if unknown:
+                with st.expander(f"{model_name} — {len(unknown)} 个状态未知样本"):
+                    st.caption("这些记录缺少明确的正确或错误状态，不能计入错误数。")
+                    if len(unknown) > 20:
+                        st.caption(f"共 {len(unknown)} 条，仅展示前 20 条。")
+                    for sample in unknown[:20]:
+                        _render_sample(sample, unknown_status=True)
+
+
+def _render_sample(sample: dict, *, unknown_status: bool = False) -> None:
+    # Both queries and model outputs are untrusted data, not markup. Rendering
+    # them as text preserves their contents without interpreting HTML or Markdown.
+    raw_status = repr(sample["correct"]) if "correct" in sample else "未记录"
+    status = f"\n原始状态：{raw_status}" if unknown_status else ""
+    difficulty = sample.get("difficulty")
+    st.text(
+        f"查询：{sample.get('query', '')}\n"
+        f"预测：{sample.get('predicted_name', '')}\n"
+        f"正确答案：{sample.get('ground_truth', '')}\n"
+        f"置信度：{fmt_num(sample.get('confidence'))} | "
+        f"难度：{difficulty_label(difficulty) if difficulty is not None else '未记录'}"
+        f"{status}"
+    )
 
 
 _REGISTRY: dict[str, DomainChartAdapter] = {}

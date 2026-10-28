@@ -710,6 +710,7 @@ def test_submission_checks_historical_exposure_across_source_bindings(store):
     import sqlite3
     from uuid import uuid4
 
+    from src.workbench.intake_service import _label_source_view_digest
     from tests.unit.test_data_materialize import FULL
 
     service, session = store
@@ -734,7 +735,7 @@ def test_submission_checks_historical_exposure_across_source_bindings(store):
             (
                 legacy_id,
                 updated.session_id,
-                updated.full_data.source.digest,
+                _label_source_view_digest(updated.full_data),
                 updated.full_data.approved_recipe_digest,
                 1,
                 42,

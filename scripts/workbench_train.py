@@ -103,6 +103,17 @@ def main():
         if model_identity(Path(record["model_path"])) != record["model_identity"]:
             raise ValueError("本地模型或 tokenizer 在启动前发生变化。")
         session = IntakeSession.model_validate_json((directory / "session.json").read_text())
+        # The worker's preflight and training config must refer to the same
+        # prepared dataset, even if the on-disk snapshot was replaced after
+        # the parent checked it. Preflighting another healthy task would not
+        # verify the partition paths that the trainer is about to consume.
+        if (
+            session.session_id != record["session_id"]
+            or session.revision != record["session_revision"]
+            or session.dataset is None
+            or content_digest(session.dataset.model_dump()) != content_digest(record["dataset"])
+        ):
+            raise ValueError("任务快照与已确认的任务或数据版本不一致，不能启动训练。")
         preflight = preflight_dataset(
             session,
             training_tokenizer(record["model_path"]),

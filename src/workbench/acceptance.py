@@ -112,6 +112,30 @@ class AcceptanceService:
         if content_digest(record["criteria"]) != record["criteria_digest"]:
             raise ValueError("业务验收标准指纹不一致。")
 
+    @classmethod
+    def _validated_row(cls, row):
+        identity, revision, payload = row
+        try:
+            record = json.loads(payload)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("验收记录格式无效。") from exc
+        if (
+            not isinstance(identity, str)
+            or not re.fullmatch(r"ac-[0-9a-f]{32}", identity)
+            or type(revision) is not int
+            or revision < 0
+            or not isinstance(record, dict)
+            or record.get("acceptance_id") != identity
+            or type(record.get("revision")) is not int
+            or record["revision"] != revision
+        ):
+            raise ValueError("验收记录身份或版本与存储不一致。")
+        try:
+            cls._verify(record)
+        except (KeyError, TypeError, IndexError) as exc:
+            raise ValueError("验收记录格式无效。") from exc
+        return record
+
     def _write(self, connection, record, *, new=False):
         require_writable(self.read_only)
         record = json.loads(canonical(record))
@@ -141,12 +165,11 @@ class AcceptanceService:
             raise ValueError("找不到这次业务验收。")
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT snapshot FROM acceptances WHERE id=?", (acceptance_id,)
+                "SELECT id, revision, snapshot FROM acceptances WHERE id=?", (acceptance_id,)
             ).fetchone()
         if row is None:
             raise ValueError("找不到这次业务验收。")
-        record = json.loads(row[0])
-        self._verify(record)
+        record = self._validated_row(row)
         if record.get("evaluation_id"):
             report = self.evaluations.get_report(record["evaluation_id"])
             if content_digest(asdict(report)) != record.get("report_digest") or content_digest(
@@ -464,14 +487,18 @@ class AcceptanceService:
             raise ValueError("固定测试题身份在确认后发生变化。")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            latest = json.loads(
-                connection.execute(
-                    "SELECT snapshot FROM acceptances WHERE id=?", (acceptance_id,)
-                ).fetchone()[0]
-            )
-            self._verify(latest)
+            row = connection.execute(
+                "SELECT id, revision, snapshot FROM acceptances WHERE id=?", (acceptance_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("找不到这次业务验收。")
+            latest = self._validated_row(row)
+            if latest["frozen_digest"] != record["frozen_digest"]:
+                raise ValueError("验收记录身份或版本在检查期间发生变化，请重新核对。")
             if latest["status"] != "prepared":
-                return latest
+                return self.get(acceptance_id)
+            if canonical(latest) != canonical(record):
+                raise ValueError("验收记录身份或版本在检查期间发生变化，请重新核对。")
             record = latest
             if self._revealed(connection, record["exposure_keys"]):
                 record.update(
