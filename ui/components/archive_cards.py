@@ -51,6 +51,7 @@ def render_archive_cards(catalog: list[dict[str, Any]]) -> None:
                         text=(
                             f"{label} · 答对 {result['correct']} / {result['total']} · "
                             f"截断 {result['truncated']} 题"
+                            + (f" · 处理失败 {result['failed']} 题" if result.get("failed") else "")
                         ),
                     )
                 if st.button("查看记录", key=f"archive-select-{item['id']}", width="stretch"):

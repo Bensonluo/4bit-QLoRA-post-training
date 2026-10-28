@@ -30,7 +30,7 @@ from src.workbench.intake_models import IntakeSession
 from src.workbench.intake_service import IntakeService
 from src.workbench.iterations import IterationService
 from src.workbench.sources import content_digest
-from src.workbench.training_runs import TrainingRunService, write_json
+from src.workbench.training_runs import TrainingRunService, _require_verified_labels, write_json
 
 MANAGED = {
     "queued",
@@ -249,12 +249,7 @@ class IterationExecutionService:
             and live.full_data.confirmed_revision is not None
         ):
             raise ValueError("请先核对并确认全量数据，再提交自动执行。")
-        verification = getattr(live, "label_verification", None)
-        if not (isinstance(verification, dict) and verification.get("verdict") == "verified"):
-            raise ValueError(
-                "请先完成本轮数据的盲标核验（对抽样行隐藏答案作答并与数据标签一致），"
-                "再提交自动执行；数据或方案修订后核验会自动失效，需要重新完成。"
-            )
+        _require_verified_labels(live, action="提交自动执行并")
         iterations.claim_execution(iteration_id, iteration_id)
         record = {
             "iteration_id": iteration_id,
@@ -374,6 +369,16 @@ class IterationExecutionService:
                     message="授权后业务目标、资料或数据方案已变化，原授权不能继续。",
                 )
                 return False
+            _require_verified_labels(live, action="继续自动执行并")
+
+            def refresh_authorized_session() -> IntakeSession:
+                # Blind-label verdicts can change without changing the intake
+                # revision. Never hand the training service a cached verdict.
+                current = intake.load(snapshot.session_id)
+                if not authorization_valid(current, snapshot):
+                    raise ValueError("授权后业务目标、资料或数据方案已变化，原授权不能继续。")
+                _require_verified_labels(current, action="继续自动执行并")
+                return current
 
             needs_materialization = iteration["status"] == "confirmed" and (
                 live.dataset is None
@@ -413,6 +418,7 @@ class IterationExecutionService:
                     run_id=iteration.get("new_run_id"),
                     message="正在按已确认方案准备训练。",
                 )
+                live = refresh_authorized_session()
                 iteration = iterations.prepare(iteration_id, live, execution_id=iteration_id)
                 record_local["run_id"] = iteration.get("new_run_id")
 
@@ -467,6 +473,7 @@ class IterationExecutionService:
                     run_id=iteration["new_run_id"],
                     message="训练已按确认方案启动。",
                 )
+                live = refresh_authorized_session()
                 iteration = iterations.start(
                     iteration_id,
                     live,
@@ -521,7 +528,7 @@ class IterationExecutionService:
                 run_id=iteration["new_run_id"],
                 message="正在按父轮协议比较基座、父轮与本轮模型。",
             )
-            live = intake.load(live.session_id)
+            live = refresh_authorized_session()
             iteration = iterations.get(iteration_id)
             parent = training.get_status(iteration["parent_run_id"])
             if parent["status"] != "succeeded":

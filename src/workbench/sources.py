@@ -339,7 +339,10 @@ def read_source(
             columns, records, blank_lines = _read_csv(text, actual_delimiter)
         else:
             columns = []
-            for line_no, line in enumerate(text.splitlines(), 1):
+            # JSON strings may contain U+2028/U+2029/NEL as ordinary text.
+            # str.splitlines() treats those as line boundaries; universal
+            # newline iteration only separates physical LF, CRLF and CR.
+            for line_no, line in enumerate(io.StringIO(text, newline=None), 1):
                 if not line.strip():
                     blank_lines.append(line_no)
                     continue

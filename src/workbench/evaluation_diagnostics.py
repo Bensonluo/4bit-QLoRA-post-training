@@ -45,27 +45,17 @@ ECHO_MIN_OUTPUT_CHARS = 12
 
 def output_echoes_prompt(output: object, prompt: object) -> bool:
     """输出是否在复述提示文本（逐字前缀或改述式长片段共享）。"""
-
-    def longest_common_span(left: str, right: str) -> int:
-        best = 0
-        previous = [0] * (len(right) + 1)
-        for i in range(1, len(left) + 1):
-            current = [0] * (len(right) + 1)
-            for j in range(1, len(right) + 1):
-                if left[i - 1] == right[j - 1]:
-                    current[j] = previous[j - 1] + 1
-                    if current[j] > best:
-                        best = current[j]
-            previous = current
-        return best
-
     if not isinstance(output, str) or not isinstance(prompt, str):
         return False
-    if len(output) < ECHO_MIN_OUTPUT_CHARS:
+    span = ECHO_MIN_SHARED_CHARS
+    if len(output) < ECHO_MIN_OUTPUT_CHARS or min(len(output), len(prompt)) < span:
         return False
-    # 提示可能远长于输出；先用输出片段探测，避免整段动态规划无谓开销。
-    window = output[: max(64, len(output))]
-    return longest_common_span(window, prompt) >= ECHO_MIN_SHARED_CHARS
+    # A common span is at least the threshold iff an exact window of that
+    # length occurs in both strings. Index the shorter side to bound memory;
+    # full string comparisons avoid probabilistic hash-collision results.
+    shorter, longer = (output, prompt) if len(output) <= len(prompt) else (prompt, output)
+    windows = {shorter[index : index + span] for index in range(len(shorter) - span + 1)}
+    return any(longer[index : index + span] in windows for index in range(len(longer) - span + 1))
 
 
 def count_instruction_echo(rows: list[dict[str, Any]]) -> int:

@@ -490,6 +490,7 @@ def _handoff_catalog_entry(root: Path) -> dict:
                 "correct": sum(row["correct"] for row in model["rows"]),
                 "total": 8,
                 "truncated": sum(row["truncated"] for row in model["rows"]),
+                "failed": sum(row["status"] == "failed" for row in model["rows"]),
             }
             for model in handoff["report"]["models"]
         ],
