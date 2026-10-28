@@ -78,11 +78,13 @@ _ACTIVE_PROCS_BY_ROOT: dict[str, dict[str, subprocess.Popen]] = {}
 class TrainingRunner:
     """Launch and monitor training runs from the Streamlit UI."""
 
-    def __init__(self, project_root: str | None = None):
+    def __init__(self, project_root: str | None = None, *, read_only: bool = False):
         self.project_root = Path(project_root or ".")
+        self.read_only = read_only
         self._active = _ACTIVE_PROCS_BY_ROOT.setdefault(str(self.project_root.resolve()), {})
         self._configs_dir = self.project_root / "outputs" / "configs"
-        self._configs_dir.mkdir(parents=True, exist_ok=True)
+        if not read_only:
+            self._configs_dir.mkdir(parents=True, exist_ok=True)
         self._meta_file = self.project_root / "outputs" / ".run_meta.json"
         self._run_meta: dict[str, dict] = self._load_meta()
 
@@ -95,6 +97,8 @@ class TrainingRunner:
         return {}
 
     def _save_meta(self, changed: set[str] | None = None, deleted: set[str] | None = None) -> None:
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能修改运行记录。")
         updates = (
             self._run_meta if changed is None else {key: self._run_meta[key] for key in changed}
         )
@@ -118,6 +122,8 @@ class TrainingRunner:
         env_remove: list[str] | None = None,
     ) -> str:
         """Start training as a subprocess. Returns run_id."""
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能启动训练。")
         self._cleanup_finished()
 
         config_path = self._configs_dir / f"{run_name}.yaml"
@@ -187,6 +193,8 @@ class TrainingRunner:
         auto-refresh, Stop and Delete cover evaluation too. config_path is
         copied from the source training run for lineage/panel fallback.
         """
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能启动评测。")
         run_id = f"eval-{source_run_id}"
         self._cleanup_finished()
 
@@ -241,6 +249,8 @@ class TrainingRunner:
         评测同池（.run_meta.json），Activity 列表、Stop、Delete、30s 自动
         刷新免费覆盖。config_path 沿源训练 run 拷贝（lineage）。
         """
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能启动评测。")
         run_id = f"enteval-{source_run_id}"
         self._cleanup_finished()
 
@@ -296,7 +306,8 @@ class TrainingRunner:
         ret = proc.poll()
         if ret is None:
             return "running"
-        self._record_exit(run_id, ret)
+        if not self.read_only:
+            self._record_exit(run_id, ret)
         return "finished" if ret == 0 else "failed"
 
     def get_log_path(self, run_id: str) -> Path | None:
@@ -316,6 +327,8 @@ class TrainingRunner:
 
     def stop_training(self, run_id: str) -> None:
         """Terminate a running training subprocess."""
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能停止训练。")
         proc = self._active.get(run_id)
         if proc and proc.poll() is None:
             proc.terminate()
@@ -333,6 +346,8 @@ class TrainingRunner:
         Raises:
             KeyError: If the run_id is unknown.
         """
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能删除运行记录。")
         if run_id not in self._run_meta:
             raise KeyError(f"Unknown run: {run_id!r}")
         proc = self._active.get(run_id)
@@ -353,6 +368,8 @@ class TrainingRunner:
 
     def _record_exit(self, run_id: str, returncode: int | None) -> None:
         """Persist exit code so status survives UI restarts."""
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能修改运行记录。")
         if returncode is None:
             return
         meta = self._run_meta.setdefault(run_id, {})
@@ -368,6 +385,8 @@ class TrainingRunner:
 
     def _cleanup_finished(self) -> None:
         """Record exit codes, then drop old finished processes (keeps last 20)."""
+        if self.read_only:
+            raise PermissionError("展示模式只允许浏览，不能修改运行记录。")
         finished = [rid for rid, proc in self._active.items() if proc.poll() is not None]
         for rid in finished:
             self._record_exit(rid, self._active[rid].returncode)

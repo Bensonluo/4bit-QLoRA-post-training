@@ -16,6 +16,7 @@ from pydantic import Field, field_validator, model_validator
 
 from src.workbench.intake_models import Contract
 from src.workbench.materialize import dataset_is_current
+from src.workbench.readonly import open_database, require_writable
 from src.workbench.sandbox import TransformCase, TransformSandbox
 from src.workbench.sources import canonical, content_digest
 
@@ -159,14 +160,21 @@ def _binding(session):
 
 
 class ScoringService:
-    def __init__(self, root):
+    def __init__(self, root, *, read_only=False):
         self.root = Path(root).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.database = self.root / "scoring.sqlite"
-        with sqlite3.connect(self.database) as connection:
+        if read_only:
+            return
+        with self._connect() as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS scoring_specs (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)"
             )
+
+    def _connect(self, **kwargs: Any) -> sqlite3.Connection:
+        return open_database(self.database, read_only=self.read_only, **kwargs)
 
     def _development_records(self, session):
         if not dataset_is_current(session):
@@ -230,6 +238,7 @@ class ScoringService:
         }
 
     def draft(self, session, recipe, *, trace=None):
+        require_writable(self.read_only)
         recipe = ScoringRecipe.model_validate(
             recipe.model_dump() if isinstance(recipe, ScoringRecipe) else recipe
         )
@@ -303,7 +312,7 @@ class ScoringService:
             "scope_note": SCOPE,
         }
         record["record_digest"] = content_digest(record)
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute(
                 "INSERT INTO scoring_specs VALUES (?,?)", (record["scoring_id"], canonical(record))
             )
@@ -312,7 +321,9 @@ class ScoringService:
     def get(self, scoring_id):
         if not isinstance(scoring_id, str) or not re.fullmatch(r"sc-[0-9a-f]{32}", scoring_id):
             raise ValueError("无效评分规则 ID。")
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            raise ValueError("找不到这份评分规则。")
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT snapshot FROM scoring_specs WHERE id=?", (scoring_id,)
             ).fetchone()
@@ -331,7 +342,9 @@ class ScoringService:
         return record
 
     def list_specs(self, session_id=None):
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            return []
+        with self._connect() as connection:
             ids = [
                 row[0]
                 for row in connection.execute("SELECT id FROM scoring_specs ORDER BY rowid DESC")
@@ -343,6 +356,7 @@ class ScoringService:
         ]
 
     def confirm(self, scoring_id, session):
+        require_writable(self.read_only)
         record = self.get(scoring_id)
         if (
             record["session_revision"] != session.revision
@@ -359,7 +373,7 @@ class ScoringService:
         record["record_digest"] = content_digest(
             {key: value for key, value in record.items() if key != "record_digest"}
         )
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute(
                 "UPDATE scoring_specs SET snapshot=? WHERE id=?", (canonical(record), scoring_id)
             )
@@ -370,10 +384,11 @@ class ScoringService:
         }
 
 
-def load_confirmed(reference, session) -> ScoringRecipe:
+def load_confirmed(reference, session, *, read_only=False) -> ScoringRecipe:
     if not isinstance(reference, dict) or set(reference) != {"root", "scoring_id", "spec_digest"}:
         raise ValueError("已确认评分规则引用无效。")
-    record = ScoringService(reference["root"]).get(reference["scoring_id"])
+    options = {"read_only": True} if read_only else {}
+    record = ScoringService(reference["root"], **options).get(reference["scoring_id"])
     if record["status"] != "confirmed" or record["spec_digest"] != reference["spec_digest"]:
         raise ValueError("评分规则尚未确认或引用的内容指纹不一致。")
     if record["binding"] != _binding(session):

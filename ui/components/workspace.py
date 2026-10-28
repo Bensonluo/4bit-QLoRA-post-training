@@ -37,7 +37,8 @@ def load_tasks():
     root = config.PROJECT_ROOT / "outputs/workbench/intake"
     if not (root / "intake.sqlite").exists():
         return [], 0
-    return IntakeService(root).list_sessions_tolerant()
+    options = {"read_only": True} if runtime.DISPLAY_ONLY else {}
+    return IntakeService(root, **options).list_sessions_tolerant()
 
 
 def render_workspace() -> None:

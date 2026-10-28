@@ -17,6 +17,7 @@ from uuid import uuid4
 from src.utils.model_files import config_and_tokenizer_files
 from src.workbench.intake_models import IntakeSession
 from src.workbench.materialize import dataset_is_current
+from src.workbench.readonly import require_writable
 from src.workbench.sources import content_digest
 from src.workbench.training_preflight import load_local_tokenizer, preflight_dataset
 
@@ -110,9 +111,13 @@ class TrainingRunService:
         root: str | Path,
         project_root: str | Path | None = None,
         python_executable: str | None = None,
+        *,
+        read_only: bool = False,
     ):
         self.root = Path(root).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.project_root = (
             Path(project_root).resolve() if project_root else Path(__file__).resolve().parents[2]
         )
@@ -122,6 +127,8 @@ class TrainingRunService:
     def runner(self):
         from src.tracking.runner import TrainingRunner
 
+        if self.read_only:
+            return TrainingRunner(str(self.project_root), read_only=True)
         key = str(self.project_root)
         if key not in _RUNNERS:
             _RUNNERS[key] = TrainingRunner(str(self.project_root))
@@ -153,6 +160,7 @@ class TrainingRunService:
         model_options: dict | None = None,
         plan_trace: list[dict] | None = None,
     ) -> dict:
+        require_writable(self.read_only)
         from config.base import DataConfig, LoggingConfig, LoRAConfig, ModelConfig, TrainingConfig
         from config.sft import SFTConfig
         from src.utils.platform_utils import get_platform
@@ -285,6 +293,7 @@ class TrainingRunService:
         acknowledge_warnings: bool = False,
         recover_technical_failures: bool = False,
     ) -> dict:
+        require_writable(self.read_only)
         record = self._load(run_id)
         if type(recover_technical_failures) is not bool:
             raise ValueError("技术恢复授权必须明确为布尔值。")
@@ -398,6 +407,7 @@ class TrainingRunService:
         return self.runner.read_recent_logs(run_id, tail=tail)
 
     def stop(self, run_id: str) -> dict:
+        require_writable(self.read_only)
         record = self.get_status(run_id)
         directory = self._directory(run_id)
         # Cancellation is visible even while dispatcher waits or prepare hashes weights.

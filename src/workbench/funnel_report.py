@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 # next_action 枚举 → 闭环前段（数据准备侧）的旅程段映射；顺序即旅程顺序。
@@ -129,6 +130,8 @@ def collect_funnel(
     evaluation_root: str | Path,
     acceptance_root: str | Path,
     iteration_root: str | Path,
+    *,
+    read_only: bool = False,
 ) -> dict:
     """从本机 workbench 记录目录读取各段状态并组装漏斗快照。
 
@@ -145,47 +148,55 @@ def collect_funnel(
     acceptance_decisions: list[str] = []
     iteration_statuses: list[str] = []
     iteration_decisions: list[str] = []
+    options = {"read_only": True} if read_only else {}
     try:
         session_statuses = [
-            next_action(session) for session in IntakeService(store_root).list_sessions()
+            next_action(session) for session in IntakeService(store_root, **options).list_sessions()
         ]
-    except (ValueError, OSError):
+    except (ValueError, OSError, sqlite3.DatabaseError):
         errors.append("数据任务记录")
     try:
         from src.workbench.training_runs import TrainingRunService
 
-        training_statuses = [run["status"] for run in TrainingRunService(training_root).list_runs()]
-    except (ValueError, OSError):
+        training_service = (
+            TrainingRunService(training_root, read_only=True)
+            if read_only
+            else TrainingRunService(training_root)
+        )
+        training_statuses = [run["status"] for run in training_service.list_runs()]
+    except (ValueError, OSError, sqlite3.DatabaseError):
         errors.append("训练记录")
     try:
         from src.workbench.business_evaluation import BusinessEvaluationService
 
-        evaluations = BusinessEvaluationService(evaluation_root)
+        evaluations = BusinessEvaluationService(evaluation_root, **options)
         evaluation_purposes = [
             report.dataset.get("purpose", "development_only")
             for report in evaluations.list_reports(purpose=None)
         ]
         evaluation_load_errors = evaluations.load_errors
-    except (ValueError, OSError):
+    except (ValueError, OSError, sqlite3.DatabaseError):
         errors.append("对照评测记录")
     try:
         from src.workbench.acceptance import AcceptanceService
 
         acceptance_decisions = [
             (record.get("result") or {}).get("decision", "unknown")
-            for record in AcceptanceService(acceptance_root, evaluation_root).list_acceptances()
+            for record in AcceptanceService(
+                acceptance_root, evaluation_root, **options
+            ).list_acceptances()
         ]
-    except (ValueError, OSError):
+    except (ValueError, OSError, sqlite3.DatabaseError):
         errors.append("业务验收记录")
     try:
         from src.workbench.iterations import IterationService
 
-        iterations = IterationService(iteration_root, training_root, evaluation_root)
+        iterations = IterationService(iteration_root, training_root, evaluation_root, **options)
         iteration_statuses = [record["status"] for record in iterations.list_iterations()]
         iteration_decisions = [
             record["decision"] for record in iterations.list_iterations() if record.get("decision")
         ]
-    except (ValueError, OSError):
+    except (ValueError, OSError, sqlite3.DatabaseError):
         errors.append("改进轮次记录")
     report = build_funnel(
         session_next_actions=session_statuses,

@@ -8,12 +8,14 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from src.workbench.business_evaluation import BusinessEvaluationService, _model_identity
 from src.workbench.evaluation_diagnostics import EvaluationDiagnostics
 from src.workbench.evaluation_suites import EvalSuiteService, assert_compatible
 from src.workbench.intake_models import IntakeSession
+from src.workbench.readonly import open_database, require_writable
 from src.workbench.sources import canonical, content_digest
 from src.workbench.training_runs import TrainingRunService
 
@@ -38,23 +40,32 @@ def decision_metric_for_protocol(protocol: dict) -> str:
 
 
 class IterationService:
-    def __init__(self, root, training_root, evaluation_root):
+    def __init__(self, root, training_root, evaluation_root, *, read_only=False):
         self.root = Path(root).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.database = self.root / "iterations.sqlite"
-        self.training = TrainingRunService(training_root)
-        self.evaluations = BusinessEvaluationService(evaluation_root)
-        self.suites = EvalSuiteService(self.root / "suites")
-        with sqlite3.connect(self.database) as connection:
+        options = {"read_only": True} if read_only else {}
+        self.training = TrainingRunService(training_root, **options)
+        self.evaluations = BusinessEvaluationService(evaluation_root, **options)
+        self.suites = EvalSuiteService(self.root / "suites", **options)
+        if read_only:
+            return
+        with self._connect() as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS iterations (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, snapshot TEXT NOT NULL)"
             )
 
+    def _connect(self, **kwargs: Any) -> sqlite3.Connection:
+        return open_database(self.database, read_only=self.read_only, **kwargs)
+
     def _save(self, record, expected=None):
+        require_writable(self.read_only)
         record = json.loads(canonical(record))
         record["revision"] = 0 if expected is None else expected + 1
         record["updated_at"] = datetime.now(timezone.utc).isoformat()
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             if expected is None:
                 connection.execute(
                     "INSERT INTO iterations VALUES (?, ?, ?)",
@@ -72,7 +83,9 @@ class IterationService:
     def get(self, iteration_id):
         if not re.fullmatch(r"it-[0-9a-f]{32}", iteration_id):
             raise ValueError("无效改进轮次 ID。")
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            raise ValueError("找不到改进轮次。")
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT snapshot FROM iterations WHERE id=?", (iteration_id,)
             ).fetchone()
@@ -81,7 +94,9 @@ class IterationService:
         return json.loads(row[0])
 
     def list_iterations(self, session_id=None):
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            return []
+        with self._connect() as connection:
             records = [
                 json.loads(row[0])
                 for row in connection.execute("SELECT snapshot FROM iterations ORDER BY rowid DESC")
@@ -144,6 +159,7 @@ class IterationService:
         max_length=None,
         sft_protocol=None,
     ):
+        require_writable(self.read_only)
         if session.dataset is None:
             raise ValueError("请先物化当前确认的数据。")
         if type(data_change) is not bool:
@@ -237,6 +253,7 @@ class IterationService:
             raise ValueError("改进轮次必须继续同一业务目标；改变目标需另建任务。")
 
     def confirm(self, iteration_id, session):
+        require_writable(self.read_only)
         record = self.get(iteration_id)
         self._task(record, session)
         if (
@@ -257,6 +274,7 @@ class IterationService:
 
     def claim_execution(self, iteration_id, execution_id):
         """Bind the iteration to one automatic execution; manual handoffs are refused."""
+        require_writable(self.read_only)
         record = self.get(iteration_id)
         self._execution_owner(record, execution_id)
         if record.get("execution_id") == execution_id:
@@ -267,6 +285,7 @@ class IterationService:
         return self._save(record, record["revision"])
 
     def prepare(self, iteration_id, session, *, execution_id=None):
+        require_writable(self.read_only)
         record = self.get(iteration_id)
         self._execution_owner(record, execution_id)
         self._task(record, session)
@@ -327,6 +346,7 @@ class IterationService:
         recover_technical_failures=False,
         execution_id=None,
     ):
+        require_writable(self.read_only)
         record = self.get(iteration_id)
         self._execution_owner(record, execution_id)
         self._task(record, session)
@@ -383,6 +403,7 @@ class IterationService:
         return child
 
     def bind_evaluation(self, iteration_id, session, evaluation_id, *, execution_id=None):
+        require_writable(self.read_only)
         record = self.get(iteration_id)
         self._execution_owner(record, execution_id)
         self._task(record, session)
@@ -444,6 +465,7 @@ class IterationService:
         return self._save(record, record["revision"])
 
     def decide(self, iteration_id, decision, reason):
+        require_writable(self.read_only)
         record = self.get(iteration_id)
         if (
             record["status"] != "evaluated"

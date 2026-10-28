@@ -628,9 +628,11 @@ def verify_evaluation_report(report: EvaluationReport) -> None:
 
 
 class BusinessEvaluationService:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, read_only: bool = False):
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.load_errors: list[dict[str, str]] = []
 
     def get_report(self, evaluation_id: str) -> EvaluationReport:
@@ -687,6 +689,9 @@ class BusinessEvaluationService:
         )
 
     def _save(self, report: EvaluationReport) -> None:
+        from src.workbench.readonly import require_writable
+
+        require_writable(self.read_only)
         path = self.root / f"{report.evaluation_id}.json"
         temporary = path.with_suffix(".tmp")
         temporary.write_text(
@@ -703,6 +708,9 @@ class BusinessEvaluationService:
         runtime_factory: Callable[[EvaluationModel], EvaluationRuntime] | None = None,
     ) -> EvaluationReport:
         """Compare only the fixed development partition; final-test evaluation is separate."""
+        from src.workbench.readonly import require_writable
+
+        require_writable(self.read_only)
         protocol.validate()
         if (
             len(models) < 2
@@ -728,6 +736,9 @@ class BusinessEvaluationService:
         runtime_factory: Callable[[EvaluationModel], EvaluationRuntime] | None = None,
     ) -> EvaluationReport:
         """Evaluate one previously selected model on fixed final-test cases only."""
+        from src.workbench.readonly import require_writable
+
+        require_writable(self.read_only)
         if not isinstance(model, EvaluationModel) or not model.label.strip():
             raise ValueError("最终验收只接受一个已选定且名称明确的模型。")
         if model.gguf_path or model.gguf_runtime_path:
@@ -753,6 +764,9 @@ class BusinessEvaluationService:
         purpose: str,
         runtime_factory: Callable[[EvaluationModel], EvaluationRuntime] | None,
     ) -> EvaluationReport:
+        from src.workbench.readonly import require_writable
+
+        require_writable(self.read_only)
         protocol.validate()
         if not dataset_is_current(session):
             raise ValueError("请先确认当前全量资料并生成有效的数据版本。")

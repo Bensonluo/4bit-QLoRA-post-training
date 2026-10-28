@@ -23,6 +23,7 @@ from src.workbench.intake_models import (
     PreviewRow,
 )
 from src.workbench.materialize import dataset_is_current, materialize_dataset
+from src.workbench.readonly import open_database, require_writable
 from src.workbench.recipes import check_examples, preview_recipe, validate_analysis
 from src.workbench.sources import profile_source, read_source
 from src.workbench.temporal_split import parse_timestamp, temporal_row_times
@@ -285,11 +286,14 @@ def mismatch_triage_lines(items: list[dict], known_labels: set[str] | None = Non
 
 
 class IntakeService:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, read_only: bool = False):
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
         self.database = self.root / "intake.sqlite"
-        with sqlite3.connect(self.database) as connection:
+        if read_only:
+            return
+        self.root.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, snapshot TEXT NOT NULL)"
             )
@@ -310,12 +314,19 @@ class IntakeService:
                 "status TEXT NOT NULL, verdict TEXT, result TEXT, created_at TEXT NOT NULL)"
             )
 
+    def _connect(self) -> sqlite3.Connection:
+        return open_database(self.database, read_only=self.read_only)
+
+    def _require_writable(self) -> None:
+        require_writable(self.read_only)
+
     def _save(self, session: IntakeSession, expected_revision: int | None) -> IntakeSession:
+        self._require_writable()
         updated = session.model_copy(deep=True)
         updated.revision = 0 if expected_revision is None else expected_revision + 1
         updated.updated_at = datetime.now(timezone.utc).isoformat()
         payload = updated.model_dump_json()
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             if expected_revision is None:
                 connection.execute(
                     "INSERT INTO sessions VALUES (?, ?, ?)",
@@ -346,6 +357,7 @@ class IntakeService:
         delimiter: str | None = None,
         sheet: str | int | None = None,
     ) -> IntakeSession:
+        self._require_writable()
         if not goal.strip():
             raise ValueError("请先描述希望模型完成的业务任务。")
         source = read_source(
@@ -367,7 +379,9 @@ class IntakeService:
     def load(self, session_id: str) -> IntakeSession:
         if not re.fullmatch(r"[0-9a-f]{32}", session_id):
             raise ValueError("无效任务 ID。")
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            raise ValueError("找不到这个任务。")
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT snapshot FROM sessions WHERE id=?", (session_id,)
             ).fetchone()
@@ -387,7 +401,7 @@ class IntakeService:
         if report is None or recipe is None:
             session.label_verification = None
             return session
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT verification_id, status, verdict, result, created_at FROM label_verifications "
                 "WHERE session_id=? AND full_source_digest=? AND recipe_digest=? "
@@ -424,7 +438,9 @@ class IntakeService:
         return session
 
     def list_sessions(self) -> list[IntakeSession]:
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            return []
+        with self._connect() as connection:
             rows = connection.execute(
                 "SELECT snapshot FROM sessions ORDER BY rowid DESC"
             ).fetchall()
@@ -436,7 +452,9 @@ class IntakeService:
         单行坏快照不再打崩整个任务列表；坏行计数交还调用方如实告知（读不到 ≠ 没有）。
         ``list_sessions`` 保持严格语义供 funnel 等 CLI 诊断使用。
         """
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            return [], 0
+        with self._connect() as connection:
             rows = connection.execute(
                 "SELECT snapshot FROM sessions ORDER BY rowid DESC"
             ).fetchall()
@@ -452,7 +470,7 @@ class IntakeService:
     def dataset_snapshot(self, session_id: str, dataset_version: str) -> IntakeSession:
         """Find the recorded context used by a historical report, never relabel current rows."""
         self.load(session_id)
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             rows = connection.execute(
                 "SELECT snapshot FROM revisions WHERE id=? ORDER BY revision DESC", (session_id,)
             ).fetchall()
@@ -463,6 +481,7 @@ class IntakeService:
         raise ValueError("找不到评测对应的历史数据快照，不能用当前数据冒充旧证据。")
 
     def answer(self, session_id: str, feedback: str) -> IntakeSession:
+        self._require_writable()
         session = self.load(session_id)
         if not feedback.strip():
             raise ValueError("请填写业务回答或修正说明。")
@@ -491,6 +510,7 @@ class IntakeService:
         model: str = "",
         trace: list | None = None,
     ) -> IntakeSession:
+        self._require_writable()
         raw_sources = session.sources or {"main": session.source}
         source = raw_sources["main"]
         composition_report = None
@@ -548,6 +568,7 @@ class IntakeService:
         return self._save(session, session.revision)
 
     def analyze(self, session_id: str, client: ChatClient) -> IntakeSession:
+        self._require_writable()
         session = self.load(session_id)
         analysis, trace = analyze_intake(session, client)
         updated = self.apply_analysis(session, analysis, model=client.model, trace=trace)
@@ -586,6 +607,7 @@ class IntakeService:
 
     def start_contrast_check(self, session_id: str, expected_revision: int) -> dict:
         """配对对比:两行输入+打乱的两个答案,用户配对——确认不再是盲点头。"""
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("任务已更新，请读取最新预览后再开始对比核验。")
@@ -602,7 +624,7 @@ class IntakeService:
             else ""
         )
         # 轮次感知抽样:已完成轮数计入种子,每轮换一组题,二连对防瞎蒙。
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             round_row = connection.execute(
                 "SELECT COUNT(*) FROM contrast_checks "
                 "WHERE session_id=? AND binding=? AND status='completed'",
@@ -620,7 +642,7 @@ class IntakeService:
         options = [rows[0].target, rows[1].target]
         random.Random(seed + 1).shuffle(options)
         check_id = uuid4().hex
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute(
                 "INSERT INTO contrast_checks VALUES (?,?,?,?,?,?,?,?,?)",
                 (
@@ -646,8 +668,9 @@ class IntakeService:
         self, session_id: str, check_id: str, mapping: dict[str, str]
     ) -> dict:
         """判定配对并留档;配错不会静默——确认前必须有人真正读懂了转换。"""
+        self._require_writable()
         session = self.load(session_id)
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT session_id, binding, row_ids, options, status FROM contrast_checks "
                 "WHERE check_id=?",
@@ -664,7 +687,7 @@ class IntakeService:
             else ""
         )
         if binding != current_binding:
-            with sqlite3.connect(self.database) as connection:
+            with self._connect() as connection:
                 connection.execute(
                     "UPDATE contrast_checks SET status='stale' WHERE check_id=?", (check_id,)
                 )
@@ -702,7 +725,7 @@ class IntakeService:
                 else "配对错误：此前的确认可能是盲点头；请重新查看预览后再确认。"
             ),
         }
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute(
                 "UPDATE contrast_checks SET status='completed', verdict=?, result=? "
                 "WHERE check_id=?",
@@ -726,7 +749,7 @@ class IntakeService:
             if session.analysis and session.analysis.recipe
             else ""
         )
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             rows = connection.execute(
                 "SELECT verdict, result FROM contrast_checks "
                 "WHERE session_id=? AND binding=? AND status='completed' "
@@ -775,6 +798,7 @@ class IntakeService:
     def confirm(
         self, session_id: str, expected_revision: int, row_ids: list[str] | None = None
     ) -> IntakeSession:
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("方案已变化，请先查看最新预览。")
@@ -808,6 +832,7 @@ class IntakeService:
         sheet: str | int | None = None,
     ) -> IntakeSession:
         """Validate an upload, or the original source when it was declared full data."""
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("方案已变化，请先查看最新预览与全量报告。")
@@ -885,6 +910,7 @@ class IntakeService:
         self, session_id: str, expected_revision: int, row_ids: list[str] | None = None
     ) -> IntakeSession:
         """Record review of this full-data report; this does not authorize training."""
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("全量报告或方案已变化，请先查看最新结果。")
@@ -921,6 +947,7 @@ class IntakeService:
         evaluation_suite: dict | None = None,
     ) -> IntakeSession:
         """Publish confirmed full data; the resulting config still needs preflight."""
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("方案或全量报告已变化，请查看最新结果后再生成分区。")
@@ -942,6 +969,7 @@ class IntakeService:
         self, session_id: str, expected_revision: int, *, sample_size: int = 5
     ) -> dict:
         """Sample labelled rows and hide their answers; the user must reproduce them."""
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("任务已更新，请读取最新结果后再开始盲标核验。")
@@ -955,7 +983,7 @@ class IntakeService:
             raise ValueError("当前全量预览没有已标注的行，无法核验。")
         binding = report.source.digest + report.approved_recipe_digest
         by_id = {row.row_id: row for row in labelled}
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             # 抽题与待答复用共享写锁，刷新或并发调用不会发出多个同题挑战。
             connection.execute("BEGIN IMMEDIATE")
             exposed = self._revealed_label_inputs(connection, session, by_id)
@@ -1119,8 +1147,9 @@ class IntakeService:
         self, session_id: str, verification_id: str, answers: dict[str, str]
     ) -> dict:
         """Compare the user's blind answers with the data labels; verdict gates training."""
+        self._require_writable()
         session = self.load(session_id)
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT session_id, full_source_digest, recipe_digest, row_ids, status "
                 "FROM label_verifications WHERE verification_id=?",
@@ -1137,7 +1166,7 @@ class IntakeService:
             or report.source.digest != full_digest
             or report.approved_recipe_digest != recipe_digest
         ):
-            with sqlite3.connect(self.database) as connection:
+            with self._connect() as connection:
                 connection.execute(
                     "UPDATE label_verifications SET status='stale' WHERE verification_id=?",
                     (verification_id,),
@@ -1207,7 +1236,7 @@ class IntakeService:
         triage = mismatch_triage_lines(items, known_labels=known_labels)
         if triage:
             result["mismatch_triage"] = triage
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             # 暴露检查与写入同一事务：旧版或并发预发出的重叠挑战不能用公布答案通过。
             connection.execute("BEGIN IMMEDIATE")
             current_status = connection.execute(
@@ -1244,6 +1273,7 @@ class IntakeService:
         delimiter: str | None = None,
         sheet: str | int | None = None,
     ) -> IntakeSession:
+        self._require_writable()
         session = self.load(session_id)
         if session.revision != expected_revision:
             raise ValueError("资料已更新，请读取最新任务后再添加。")
@@ -1299,6 +1329,7 @@ class IntakeService:
         ``sheets`` 按资料别名指定各自 Excel 的 sheet（名称或 1 起始序号），与
         ``files`` 一一对应；不传时全部读第一个 sheet，行为与此前完全一致。
         """
+        self._require_writable()
         from src.workbench.composition import CompositionRecipe, compose_sources, required_sources
         from src.workbench.intake_models import FullDataIssue
 
@@ -1409,6 +1440,7 @@ class IntakeService:
         *,
         sft_protocol: str = "alpaca_full_prompt_v1",
     ) -> IntakeSession:
+        self._require_writable()
         from src.workbench.training_preflight import preflight_dataset
 
         session = self.load(session_id)

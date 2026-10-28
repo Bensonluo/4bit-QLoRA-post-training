@@ -24,6 +24,7 @@ from src.workbench.business_evaluation import (
 from src.workbench.evaluation_suites import EvalSuiteService, evaluation_cases
 from src.workbench.intake_models import IntakeSession
 from src.workbench.materialize import dataset_is_current
+from src.workbench.readonly import open_database, require_writable
 from src.workbench.sources import canonical, content_digest
 
 _FROZEN = (
@@ -79,13 +80,18 @@ _SPEC_ELEMENT_KEYS = ("goal", "answer_semantics", "scoring", "temporal_split")
 
 
 class AcceptanceService:
-    def __init__(self, root, evaluation_root):
+    def __init__(self, root, evaluation_root, *, read_only=False):
         self.root = Path(root).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.database = self.root / "acceptances.sqlite"
-        self.evaluations = BusinessEvaluationService(evaluation_root)
-        self.suites = EvalSuiteService(self.root / "suites")
-        with sqlite3.connect(self.database) as connection:
+        options = {"read_only": True} if read_only else {}
+        self.evaluations = BusinessEvaluationService(evaluation_root, **options)
+        self.suites = EvalSuiteService(self.root / "suites", **options)
+        if read_only:
+            return
+        with self._connect() as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS acceptances (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, snapshot TEXT NOT NULL)"
             )
@@ -96,6 +102,9 @@ class AcceptanceService:
                 "CREATE TABLE IF NOT EXISTS revealed_cases (key TEXT PRIMARY KEY, acceptance_id TEXT NOT NULL)"
             )
 
+    def _connect(self, **kwargs: Any) -> sqlite3.Connection:
+        return open_database(self.database, read_only=self.read_only, **kwargs)
+
     @staticmethod
     def _verify(record):
         if content_digest(_frozen_payload(record)) != record["frozen_digest"]:
@@ -104,6 +113,7 @@ class AcceptanceService:
             raise ValueError("业务验收标准指纹不一致。")
 
     def _write(self, connection, record, *, new=False):
+        require_writable(self.read_only)
         record = json.loads(canonical(record))
         previous = record.get("revision", 0)
         record["revision"] = 0 if new else previous + 1
@@ -127,7 +137,9 @@ class AcceptanceService:
             r"ac-[0-9a-f]{32}", acceptance_id
         ):
             raise ValueError("无效验收 ID。")
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            raise ValueError("找不到这次业务验收。")
+        with self._connect() as connection:
             row = connection.execute(
                 "SELECT snapshot FROM acceptances WHERE id=?", (acceptance_id,)
             ).fetchone()
@@ -145,7 +157,9 @@ class AcceptanceService:
         return record
 
     def list_acceptances(self, session_id=None):
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            return []
+        with self._connect() as connection:
             ids = [
                 row[0]
                 for row in connection.execute("SELECT id FROM acceptances ORDER BY rowid DESC")
@@ -239,6 +253,7 @@ class AcceptanceService:
         *,
         task_spec: dict | None = None,
     ):
+        require_writable(self.read_only)
         if not dataset_is_current(session):
             raise ValueError("请先确认全量资料并物化独立数据分区。")
         if not isinstance(model, EvaluationModel) or not model.label.strip():
@@ -306,7 +321,7 @@ class AcceptanceService:
         contract = content_digest(
             {"criteria": criteria, "protocol": protocol_settings(protocol), **scoring_identity}
         )
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             previous = connection.execute(
                 "SELECT digest FROM suite_criteria WHERE suite_id=?", (reference["suite_id"],)
@@ -425,6 +440,7 @@ class AcceptanceService:
         return result
 
     def run(self, acceptance_id, session, *, runtime_factory=None):
+        require_writable(self.read_only)
         record = self.get(acceptance_id)
         if record["status"] != "prepared":
             return record
@@ -446,7 +462,7 @@ class AcceptanceService:
         cases = evaluation_cases(snapshot, split="test")["records"]
         if self._exposure_keys(snapshot, cases) != record["exposure_keys"]:
             raise ValueError("固定测试题身份在确认后发生变化。")
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             latest = json.loads(
                 connection.execute(
@@ -517,10 +533,11 @@ class AcceptanceService:
                 error=str(exc),
                 result={"decision": "insufficient_evidence", "reason": str(exc)},
             )
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             return self._write(connection, record)
 
     def review(self, acceptance_id, decisions):
+        require_writable(self.read_only)
         record = self.get(acceptance_id)
         if (
             record["status"] != "needs_business_review"
@@ -570,5 +587,5 @@ class AcceptanceService:
         record["result"] = self._result(record)
         if record["result"]["decision"] != "pending_review":
             record["status"] = "completed"
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             return self._write(connection, record)

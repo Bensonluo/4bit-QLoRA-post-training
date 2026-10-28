@@ -25,6 +25,8 @@ def collect_task_spec(
     evaluation_root: Path | str,
     iteration_root: Path | str,
     training_root: Path | str,
+    *,
+    read_only: bool = False,
 ) -> dict:
     """只读汇编任务规约；不写任何状态，草稿不进入投影。"""
     from src.workbench.acceptance import AcceptanceService
@@ -32,19 +34,20 @@ def collect_task_spec(
     from src.workbench.intake_service import IntakeService
     from src.workbench.iterations import IterationService
 
-    session = IntakeService(store).load(session_id)
+    options = {"read_only": True} if read_only else {}
+    session = IntakeService(store, **options).load(session_id)
     analysis = session.analysis
     recipe = analysis.recipe if analysis else None
 
-    specs = ScoringService(scoring_root).list_specs(session_id=session_id)
+    specs = ScoringService(scoring_root, **options).list_specs(session_id=session_id)
     confirmed = [record for record in specs if record["status"] == "confirmed"]
 
-    acceptances = AcceptanceService(acceptance_root, evaluation_root).list_acceptances(
+    acceptances = AcceptanceService(acceptance_root, evaluation_root, **options).list_acceptances(
         session_id=session_id
     )
-    iterations = IterationService(iteration_root, training_root, evaluation_root).list_iterations(
-        session_id=session_id
-    )
+    iterations = IterationService(
+        iteration_root, training_root, evaluation_root, **options
+    ).list_iterations(session_id=session_id)
     latest = iterations[0] if iterations else None
 
     return {

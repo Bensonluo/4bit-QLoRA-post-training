@@ -12,6 +12,7 @@ from pathlib import Path
 
 from src.workbench.full_data import full_data_is_current
 from src.workbench.intake_models import IntakeSession
+from src.workbench.readonly import require_writable
 from src.workbench.sources import canonical, content_digest
 
 EVALUATION_SPLITS = ("validation", "test")
@@ -97,9 +98,11 @@ def verify_suite(reference: dict) -> dict:
 
 
 class EvalSuiteService:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, read_only: bool = False):
         self.root = Path(root).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
 
     def get(self, suite_id: str) -> dict:
         return _reference(self.root, verify_suite({"root": str(self.root), "suite_id": suite_id}))
@@ -121,6 +124,7 @@ class EvalSuiteService:
         return assert_compatible(session, reference)
 
     def freeze(self, session: IntakeSession, *, new_suite: bool = False) -> dict:
+        require_writable(self.read_only)
         from src.workbench.materialize import dataset_is_current
         from src.workbench.training_preflight import _verified_partitions
 

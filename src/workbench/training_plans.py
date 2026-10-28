@@ -9,9 +9,11 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from src.workbench.materialize import dataset_is_current
+from src.workbench.readonly import open_database, require_writable
 from src.workbench.sources import canonical, content_digest
 from src.workbench.training_preflight import preflight_dataset
 from src.workbench.training_runs import TrainingRunService, model_identity, training_tokenizer
@@ -239,17 +241,26 @@ def _options(proposal, platform):
 
 
 class TrainingPlanService:
-    def __init__(self, root, training_root):
+    def __init__(self, root, training_root, *, read_only=False):
         self.root = Path(root).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not read_only:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.database = self.root / "plans.sqlite"
-        self.training = TrainingRunService(training_root)
-        with sqlite3.connect(self.database) as connection:
+        options = {"read_only": True} if read_only else {}
+        self.training = TrainingRunService(training_root, **options)
+        if read_only:
+            return
+        with self._connect() as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)"
             )
 
+    def _connect(self, **kwargs: Any) -> sqlite3.Connection:
+        return open_database(self.database, read_only=self.read_only, **kwargs)
+
     def context(self, session, model_paths: list[str]) -> dict:
+        require_writable(self.read_only)
         from src.utils.platform_utils import detect_platform, recommend_settings
         from src.workbench.intake_service import next_action, next_action_phrase
 
@@ -342,6 +353,7 @@ class TrainingPlanService:
     def probe(
         self, session, model_path, max_length, *, sft_protocol="alpaca_full_prompt_v1"
     ) -> dict:
+        require_writable(self.read_only)
         if type(max_length) is not int or max_length <= 0:
             raise ValueError("max_length 必须为正整数。")
         result = {
@@ -401,6 +413,7 @@ class TrainingPlanService:
         return result
 
     def save(self, session, proposal, context, trace) -> dict:
+        require_writable(self.read_only)
         proposal = json.loads(canonical(proposal))
         required = {
             "model_path",
@@ -492,7 +505,7 @@ class TrainingPlanService:
             "scope_note": SCOPE,
         }
         record["proposal_digest"] = content_digest(proposal)
-        with sqlite3.connect(self.database) as connection:
+        with self._connect() as connection:
             connection.execute(
                 "INSERT INTO plans VALUES (?, ?)", (record["plan_id"], canonical(record))
             )
@@ -501,14 +514,18 @@ class TrainingPlanService:
     def get(self, plan_id):
         if not isinstance(plan_id, str) or not re.fullmatch(r"tp-[0-9a-f]{32}", plan_id):
             raise ValueError("无效训练方案 ID。")
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            raise ValueError("找不到训练方案。")
+        with self._connect() as connection:
             row = connection.execute("SELECT snapshot FROM plans WHERE id=?", (plan_id,)).fetchone()
         if row is None:
             raise ValueError("找不到训练方案。")
         return json.loads(row[0])
 
     def list_plans(self, session_id=None):
-        with sqlite3.connect(self.database) as connection:
+        if self.read_only and not self.database.exists():
+            return []
+        with self._connect() as connection:
             records = [
                 json.loads(row[0])
                 for row in connection.execute("SELECT snapshot FROM plans ORDER BY rowid DESC")
@@ -518,8 +535,9 @@ class TrainingPlanService:
         ]
 
     def prepare(self, plan_id, session):
+        require_writable(self.read_only)
         # Serialize confirmation across UI/CLI processes; a second click reuses the existing run.
-        with sqlite3.connect(self.database, timeout=120) as connection:
+        with self._connect(timeout=120) as connection:
             connection.execute("BEGIN IMMEDIATE")
             record = self.get(plan_id)
             proposal = record["proposal"]

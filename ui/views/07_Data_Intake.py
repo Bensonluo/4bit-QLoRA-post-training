@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -31,6 +32,7 @@ from src.workbench.intake_service import (
     wilson_lower_bound,
 )
 from src.workbench.iterations import IterationService
+from src.workbench.readonly import ReadOnlyWalUnsupported
 from src.workbench.training_guidance import (
     LR_TIER_DISCLAIMER,
     SFT_PROTOCOL_LABELS,
@@ -44,7 +46,14 @@ from ui.config import PROJECT_ROOT
 from ui.runtime import DISPLAY_ONLY, action_button, action_submit, action_upload
 
 st.set_page_config(page_title="目标与数据 — TuneSmith", page_icon="🧩", layout="wide")
-service = IntakeService(PROJECT_ROOT / "outputs" / "workbench" / "intake")
+read_only_options = {"read_only": True} if DISPLAY_ONLY else {}
+try:
+    service = IntakeService(PROJECT_ROOT / "outputs" / "workbench" / "intake", **read_only_options)
+except (OSError, sqlite3.DatabaseError):
+    st.error("任务存储暂不可读，请检查存储文件和访问权限后刷新。")
+    if st.button("浏览公开历史档案", key="intake-storage-error-history"):
+        st.switch_page("views/08_Showcase.py")
+    st.stop()
 
 
 TEMPORAL_EXCLUSION_NAMES = {
@@ -348,13 +357,30 @@ def collect_current_task_spec(session_id: str) -> dict:
         PROJECT_ROOT / "outputs/workbench/evaluations",
         PROJECT_ROOT / "outputs/workbench/iterations",
         PROJECT_ROOT / "outputs/workbench/training",
+        **read_only_options,
     )
+
+
+def show_current_task_spec(session_id: str, *, show_json: bool = False) -> dict | None:
+    from src.workbench.task_spec_projection import summarize_task_spec
+
+    try:
+        spec = collect_current_task_spec(session_id)
+    except (ValueError, OSError, sqlite3.DatabaseError) as exc:
+        st.error(f"任务规约暂不可读，请检查相关记录：{exc}")
+        return
+    for line in summarize_task_spec(spec):
+        st.write(line)
+    if show_json:
+        with st.expander("查看规约原始 JSON"):
+            st.json(spec)
+    return spec
 
 
 def scoring_store():
     from src.workbench.business_scoring import ScoringService
 
-    return ScoringService(PROJECT_ROOT / "outputs/workbench/business-scoring")
+    return ScoringService(PROJECT_ROOT / "outputs/workbench/business-scoring", **read_only_options)
 
 
 def select_business_scoring(*, key: str) -> dict | None:
@@ -364,7 +390,7 @@ def select_business_scoring(*, key: str) -> dict | None:
             for item in scoring_store().list_specs(session_id=session.session_id)
             if item["status"] == "confirmed"
         }
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.DatabaseError) as exc:
         st.error(f"无法读取评分规则：{exc}")
         return None
     if not choices:
@@ -449,7 +475,7 @@ def show_business_scoring() -> None:
         st.info("请补充上方业务要求后重新拟定规则；当前没有可确认的评分方案。")
     try:
         specs = scoring_store().list_specs(session_id=session.session_id)
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.DatabaseError) as exc:
         st.error(f"无法读取评分草案：{exc}")
         return
     for spec in specs:
@@ -508,6 +534,7 @@ def show_final_acceptance(run: dict) -> None:
     acceptance = AcceptanceService(
         PROJECT_ROOT / "outputs/workbench/acceptance",
         PROJECT_ROOT / "outputs/workbench/evaluations",
+        **read_only_options,
     )
     run_id = run["run_id"]
     with st.expander("按业务标准做最终验收"):
@@ -542,11 +569,7 @@ def show_final_acceptance(run: dict) -> None:
             )
             with st.expander("📋 任务规约（冻结验收条款前的口径）"):
                 # 与 task-spec-show、训练启动前折叠区同源(summarize_task_spec 单一来源)。
-                from src.workbench.task_spec_projection import summarize_task_spec
-
-                spec = collect_current_task_spec(session.session_id)
-                for line in summarize_task_spec(spec):
-                    st.write(line)
+                spec = show_current_task_spec(session.session_id)
             with st.form(f"acceptance_prepare_{run_id}"):
                 standard = st.text_area(
                     "最终业务验收标准", placeholder="说明什么样的回答可交付，以及哪些错误不能接受。"
@@ -589,9 +612,11 @@ def show_final_acceptance(run: dict) -> None:
                     suite_test_count,
                 ):
                     st.caption(gate_line)
-                prepare = action_submit("冻结此模型与业务验收标准")
+                prepare = action_submit("冻结此模型与业务验收标准", disabled=spec is None)
             if prepare:
-                if not standard.strip() or minimum_score is None or minimum_cases is None:
+                if spec is None:
+                    st.error("任务规约暂不可读，无法冻结验收标准。")
+                elif not standard.strip() or minimum_score is None or minimum_cases is None:
                     st.error("请明确填写业务标准、最低通过率和最低题数，软件不替你设定业务门槛。")
                 else:
                     try:
@@ -628,7 +653,7 @@ def show_final_acceptance(run: dict) -> None:
             st.info("当前任务数据已变化；这里只展示该模型已保存的验收记录。")
         try:
             records = acceptance.list_acceptances(session_id=session.session_id)
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, sqlite3.DatabaseError) as exc:
             st.error(f"无法读取最终验收记录：{exc}")
             return
         for record in records:
@@ -800,7 +825,7 @@ def show_training_recommendations() -> None:
 
     plan_root = PROJECT_ROOT / "outputs/workbench/training-plans"
     training_root = PROJECT_ROOT / "outputs/workbench/training"
-    plans = TrainingPlanService(plan_root, training_root)
+    plans = TrainingPlanService(plan_root, training_root, **read_only_options)
     st.write("**让 Agent 推荐训练方案**")
     st.caption(
         "提供一个或多个已准备好的本地模型目录。Agent 将结合业务目标、真实数据统计、模型信息和本机条件，实际检查 tokenizer 后给出建议。不会自动下载模型或启动训练。"
@@ -884,7 +909,7 @@ def show_training_recommendations() -> None:
                 st.error(str(exc))
     try:
         saved_plans = plans.list_plans(session_id=session.session_id)
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.DatabaseError) as exc:
         st.error(f"无法读取已保存训练方案：{exc}")
         return
     from src.workbench.report_summary import PLAN_STATUS_NAMES
@@ -1369,7 +1394,18 @@ with st.sidebar:
     st.subheader("已有数据任务")
     # 容错列举（R131）：一行坏快照不得打崩侧栏（它在任何内容前执行）——跳过坏行
     # 并如实计数，其余任务与新建流程不受影响。读不到 ≠ 没有：不落回「无任务」空态。
-    sessions, corrupt_sessions = service.list_sessions_tolerant()
+    try:
+        sessions, corrupt_sessions = service.list_sessions_tolerant()
+    except (OSError, sqlite3.DatabaseError) as exc:
+        if isinstance(exc, ReadOnlyWalUnsupported):
+            st.error(
+                "任务存储使用 WAL 日志模式或存在残留日志，展示环境暂无法只读浏览。请在本地工作台打开。"
+            )
+        else:
+            st.error("任务存储暂不可读，请检查存储文件和访问权限后刷新。")
+        if st.button("浏览公开历史档案", key="intake-storage-error-history"):
+            st.switch_page("views/08_Showcase.py")
+        st.stop()
     if corrupt_sessions:
         st.warning(
             f"有 {corrupt_sessions} 个任务的数据快照损坏，已从列表跳过；其余任务和"
@@ -1403,6 +1439,7 @@ with st.sidebar:
                 PROJECT_ROOT / "outputs" / "workbench" / "evaluations",
                 PROJECT_ROOT / "outputs" / "workbench" / "acceptance",
                 PROJECT_ROOT / "outputs" / "workbench" / "iterations",
+                **read_only_options,
             )
         except Exception as exc:
             # 侧栏漏斗读取守卫（R131）：collect_funnel 内部走严格 list_sessions，
@@ -1421,6 +1458,10 @@ if "intake_id" not in st.session_state:
     st.caption("业务任务 / 目标与数据")
     st.title("先说业务目标，再看数据")
     st.write("提供原始资料，核对模型需要学习的输入与答案。")
+    if DISPLAY_ONLY:
+        st.info("展示环境可以浏览现有任务，或查看示例数据与公开历史。")
+        if st.button("查看示例与历史", key="intake-display-showcase"):
+            st.switch_page("views/08_Showcase.py")
     goal = st.text_area(
         "希望模型完成什么业务工作？",
         placeholder="例如：根据客户首次咨询判断售后问题类型。历史工单里的处理结果可能不是我想要的标签。",
@@ -1533,6 +1574,7 @@ iteration_service = IterationService(
     PROJECT_ROOT / "outputs/workbench/iterations",
     PROJECT_ROOT / "outputs/workbench/training",
     PROJECT_ROOT / "outputs/workbench/evaluations",
+    **read_only_options,
 )
 try:
     iterations = iteration_service.list_iterations(session_id=session.session_id)
@@ -1569,7 +1611,9 @@ if iterations:
             st.error(f"无法读取本轮执行记录：{exc}")
             execution_records[item["iteration_id"]] = {"status": "unavailable", "message": str(exc)}
 active_iteration = next((item for item in iterations if item["status"] == "confirmed"), None)
-suite_service = EvalSuiteService(PROJECT_ROOT / "outputs/workbench/evaluation-suites")
+suite_service = EvalSuiteService(
+    PROJECT_ROOT / "outputs/workbench/evaluation-suites", **read_only_options
+)
 try:
     available_suites = {ref["suite_id"]: ref for ref in suite_service.list_suites()}
 except Exception as exc:
@@ -3184,13 +3228,7 @@ if dataset is not None:
             st.success("独立数据分区已生成，可继续训练前检查；分区就绪不代表模型效果已验收。")
         with st.expander("📋 任务规约投影（训练启动前对齐「我们在教模型什么」）"):
             # ADR-1 只读投影:由既有确认记录汇编,不新增状态;与 CLI task-spec-show 同源同词汇。
-            from src.workbench.task_spec_projection import summarize_task_spec
-
-            spec = collect_current_task_spec(session.session_id)
-            for line in summarize_task_spec(spec):
-                st.write(line)
-            with st.expander("查看规约原始 JSON"):
-                st.json(spec)
+            show_current_task_spec(session.session_id, show_json=True)
         st.subheader("训练前检查")
         st.caption(
             "只读取本地目录或已有缓存中的 tokenizer，不自动下载、不加载模型权重、不启动训练。"
@@ -3340,7 +3378,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"}:
     show_business_scoring()
 
 training_service = TrainingRunService(
-    PROJECT_ROOT / "outputs/workbench/training", project_root=PROJECT_ROOT
+    PROJECT_ROOT / "outputs/workbench/training", project_root=PROJECT_ROOT, **read_only_options
 )
 try:
     training_runs = training_service.list_runs(session_id=session.session_id)
@@ -3596,11 +3634,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     with st.expander("📋 任务规约（启动本轮训练前的口径）"):
                         # 与训练前检查位的规约卡同源同词汇(ADR-1 只读投影):
                         # 能启动时先对齐「我们在教模型什么」,再决定按当前方案启动。
-                        from src.workbench.task_spec_projection import summarize_task_spec
-
-                        spec = collect_current_task_spec(session.session_id)
-                        for line in summarize_task_spec(spec):
-                            st.write(line)
+                        show_current_task_spec(session.session_id)
                     recover_technical = False
                     if not run.get("recovery_parent_run_id"):
                         recover_technical = st.checkbox(
@@ -3898,7 +3932,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     )
 
                     evaluation_service = BusinessEvaluationService(
-                        PROJECT_ROOT / "outputs/workbench/evaluations"
+                        PROJECT_ROOT / "outputs/workbench/evaluations", **read_only_options
                     )
                     st.write("**基座与本轮微调：同开发集对照**")
                     st.caption(
