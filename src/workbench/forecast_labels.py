@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import (
+    ROUND_HALF_EVEN,
+    Context,
+    Decimal,
+    DecimalException,
+    InvalidOperation,
+    localcontext,
+)
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -63,6 +70,30 @@ def _price(value) -> Decimal:
     if not result.is_finite() or result <= 0:
         raise ValueError("价格必须是有限正数，不能用零或空值填补缺行情。")
     return result
+
+
+def _realized_return(baseline: Decimal, final: Decimal) -> str:
+    """Compute the price difference exactly before rounding the ratio to 28 digits."""
+    baseline_exponent, final_exponent = baseline.as_tuple().exponent, final.as_tuple().exponent
+    if not isinstance(baseline_exponent, int) or not isinstance(final_exponent, int):
+        raise ValueError("收益率价格必须为有限数值。")
+    precision = max(
+        28,
+        max(baseline.adjusted(), final.adjusted()) - min(baseline_exponent, final_exponent) + 1,
+    )
+    # Prevent pathological exponent gaps from requiring unbounded allocations.
+    if precision > 10_000:
+        raise ValueError("价格差精度超出收益率计算范围，请核对行情数据。")
+    try:
+        with localcontext(Context(prec=precision, rounding=ROUND_HALF_EVEN)):
+            change = final - baseline
+        with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
+            result = change / baseline
+            if not result.is_finite() or (change and not result):
+                raise ValueError("收益率超出可表示范围，请核对行情数据。")
+            return str(result.normalize())
+    except DecimalException as exc:
+        raise ValueError("收益率超出可表示范围，请核对行情数据。") from exc
 
 
 def output_columns(step: ForecastLabelsStep) -> list[str]:
@@ -214,7 +245,7 @@ def build_forecast_labels(
                 {
                     step.prefix + "reference_price": str(baseline),
                     step.prefix + "target_price": str(final),
-                    step.prefix + "realized_return": str((final / baseline - 1).normalize()),
+                    step.prefix + "realized_return": _realized_return(baseline, final),
                     step.prefix + "direction": "上涨" if final > baseline else "未上涨",
                     step.prefix + "status": "ready",
                 }
@@ -225,7 +256,8 @@ def build_forecast_labels(
         "forecast_contract_review",
         f"按提供的完整交易日历，在资料可用后的首个收盘至其后{step.horizon_sessions}个交易日计算标签；"
         f"行情口径声明为{step.price_basis}。请核对日历覆盖、行情调整口径、证券历史身份和公开时间。"
-        "价格源的口径属于需核对的声明，本程序不凭价格列名证明其调整正确。",
+        "价格源的口径属于需核对的声明，本程序不凭价格列名证明其调整正确。"
+        "收益率按价格差计算，并保留 28 位有效数字、采用四舍六入五成双。",
         severity="review",
     )
     return result

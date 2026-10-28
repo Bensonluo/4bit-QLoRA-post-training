@@ -154,6 +154,7 @@ def select_preview_rows(rows, *, key: str, label: str, issue_ids=None):
 def show_missing_label_next_step(rows, *, full=False) -> None:
     from src.workbench.answer_sheet import (
         answer_sheet_csv,
+        answer_sheet_lineage,
         answer_sheet_lines,
         answer_sheet_source,
         missing_answer_rows,
@@ -185,7 +186,10 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
         st.download_button(
             "导出待补答案清单（交给填写人）",
             data=answer_sheet_csv(
-                missing, field_names, source=answer_sheet_source(session, full=full)
+                missing,
+                field_names,
+                source=answer_sheet_source(session, full=full),
+                lineage=answer_sheet_lineage(session, full=full, rows=missing),
             ),
             file_name=f"待补答案清单-{'全量' if full else '样例'}.csv",
             mime="text/csv",

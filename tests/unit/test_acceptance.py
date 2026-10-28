@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -48,6 +49,37 @@ def runtime(service, record, events, response=None):
             events.append(("close",))
 
     return Runtime
+
+
+def test_final_acceptance_does_not_count_outputs_when_model_changes_and_is_restored(
+    task, model_paths, tmp_path
+):
+    session = task[1]
+    service = AcceptanceService(tmp_path / "acceptance", tmp_path / "eval")
+    record = service.prepare(
+        session, model_paths[0], EvaluationProtocol("classification_exact"), criteria()
+    )
+    weights = Path(model_paths[0].base_model) / "pytorch_model.bin"
+    original = weights.read_bytes()
+    base_runtime = runtime(service, record, [])
+
+    class ChangingRuntime(base_runtime):
+        def generate(self, prompt, protocol):
+            output = super().generate(prompt, protocol)
+            weights.write_bytes(b"changed-during-evaluation")
+            return output
+
+        def close(self):
+            super().close()
+            weights.write_bytes(original)
+
+    result = service.run(record["acceptance_id"], session, runtime_factory=ChangingRuntime)
+    assert weights.read_bytes() == original
+    assert result["status"] == "completed"
+    assert result["result"]["decision"] == "insufficient_evidence"
+    assert result["result"]["usable_cases"] == 0
+    assert all(row["status"] == "failed" for row in result["report"]["models"][0]["rows"])
+    assert "评测期间发生变化" in result["report"]["models"][0]["errors"][0]
 
 
 @pytest.mark.parametrize("field", ["gguf_path", "gguf_runtime_path"])
@@ -394,7 +426,8 @@ def test_model_changed_during_generation_keeps_report_but_cannot_pass(task, mode
     assert result["status"] == "failed"
     assert result["result"]["decision"] == "insufficient_evidence"
     assert result["evaluation_id"]
-    assert result["report"]["models"][0]["metrics"]["exact_match"] == 1
+    assert result["report"]["models"][0]["metrics"]["exact_match"] == 0
+    assert all(row["output"] is not None for row in result["report"]["models"][0]["rows"])
 
 
 def test_prepare_snapshots_only_the_four_task_spec_elements(task, model_paths, tmp_path):

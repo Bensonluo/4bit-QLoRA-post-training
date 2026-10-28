@@ -365,6 +365,85 @@ def test_uncertain_release_prevents_loading_next_model(task, model_paths, tmp_pa
         assert_comparable(report, report)
 
 
+@pytest.mark.parametrize("component", ["base", "adapter"])
+@pytest.mark.parametrize("release_fails", [False, True])
+@pytest.mark.parametrize("mutation", ["modify", "delete"])
+def test_hf_model_changed_during_generation_cannot_claim_valid_scores(
+    task, model_paths, tmp_path, component, release_fails, mutation
+):
+    _, session = task
+    events = []
+    selected = model_paths[1]
+    target = Path(selected.base_model if component == "base" else selected.adapter_path)
+    base_runtime = fixture_factory(session, events, close_error=release_fails)
+
+    class ChangingRuntime(base_runtime):
+        def generate(self, prompt, protocol):
+            result = super().generate(prompt, protocol)
+            if self.index == 1 and self.model.label == "tuned":
+                weights = target / "pytorch_model.bin"
+                if mutation == "delete":
+                    weights.unlink()
+                else:
+                    weights.write_bytes(b"changed-during-evaluation")
+            return result
+
+    service = BusinessEvaluationService(tmp_path / "eval")
+    report = service.compare(
+        session,
+        [selected, model_paths[0]],
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=ChangingRuntime,
+    )
+    result = report.models[0]
+    total = report.dataset["row_count"]
+    assert report.status == ("release_failed" if release_fails else "completed_with_failures")
+    assert result["metrics"]["total"] == total
+    assert result["metrics"]["exact_match"] == result["metrics"]["scorable_coverage"] == 0
+    assert result["metrics"]["generation_coverage"] == 1
+    assert all(row["status"] == "failed" and row["output"] is not None for row in result["rows"])
+    assert any(
+        ("评测期间发生变化" if mutation == "modify" else "没有可识别的权重文件") in error
+        for error in result["errors"]
+    )
+    assert any("模型释放失败" in error for error in result["errors"]) is release_fails
+    if release_fails:
+        assert ("load", "base") not in events
+    loaded = service.get_report(report.evaluation_id)
+    assert loaded.models[0]["metrics"] == result["metrics"]
+
+
+def test_changed_model_retains_truncation_and_original_error_evidence(task, model_paths, tmp_path):
+    session = task[1]
+    selected = model_paths[1]
+    weights = Path(selected.adapter_path) / "pytorch_model.bin"
+    original = weights.read_bytes()
+
+    def generate(label, index, expected):
+        if label == "tuned" and index == 0:
+            weights.write_bytes(b"changed")
+            return Generation(expected, truncated=True, generated_tokens=8)
+        return Generation(expected)
+
+    class Runtime(fixture_factory(session, [], generate)):
+        def close(self):
+            super().close()
+            weights.write_bytes(original)
+
+    report = BusinessEvaluationService(tmp_path / "eval").compare(
+        session,
+        [selected, model_paths[0]],
+        EvaluationProtocol("classification_exact", max_new_tokens=8),
+        runtime_factory=Runtime,
+    )
+    first = report.models[0]["rows"][0]
+    assert first["status"] == "truncated"
+    assert first["truncated"] is True and first["output"] is not None
+    assert "达到生成长度限制" in first["error"]
+    assert "模型身份无法核验" in first["error"]
+    assert report.models[0]["metrics"]["exact_match"] == 0
+
+
 def test_model_content_change_between_loads_is_not_hidden_by_identity_cache(
     task, model_paths, tmp_path
 ):

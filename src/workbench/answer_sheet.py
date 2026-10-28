@@ -12,6 +12,7 @@ import csv
 import io
 
 from src.workbench.intake_models import IntakeSession, PreviewRow, SampleSource
+from src.workbench.sources import source_view_digest
 from src.workbench.temporal_split import TemporalSplitPolicy
 
 
@@ -44,13 +45,72 @@ def answer_sheet_source(session: IntakeSession, *, full: bool = False) -> Sample
     return None if view.adapter_report is not None else view.source
 
 
+def answer_sheet_lineage(
+    session: IntakeSession, *, full: bool = False, rows: list[PreviewRow] | None = None
+) -> dict[str, str]:
+    """Resolve recorded composition origins without guessing ambiguous source views."""
+    view = session.full_data if full else session
+    if view is None or view.composition_report is None or view.preview is None:
+        return {}
+    if view.preview.source_digest != view.source.digest:
+        return {}
+    origins = view.composition_report.get("origins")
+    if not isinstance(origins, dict):
+        return {}
+    lookup: dict[tuple[str, str], list[tuple[str, SampleSource, str, int]]] = {}
+    for alias, source in view.sources.items():
+        digest = source_view_digest(source)
+        for source_row in source.rows:
+            lookup.setdefault((source.digest, source_row.row_id), []).append(
+                (alias, source, digest, source_row.line)
+            )
+    processed = {row.row_id: row for row in view.source.rows}
+    if len(processed) != len(view.source.rows):
+        return {}
+    locations = {}
+    for row in view.preview.rows if rows is None else rows:
+        current = processed.get(row.row_id)
+        refs = origins.get(row.row_id)
+        if (
+            current is None
+            or current.values != row.original
+            or not isinstance(refs, list)
+            or not refs
+        ):
+            continue
+        resolved = []
+        for ref in refs:
+            if not isinstance(ref, dict):
+                break
+            origin_digest, origin_row = ref.get("source_digest"), ref.get("row_id")
+            if not isinstance(origin_digest, str) or not isinstance(origin_row, str):
+                break
+            candidates = lookup.get((origin_digest, origin_row), [])
+            if "source_alias" in ref:
+                candidates = [item for item in candidates if item[0] == ref["source_alias"]]
+            if "source_view_digest" in ref:
+                candidates = [item for item in candidates if item[2] == ref["source_view_digest"]]
+            if len(candidates) != 1:
+                break
+            alias, source, _, line = candidates[0]
+            sheet = f" · 工作表 {source.sheet}" if source.sheet else ""
+            resolved.append(f"{alias}：文件 {source.name}{sheet} · 第 {line} 行")
+        else:
+            locations[row.row_id] = "关联来源（需确认答案字段归属）：" + "；".join(resolved)
+    return locations
+
+
 def answer_sheet_csv(
-    rows: list[PreviewRow], field_names: list[str], *, source: SampleSource | None = None
+    rows: list[PreviewRow],
+    field_names: list[str],
+    *,
+    source: SampleSource | None = None,
+    lineage: dict[str, str] | None = None,
 ) -> bytes:
     """填写表导出为 CSV(带 BOM,Excel 直开);交给了解业务的人线下填写。
 
-    行ID是预览编号而非原文件编号。直接来源提供记录起始行及工作表，
-    组合来源或缺失来源不猜测位置。表内不包含已有答案。
+    行ID是预览编号而非原文件编号。直接来源和可核验的组合血缘提供原始位置，
+    对缺失或存在歧义的来源不猜测。表内不包含已有答案。
     """
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -67,7 +127,7 @@ def answer_sheet_csv(
         source_rows = {}
     for row in rows:
         original = source_rows.get(row.row_id)
-        location = "未记录或不可核验，请查看来源血缘"
+        location = (lineage or {}).get(row.row_id, "未记录或不可核验，请查看来源血缘")
         if (
             source is not None
             and original is not None

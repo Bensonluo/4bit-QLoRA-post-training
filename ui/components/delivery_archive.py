@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,21 @@ _ARTIFACTS = {
     "hf": ("Hugging Face", "合并 HF"),
     "gguf_q4_k_m": ("GGUF · Q4_K_M", "GGUF Q4_K_M"),
 }
+
+
+def _recorded_text(value: Any) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _recorded_timestamp(value: Any) -> str | None:
+    text = _recorded_text(value)
+    if text is None or len(text) <= 10 or text[10] not in {"T", "t", " "}:
+        return None
+    try:
+        datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+    except ValueError:
+        return None
+    return text
 
 
 def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery") -> None:
@@ -66,14 +82,22 @@ def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery"
             st.code(artifact["source_run_id"], language=None, wrap_lines=True)
 
     dataset = report["dataset"]
+    dataset_name = _recorded_text(dataset.get("name"))
+    dataset_version = _recorded_text(dataset.get("version"))
+    finished_at = _recorded_timestamp(data["training"].get("finished_at"))
     lineage: dict[str, Any] = {
         "training": {
             "run_id": data["training"]["run_id"],
             "status": data["training"]["status"],
             "optimizer_updates": data["counts"]["optimizer_steps"],
-            "finished_at": data["training"]["finished_at"],
+            "finished_at": finished_at,
         },
-        "dataset": {key: dataset[key] for key in ("name", "version", "split", "row_count")},
+        "dataset": {
+            "name": dataset_name,
+            "version": dataset_version,
+            "split": dataset["split"],
+            "row_count": dataset["row_count"],
+        },
         "development_evaluation": {
             "evaluation_id": report["evaluation_id"],
             "comparison_key": report["comparison_key"],
@@ -85,7 +109,14 @@ def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery"
     }
     with st.expander("训练、数据版本与同题对照的关联"):
         st.caption("数据版本")
-        st.code(dataset["version"], language=None, wrap_lines=True)
+        if dataset_version is None:
+            st.caption("数据版本未记录或不可核验。")
+        else:
+            st.code(dataset_version, language=None, wrap_lines=True)
+        if dataset_name is None:
+            st.caption("数据集名称未记录或不可核验。")
+        if finished_at is None:
+            st.caption("训练结束时间未记录或不可核验。")
         st.caption("开发对照报告")
         st.code(report["evaluation_id"], language=None, wrap_lines=True)
         st.caption(

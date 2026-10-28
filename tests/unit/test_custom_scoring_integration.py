@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict
+from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -147,6 +148,33 @@ def test_custom_execution_failure_never_falls_back_to_exact_match(custom, model_
         assert all("自定义评分失败" in row["error"] for row in model["rows"])
     diagnostics = EvaluationDiagnostics(report, session)
     assert all(case["error_type"] == "scoring_error" for case in diagnostics.read_cases()["cases"])
+
+
+def test_changed_adapter_is_not_given_custom_business_scores(custom, model_paths, tmp_path):
+    session, protocol, _ = custom
+    weights = Path(model_paths[1].adapter_path) / "pytorch_model.bin"
+    original = weights.read_bytes()
+    base_runtime = fixture_factory(session, [])
+
+    class ChangingRuntime(base_runtime):
+        def generate(self, prompt, protocol):
+            output = super().generate(prompt, protocol)
+            if self.model.label == "tuned":
+                weights.write_bytes(b"changed-during-evaluation")
+            return output
+
+        def close(self):
+            super().close()
+            weights.write_bytes(original)
+
+    report = BusinessEvaluationService(tmp_path / "eval").compare(
+        session, [model_paths[1], model_paths[0]], protocol, runtime_factory=ChangingRuntime
+    )
+    changed, unchanged = report.models
+    assert report.status == "completed_with_failures"
+    assert changed["metrics"]["business_score"] == changed["metrics"]["pass_rate"] == 0
+    assert all(row["status"] == "failed" and row["business_score"] == 0 for row in changed["rows"])
+    assert unchanged["metrics"]["pass_rate"] == 1
 
 
 def test_unconfirmed_or_noncustom_rules_rejected_before_model_load(custom, model_paths, tmp_path):

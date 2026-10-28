@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_DOWN, localcontext
 
 import pytest
 
@@ -149,6 +150,77 @@ def test_close_timestamp_tie_uses_next_session_and_flat_price_is_not_up(financia
     assert row["forecast_label_end_at"] == closes[22].isoformat()
     assert row["forecast_direction"] == "未上涨"
     assert row["forecast_realized_return"] == "0"
+
+
+@pytest.mark.parametrize(
+    "baseline,final,expected,direction",
+    [
+        ("100", "100.00000000000000000000000001", "1E-28", "上涨"),
+        ("100", "99.99999999999999999999999999", "-1E-28", "未上涨"),
+        ("3", "4", "0.3333333333333333333333333333", "上涨"),
+        ("3", "2", "-0.3333333333333333333333333333", "未上涨"),
+        (
+            "100000000000000000000000000000",
+            "112345678901234567890123456785",
+            "0.1234567890123456789012345678",
+            "上涨",
+        ),
+        (
+            "100000000000000000000000000000",
+            "112345678901234567890123456795",
+            "0.123456789012345678901234568",
+            "上涨",
+        ),
+        ("1e-20", "2e-20", "1", "上涨"),
+    ],
+)
+def test_small_price_changes_and_nonterminating_returns_are_consistent(
+    financial_sources, baseline, final, expected, direction
+):
+    closes, events, prices, calendar = financial_sources
+    prices[1]["adjusted"] = baseline
+    prices[21]["adjusted"] = final
+    result = build_forecast_labels(
+        events, source("prices", prices), source("calendar", calendar), step(closes)
+    )
+    output = result["rows"][0]
+    assert output["forecast_realized_return"] == expected
+    assert output["forecast_direction"] == direction
+    assert output["forecast_status"] == "ready"
+
+
+@pytest.mark.parametrize("baseline,final", [("1e-999999", "1e999999"), ("1e999999", "1e-999999")])
+def test_out_of_range_return_is_reported_without_creating_a_label(
+    financial_sources, baseline, final
+):
+    closes, events, prices, calendar = financial_sources
+    prices[1]["adjusted"] = baseline
+    prices[21]["adjusted"] = final
+    result = build_forecast_labels(
+        events, source("prices", prices), source("calendar", calendar), step(closes)
+    )
+    output = result["rows"][0]
+    assert output["forecast_realized_return"] is None
+    assert output["forecast_direction"] is None
+    assert output["forecast_status"] == "invalid_event"
+    assert any(
+        issue["code"] == "invalid_forecast_event" and "收益率" in issue["message"]
+        for issue in result["issues"]
+    )
+
+
+def test_forecast_return_does_not_inherit_callers_decimal_context(financial_sources):
+    closes, events, prices, calendar = financial_sources
+    prices[1]["adjusted"] = "3"
+    prices[21]["adjusted"] = "4"
+    with localcontext() as context:
+        context.prec = 3
+        context.rounding = ROUND_DOWN
+        context.Emax, context.Emin = 9, -9
+        result = build_forecast_labels(
+            events, source("prices", prices), source("calendar", calendar), step(closes)
+        )
+    assert result["rows"][0]["forecast_realized_return"] == "0.3333333333333333333333333333"
 
 
 def test_forecast_requires_both_prices_and_calendar(financial_sources):

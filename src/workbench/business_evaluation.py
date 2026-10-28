@@ -1047,7 +1047,7 @@ class BusinessEvaluationService:
                             result.pop("token_proof", None)
                         result["error"] = f"{type(exc).__name__}: {exc}"
                     outcome["rows"].append(result)
-                if token_contract:
+                try:
                     if model.gguf_path:
                         if verified_gguf_model(model) != outcome["identity"]:
                             raise ValueError("GGUF、来源或运行器在评测期间发生变化。")
@@ -1055,7 +1055,24 @@ class BusinessEvaluationService:
                         path is not None and _model_identity(path) != identity_cache[path]
                         for path in paths
                     ):
-                        raise ValueError("HF 模型在 GGUF 同题评测期间发生变化。")
+                        raise ValueError("HF 模型在评测期间发生变化。")
+                except Exception as exc:
+                    # Token-contract comparisons keep their stricter all-or-nothing
+                    # behavior. For ordinary HF evaluations retain generated text
+                    # as audit evidence, but do not attribute scores to a model
+                    # whose identity no longer matches the recorded snapshot.
+                    if token_contract:
+                        raise
+                    error = f"评测后模型身份无法核验：{type(exc).__name__}: {exc}"
+                    outcome["errors"].append(error)
+                    for result in outcome["rows"]:
+                        previous_error = result.get("error")
+                        result.update(
+                            status="truncated" if result["truncated"] else "failed",
+                            correct=None if protocol.scorer == "open_review" else False,
+                            field_scores={},
+                            error=f"{error}；原记录：{previous_error}" if previous_error else error,
+                        )
                 token_inputs.update(current_token_inputs)
             except Exception as exc:
                 outcome["errors"].append(f"{type(exc).__name__}: {exc}")

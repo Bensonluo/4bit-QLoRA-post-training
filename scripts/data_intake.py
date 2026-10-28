@@ -2020,6 +2020,7 @@ def main() -> int:
             # 填写表与三条规则与页面下载按钮同一来源(answer_sheet 单一来源)。
             from src.workbench.answer_sheet import (
                 answer_sheet_csv,
+                answer_sheet_lineage,
                 answer_sheet_lines,
                 answer_sheet_source,
                 missing_answer_rows,
@@ -2058,7 +2059,10 @@ def main() -> int:
                     args.export_csv.parent.mkdir(parents=True, exist_ok=True)
                     args.export_csv.write_bytes(
                         answer_sheet_csv(
-                            missing, field_names, source=answer_sheet_source(session, full=use_full)
+                            missing,
+                            field_names,
+                            source=answer_sheet_source(session, full=use_full),
+                            lineage=answer_sheet_lineage(session, full=use_full, rows=missing),
                         )
                     )
                     print(f"待补答案清单已导出：{args.export_csv}", file=sys.stderr)
