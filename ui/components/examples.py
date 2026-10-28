@@ -12,19 +12,25 @@ from ui import config, runtime
 
 
 def render_examples(root: Path) -> None:
-    from ui.showcase import example_tasks
+    from ui.showcase import example_tasks_tolerant
 
     try:
-        examples = example_tasks(root)
-    except (OSError, ValueError) as exc:
-        st.warning(f"示例数据暂不可读：{exc}")
+        examples, unavailable = example_tasks_tolerant(root)
+    except (OSError, ValueError):
+        st.warning("示例数据暂不可读，请检查示例资料。")
         return
+    if unavailable:
+        names = "、".join(item["title"] for item in unavailable)
+        message = f"示例数据暂不可读：{names}。"
+        if examples:
+            message += "其余示例仍可浏览。"
+        st.warning(message)
     if not examples:
-        st.caption("当前安装未包含示例资料，可直接创建自己的业务任务。")
+        st.caption("当前没有可用的示例资料，可直接创建自己的业务任务。")
         return
 
     st.subheader("从一份具体的数据开始")
-    st.caption("三种任务，三种答案形态。先看输入与输出，再带着自己的业务数据开始。")
+    st.caption("先看不同任务的输入与输出，再带着自己的业务数据开始。")
     for column, example in zip(st.columns(len(examples), gap="medium"), examples, strict=True):
         with column, st.container(border=True, key=f"ts-example-{example['id']}"):
             st.html(
@@ -76,6 +82,8 @@ def render_examples(root: Path) -> None:
         "原始示例数据与下载", expanded=st.session_state.get("showcase-preview-open", False)
     ):
         by_id = {example["id"]: example for example in examples}
+        if st.session_state.get("showcase-example") not in by_id:
+            st.session_state["showcase-example"] = next(iter(by_id))
         selected = st.selectbox(
             "示例数据",
             list(by_id),

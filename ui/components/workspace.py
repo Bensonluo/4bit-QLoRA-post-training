@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, datetime
 from html import escape
+from math import isfinite
+from numbers import Real
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
+from src.workbench.intake_models import IntakeSession
 from src.workbench.intake_service import IntakeService
 from ui import config, runtime
 from ui.components.task_state import task_state
@@ -33,12 +37,56 @@ def open_task(session_id: str | None = None) -> None:
     st.switch_page("views/07_Data_Intake.py")
 
 
-def load_tasks():
+def load_tasks() -> tuple[list[IntakeSession], int]:
     root = config.PROJECT_ROOT / "outputs/workbench/intake"
     if not (root / "intake.sqlite").exists():
         return [], 0
     options = {"read_only": True} if runtime.DISPLAY_ONLY else {}
     return IntakeService(root, **options).list_sessions_tolerant()
+
+
+def _short_run_ids(runs: pd.DataFrame) -> dict[str, str]:
+    """Keep short prefixes distinct among all known runs, not only the visible three."""
+    if "run_id" not in runs:
+        return {}
+    identities = {
+        value.strip() for value in runs["run_id"] if isinstance(value, str) and value.strip()
+    }
+    visible = {
+        value.strip()
+        for value in runs["run_id"].head(3)
+        if isinstance(value, str) and value.strip()
+    }
+    return {
+        identity: next(
+            (
+                identity[:size]
+                for size in range(8, len(identity) + 1)
+                if all(
+                    other == identity or not other.startswith(identity[:size])
+                    for other in identities
+                )
+            ),
+            identity,
+        )
+        for identity in visible
+    }
+
+
+def _start_time(value: object) -> str:
+    if not isinstance(value, (datetime, date)) or pd.isna(value):
+        return "未记录"
+    timestamp = pd.Timestamp(value)
+    zone = timestamp.strftime("%Z") if timestamp.tzinfo else "时区未记录"
+    return f"{timestamp:%Y-%m-%d %H:%M:%S}（{zone}）"
+
+
+def _training_loss(row: pd.Series) -> str:
+    for key in ("metrics.train_loss", "metrics.loss"):
+        value = row.get(key)
+        if isinstance(value, Real) and not isinstance(value, bool) and isfinite(value):
+            return f"{value:.4g}"
+    return "—"
 
 
 def render_workspace() -> None:
@@ -155,7 +203,8 @@ def render_workspace() -> None:
         try:
             from ui.queries import fetch_runs
 
-            runs = fetch_runs(config.MLFLOW_TRACKING_URI).head(3)
+            all_runs = fetch_runs(config.MLFLOW_TRACKING_URI)
+            runs = all_runs.head(3)
         except Exception:
             st.warning("实验记录暂不可读，请到实验记录页检查数据连接。")
         else:
@@ -163,11 +212,19 @@ def render_workspace() -> None:
                 st.caption("暂无实验记录。完成数据核验并启动训练后，运行记录会出现在这里。")
             else:
                 rows = []
+                short_ids = _short_run_ids(all_runs)
                 for _, row in runs.iterrows():
-                    loss = row.get("metrics.train_loss", row.get("metrics.loss"))
+                    run_id = row.get("run_id")
+                    name = row.get("tags.mlflow.runName")
                     rows.append(
                         {
-                            "记录": row.get("tags.mlflow.runName", str(row.get("run_id", ""))[:8]),
+                            "记录": name.strip()
+                            if isinstance(name, str) and name.strip()
+                            else "未命名运行",
+                            "运行 ID": short_ids.get(run_id.strip(), "未记录")
+                            if isinstance(run_id, str) and run_id.strip()
+                            else "未记录",
+                            "开始时间": _start_time(row.get("start_time")),
                             "状态": {
                                 "FINISHED": "已完成",
                                 "RUNNING": "运行中",
@@ -176,9 +233,8 @@ def render_workspace() -> None:
                             "来源": "公开历史验证"
                             if pd.notna(row.get("tags.evidence.source"))
                             else "本地实验",
-                            "训练损失": f"{loss:.4g}"
-                            if isinstance(loss, (int, float)) and pd.notna(loss)
-                            else "—",
+                            "训练损失": _training_loss(row),
                         }
                     )
                 st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+                st.page_link("views/01_Experiments.py", label="查看全部实验记录")

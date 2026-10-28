@@ -27,11 +27,15 @@ def _scores(data: dict[str, Any]) -> None:
         total = len(rows)
         correct = sum(row["correct"] is True for row in rows)
         truncated = sum(row["status"] == "truncated" for row in rows)
-        eos = sum(row.get("token_proof", {}).get("finish_reason") == "eos" for row in rows)
+        eos = sum((row.get("token_proof") or {}).get("finish_reason") == "eos" for row in rows)
+        failed = sum(row["status"] == "failed" for row in rows)
         with column, st.container(border=True):
             st.metric(model["label"], f"{correct} / {total}")
             st.progress(correct / total, text=f"严格匹配 · {correct / total:.0%}")
-            st.caption(f"完整结束 {eos} 题 · 截断 {truncated} 题")
+            st.caption(
+                f"完整结束 {eos} 题 · 截断 {truncated} 题"
+                + (f" · 处理失败 {failed} 题" if failed else "")
+            )
 
 
 def _case_scope(data: dict[str, Any]) -> str:

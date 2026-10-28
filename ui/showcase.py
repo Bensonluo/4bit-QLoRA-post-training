@@ -381,51 +381,65 @@ def load_showcase(root: Path) -> dict:
         raise ValueError(f"公开历史记录 {R149_SOURCE} 缺损或不一致：{exc}") from exc
 
 
-def example_tasks(root: Path) -> list[dict]:
-    """Return the existing fictional CSV bytes and their real preview rows."""
-    specs = (
-        ("classification", None, "售后工单分类", "类别", ["客户描述"], "violet", "category"),
-        ("extraction", "extraction", "工单编号抽取", "工单号", ["客户描述"], "cyan", "data_object"),
-        ("generation", "generation", "客服答复生成", "标准答复", ["客户问题"], "rose", "chat"),
-    )
-    tasks = []
-    for task_id, variant, title, target, inputs, accent, icon in specs:
-        payload = demo_create_payload(Path(root), variant)
-        if payload is None:
-            raise ValueError(f"内置示例 {title} 的 CSV 文件缺失。")
-        goal, raw, name, description = payload
-        try:
-            rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
-            _require(
-                rows
-                and all(
-                    target in row
-                    and all(key in row for key in inputs)
-                    and all(isinstance(value, str) for value in row.values())
-                    for row in rows
-                ),
-                "示例字段或 CSV 记录不完整。",
-            )
-        except (UnicodeError, csv.Error, ValueError) as exc:
-            raise ValueError(f"内置示例 {title} 无法读取：{exc}") from exc
-        tasks.append(
-            {
-                "id": task_id,
-                "title": title,
-                "description": description,
-                "goal": goal,
-                "name": name,
-                "bytes": raw,
-                "rows": rows,
-                "row_count": len(rows),
-                "target_column": target,
-                "input_columns": inputs,
-                "accent": accent,
-                "icon": icon,
-                "kind": "fictional_example",
-            }
+_EXAMPLE_SPECS = (
+    ("classification", None, "售后工单分类", "类别", ["客户描述"], "violet", "category"),
+    ("extraction", "extraction", "工单编号抽取", "工单号", ["客户描述"], "cyan", "data_object"),
+    ("generation", "generation", "客服答复生成", "标准答复", ["客户问题"], "rose", "chat"),
+)
+
+
+def _example_task(root: Path, spec: tuple) -> dict:
+    task_id, variant, title, target, inputs, accent, icon = spec
+    payload = demo_create_payload(Path(root), variant)
+    if payload is None:
+        raise ValueError(f"内置示例 {title} 的 CSV 文件缺失。")
+    goal, raw, name, description = payload
+    try:
+        rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
+        _require(
+            rows
+            and all(
+                target in row
+                and all(key in row for key in inputs)
+                and all(isinstance(value, str) for value in row.values())
+                for row in rows
+            ),
+            "示例字段或 CSV 记录不完整。",
         )
-    return tasks
+    except (UnicodeError, csv.Error, ValueError) as exc:
+        raise ValueError(f"内置示例 {title} 无法读取：{exc}") from exc
+    return {
+        "id": task_id,
+        "title": title,
+        "description": description,
+        "goal": goal,
+        "name": name,
+        "bytes": raw,
+        "rows": rows,
+        "row_count": len(rows),
+        "target_column": target,
+        "input_columns": inputs,
+        "accent": accent,
+        "icon": icon,
+        "kind": "fictional_example",
+    }
+
+
+def example_tasks(root: Path) -> list[dict]:
+    """Return all fictional examples, failing if any source is unavailable."""
+    return [_example_task(root, spec) for spec in _EXAMPLE_SPECS]
+
+
+def example_tasks_tolerant(root: Path) -> tuple[list[dict], list[dict]]:
+    """Return readable examples and identify unavailable ones without local paths."""
+    tasks: list[dict] = []
+    errors: list[dict] = []
+    for spec in _EXAMPLE_SPECS:
+        try:
+            tasks.append(_example_task(root, spec))
+        except (OSError, ValueError, csv.Error):
+            errors.append({"id": spec[0], "title": spec[2]})
+    return tasks, errors
 
 
 _CATALOG_RECORDS = (

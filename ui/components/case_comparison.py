@@ -43,6 +43,8 @@ def _status(row: dict) -> str:
         return "… 截断"
     if row.get("output") is None:
         return "未生成"
+    if row.get("status") == "failed":
+        return "处理失败"
     if row["correct"] is True:
         return "✓ 匹配"
     return "待业务审阅" if row["correct"] is None else "未匹配"

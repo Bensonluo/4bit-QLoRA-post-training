@@ -14,7 +14,14 @@ from pathlib import Path
 import pytest
 
 from src.workbench.demo_task import demo_create_payload
-from ui.showcase import R148_SOURCE, R149_SOURCE, example_tasks, history_catalog, load_showcase
+from ui.showcase import (
+    R148_SOURCE,
+    R149_SOURCE,
+    example_tasks,
+    example_tasks_tolerant,
+    history_catalog,
+    load_showcase,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -231,6 +238,41 @@ def test_missing_or_malformed_csv_is_not_replaced_with_mock_rows(assets, mode):
         path.write_bytes(b"\xff")
     with pytest.raises(ValueError, match="示例"):
         example_tasks(assets)
+
+
+@pytest.mark.parametrize("mode", ["missing", "bad_columns", "bad_encoding"])
+def test_tolerant_examples_isolate_one_unreadable_source_and_keep_actual_bytes(assets, mode):
+    expected = example_tasks(assets)
+    damaged = expected[1]
+    path = assets / "data/custom/examples" / damaged["name"]
+    if mode == "missing":
+        path.unlink()
+    elif mode == "bad_columns":
+        path.write_bytes(b"unexpected,columns\nx,y\n")
+    else:
+        path.write_bytes(b"\xff")
+    before = {
+        item.relative_to(assets): item.read_bytes() if item.is_file() else None
+        for item in assets.rglob("*")
+    }
+    healthy, errors = example_tasks_tolerant(assets)
+    assert healthy == [expected[0], expected[2]]
+    assert errors == [{"id": damaged["id"], "title": damaged["title"]}]
+    assert str(assets) not in repr(errors)
+    assert {
+        item.relative_to(assets): item.read_bytes() if item.is_file() else None
+        for item in assets.rglob("*")
+    } == before
+    with pytest.raises(ValueError, match="工单编号抽取"):
+        example_tasks(assets)
+
+
+def test_tolerant_examples_report_all_missing_without_writing(tmp_path):
+    healthy, errors = example_tasks_tolerant(tmp_path)
+    assert healthy == []
+    assert [item["id"] for item in errors] == ["classification", "extraction", "generation"]
+    assert all(set(item) == {"id", "title"} for item in errors)
+    assert not list(tmp_path.iterdir())
 
 
 def test_catalog_has_three_studies_and_preserves_simultaneous_arms():
