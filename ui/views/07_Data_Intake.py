@@ -3381,7 +3381,13 @@ training_service = TrainingRunService(
     PROJECT_ROOT / "outputs/workbench/training", project_root=PROJECT_ROOT, **read_only_options
 )
 try:
-    training_runs = training_service.list_runs(session_id=session.session_id)
+    training_runs, unreadable_training_runs = training_service.list_runs_tolerant(
+        session_id=session.session_id
+    )
+    if unreadable_training_runs:
+        st.warning(
+            f"有 {unreadable_training_runs} 条训练记录无法读取或归属不明，已跳过；请检查训练存储。"
+        )
 except Exception as exc:
     # 页载入读取守卫（R131）：训练运行记录读取失败不得打崩任务视图
     st.warning(f"训练运行记录读取失败，已先隐藏（原因：{exc}）。不影响当前任务的继续使用。")
@@ -3487,11 +3493,9 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
             "unknown": "状态待核实",
         }
         for saved_run in reversed(training_runs):
-            try:
-                run = training_service.get_status(saved_run["run_id"])
-            except (ValueError, RuntimeError, OSError) as exc:
-                st.error(str(exc))
-                continue
+            # list_runs_tolerant has already resolved and checked this snapshot.
+            # Actions revalidate the stored record when they execute.
+            run = saved_run
             run_id = run["run_id"]
             run_iteration = next(
                 (item for item in iterations if item.get("new_run_id") == run_id), None
@@ -3509,11 +3513,22 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     try:
                         original_run = training_service.get_status(run["recovery_parent_run_id"])
                         if (
-                            original_run.get("recover_technical_failures")
+                            original_run.get("run_id") == run["recovery_parent_run_id"]
+                            and original_run.get("session_id") == session.session_id
+                            and original_run.get("recover_technical_failures")
                             and (original_run.get("recovery") or {}).get("child_run_id") == run_id
                         ):
                             run_iteration = candidate_iteration
-                    except (ValueError, RuntimeError, OSError) as exc:
+                        else:
+                            st.warning("技术恢复的任务归属或父子关系无法核验，已隐藏该关联。")
+                    except (
+                        ValueError,
+                        RuntimeError,
+                        OSError,
+                        TypeError,
+                        KeyError,
+                        AttributeError,
+                    ) as exc:
                         st.warning(f"无法核对本轮技术恢复关联：{exc}")
             run_execution = (
                 execution_records.get(run_iteration["iteration_id"]) if run_iteration else None
@@ -3527,7 +3542,7 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
             ):
                 st.write(f"**基础模型：** {run.get('model_path', '')}")
                 st.write(f"**数据版本：** `{run.get('dataset_version', '')}`")
-                for issue in run.get("issues", []):
+                for issue in run.get("issues") or []:
                     if isinstance(issue, dict):
                         severity, message = issue.get("severity"), issue.get("message", str(issue))
                     else:
@@ -3536,8 +3551,8 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                         severity, st.warning
                     )(message)
                 preflight = run.get("preflight") or {}
-                for issue in preflight.get("issues", []):
-                    if issue in run.get("issues", []):
+                for issue in preflight.get("issues") or []:
+                    if issue in (run.get("issues") or []):
                         continue
                     {"blocking": st.error, "warning": st.warning, "info": st.info}.get(
                         issue.get("severity"), st.info
@@ -3706,11 +3721,15 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     # (半程数据不足以支持整场结论);中断态给趋势但注明只代表
                     # 已训练部分。成功态走下方 metrics 块,两块互斥。
                     from src.workbench.training_progress import (
-                        load_loss_history,
+                        load_loss_history_with_health,
                         loss_trend_lines,
                     )
 
-                    partial = load_loss_history(run["output_dir"])
+                    partial, damaged = load_loss_history_with_health(run["output_dir"])
+                    if damaged:
+                        st.warning(
+                            f"训练曲线记录部分损坏或不可读，保留 {len(partial)} 个有效点；不能判断完整趋势。"
+                        )
                     if len(partial) >= 2:
                         if run["status"] in {"running", "stopping"}:
                             st.write("**训练中的 loss 曲线**")
@@ -3720,8 +3739,9 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                         else:
                             st.write("**训练未完成时已记录的 loss 曲线**")
                             st.caption("训练中断，以下内容只代表已训练的部分。")
-                            for line in loss_trend_lines(partial):
-                                st.caption(line)
+                            if not damaged:
+                                for line in loss_trend_lines(partial):
+                                    st.caption(line)
                         from ui.components.charts import make_metric_timeseries
 
                         st.plotly_chart(
@@ -3736,13 +3756,19 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                     # loss_trend_lines，与 CLI train-status 同源同词汇）；
                     # 原始 flat metrics 收进折叠区保透明，不再裸倾倒。
                     from src.workbench.training_progress import (
-                        load_loss_history,
+                        load_loss_history_with_health,
                         loss_trend_lines,
                     )
 
-                    history = load_loss_history(run.get("output_dir"))
-                    for line in loss_trend_lines(history):
-                        st.caption(line)
+                    history, damaged = load_loss_history_with_health(run.get("output_dir"))
+                    if damaged:
+                        if run["status"] == "succeeded":
+                            st.warning(
+                                f"训练曲线记录部分损坏或不可读，保留 {len(history)} 个有效点；不能判断完整趋势。"
+                            )
+                    else:
+                        for line in loss_trend_lines(history):
+                            st.caption(line)
                     if len(history) >= 2:
                         from ui.components.charts import make_metric_timeseries
 
@@ -3969,9 +3995,20 @@ if next_action(session) in {"ready_for_training_preflight", "preflight_passed"} 
                         st.write("**评分方式：** " + scorer_labels[scorer])
                         parent_runs = {}
                         if getattr(session.dataset, "evaluation_suite", None):
+                            try:
+                                candidate_runs, unreadable_candidates = (
+                                    training_service.list_runs_tolerant()
+                                )
+                            except (OSError, ValueError, TypeError) as exc:
+                                st.warning(f"训练记录暂不可读，无法列出全部模型对照候选：{exc}")
+                                candidate_runs, unreadable_candidates = [], 0
+                            if unreadable_candidates:
+                                st.warning(
+                                    f"有 {unreadable_candidates} 条训练记录不可读，无法判断是否可用于模型对照。"
+                                )
                             parent_runs = {
                                 item["run_id"]: item
-                                for item in training_service.list_runs()
+                                for item in candidate_runs
                                 if item["status"] == "succeeded" and item["run_id"] != run_id
                             }
                         last_handoff = st.session_state.get(f"export_result_{run_id}")

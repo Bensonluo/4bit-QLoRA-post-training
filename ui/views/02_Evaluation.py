@@ -12,6 +12,7 @@ import streamlit as st
 
 from ui.components.archive_navigation import archive_link, render_archive_source
 from ui.components.domain_adapters import (
+    UnreadableEvalData,
     get_adapter,
     get_domain_display_name,
     list_domains,
@@ -81,6 +82,7 @@ selected_domain = st.selectbox(
 # ── Load Data ───────────────────────────────────────────────────
 
 data = load_eval_data(selected_domain)
+local_results_unreadable = isinstance(data, UnreadableEvalData)
 
 # Also try MLflow
 mlflow_data: list[dict] = []
@@ -129,11 +131,14 @@ if not data:
     if DISPLAY_ONLY:
         display_navigation(
             "无法确认该领域是否有本地实验评测记录。样例任务与历史训练记录仍可浏览。"
-            if mlflow_unavailable
+            if mlflow_unavailable or local_results_unreadable
             else "该领域尚未收录评测结果。样例任务与历史训练记录仍可浏览。"
         )
         st.stop()
-    st.warning("该领域暂无评测数据。")
+    if local_results_unreadable:
+        st.warning("评测记录无法读取，当前无法判断该领域是否有结果。")
+    else:
+        st.warning("该领域暂无评测数据。")
     if selected_domain == "entity_matching":
         # 通用域空态闭环（R121）：R120 的「用我的 test 集评测」把结果送到这里——
         # 空态必须回答「怎么让这里出现结果」，而不是死胡同「运行领域评测脚本」

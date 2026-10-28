@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ import streamlit as st
 
 from ui.components.archive_navigation import archive_link, render_archive_source
 from ui.components.domain_adapters import (
+    UnreadableEvalData,
     difficulty_label,
     entity_type_label,
     get_adapter,
@@ -21,6 +21,7 @@ from ui.components.domain_adapters import (
     load_eval_data,
 )
 from ui.components.format import delta as _delta
+from ui.components.format import finite_number
 from ui.components.format import fmt_num as _fmt_num
 from ui.components.format import fmt_pct as _fmt_pct
 from ui.components.shell import display_navigation
@@ -59,10 +60,17 @@ data = load_eval_data(domain)
 if len(data) < 2:
     archive_link()
     if DISPLAY_ONLY:
-        display_navigation("当前领域不足两条模型评测记录，暂不能对照。可浏览已有的任务与实验记录。")
+        display_navigation(
+            "当前评测记录不可读，无法判断能否对照。可浏览已有的任务与实验记录。"
+            if isinstance(data, UnreadableEvalData)
+            else "当前领域不足两条模型评测记录，暂不能对照。可浏览已有的任务与实验记录。"
+        )
         st.stop()
     if not data:
-        st.warning("还没有任何模型的评测结果。")
+        if isinstance(data, UnreadableEvalData):
+            st.warning("评测记录无法读取，当前无法判断该领域是否有结果。")
+        else:
+            st.warning("还没有任何模型的评测结果。")
     else:
         st.warning(
             f"目前只有 1 个模型的评测结果（{data[0].get('model', '模型 0')}），对比至少需要 2 个。"
@@ -199,13 +207,9 @@ with cost_tab:
 
     def recorded_time(record: dict) -> str:
         throughput = record.get("throughput_per_sec")
-        if (
-            isinstance(throughput, (int, float))
-            and not isinstance(throughput, bool)
-            and math.isfinite(throughput)
-            and throughput > 0
-        ):
-            return f"{1_000_000 / throughput / 3600:.1f} 小时"
+        if finite_number(throughput) and isinstance(throughput, (int, float)) and throughput > 0:
+            hours = 1_000_000 / throughput / 3600
+            return f"{hours:.1f} 小时" if finite_number(hours) else "—"
         return "—"
 
     cost_df = pd.DataFrame(

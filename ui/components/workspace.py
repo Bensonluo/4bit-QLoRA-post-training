@@ -226,6 +226,7 @@ def render_workspace() -> None:
                 for _, row in runs.iterrows():
                     run_id = row.get("run_id")
                     name = row.get("tags.mlflow.runName")
+                    source = row.get("tags.evidence.source")
                     rows.append(
                         {
                             "记录": name.strip()
@@ -241,7 +242,7 @@ def render_workspace() -> None:
                                 "FAILED": "失败",
                             }.get(row.get("status"), row.get("status", "未知")),
                             "来源": "公开历史验证"
-                            if pd.notna(row.get("tags.evidence.source"))
+                            if isinstance(source, str) and source.strip()
                             else "本地实验",
                             "训练损失": _training_loss(row),
                         }

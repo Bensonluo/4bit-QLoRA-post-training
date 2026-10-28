@@ -44,6 +44,9 @@ def test_display_completed_run_does_not_initialize_mlflow(monkeypatch, tmp_path)
         def list_runs(self, session_id=None):
             return [deepcopy(run)] if session_id == session.session_id else []
 
+        def list_runs_tolerant(self, session_id=None):
+            return self.list_runs(session_id), 0
+
         def get_status(self, run_id):
             assert run_id == run["run_id"]
             return deepcopy(run)

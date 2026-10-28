@@ -36,8 +36,10 @@ def summarize_run_cost(
         try:
             begin = datetime.fromisoformat(started)
             end = datetime.fromisoformat(finished)
-            duration_hours = max((end - begin).total_seconds() / 3600.0, 0.0)
-        except ValueError:
+            duration_hours = (end - begin).total_seconds() / 3600.0
+            if duration_hours < 0:
+                duration_hours = None
+        except (ValueError, TypeError, OverflowError):
             duration_hours = None
     watts = device_watts if device_watts is not None else DEFAULT_DEVICE_WATTS.get(device, 60)
     electricity_cost = (
@@ -86,7 +88,7 @@ def cost_lines(account: dict[str, Any]) -> list[str]:
         shown = f"{hours:.1f} 小时" if hours >= 1 else f"{hours * 60:.0f} 分钟"
         lines.append(f"这次训练实际运行了 {shown}(设备:{account['device']})。")
     else:
-        lines.append("这次运行缺少起止时间,算不出时长;成本账不完整。")
+        lines.append("这次运行的起止时间缺失或无法比较,算不出时长;成本账不完整。")
     if account.get("electricity_cost_estimated") is not None:
         lines.append(
             f"按 {account['device_watts_estimated']}W 估计功耗与 "

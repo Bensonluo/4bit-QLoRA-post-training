@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -41,32 +42,60 @@ def extract_loss_history(log_history: list[dict[str, Any]]) -> list[dict[str, fl
     return series
 
 
+def load_loss_history_with_health(
+    output_dir: str | Path | None,
+) -> tuple[list[dict[str, float]], bool]:
+    """返回可读点和损坏标记；缺少文件与已有但损坏的文件分开。"""
+    if not output_dir:
+        return [], False
+    path = Path(output_dir) / LOSS_HISTORY_FILENAME
+    if not path.exists():
+        return [], False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return [], True
+    if not isinstance(data, list):
+        return [], True
+    points: list[dict[str, float]] = []
+    damaged = False
+    for item in data:
+        try:
+            if not isinstance(item, dict) or any(
+                isinstance(item.get(key), bool) for key in ("step", "loss")
+            ):
+                raise ValueError("无效的曲线点")
+            step, loss = float(item["step"]), float(item["loss"])
+            if (
+                not math.isfinite(step)
+                or not math.isfinite(loss)
+                or step < 0
+                or not step.is_integer()
+                or step > 2**53 - 1
+            ):
+                raise ValueError("曲线点不是有限数值")
+            points.append({"step": step, "loss": loss})
+        except (KeyError, TypeError, ValueError, OverflowError):
+            damaged = True
+    return points, damaged
+
+
 def load_loss_history(output_dir: str | Path | None) -> list[dict[str, float]]:
     """读取产物目录里的逐条 loss 记录；缺失或损坏时返回空（旧产物如实没有）。
 
     只回读 step/loss 两个键并逐条过滤坏行——损坏的旧文件不让训练信息区
     整体崩掉，曲线与趋势各自把「点数不足」如实说出口。
     """
-    if not output_dir:
-        return []
-    path = Path(output_dir) / LOSS_HISTORY_FILENAME
-    if not path.is_file():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    return [
-        {"step": float(item["step"]), "loss": float(item["loss"])}
-        for item in data
-        if isinstance(item, dict) and "step" in item and "loss" in item
-    ]
+    return load_loss_history_with_health(output_dir)[0]
 
 
 def _segment_mean(points: list[dict[str, float]]) -> float:
-    return sum(item["loss"] for item in points) / len(points)
+    # Normalize before summing so even the largest finite float cannot overflow.
+    scale = max(abs(item["loss"]) for item in points)
+    if not scale:
+        return 0.0
+    mean = math.fsum(item["loss"] / scale for item in points) / len(points)
+    return scale * max(-1.0, min(1.0, mean))
 
 
 def loss_trend_lines(history: list[dict[str, float]], *, in_progress: bool = False) -> list[str]:
@@ -97,9 +126,9 @@ def loss_trend_lines(history: list[dict[str, float]], *, in_progress: bool = Fal
             span + "训练进行中，趋势判定等训练完成后再看。",
             "loss 下降只说明模型在逐步记住训练题，不代表业务效果；效果要看同一套开发题上的对照报告。",
         ]
-    if tail < head * 0.95:
+    if tail / 0.95 < head:
         verdict = "整体在下降。"
-    elif tail > head * 1.05:
+    elif tail / 1.05 > head:
         verdict = (
             f"末段反而更高（首段均值 {head:.4f} → 末段均值 {tail:.4f}）。中途不降反升"
             "需要核查——常见方向是学习率过大或数据里有异常样本，先看同题对照结果再定。"

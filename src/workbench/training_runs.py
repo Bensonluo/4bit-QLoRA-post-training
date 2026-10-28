@@ -105,6 +105,64 @@ def _removed_environment() -> list[str]:
     return [name for name in os.environ if name not in allowed and not name.startswith(prefixes)]
 
 
+def _validate_browsable_run(record: dict) -> None:
+    """Reject malformed nested values that task views cannot safely interpret."""
+    for name in ("config", "preflight", "failure", "recovery", "metrics", "artifacts"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, dict):
+            raise ValueError(f"运行记录 {name} 格式不正确。")
+    for name in ("model_path", "output_dir", "dataset_version", "recovery_parent_run_id"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"运行记录 {name} 格式不正确。")
+    for name in ("issues", "plan_trace"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, list):
+            raise ValueError(f"运行记录 {name} 格式不正确。")
+    for issue in record.get("issues") or []:
+        if (
+            isinstance(issue, dict)
+            and issue.get("severity") is not None
+            and not isinstance(issue["severity"], str)
+        ):
+            raise ValueError("运行问题级别格式不正确。")
+    config = record.get("config") or {}
+    if "training" in config and not isinstance(config["training"], dict):
+        raise ValueError("运行记录训练配置格式不正确。")
+    preflight = record.get("preflight") or {}
+    if "sft_protocol" in preflight and not isinstance(preflight["sft_protocol"], str):
+        raise ValueError("训练监督协议格式不正确。")
+    for name in ("issues", "rows"):
+        value = preflight.get(name)
+        if value is not None and (
+            not isinstance(value, list) or any(not isinstance(item, dict) for item in value)
+        ):
+            raise ValueError(f"训练前检查 {name} 格式不正确。")
+    for issue in preflight.get("issues") or []:
+        if issue.get("severity") is not None and not isinstance(issue["severity"], str):
+            raise ValueError("训练前检查问题级别格式不正确。")
+    recovery = record.get("recovery") or {}
+    for name in ("status", "reason", "child_run_id"):
+        if recovery.get(name) is not None and not isinstance(recovery[name], str):
+            raise ValueError("技术恢复记录格式不正确。")
+    splits = preflight.get("splits")
+    if splits is not None:
+        if not isinstance(splits, dict) or any(
+            not isinstance(item, dict) for item in splits.values()
+        ):
+            raise ValueError("训练前检查分区格式不正确。")
+        for split in splits.values():
+            for name in ("rows", "truncated_rows", "answer_lost_rows"):
+                value = split.get(name, 0)
+                if type(value) is not int or value < 0:
+                    raise ValueError("训练前检查分区数量格式不正确。")
+    loss = (record.get("metrics") or {}).get("train_loss")
+    if loss is not None and (
+        not isinstance(loss, (int, float)) or isinstance(loss, bool) or not math.isfinite(loss)
+    ):
+        raise ValueError("训练损失格式不正确。")
+
+
 class TrainingRunService:
     def __init__(
         self,
@@ -438,3 +496,44 @@ class TrainingRunService:
         return [
             record for record in records if session_id is None or record["session_id"] == session_id
         ]
+
+    def list_runs_tolerant(self, session_id: str | None = None) -> tuple[list[dict], int]:
+        """List readable runs and count records whose identity or status cannot be read.
+
+        A corrupt run may not reveal its task identity, so it is reported rather
+        than silently classified as belonging to another task. Records with a
+        known different task are skipped before resolving their result files.
+        """
+        records: list[dict] = []
+        unreadable = 0
+        for path in sorted(self.root.glob("wb-*/run.json")):
+            run_id = path.parent.name
+            try:
+                initial = self._load(run_id)
+                if (
+                    not isinstance(initial, dict)
+                    or initial.get("run_id") != run_id
+                    or not isinstance(initial.get("session_id"), str)
+                    or not initial["session_id"].strip()
+                ):
+                    raise ValueError("运行身份缺失或不一致。")
+                owner = initial["session_id"]
+                if session_id is not None and owner != session_id:
+                    continue
+                record = self.get_status(run_id)
+                if record.get("run_id") != run_id or record.get("session_id") != owner:
+                    raise ValueError("运行结果的任务身份不一致。")
+                if record.get("status") not in {
+                    "blocked",
+                    "prepared",
+                    "running",
+                    "stopping",
+                    "unknown",
+                    *TERMINAL,
+                }:
+                    raise ValueError("运行状态缺失或不受支持。")
+                _validate_browsable_run(record)
+                records.append(record)
+            except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                unreadable += 1
+        return records, unreadable

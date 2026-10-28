@@ -229,5 +229,5 @@ def test_comparison_all_corrupt_keeps_empty_state_recovery(monkeypatch, tmp_path
     at.switch_page("views/03_Model_Comparison.py").run()
     assert not at.exception, [e.message for e in at.exception]
     assert any("全部跳过" in w.value for w in at.warning), "全部损坏必须如实告知并给修法"
-    assert any("还没有任何模型的评测结果" in w.value for w in at.warning), "空态兜底必须接住"
+    assert any("无法判断该领域是否有结果" in w.value for w in at.warning), "坏记录不得冒充空数据"
     assert any(b.label == "🏋️ 去训练实验室" for b in at.button), "出路按钮必须在场"

@@ -34,6 +34,9 @@ def training_page(data_page, monkeypatch):
         def list_runs(self, session_id=None):
             return deepcopy(records)
 
+        def list_runs_tolerant(self, session_id=None):
+            return self.list_runs(session_id), 0
+
         def prepare(self, current, model_path, **options):
             calls.append(("prepare", current.session_id, model_path, options))
             run = {

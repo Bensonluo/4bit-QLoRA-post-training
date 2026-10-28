@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from streamlit.testing.v1 import AppTest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -75,3 +76,24 @@ def test_short_ids_remain_distinct_when_one_id_is_prefix_of_another():
         "abcdefghx12": "abcdefghx",
         "abcde": "abcde",
     }
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [(None, "本地实验"), ("", "本地实验"), ("  ", "本地实验"), ("evidence.json", "公开历史验证")],
+)
+def test_home_source_matches_experiment_detail_for_missing_and_nonempty_tags(
+    monkeypatch, source, expected
+):
+    from ui import queries
+    from ui.components import workspace
+
+    runs = pd.DataFrame(
+        [{"run_id": "12345678abcdef", "tags.evidence.source": source, "status": "FINISHED"}]
+    )
+    monkeypatch.setattr(queries, "fetch_runs", lambda *_: runs)
+    monkeypatch.setattr(workspace, "load_tasks", lambda: ([], 0))
+    page = AppTest.from_file(str(ROOT / "ui/app.py"), default_timeout=30).run()
+    assert not page.exception
+    table = next(item.value for item in page.dataframe if "运行 ID" in item.value.columns)
+    assert table.loc[0, "来源"] == expected
