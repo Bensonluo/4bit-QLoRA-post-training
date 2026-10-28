@@ -16,7 +16,7 @@ st.set_page_config(
     page_title="TuneSmith — 业务模型工作台",
     page_icon=":material/model_training:",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 apply_shell()
 # A physical pages/ directory lets legacy deep links bypass this shared entry.

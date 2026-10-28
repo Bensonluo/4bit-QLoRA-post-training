@@ -33,7 +33,8 @@ class SampleSource(Contract):
     sheet_note: str = Field(
         default="",
         description="多 Sheet 工作簿的读取范围说明（含多个 sheet 时非空）："
-        "如实记录本次读了哪个 sheet、哪些未读取；由读取时按实际选择生成。",
+        "如实记录本次读了哪个 sheet、哪些未读取；由读取时按实际选择生成。"
+        "旧版 XLS 读取引擎报告文件结构异常但仍可解析时，也在此提示核对原始资料。",
     )
     merged_note: str = Field(
         default="",

@@ -16,7 +16,12 @@ from src.workbench.materialize import dataset_is_current
 from src.workbench.readonly import open_database, require_writable
 from src.workbench.sources import canonical, content_digest
 from src.workbench.training_preflight import preflight_dataset
-from src.workbench.training_runs import TrainingRunService, model_identity, training_tokenizer
+from src.workbench.training_runs import (
+    TrainingRunService,
+    _require_lora_option_types,
+    model_identity,
+    training_tokenizer,
+)
 
 OPTION_FIELDS = {
     "training_options": {
@@ -169,7 +174,7 @@ def _options(proposal, platform):
             raise ValueError(f"{name} 含当前训练方案不支持的字段。")
     training, lora, model = (proposal[key] for key in OPTION_FIELDS)
     TrainingConfig(**training)
-    LoRAConfig(**lora)
+    _require_lora_option_types(LoRAConfig(**lora))
     for name in (
         "num_epochs",
         "batch_size",

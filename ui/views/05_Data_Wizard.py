@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -89,23 +90,31 @@ with st.expander("数据向导配置（只读）") if DISPLAY_ONLY else st.conta
     草果四味汤散,草果四味,Z15020417,产品,10g/袋
     """
 
-    def _load_bytes(name: str, data: bytes, template_hint: str) -> None:
+    def _load_bytes(name: str, data: bytes, template_hint: str) -> bool:
         """上传/演示字节流 → 落临时文件 → 走真实 import_table 代码路径。"""
+        safe_name = Path(name.replace("\\", "/")).name
+        if safe_name in {"", ".", ".."}:
+            st.error("文件名无效，请重新选择资料。")
+            return False
         try:
-            tmp_dir = Path(tempfile.mkdtemp(prefix="tunesmith_wizard_"))
-            path = tmp_dir / name
-            path.write_bytes(data)
-            with st.spinner("正在读取表格…"):
-                table = import_table(path)
+            with tempfile.TemporaryDirectory(prefix="tunesmith_wizard_") as tmp_dir:
+                path = Path(tmp_dir) / safe_name
+                path.write_bytes(data)
+                with st.spinner("正在读取表格…"):
+                    table = import_table(path)
+                table = RawTable(source=safe_name, columns=table.columns, rows=table.rows)
         except WizardError as exc:
             st.error(str(exc))
-            return
+            return False
+        except OSError:
+            st.error("无法读取文件，请检查本地临时目录后重试。")
+            return False
         st.session_state["wizard_table"] = table
-        st.session_state["wizard_source"] = name
+        st.session_state["wizard_source"] = safe_name
         st.session_state["wizard_template"] = template_hint  # 演示数据自动切换对应模板
         st.session_state.pop("wizard_report", None)  # 新数据让旧报告失效
         st.session_state.pop("wizard_preview", None)  # 新数据让旧样本预览失效（R126）
-        st.rerun()
+        return True
 
     # ═══ 第 1 步 · 导入数据 ═══════════════════════════════════════════
 
@@ -119,11 +128,21 @@ with st.expander("数据向导配置（只读）") if DISPLAY_ONLY else st.conta
             help="CSV / Excel / JSONL，需要一列「标准名」和一列「查询/别名」。Excel 需要 openpyxl。",
         )
         if upload is not None:
-            _load_bytes(
-                upload.name,
-                upload.getvalue(),
-                template_hint=st.session_state.get("wizard_template", "entity_matching"),
+            file_id = getattr(upload, "file_id", None)
+            data = None if isinstance(file_id, str) and file_id else upload.getvalue()
+            token = (
+                ("upload", file_id, upload.name)
+                if data is None
+                else ("content", upload.name, hashlib.sha256(data).hexdigest())
             )
+            if st.session_state.get("wizard_consumed_upload") != token and _load_bytes(
+                upload.name,
+                upload.getvalue() if data is None else data,
+                template_hint=st.session_state.get("wizard_template", "entity_matching"),
+            ):
+                st.session_state["wizard_consumed_upload"] = token
+        else:
+            st.session_state.pop("wizard_consumed_upload", None)
     with path_col:
         server_path = st.text_input(
             "或输入服务器上的文件路径",

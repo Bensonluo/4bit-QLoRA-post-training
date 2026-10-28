@@ -7,14 +7,31 @@ import hashlib
 import io
 import json
 import math
+import struct
 import threading
 from collections import Counter
 from pathlib import Path
 from typing import Any, Literal
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 from src.workbench.intake_models import SampleSource, SourceRow
 
 _CSV_READ_LOCK = threading.Lock()
+
+
+class _ExcelWarningLog:
+    """Remember reader warnings without retaining unbounded or private output."""
+
+    def __init__(self) -> None:
+        self.has_output = False
+
+    def write(self, text: str) -> int:
+        self.has_output |= bool(text.strip())
+        return len(text)
+
+    def flush(self) -> None:
+        pass
 
 
 def _resolve_excel_sheet(book: Any, sheet: str | int | None) -> tuple[str, bool]:
@@ -25,6 +42,8 @@ def _resolve_excel_sheet(book: Any, sheet: str | int | None) -> tuple[str, bool]
     解析不到即报错并如实列出全部 sheet，不静默回退。
     """
     names = list(book.sheet_names)
+    if not names:
+        raise ValueError("Excel 文件没有可读取的工作表；请检查原文件。")
     if sheet is None:
         return names[0], False
     hint = f"该文件含 {len(names)} 个 sheet：{'、'.join(names)}。序号从 1 开始（1=第一个）。"
@@ -391,19 +410,44 @@ def read_source(
     elif suffix in {"xlsx", "xls"}:
         import pandas as pd
 
+        if not data:
+            raise ValueError("Excel 文件为空，请检查并重新导出原文件。")
+        excel_errors: tuple[type[Exception], ...] = (
+            BadZipFile,
+            ParseError,
+            EOFError,
+            KeyError,
+            IndexError,
+            ValueError,
+        )
+        xls_log = _ExcelWarningLog() if suffix == "xls" else None
         try:
+            if suffix == "xls":
+                from xlrd.biffh import XLRDError
+                from xlrd.compdoc import CompDocError
+
+                excel_errors += (XLRDError, CompDocError, struct.error)
             # ExcelFile 与 read_excel(BytesIO, sheet_name=0) 走同一条解析路径:
             # 默认仍读第一个 sheet(行为不变),指定 sheet 时按名称选中同一解析器;
             # 借此拿到 sheet 清单,多 Sheet 时如实告知读取范围。
-            book = pd.ExcelFile(io.BytesIO(data))
-            resolved_sheet, explicit = _resolve_excel_sheet(book, sheet)
-            frame = book.parse(
-                sheet_name=resolved_sheet, header=None, dtype=object, keep_default_na=False
+            book = pd.ExcelFile(
+                io.BytesIO(data),
+                engine="openpyxl" if suffix == "xlsx" else "xlrd",
+                engine_kwargs={"logfile": xls_log} if xls_log is not None else {},
             )
         except ImportError as exc:
             raise ValueError(
                 "读取 Excel 缺少对应引擎，请安装 openpyxl（xlsx）或 xlrd（xls）。"
             ) from exc
+        except excel_errors as exc:
+            raise ValueError("Excel 文件损坏或格式无效，请检查并重新导出原文件。") from exc
+        resolved_sheet, explicit = _resolve_excel_sheet(book, sheet)
+        try:
+            frame = book.parse(
+                sheet_name=resolved_sheet, header=None, dtype=object, keep_default_na=False
+            )
+        except excel_errors as exc:
+            raise ValueError("Excel 工作表损坏或格式无效，请检查并重新导出原文件。") from exc
         if frame.empty:
             raise ValueError("文件没有表头或数据。")
         headers = frame.iloc[0].tolist()
@@ -416,13 +460,19 @@ def read_source(
         sheet_names = list(book.sheet_names)
         if len(sheet_names) > 1:
             sheet_note = _excel_sheet_note(sheet_names, resolved_sheet, explicit)
+        if xls_log is not None and xls_log.has_output:
+            warning = "读取引擎报告文件结构异常，请核对原始资料完整性。"
+            sheet_note = f"{sheet_note} {warning}" if sheet_note else warning
         # xlsx 检测与数据区相交的合并单元格、数据区内无缓存值的公式格与
         # 数据区内的隐藏行/列 (xls 引擎不提供这些信息,不检测——如实边界)。
-        merged_note, formula_note, hidden_note = (
-            _excel_notes(data, resolved_sheet, columns, len(records))
-            if suffix == "xlsx"
-            else ("", "", "")
-        )
+        try:
+            merged_note, formula_note, hidden_note = (
+                _excel_notes(data, resolved_sheet, columns, len(records))
+                if suffix == "xlsx"
+                else ("", "", "")
+            )
+        except excel_errors as exc:
+            raise ValueError("Excel 工作表损坏或格式无效，请检查并重新导出原文件。") from exc
     else:
         raise ValueError("当前数据入口支持 CSV、Excel、JSONL。")
     # 空行的如实说明(跨格式):CSV/JSONL 的空行读取时被跳过,Excel 的全空行照常

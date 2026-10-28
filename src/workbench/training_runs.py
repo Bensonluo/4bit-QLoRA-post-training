@@ -24,6 +24,22 @@ from src.workbench.training_preflight import load_local_tokenizer, preflight_dat
 
 _RUNNERS: dict[str, Any] = {}
 TERMINAL = {"succeeded", "failed", "stopped"}
+
+
+def _require_lora_option_types(lora: Any) -> None:
+    """Reject options Python would otherwise silently coerce into LoRA values."""
+    if type(lora.r) is not int or type(lora.lora_alpha) is not int:
+        raise ValueError("LoRA rank 与 alpha 必须是正整数，不能使用布尔值或小数。")
+    if (
+        type(lora.lora_dropout) not in (int, float)
+        or not math.isfinite(lora.lora_dropout)
+        or not 0 <= lora.lora_dropout <= 1
+    ):
+        raise ValueError("LoRA dropout 必须是 0 到 1 之间的有限数值，不能使用布尔值。")
+    if type(lora.use_rslora) is not bool or type(lora.use_dora) is not bool:
+        raise ValueError("LoRA use_rslora 与 use_dora 必须明确为布尔值。")
+
+
 # Worker receipts may update execution outcomes, never the prepared handoff.
 _RECEIPT_RESULT_FIELDS = {
     "status",
@@ -473,6 +489,7 @@ class TrainingRunService:
             lora = LoRAConfig(
                 **{"r": 8, "lora_alpha": 16, "target_modules": "all-linear", **(lora_options or {})}
             )
+            _require_lora_option_types(lora)
             logging = LoggingConfig(
                 use_tensorboard=False,
                 use_mlflow=True,
