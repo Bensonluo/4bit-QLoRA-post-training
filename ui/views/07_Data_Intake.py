@@ -1408,7 +1408,7 @@ with st.sidebar:
     if corrupt_sessions:
         st.warning(
             f"有 {corrupt_sessions} 个任务的数据快照损坏，已从列表跳过；其余任务和"
-            "新建任务不受影响。多半是存储写入被中途打断。"
+            "新建任务不受影响；请检查相关任务存储。"
         )
     labels = {s.session_id: f"{s.goal[:35]} · {s.session_id[:6]}" for s in sessions}
     if DISPLAY_ONLY and not st.session_state.get("ts_display_intake_initialized"):

@@ -219,21 +219,32 @@ def _variant(
     protocol: str,
     evaluation: dict,
     train_precision: str | None,
-    eval_precision: str,
+    eval_precision: str | None,
     history: list[dict],
+    *,
+    role: str,
 ) -> dict:
+    _require(role in {"baseline", "trained"}, "实验变体角色无效。")
+    _require(
+        all(
+            value is None or (isinstance(value, str) and value.strip())
+            for value in (train_precision, eval_precision)
+        ),
+        "精度记录格式无效。",
+    )
+    _require(role != "baseline" or train_precision is None, "基座不能标记为本次训练。")
     _verify_scores(evaluation["rows"], evaluation["summary"])
     return {
         "id": variant_id,
         "label": label,
-        "role": "baseline" if train_precision is None else "trained",
+        "role": role,
         "protocol": protocol,
         "training_precision": train_precision,
         "evaluation_precision": eval_precision,
         "precision": (
-            f"训练 {train_precision} / 推理 {eval_precision}"
-            if train_precision
-            else f"推理 {eval_precision}"
+            f"训练 {train_precision or '未记录'} / 推理 {eval_precision or '未记录'}"
+            if role == "trained"
+            else f"推理 {eval_precision or '未记录'}"
         ),
         "training_history": history,
         "rows": evaluation["rows"],
@@ -311,8 +322,9 @@ def load_study(root: Path, study_id: str) -> dict:
                     PROTOCOLS[0],
                     results["baseline"][PROTOCOLS[0]],
                     None,
-                    settings["dtype"],
+                    settings.get("dtype"),
                     [],
+                    role="baseline",
                 ),
                 _variant(
                     "base-native",
@@ -320,8 +332,9 @@ def load_study(root: Path, study_id: str) -> dict:
                     PROTOCOLS[2],
                     results["baseline"][PROTOCOLS[2]],
                     None,
-                    settings["dtype"],
+                    settings.get("dtype"),
                     [],
+                    role="baseline",
                 ),
             ]
             for protocol in PROTOCOLS:
@@ -341,9 +354,10 @@ def load_study(root: Path, study_id: str) -> dict:
                         LABELS[protocol],
                         protocol,
                         arm["evaluation"],
-                        settings["dtype"],
-                        settings["dtype"],
+                        settings.get("dtype"),
+                        settings.get("dtype"),
                         history,
+                        role="trained",
                     )
                 )
             title, scope, pair = (
@@ -360,9 +374,9 @@ def load_study(root: Path, study_id: str) -> dict:
                 state["global_step"] == results["training"]["global_step"] == 64,
                 "产品训练回执与原始 Trainer 状态不一致。",
             )
-            precision = settings["actual_training_dtype"]
+            precision = settings.get("actual_training_dtype")
             _require(
-                precision == "torch.float32"
+                precision in (None, "torch.float32")
                 and settings["configs"]["model"]["torch_dtype"] == "float32"
                 and not settings["configs"]["training"]["fp16"]
                 and not settings["configs"]["training"]["bf16"],
@@ -379,8 +393,9 @@ def load_study(root: Path, study_id: str) -> dict:
                     PROTOCOLS[1],
                     evaluations["base"],
                     None,
-                    evaluations["base"]["actual_dtype"],
+                    evaluations["base"].get("actual_dtype"),
                     [],
+                    role="baseline",
                 ),
                 _variant(
                     "trained",
@@ -388,13 +403,14 @@ def load_study(root: Path, study_id: str) -> dict:
                     PROTOCOLS[1],
                     evaluations["trained"],
                     precision,
-                    evaluations["trained"]["actual_dtype"],
+                    evaluations["trained"].get("actual_dtype"),
                     history,
+                    role="trained",
                 ),
             ]
             title, scope, pair = (
                 "仅答案监督 · 产品链路验证",
-                "独立产品 smoke；训练 FP32、推理 BF16，不是前述受控实验第四臂，也不代表真实业务验收。",
+                "独立产品 smoke；训练与推理精度分别按记录展示，不是前述受控实验第四臂，也不代表真实业务验收。",
                 ["trained", "base"],
             )
         _bind_baselines(variants)

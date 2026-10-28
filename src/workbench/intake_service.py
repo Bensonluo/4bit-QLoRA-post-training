@@ -320,6 +320,21 @@ class IntakeService:
     def _require_writable(self) -> None:
         require_writable(self.read_only)
 
+    @staticmethod
+    def _validated_snapshot(row_id: str, revision: int, payload: str) -> IntakeSession:
+        """Bind a decoded snapshot to the identity and revision of its SQLite row."""
+        if (
+            not isinstance(row_id, str)
+            or not re.fullmatch(r"[0-9a-f]{32}", row_id)
+            or type(revision) is not int
+            or revision < 0
+        ):
+            raise ValueError("任务存储记录的身份或版本无效。")
+        session = IntakeSession.model_validate_json(payload)
+        if session.session_id != row_id or session.revision != revision:
+            raise ValueError("任务快照身份或版本与存储记录不一致。")
+        return session
+
     def _save(self, session: IntakeSession, expected_revision: int | None) -> IntakeSession:
         self._require_writable()
         updated = session.model_copy(deep=True)
@@ -383,11 +398,11 @@ class IntakeService:
             raise ValueError("找不到这个任务。")
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT snapshot FROM sessions WHERE id=?", (session_id,)
+                "SELECT id, revision, snapshot FROM sessions WHERE id=?", (session_id,)
             ).fetchone()
         if row is None:
             raise ValueError("找不到这个任务。")
-        session = IntakeSession.model_validate_json(row[0])
+        session = self._validated_snapshot(*row)
         return self._attach_label_verification(session)
 
     def _attach_label_verification(self, session: IntakeSession) -> IntakeSession:
@@ -442,9 +457,9 @@ class IntakeService:
             return []
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT snapshot FROM sessions ORDER BY rowid DESC"
+                "SELECT id, revision, snapshot FROM sessions ORDER BY rowid DESC"
             ).fetchall()
-        return [IntakeSession.model_validate_json(row[0]) for row in rows]
+        return [self._validated_snapshot(*row) for row in rows]
 
     def list_sessions_tolerant(self) -> tuple[list[IntakeSession], int]:
         """List valid sessions and count corrupt rows instead of raising (R131).
@@ -456,13 +471,13 @@ class IntakeService:
             return [], 0
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT snapshot FROM sessions ORDER BY rowid DESC"
+                "SELECT id, revision, snapshot FROM sessions ORDER BY rowid DESC"
             ).fetchall()
         sessions: list[IntakeSession] = []
         corrupt = 0
         for row in rows:
             try:
-                sessions.append(IntakeSession.model_validate_json(row[0]))
+                sessions.append(self._validated_snapshot(*row))
             except ValueError:  # 含 pydantic ValidationError 与 json 解析错
                 corrupt += 1
         return sessions, corrupt
@@ -472,10 +487,11 @@ class IntakeService:
         self.load(session_id)
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT snapshot FROM revisions WHERE id=? ORDER BY revision DESC", (session_id,)
+                "SELECT id, revision, snapshot FROM revisions WHERE id=? ORDER BY revision DESC",
+                (session_id,),
             ).fetchall()
         for row in rows:
-            snapshot = IntakeSession.model_validate_json(row[0])
+            snapshot = self._validated_snapshot(*row)
             if snapshot.dataset and snapshot.dataset.version == dataset_version:
                 return snapshot
         raise ValueError("找不到评测对应的历史数据快照，不能用当前数据冒充旧证据。")

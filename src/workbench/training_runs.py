@@ -19,11 +19,48 @@ from src.utils.model_files import config_and_tokenizer_files
 from src.workbench.intake_models import IntakeSession
 from src.workbench.materialize import dataset_is_current
 from src.workbench.readonly import require_writable
-from src.workbench.sources import content_digest
+from src.workbench.sources import canonical, content_digest
 from src.workbench.training_preflight import load_local_tokenizer, preflight_dataset
 
 _RUNNERS: dict[str, Any] = {}
 TERMINAL = {"succeeded", "failed", "stopped"}
+# Worker receipts may update execution outcomes, never the prepared handoff.
+_RECEIPT_RESULT_FIELDS = {
+    "status",
+    "pid",
+    "artifacts",
+    "metrics",
+    "failure",
+    "mlflow_run_id",
+    "mlflow_tracking_uri",
+    "mlflow_status",
+    "finished_at",
+}
+_RECEIPT_PROTECTED_FIELDS = {
+    "run_id",
+    "session_id",
+    "session_revision",
+    "dataset_version",
+    "dataset",
+    "model_path",
+    "model_identity",
+    "output_dir",
+    "config",
+    "config_digest",
+    "preflight",
+    "issues",
+    "plan_trace",
+    "execution",
+    "acknowledge_warnings",
+    "recover_technical_failures",
+    "recovery_parent_run_id",
+    "recovery_changes",
+    "recovery_binding_digest",
+    "recovery",
+    "created_at",
+    "started_at",
+    "intake_store",
+}
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -504,24 +541,62 @@ class TrainingRunService:
 
     def get_status(self, run_id: str) -> dict:
         record = self._load(run_id)
+        if not isinstance(record, dict) or record.get("run_id") != run_id:
+            raise ValueError("运行记录身份不匹配。")
+        # Both reads compare to the prepared handoff, not to an earlier
+        # running receipt whose result metadata may legitimately evolve.
+        prepared = dict(record)
         receipt = self._directory(run_id) / "result.json"
-        if receipt.exists():
-            result = json.loads(receipt.read_text())
+
+        def read_receipt() -> dict | None:
+            try:
+                result = json.loads(receipt.read_text())
+            except FileNotFoundError:
+                return None
+            if not isinstance(result, dict):
+                raise ValueError("运行结果格式不正确。")
             if result.get("run_id") != run_id:
                 raise ValueError("运行结果身份不匹配。")
+            config = prepared.get("config")
+            logging = config.get("logging") if isinstance(config, dict) else None
+            expected_uri = logging.get("mlflow_tracking_uri") if isinstance(logging, dict) else None
+            observed_uri = result.get("mlflow_tracking_uri")
+            if expected_uri and observed_uri and observed_uri != expected_uri:
+                raise ValueError("运行结果与已保存的运行身份或配置不一致。")
+            for key, value in result.items():
+                if key in _RECEIPT_RESULT_FIELDS:
+                    continue
+                if key in _RECEIPT_PROTECTED_FIELDS or key in prepared:
+                    try:
+                        same = key in prepared and canonical(value) == canonical(prepared[key])
+                    except (TypeError, ValueError, OverflowError):
+                        same = False
+                    if not same:
+                        raise ValueError("运行结果与已保存的运行身份或配置不一致。")
+            return result
+
+        result = read_receipt()
+        if result is not None:
             record.update(result)
         if record["status"] in {"running", "stopping", "unknown"}:
             status = self.runner.get_status(run_id)
             if status in {"finished", "failed"}:
-                requested_stop = (self._directory(run_id) / "stop.request").exists()
-                record["status"] = "stopped" if requested_stop else "failed"
-                record["failure"] = {
-                    "stage": "worker",
-                    "type": "UserStopped" if requested_stop else "MissingResult",
-                    "message": "训练已按请求停止。"
-                    if requested_stop
-                    else "训练进程已退出但没有有效结果记录，请查看日志。",
-                }
+                # The worker may publish its final receipt between the first
+                # read and process exit. Re-read before declaring it missing.
+                final = read_receipt()
+                final_status = final.get("status") if final is not None else None
+                if final is not None and isinstance(final_status, str) and final_status in TERMINAL:
+                    record.update(final)
+                else:
+                    requested_stop = (self._directory(run_id) / "stop.request").exists()
+                    record["status"] = "stopped" if requested_stop else "failed"
+                    record["failure"] = {
+                        "stage": "worker",
+                        "type": "UserStopped" if requested_stop else "MissingResult",
+                        "message": "训练已按请求停止。"
+                        if requested_stop
+                        else "训练进程已退出但没有有效结果记录，请查看日志。",
+                    }
             elif status == "unknown":
                 record["status"] = "unknown"
             elif (self._directory(run_id) / "stop.request").exists():
