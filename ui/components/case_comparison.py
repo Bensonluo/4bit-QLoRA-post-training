@@ -179,7 +179,7 @@ def render_case_comparison(data: dict, *, key_prefix: str) -> None:
             st.session_state[question_key] = visible[rows[0]]
 
     st.dataframe(
-        case_overview(models, groups_verified=groups_verified).loc[visible],
+        case_overview(displayed, groups_verified=groups_verified).loc[visible],
         hide_index=True,
         width="stretch",
         on_select=select_row,

@@ -19,6 +19,7 @@ from src.workbench.training_preflight import preflight_dataset
 from src.workbench.training_runs import (
     TrainingRunService,
     _require_lora_option_types,
+    _require_training_option_types,
     model_identity,
     training_tokenizer,
 )
@@ -173,7 +174,7 @@ def _options(proposal, platform):
         if not isinstance(values, dict) or set(values) - allowed:
             raise ValueError(f"{name} 含当前训练方案不支持的字段。")
     training, lora, model = (proposal[key] for key in OPTION_FIELDS)
-    TrainingConfig(**training)
+    _require_training_option_types(TrainingConfig(**training))
     _require_lora_option_types(LoRAConfig(**lora))
     for name in (
         "num_epochs",
@@ -182,7 +183,6 @@ def _options(proposal, platform):
         "learning_rate",
         "r",
         "lora_alpha",
-        "max_grad_norm",
     ):
         values = lora if name in ("r", "lora_alpha") else training
         if name in values:
@@ -194,10 +194,7 @@ def _options(proposal, platform):
                 and type(value) is not int
             ):
                 raise ValueError(f"{name} 必须为正整数。")
-    for name in ("logging_steps", "save_steps", "eval_steps"):
-        if name in training and (type(training[name]) is not int or training[name] <= 0):
-            raise ValueError(f"{name} 必须为正整数。")
-    for name in ("warmup_ratio", "weight_decay"):
+    for name in ("warmup_ratio",):
         value = training.get(name, 0)
         if (
             type(value) not in (int, float)
@@ -207,7 +204,6 @@ def _options(proposal, platform):
         ):
             raise ValueError(f"{name} 数值无效。")
     for values, keys in (
-        (training, ("gradient_checkpointing", "fp16", "bf16")),
         (lora, ("use_dora", "use_rslora")),
         (model, ("load_in_8bit", "use_flash_attention")),
     ):

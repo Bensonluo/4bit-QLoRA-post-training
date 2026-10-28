@@ -41,6 +41,8 @@ def _text(value: Any) -> str:
 
 
 def validate_recipe(source: SampleSource, recipe: DataRecipe) -> None:
+    if recipe.input_render == "plain" and len(recipe.inputs) != 1:
+        raise ValueError("纯文本直出只支持一个输入字段；多个输入请使用字段名标注。")
     referenced = {f.column for f in recipe.inputs + recipe.targets} | set(recipe.group_columns)
     if recipe.temporal_split:
         policy = recipe.temporal_split

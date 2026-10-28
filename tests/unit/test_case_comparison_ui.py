@@ -45,6 +45,13 @@ def test_equal_export_pair_has_no_differences_and_can_return_to_all_cases():
     assert not page.exception
     assert any("8/8 题的原始文本与生成 token 均一致" in item.value for item in page.caption)
     assert len(page.dataframe[0].value) == 8
+    assert list(page.dataframe[0].value.columns) == [
+        "题目",
+        "业务分组",
+        "期望答案",
+        "合并 HF",
+        "GGUF Q4_K_M",
+    ]
     page.selectbox(key="case-filter").set_value("输出或 token 不同").run()
     assert not page.exception
     assert any("当前显示 0/8" in item.value for item in page.caption)
@@ -57,6 +64,33 @@ def test_equal_export_pair_has_no_differences_and_can_return_to_all_cases():
     assert "**合并 HF**" in [item.value for item in page.markdown]
     assert "**GGUF Q4_K_M**" in [item.value for item in page.markdown]
     assert "**基础模型**" not in [item.value for item in page.markdown]
+
+
+def test_overview_follows_pair_selection_and_restores_all_models():
+    page = boot()
+    page.segmented_control(key="case-view").set_value("两模型对照").run()
+    page.selectbox(key="case-left").set_value(0).run()
+    page.selectbox(key="case-right").set_value(3).run()
+    assert not page.exception
+    table = page.dataframe[0].value
+    assert list(table.columns) == ["题目", "业务分组", "期望答案", "基础模型", "GGUF Q4_K_M"]
+    assert table["基础模型"].eq("… 截断").all()
+    assert table["GGUF Q4_K_M"].eq("✓ 匹配").all()
+    page.selectbox(key="case-filter").set_value("存在截断").run()
+    assert not page.exception
+    assert len(page.dataframe[0].value) == 8
+    assert list(page.dataframe[0].value.columns) == list(table.columns)
+    page.segmented_control(key="case-view").set_value("全部模型").run()
+    assert not page.exception
+    assert list(page.dataframe[0].value.columns) == [
+        "题目",
+        "业务分组",
+        "期望答案",
+        "基础模型",
+        "训练适配器",
+        "合并 HF",
+        "GGUF Q4_K_M",
+    ]
 
 
 @pytest.mark.parametrize("criterion", ["输出或 token 不同", "至少一侧未通过", "存在截断"])

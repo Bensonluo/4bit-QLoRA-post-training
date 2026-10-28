@@ -46,6 +46,35 @@ def _from_dataframe(df: pd.DataFrame, source: str) -> RawTable:
     return RawTable(source=source, columns=columns, rows=rows)
 
 
+def _reject_excel_errors(workbook: pd.ExcelFile) -> None:
+    """Do not let spreadsheet error cells become missing values in training data."""
+    from openpyxl.utils import get_column_letter
+
+    if workbook.engine == "openpyxl":
+        sheet = workbook.book.worksheets[0]
+        for cells in sheet.iter_rows():
+            for cell in cells:
+                if cell.data_type == "e":
+                    raise WizardError(
+                        f"Excel 工作表「{sheet.title}」单元格 {cell.coordinate} 包含错误值 {cell.value}；"
+                        "请修正原文件后重新导入。"
+                    )
+    elif workbook.engine == "xlrd":
+        from xlrd.biffh import error_text_from_code
+
+        sheet = workbook.book.sheet_by_index(0)
+        for row in range(sheet.nrows):
+            for column in range(sheet.ncols):
+                if sheet.cell_type(row, column) == 5:
+                    code = sheet.cell_value(row, column)
+                    value = error_text_from_code.get(code, f"错误码 {code}")
+                    coordinate = f"{get_column_letter(column + 1)}{row + 1}"
+                    raise WizardError(
+                        f"Excel 工作表「{sheet.name}」单元格 {coordinate} 包含错误值 {value}；"
+                        "请修正原文件后重新导入。"
+                    )
+
+
 def import_table(path: str | Path) -> RawTable:
     """按扩展名导入表格文件，返回归一化的 RawTable。"""
     p = Path(path)
@@ -56,7 +85,9 @@ def import_table(path: str | Path) -> RawTable:
         if suffix == ".csv":
             df = pd.read_csv(p, dtype=str, keep_default_na=False, encoding="utf-8-sig")
         elif suffix in (".xlsx", ".xls"):
-            df = pd.read_excel(p, dtype=str)
+            with pd.ExcelFile(p) as workbook:
+                _reject_excel_errors(workbook)
+                df = workbook.parse(dtype=str, keep_default_na=False)
         elif suffix == ".jsonl":
             return _import_jsonl(p)
         else:

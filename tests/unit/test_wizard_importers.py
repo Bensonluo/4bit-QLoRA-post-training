@@ -110,7 +110,7 @@ class TestImportTable:
         def boom(*args, **kwargs):
             raise ImportError("No module named 'openpyxl'")
 
-        monkeypatch.setattr(pd, "read_excel", boom)
+        monkeypatch.setattr(pd, "ExcelFile", boom)
         path = tmp_path / "raw.xlsx"
         path.write_bytes(b"fake")
         with pytest.raises(WizardError, match="openpyxl"):

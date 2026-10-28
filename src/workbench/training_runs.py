@@ -26,6 +26,27 @@ _RUNNERS: dict[str, Any] = {}
 TERMINAL = {"succeeded", "failed", "stopped"}
 
 
+def _require_training_option_types(training: Any) -> None:
+    """Validate options shared by direct preparation and reviewed plans."""
+    for name in ("logging_steps", "save_steps", "eval_steps"):
+        value = getattr(training, name)
+        if type(value) is not int or value <= 0:
+            raise ValueError(f"{name} 必须为正整数。")
+    if training.save_steps % training.eval_steps != 0:
+        raise ValueError("save_steps 必须是 eval_steps 的整数倍，以便按验证集选择最佳模型。")
+    for name in ("weight_decay", "max_grad_norm"):
+        value = getattr(training, name)
+        try:
+            valid = type(value) in (int, float) and math.isfinite(value) and value >= 0
+        except OverflowError:
+            valid = False
+        if not valid:
+            raise ValueError(f"{name} 必须为有限非负数。")
+    for name in ("gradient_checkpointing", "fp16", "bf16"):
+        if type(getattr(training, name)) is not bool:
+            raise ValueError(f"{name} 必须明确为布尔值。")
+
+
 def _require_lora_option_types(lora: Any) -> None:
     """Reject options Python would otherwise silently coerce into LoRA values."""
     if type(lora.r) is not int or type(lora.lora_alpha) is not int:
@@ -468,6 +489,7 @@ class TrainingRunService:
                     **train_options,
                 }
             )
+            _require_training_option_types(training)
             if any(
                 not isinstance(value, (int, float))
                 or isinstance(value, bool)
