@@ -1700,13 +1700,13 @@ def main() -> int:
             sheets: dict[str, str] = {}
             for item in args.sheet:
                 alias, separator, value = item.partition("=")
-                if not separator or not alias.strip() or not value.strip():
+                if not separator or not alias.strip() or not value:
                     raise ValueError(
                         "--sheet 格式应为资料别名=sheet名称或序号，例如 main=工单表、labels=2。"
                     )
                 if alias in sheets:
                     raise ValueError(f"资料别名重复：{alias}。每份来源的 sheet 只指定一次。")
-                sheets[alias] = value.strip()
+                sheets[alias] = value
             session = service.validate_full_sources(
                 args.session_id, args.revision, files or None, sheets=sheets or None
             )

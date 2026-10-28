@@ -42,12 +42,8 @@ def display_navigation(message: str, *, experiments: bool = True) -> None:
         if st.button("查看目标与数据", type="primary", key="display-browse-task"):
             st.switch_page("views/07_Data_Intake.py")
         if st.button("浏览示例数据", key="display-browse-examples"):
-            from ui.components.workspace import render_workspace
+            from ui.components.workspace import open_examples
 
-            st.switch_page(
-                st.Page(
-                    render_workspace, title="任务总览", icon=":material/workspaces:", default=True
-                )
-            )
+            open_examples()
         if experiments and st.button("浏览实验记录", key="display-browse-experiments"):
             st.switch_page("views/01_Experiments.py")

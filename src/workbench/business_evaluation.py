@@ -199,6 +199,8 @@ def assert_comparable(left: EvaluationReport, right: EvaluationReport) -> None:
 def comparison_key(dataset: dict[str, Any], protocol: dict[str, Any]) -> str:
     """Fixed-suite scoring identity excludes mutable training-data provenance."""
     suite = dataset.get("evaluation_suite")
+    if suite is not None and not isinstance(suite, dict):
+        raise ValueError("固定评测套件记录格式无效。")
     if suite:
         if not all(suite.get(key) for key in ("suite_id", "cases_digest")):
             raise ValueError("固定评测套件缺少内容身份。")
@@ -563,6 +565,23 @@ def verify_evaluation_report(report: EvaluationReport) -> None:
         not isinstance(report.dataset, dict)
         or not isinstance(report.protocol, dict)
         or not isinstance(report.models, list)
+        or not isinstance(report.created_at, str)
+        or not report.created_at.strip()
+        or report.status
+        not in (
+            "running",
+            "completed",
+            "completed_with_failures",
+            "needs_business_review",
+            "release_failed",
+        )
+        or not isinstance(report.notes, list)
+        or any(not isinstance(note, str) for note in report.notes)
+        or type(report.dataset.get("row_count")) is not int
+        or report.dataset["row_count"] < 1
+        or report.protocol.get("scorer")
+        not in ("classification_exact", "json_fields_exact", "open_review", "custom_rules")
+        or (report.status != "running" and not report.models)
     ):
         raise ValueError("业务评测报告格式无效。")
     if report.comparison_key != comparison_key(report.dataset, report.protocol):
@@ -591,7 +610,25 @@ def verify_evaluation_report(report: EvaluationReport) -> None:
         or not report.protocol["decoder_version"].strip()
     ):
         raise ValueError("token 生成协议的分词、解码、版本或停止规则无效。")
+    labels: set[str] = set()
     for model in report.models:
+        if not isinstance(model, dict):
+            raise ValueError("评测模型结果格式无效。")
+        label, errors, requested = (
+            model.get("label"),
+            model.get("errors", []),
+            model.get("requested_model"),
+        )
+        if (
+            not isinstance(label, str)
+            or not label.strip()
+            or label in labels
+            or not isinstance(errors, list)
+            or any(not isinstance(error, str) for error in errors)
+            or (requested is not None and not isinstance(requested, dict))
+        ):
+            raise ValueError("评测模型名称或状态记录格式无效。")
+        labels.add(label)
         verify_evaluation_metrics(model, report.protocol, report.dataset.get("row_count"))
         if has_gguf:
             from src.workbench.gguf_evaluation import verify_gguf_report_identity
@@ -608,10 +645,12 @@ def verify_evaluation_report(report: EvaluationReport) -> None:
                         raise ValueError("同题模型的实际输入 token 或 EOS 规则不同。")
                     token_inputs[row["index"]] = inputs
         if any(
-            not isinstance(row.get("prompt"), str) or not isinstance(row.get("expected"), str)
+            not isinstance(row.get("prompt"), str)
+            or not isinstance(row.get("expected"), str)
+            or not isinstance(row.get("source"), dict)
             for row in rows
         ):
-            raise ValueError("评测报告缺少逐题实际提示或标准答案。")
+            raise ValueError("评测报告缺少逐题实际提示、标准答案或来源。")
         current_questions = _report_questions(model)
         current_sources = [row.get("source") for row in rows]
         if questions is not None and (
@@ -625,6 +664,16 @@ def verify_evaluation_report(report: EvaluationReport) -> None:
             "answers_digest"
         ] != content_digest([row["expected"] for row in rows]):
             raise ValueError("评测报告的实际标准答案与声明的答案指纹不一致。")
+    if report.status == "completed" and any(
+        row["status"] in {"failed", "truncated"} for model in report.models for row in model["rows"]
+    ):
+        raise ValueError("评测包含失败或截断，不能标记为完整无失败。")
+    if report.status in {"completed", "completed_with_failures"} and any(
+        error.startswith("模型释放失败")
+        for model in report.models
+        for error in model.get("errors", [])
+    ):
+        raise ValueError("评测记录模型释放失败，不能标记为完整对照。")
 
 
 class BusinessEvaluationService:
@@ -681,7 +730,7 @@ class BusinessEvaluationService:
                 )
                 and (
                     suite_id is None
-                    or report.dataset.get("evaluation_suite", {}).get("suite_id") == suite_id
+                    or (report.dataset.get("evaluation_suite") or {}).get("suite_id") == suite_id
                 )
             ),
             key=lambda report: report.created_at,

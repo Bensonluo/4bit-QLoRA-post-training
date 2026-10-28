@@ -11,7 +11,7 @@ import streamlit as st
 
 from ui.components.archive_cards import render_archive_cards
 from ui.components.showcase import render_history
-from ui.components.workspace import SHOWCASE_ROOT, render_workspace
+from ui.components.workspace import SHOWCASE_ROOT, open_examples
 from ui.showcase import available_history_catalog
 
 st.set_page_config(
@@ -21,9 +21,7 @@ st.caption("EXPERIMENT ARCHIVE / 公开验证档案")
 st.title("示例与历史")
 st.write("数据怎样进入模型，训练时发生了什么，导出的模型答得是否一样。这里保留完整过程。")
 if st.button("浏览示例数据", key="archive-open-examples", icon=":material/table_view:"):
-    st.switch_page(
-        st.Page(render_workspace, title="任务总览", icon=":material/workspaces:", default=True)
-    )
+    open_examples()
 
 catalog, unavailable = available_history_catalog(SHOWCASE_ROOT)
 for item in unavailable:

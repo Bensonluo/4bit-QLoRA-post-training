@@ -7,7 +7,9 @@ import os
 import subprocess
 import sys
 import time
+from collections import deque
 from contextlib import contextmanager, suppress
+from io import BytesIO, TextIOWrapper
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -321,9 +323,40 @@ class TrainingRunner:
         log_path = self.get_log_path(run_id)
         if log_path is None or not log_path.exists():
             return ""
-        with open(log_path) as f:
-            lines = f.readlines()
-        return "".join(lines[-tail:])
+        # Preserve Python slicing behavior for legacy non-positive values.
+        if tail <= 0:
+            with open(log_path) as stream:
+                return "".join(stream.readlines()[-tail:])
+        with log_path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            position = stream.tell()
+            blocks: list[bytes] = []
+            newline_count = 0
+            while position > 0 and newline_count <= tail:
+                size = min(position, 8192)
+                position -= size
+                stream.seek(position)
+                block = stream.read(size)
+                newline_count += block.count(b"\r") + block.count(b"\n") - block.count(b"\r\n")
+                if blocks and block.endswith(b"\r") and blocks[-1].startswith(b"\n"):
+                    newline_count -= 1
+                blocks.append(block)
+            data = b"".join(reversed(blocks))
+            if position:
+                # Skip the potentially partial first line (and UTF-8 code point).
+                delimiters = [offset for char in (b"\r", b"\n") if (offset := data.find(char)) >= 0]
+                if not delimiters:
+                    # The file changed while reading; fall back to a fresh scan.
+                    stream.seek(0)
+                    data = stream.read()
+                else:
+                    first_newline = min(delimiters)
+                    width = 2 if data[first_newline : first_newline + 2] == b"\r\n" else 1
+                    data = data[first_newline + width :]
+        # TextIOWrapper retains open(...).readlines()'s locale and universal
+        # newline behavior, including legacy CR-only logs.
+        with TextIOWrapper(BytesIO(data)) as text:
+            return "".join(deque(text, maxlen=tail))
 
     def stop_training(self, run_id: str) -> None:
         """Terminate a running training subprocess."""

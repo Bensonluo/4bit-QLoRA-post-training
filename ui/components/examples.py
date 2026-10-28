@@ -54,6 +54,7 @@ def render_examples(root: Path) -> None:
                 icon=":material/table_view:",
             ):
                 st.session_state["showcase-example"] = example["id"]
+                st.session_state["showcase-last-example"] = example["id"]
                 st.session_state["showcase-preview-open"] = True
             if runtime.action_button(
                 "用这份数据开始",
@@ -83,12 +84,22 @@ def render_examples(root: Path) -> None:
     ):
         by_id = {example["id"]: example for example in examples}
         if st.session_state.get("showcase-example") not in by_id:
-            st.session_state["showcase-example"] = next(iter(by_id))
+            last_example = st.session_state.get("showcase-last-example")
+            chosen = last_example if last_example in by_id else next(iter(by_id))
+            st.session_state["showcase-example"] = chosen
+            st.session_state["showcase-last-example"] = chosen
+
+        def remember_example() -> None:
+            # Widget state is removed when leaving the page; retain the user's
+            # selection separately so a navigation back opens the same CSV.
+            st.session_state["showcase-last-example"] = st.session_state["showcase-example"]
+
         selected = st.selectbox(
             "示例数据",
             list(by_id),
             format_func=lambda item: by_id[item]["title"],
             key="showcase-example",
+            on_change=remember_example,
         )
         example = by_id[selected]
         st.caption(example["description"])

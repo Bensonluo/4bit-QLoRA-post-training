@@ -37,6 +37,14 @@ def open_task(session_id: str | None = None) -> None:
     st.switch_page("views/07_Data_Intake.py")
 
 
+def open_examples() -> None:
+    """Return to the workspace with the actual example data visible."""
+    st.session_state["showcase-preview-open"] = True
+    st.switch_page(
+        st.Page(render_workspace, title="任务总览", icon=":material/workspaces:", default=True)
+    )
+
+
 def load_tasks() -> tuple[list[IntakeSession], int]:
     root = config.PROJECT_ROOT / "outputs/workbench/intake"
     if not (root / "intake.sqlite").exists():

@@ -177,23 +177,20 @@ def test_model_binding_requires_correct_base_and_adapter(tmp_path):
     assert not IterationService._has_model(report, run)
 
 
-def test_parent_and_bound_evaluation_content_cannot_change_before_decision(tmp_path):
+def test_parent_and_bound_evaluation_content_cannot_change_before_decision(environment, tmp_path):  # noqa: F811
     from dataclasses import asdict
 
-    from src.workbench.business_evaluation import EvaluationReport, comparison_key
     from src.workbench.sources import content_digest
 
+    _, session, _, model = environment
     service = IterationService(tmp_path / "iterations", tmp_path / "runs", tmp_path / "eval")
-    dataset, protocol = {"version": "fixture"}, {"scorer": "open_review"}
-    report = EvaluationReport(
-        "a" * 32,
-        "2026-01-01",
-        dataset,
-        protocol,
-        comparison_key(dataset, protocol),
-        status="completed",
+    report = service.evaluations.compare(
+        session,
+        [EvaluationModel("base", str(model)), EvaluationModel("comparison", str(model))],
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=FixtureRuntime,
     )
-    service.evaluations._save(report)
+    report = service.evaluations.get_report(report.evaluation_id)
     record = service._save(
         {
             "iteration_id": "it-" + "b" * 32,
@@ -231,33 +228,35 @@ def test_data_scope_and_length_are_explicit_before_proposal(tmp_path):
         service.propose(SimpleNamespace(dataset=object()), **arguments, max_length=True)
 
 
-def test_incomplete_three_model_comparison_cannot_become_decision_evidence(tmp_path, monkeypatch):
-    from types import SimpleNamespace
+def test_incomplete_three_model_comparison_cannot_become_decision_evidence(
+    request,
+    tmp_path,
+    monkeypatch,
+):
+    _, session, _, model = request.getfixturevalue("environment")
 
-    from src.workbench.business_evaluation import EvaluationReport, comparison_key
+    class ReleaseFailure(FixtureRuntime):
+        def close(self):
+            raise RuntimeError("release failed")
 
     service = IterationService(tmp_path / "iterations", tmp_path / "runs", tmp_path / "eval")
-    dataset, protocol = {"version": "fixture"}, {"scorer": "open_review"}
-    report = EvaluationReport(
-        "a" * 32,
-        "2026-01-01",
-        dataset,
-        protocol,
-        comparison_key(dataset, protocol),
-        status="release_failed",
+    report = service.evaluations.compare(
+        session,
+        [EvaluationModel("base", str(model)), EvaluationModel("comparison", str(model))],
+        EvaluationProtocol("classification_exact"),
+        runtime_factory=ReleaseFailure,
     )
-    service.evaluations._save(report)
+    assert report.status == "release_failed"
     record = service._save(
         {
             "iteration_id": "it-" + "b" * 32,
-            "session_id": "c" * 32,
-            "goal": "目标",
+            "session_id": session.session_id,
+            "goal": session.goal,
             "status": "running",
             "new_run_id": "new",
         }
     )
     monkeypatch.setattr(service.training, "get_status", lambda run_id: {"status": "succeeded"})
-    session = SimpleNamespace(session_id=record["session_id"], goal=record["goal"])
     with pytest.raises(ValueError, match="尚未完整"):
         service.bind_evaluation(record["iteration_id"], session, report.evaluation_id)
     assert service.get(record["iteration_id"])["status"] == "running"

@@ -32,6 +32,11 @@ def _resolve_excel_sheet(book: Any, sheet: str | int | None) -> tuple[str, bool]
         if not 1 <= sheet <= len(names):
             raise ValueError(f"sheet 序号 {sheet} 超出范围；{hint}")
         return names[sheet - 1], True
+    # Excel names may contain leading/trailing whitespace. Preserve an exact
+    # match before normalizing typed input, otherwise a valid selection can
+    # silently resolve to a different worksheet with a trimmed name.
+    if isinstance(sheet, str) and sheet in names:
+        return sheet, True
     text = str(sheet).strip()
     if not text:
         return names[0], False

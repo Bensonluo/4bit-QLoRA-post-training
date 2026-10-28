@@ -1496,7 +1496,7 @@ if "intake_id" not in st.session_state:
                     delimiter={"逗号": ",", "分号": ";", "Tab": "\t", "竖线": "|"}.get(
                         delimiter_label
                     ),
-                    sheet=(sheet or "").strip() or None,
+                    sheet=sheet or None,
                 )
                 st.session_state["intake_id"] = session.session_id
                 st.rerun()
@@ -2286,7 +2286,7 @@ with st.expander("原始资料与补充文件", expanded=len(original_sources) >
                     source_upload.name,
                     source_upload.getvalue(),
                     scope="full" if source_scope == "全量" else "sample",
-                    sheet=(source_sheet or "").strip() or None,
+                    sheet=source_sheet or None,
                 )
                 if source_description.strip():
                     service.answer(
@@ -2714,9 +2714,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                                 },
                                 # 只有用户填写了 sheet 的资料才进入指定;留空仍读第一个 sheet。
                                 sheets={
-                                    alias: (value or "").strip() or None
-                                    for alias, value in full_sheets.items()
-                                    if value
+                                    alias: value for alias, value in full_sheets.items() if value
                                 }
                                 or None,
                             )
@@ -2808,7 +2806,7 @@ if session.confirmed_revision is not None or session.full_data is not None:
                                     "Tab": "\t",
                                     "竖线": "|",
                                 }.get(full_delimiter),
-                                sheet=(full_sheet or "").strip() or None,
+                                sheet=full_sheet or None,
                             )
                         st.rerun()
                     except (ValueError, OSError) as exc:
