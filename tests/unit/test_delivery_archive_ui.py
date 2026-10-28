@@ -15,6 +15,12 @@ PUBLIC = "公开交付档案"
 LOCAL = "本地注册版本"
 
 
+def render_delivery(root):
+    from ui.components.delivery_archive import render_delivery_archive
+
+    render_delivery_archive(root)
+
+
 def snapshot(root):
     return {
         str(path.relative_to(root)): path.read_bytes() if path.is_file() else None
@@ -88,6 +94,38 @@ def test_display_defaults_to_real_public_artifacts_without_mlflow_or_writes(monk
     assert calls == []
     assert snapshot(tmp_path) == before
     assert asset_identity() == source_before
+
+
+@pytest.mark.parametrize("error_type", [OSError, ValueError])
+def test_unreadable_delivery_hides_private_exception_and_keeps_local_navigation(
+    monkeypatch, tmp_path, error_type
+):
+    from ui import showcase
+
+    def unavailable(*_args):
+        raise error_type("/Users/private-owner/secret-client/report.json")
+
+    monkeypatch.setattr(showcase, "load_showcase", unavailable)
+    before = snapshot(tmp_path)
+    page, calls = boot(monkeypatch, tmp_path, display=True)
+    warnings = " ".join(item.value for item in page.warning)
+    assert "公开交付档案暂不可读或核验失败" in warnings
+    assert "private-owner" not in warnings
+    assert "secret-client" not in warnings
+    assert calls == []
+    page.segmented_control(key="registry-source").set_value(LOCAL).run()
+    assert_clean(page)
+    assert page.segmented_control(key="registry-source").value == LOCAL
+    assert snapshot(tmp_path) == before
+
+
+def test_missing_delivery_file_does_not_expose_actual_server_path(tmp_path):
+    page = AppTest.from_function(render_delivery, args=(tmp_path,)).run()
+    assert_clean(page)
+    warnings = " ".join(item.value for item in page.warning)
+    assert "公开交付档案暂不可读或核验失败" in warnings
+    assert str(tmp_path) not in warnings
+    assert not list(tmp_path.iterdir())
 
 
 def test_delivery_opens_complete_comparison_and_replaces_a_stale_study_selection(

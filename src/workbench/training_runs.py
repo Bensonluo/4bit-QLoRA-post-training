@@ -705,6 +705,8 @@ class TrainingRunService:
                     manifest["run_id"] != run_id
                     or manifest["dataset_version"] != record["dataset_version"]
                     or manifest["config_digest"] != record["config_digest"]
+                    or canonical(manifest.get("model_identity"))
+                    != canonical(record.get("model_identity"))
                 ):
                     raise ValueError("训练产物身份不匹配。")
                 files = manifest["files"]
@@ -728,6 +730,18 @@ class TrainingRunService:
                     path = Path(artifact["path"]).resolve()
                     if not path.is_relative_to(output) or file_digest(path) != artifact["sha256"]:
                         raise ValueError("训练产物已修改，内容哈希不匹配。")
+                if "metrics" in files or "metrics" in record:
+                    metrics_path = output / "workbench_metrics.json"
+                    if (
+                        Path(files["metrics"]["path"]).resolve() != metrics_path
+                        or Path(artifacts["metrics"]).resolve() != metrics_path
+                    ):
+                        raise ValueError("训练指标文件与产物记录不一致。")
+                    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+                    if not isinstance(metrics, dict) or canonical(metrics) != canonical(
+                        record.get("metrics")
+                    ):
+                        raise ValueError("训练回执指标与已核验的指标文件不一致。")
             except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
                 record["status"] = "failed"
                 record["failure"] = {

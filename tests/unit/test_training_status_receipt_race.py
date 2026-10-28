@@ -28,6 +28,7 @@ def running(tmp_path):
         "status": "running",
         "dataset_version": "dataset-v1",
         "config_digest": "config-v1",
+        "model_identity": {"path": "/models/base", "weights": ["fixture"]},
     }
     (directory / "run.json").write_text(json.dumps(record))
     return (
@@ -47,10 +48,13 @@ def valid_success(directory, identity):
     }
     for artifact in paths.values():
         artifact.write_bytes(b"valid artifact")
+    paths["metrics"] = output / "workbench_metrics.json"
+    paths["metrics"].write_text(json.dumps({"train_loss": 0.5}))
     manifest = {
         "run_id": identity,
         "dataset_version": "dataset-v1",
         "config_digest": "config-v1",
+        "model_identity": {"path": "/models/base", "weights": ["fixture"]},
         "files": {
             key: {
                 "path": str(artifact),
@@ -64,6 +68,7 @@ def valid_success(directory, identity):
     return {
         "run_id": identity,
         "status": "succeeded",
+        "metrics": {"train_loss": 0.5},
         "artifacts": {**{key: str(value) for key, value in paths.items()}, "manifest": str(path)},
     }
 
@@ -136,6 +141,55 @@ def test_succeeded_receipt_requires_bound_adapter_evidence(running, damage, tmp_
     assert status["failure"]["stage"] == "artifacts"
     assert status["failure"]["type"] == "ArtifactMismatch"
     assert snapshot(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    "damage", ["identity", "missing_identity", "metrics", "missing_metrics", "redirected_metrics"]
+)
+def test_success_requires_consistent_base_identity_and_recorded_metrics(running, damage, tmp_path):
+    service, directory, identity = running
+    result = valid_success(directory, identity)
+    manifest_path = directory / "model" / "workbench_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if damage == "identity":
+        manifest["model_identity"]["path"] = "/models/another"
+    elif damage == "missing_identity":
+        del manifest["model_identity"]
+    elif damage == "metrics":
+        result["metrics"]["train_loss"] = 0.1
+    elif damage == "missing_metrics":
+        del manifest["files"]["metrics"]
+    else:
+        other = directory / "model" / "other.json"
+        other.write_bytes((directory / "model" / "workbench_metrics.json").read_bytes())
+        manifest["files"]["metrics"]["path"] = str(other)
+        result["artifacts"]["metrics"] = str(other)
+    manifest_path.write_text(json.dumps(manifest))
+    (directory / "result.json").write_text(json.dumps(result))
+    before = snapshot(tmp_path)
+    status = service.get_status(identity)
+    assert status["status"] == "failed"
+    assert status["failure"]["stage"] == "artifacts"
+    assert status["failure"]["type"] == "ArtifactMismatch"
+    assert snapshot(tmp_path) == before
+
+
+def test_legacy_record_without_metrics_or_identity_remains_readable(running):
+    service, directory, identity = running
+    result = valid_success(directory, identity)
+    manifest_path = directory / "model" / "workbench_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["model_identity"]
+    del manifest["files"]["metrics"]
+    del result["metrics"]
+    del result["artifacts"]["metrics"]
+    record_path = directory / "run.json"
+    record = json.loads(record_path.read_text())
+    del record["model_identity"]
+    record_path.write_text(json.dumps(record))
+    manifest_path.write_text(json.dumps(manifest))
+    (directory / "result.json").write_text(json.dumps(result))
+    assert service.get_status(identity)["status"] == "succeeded"
 
 
 def test_newly_published_receipt_still_checks_identity(running):

@@ -40,7 +40,7 @@ def invoke(service, *args):
 
 
 def test_answer_sheet_cli_exports_handoff_sheet_for_business_filler(tmp_path):
-    """样例口径:JSON 给行ID 与答案字段,CSV 是 Excel 直开的填写表,规则同源。"""
+    """样例口径:JSON 给行ID 与答案字段,CSV 保留原始值,规则同源。"""
     service, session = _store(tmp_path, MISSING)
     target = tmp_path / "sheet.csv"
     done = invoke(service, "answer-sheet", session.session_id, "--export-csv", target)

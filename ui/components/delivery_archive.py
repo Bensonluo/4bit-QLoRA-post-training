@@ -36,8 +36,10 @@ def render_delivery_archive(root: Path, *, key_prefix: str = "registry-delivery"
 
     try:
         data = load_showcase(root)
-    except (ValueError, OSError) as exc:
-        st.warning(f"公开交付档案暂不可读：{exc}。可切换来源查看本地注册版本。")
+    except (ValueError, OSError):
+        st.warning(
+            "公开交付档案暂不可读或核验失败；请检查公开来源文件，或切换来源查看本地注册版本。"
+        )
         return
     report = data["report"]
     groups = data["counts"].get("development_groups")

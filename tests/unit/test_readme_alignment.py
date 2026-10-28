@@ -220,6 +220,7 @@ def test_agent_setup_blind_label_cli_section_pins_full_usage():
         assert key in section, f"盲标 CLI 用法缺少统计键说明: {key}"
     assert "不收 `--revision`" in section
     assert "只含「行ID、题目输入、留空待填的盲标答案」三列，不含数据答案" in section
+    assert "开放文本逐条审阅的清单包含题目、数据中的待审答复" in section
     assert "判定：verified（5/5 一致，95% 置信下界约 57%）" in section
 
 

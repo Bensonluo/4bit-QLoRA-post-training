@@ -104,6 +104,8 @@ def test_display_page_isolates_corrupt_curve_and_incomparable_time(data_page, mo
     }
     for artifact in artifacts.values():
         artifact.write_text("valid artifact")
+    artifacts["metrics"] = output / "workbench_metrics.json"
+    artifacts["metrics"].write_text(json.dumps({"train_loss": 0.5}))
     manifest = output / "workbench_manifest.json"
     manifest.write_text(
         json.dumps(

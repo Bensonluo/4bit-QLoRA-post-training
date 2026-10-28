@@ -145,6 +145,36 @@ def parse_json_value(text: str) -> Any:
     return value
 
 
+def _excel_nonfinite_cell(
+    book: Any, sheet: str, suffix: str, row_number: int, values: Any, headers: list[Any]
+) -> None:
+    """Reject spreadsheet errors before pandas' NaN can enter a source snapshot."""
+    for column_number, value in enumerate(values, 1):
+        if not isinstance(value, float) or math.isfinite(value):
+            continue
+        from openpyxl.utils import get_column_letter
+
+        coordinate = f"{get_column_letter(column_number)}{row_number}"
+        code = None
+        if suffix == "xlsx":
+            cell = book.book[sheet].cell(row=row_number, column=column_number)
+            if cell.data_type == "e":
+                code = cell.value
+        elif suffix == "xls":
+            cell = book.book.sheet_by_name(sheet).cell(row_number - 1, column_number - 1)
+            if cell.ctype == 5:
+                from xlrd.biffh import error_text_from_code
+
+                code = error_text_from_code.get(cell.value, f"错误码 {cell.value}")
+        header = headers[column_number - 1]
+        field = f"（字段「{header}」）" if isinstance(header, str) and header.strip() else ""
+        detail = f"Excel 错误值 {code}" if code else "无法表示的非有限数值"
+        raise ValueError(
+            f"Excel 工作表「{sheet}」单元格 {coordinate}{field}包含{detail}；"
+            "请在原文件中修正后重新读取，未将其当作空值或有效答案。"
+        )
+
+
 def _excel_sheet_note(sheet_names: list[str], read_name: str, explicit: bool) -> str:
     """多 Sheet 工作簿的读取范围说明:如实列出读了哪个 sheet、哪些未读取。"""
 
@@ -376,8 +406,11 @@ def read_source(
             ) from exc
         if frame.empty:
             raise ValueError("文件没有表头或数据。")
-        columns = _headers(frame.iloc[0].tolist())
+        headers = frame.iloc[0].tolist()
+        _excel_nonfinite_cell(book, resolved_sheet, suffix, 1, headers, headers)
+        columns = _headers(headers)
         for i, values in enumerate(frame.iloc[1:].itertuples(index=False, name=None), 2):
+            _excel_nonfinite_cell(book, resolved_sheet, suffix, i, values, headers)
             normalized = [v.isoformat() if hasattr(v, "isoformat") else v for v in values]
             records.append((i, dict(zip(columns, normalized))))
         sheet_names = list(book.sheet_names)

@@ -812,16 +812,32 @@ def test_missing_answer_handoff_sheet_renders_rules_and_download(data_page):
     page.run()
     page.selectbox(key="intake_select").select(session.session_id).run()
     assert not page.exception
-    # AppTest 没有 download_button 专用访问器(不在 page.button 里),按元素类型
-    # 从消息树取节点、按标签过滤(页面还有分区下载等常驻下载按钮);CSV 内容
-    # 本身由单元/CLI 测试钉住,这里钉住按钮在缺答案时出现。
+    # 文件内容由单元/CLI 测试核对，页面应同时提供人工填写和程序读取入口。
     downloads = [node.proto.label for node in page.get("download_button")]
     assert "导出待补答案清单（交给填写人）" in downloads
+    assert "下载原始 CSV（供程序读取）" in downloads
     captions = " ".join(item.value for item in page.caption)
+    assert "表格软件可能将部分内容识别为公式" in captions
     assert "只填「待填答案」列" in captions
     assert "不要凭猜测填" in captions
     assert "监督信号" in captions
     assert "比编一个答案更有价值" in captions
+
+
+def test_oversized_answer_input_keeps_raw_csv_available(data_page):
+    service, _, page = data_page
+    data = (
+        "编号,客户描述,类别,处理结果\n001,普通问题,质量,补发\n002," + "长" * 32768 + ",,补发\n"
+    ).encode()
+    session = service.create("判断类别", "sample.csv", data)
+    session = service.apply_analysis(session, analysis())
+    page.run()
+    page.selectbox(key="intake_select").select(session.session_id).run()
+    assert not page.exception, [item.message for item in page.exception]
+    assert any("超过 Excel 单元格长度限制" in item.value for item in page.warning)
+    downloads = [node.proto.label for node in page.get("download_button")]
+    assert "下载原始 CSV（供程序读取）" in downloads
+    assert "导出待补答案清单（交给填写人）" not in downloads
 
 
 def test_missing_answer_rules_absent_when_no_missing_rows(data_page):

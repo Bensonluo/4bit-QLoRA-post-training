@@ -85,22 +85,25 @@ def _save_config(args: argparse.Namespace) -> None:
     print("已保存公共配置；密钥仅从环境变量读取。环境配置优先于此文件。", file=sys.stderr)
 
 
-def _verification_questions_to_csv(items: list[dict]) -> bytes:
-    """盲标题目清单导出为 CSV（带 BOM，Excel 直开），供线下作答核对。
-
-    与 learnability-probe 的候选清单导出同款口径；关键差别是盲标清单
-    只含行ID与隐藏答案后的题目输入，绝不含数据标签——盲标核验的价值在
-    独立复现业务含义，导出文件一旦泄露答案，核验就失效了。第三列留空，
-    供线下填写盲标答案后逐条照抄回 label-verify-submit 提交。
-    """
+def _verification_questions_to_csv(items: list[dict], *, mode: str = "reproduce") -> bytes:
+    """Export the actual verification task without leaking labels in reproduce mode."""
     import csv
     import io
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["行ID", "题目输入（仅根据此列作答）", "你的盲标答案（填写后提交）"])
-    for item in items:
-        writer.writerow([item["row_id"], item["input"], ""])
+    if mode == "reproduce":
+        writer.writerow(["行ID", "题目输入（仅根据此列作答）", "你的盲标答案（填写后提交）"])
+        for item in items:
+            writer.writerow([item["row_id"], item["input"], ""])
+    elif mode == "review":
+        writer.writerow(["行ID", "题目输入", "数据中的答复（供审阅）", "审阅结论（填写是或否）"])
+        for item in items:
+            if not isinstance(item.get("answer"), str):
+                raise ValueError("逐条审阅缺少数据中的答复，不能导出审阅清单。")
+            writer.writerow([item["row_id"], item["input"], item["answer"], ""])
+    else:
+        raise ValueError("不支持的核验方式，不能导出题目清单。")
     return buffer.getvalue().encode("utf-8-sig")
 
 
@@ -341,7 +344,7 @@ def main() -> int:
     label_verify.add_argument(
         "--export-csv",
         type=Path,
-        help="抽题后把题目清单导出为 CSV 文件（Excel 直开），供线下作答核对；清单只含行ID与题目输入，不含数据答案",
+        help="导出原始 CSV：复现式核验隐藏数据答案；开放文本审阅包含待审答复。电子表格可能将原始内容解释为公式。",
     )
     verify_submit = sub.add_parser("label-verify-submit", help="提交盲标核验答案并得到一致性判定")
     verify_submit.add_argument("session_id")
@@ -377,7 +380,12 @@ def main() -> int:
     answer_sheet_cmd.add_argument(
         "--export-csv",
         type=Path,
-        help="把填写表导出为 CSV 文件（Excel 直开）；没有缺答案行或答案列待业务确认时不写文件",
+        help="把原始填写表导出为 CSV，供程序读取；没有缺答案行或答案列待业务确认时不写文件",
+    )
+    answer_sheet_cmd.add_argument(
+        "--export-xlsx",
+        type=Path,
+        help="把填写表导出为文本单元格的 Excel 文件，供人工填写",
     )
     probe = sub.add_parser(
         "learnability-probe",
@@ -1909,12 +1917,17 @@ def main() -> int:
                 print(f"\n[{item['row_id']}] {item['input']}", file=sys.stderr)
                 if pending.get("mode") == "review":
                     print(f"  数据中的答复：{item.get('answer', '')}", file=sys.stderr)
-            # 题目清单可导出 CSV 供线下作答核对,与 learnability-probe 的候选导出同款;
-            # 导出发生在抽题成功之后,清单不含数据答案,盲标不因导出失效。
+            # 复现式核验不泄露答案；开放文本审阅则必须显示数据中的待审答复。
             if args.export_csv is not None:
                 args.export_csv.parent.mkdir(parents=True, exist_ok=True)
-                args.export_csv.write_bytes(_verification_questions_to_csv(pending["items"]))
+                args.export_csv.write_bytes(
+                    _verification_questions_to_csv(pending["items"], mode=pending["mode"])
+                )
                 print(f"题目清单已导出：{args.export_csv}", file=sys.stderr)
+                print(
+                    "原始 CSV 不屏蔽电子表格公式，请勿直接在电子表格中打开不可信内容。",
+                    file=sys.stderr,
+                )
             result = {
                 "verification_id": pending["verification_id"],
                 "mode": pending["mode"],
@@ -2023,6 +2036,7 @@ def main() -> int:
                 answer_sheet_lineage,
                 answer_sheet_lines,
                 answer_sheet_source,
+                answer_sheet_xlsx,
                 missing_answer_rows,
             )
             from src.workbench.full_data import full_data_is_current
@@ -2054,20 +2068,41 @@ def main() -> int:
                     print(line, file=sys.stderr)
             else:
                 print("当前没有缺答案的行，无需导出清单。", file=sys.stderr)
-            if args.export_csv is not None:
+            if args.export_csv is not None or args.export_xlsx is not None:
                 if missing and field_names:
-                    args.export_csv.parent.mkdir(parents=True, exist_ok=True)
-                    args.export_csv.write_bytes(
-                        answer_sheet_csv(
-                            missing,
-                            field_names,
-                            source=answer_sheet_source(session, full=use_full),
-                            lineage=answer_sheet_lineage(session, full=use_full, rows=missing),
+                    if (
+                        args.export_csv is not None
+                        and args.export_xlsx is not None
+                        and args.export_csv.resolve() == args.export_xlsx.resolve()
+                    ):
+                        raise ValueError("CSV 和 Excel 导出路径不能相同。")
+                    source = answer_sheet_source(session, full=use_full)
+                    lineage = answer_sheet_lineage(session, full=use_full, rows=missing)
+                    exports = []
+                    if args.export_csv is not None:
+                        exports.append(
+                            (
+                                args.export_csv,
+                                answer_sheet_csv(
+                                    missing, field_names, source=source, lineage=lineage
+                                ),
+                            )
                         )
-                    )
-                    print(f"待补答案清单已导出：{args.export_csv}", file=sys.stderr)
+                    if args.export_xlsx is not None:
+                        exports.append(
+                            (
+                                args.export_xlsx,
+                                answer_sheet_xlsx(
+                                    missing, field_names, source=source, lineage=lineage
+                                ),
+                            )
+                        )
+                    for target, content in exports:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(content)
+                        print(f"待补答案清单已导出：{target}", file=sys.stderr)
                 else:
-                    print("没有待补行或答案列待业务确认，未生成清单 CSV。", file=sys.stderr)
+                    print("没有待补行或答案列待业务确认，未生成清单文件。", file=sys.stderr)
             result = {
                 "scope": scope,
                 "missing_count": len(missing),

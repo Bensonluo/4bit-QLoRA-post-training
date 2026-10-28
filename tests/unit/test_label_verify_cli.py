@@ -4,6 +4,8 @@ CLI 进程内调用（monkeypatch sys.argv，参考 test_probe_cli 的调用模�
 数据用 _full 确认后的全量预览，全部落在 tmp_path，不碰 outputs/。
 """
 
+import csv
+import io
 import json
 import sys
 
@@ -213,12 +215,19 @@ def test_cli_label_verify_review_mode_shows_answers_and_accepts_yes_no(
         captured_errs.append(captured.err)
         return json.loads(captured.out)
 
-    pending = _run("--size", "2")
+    target = tmp_path / "review-questions.csv"
+    pending = _run("--size", "2", "--export-csv", target)
     assert pending["mode"] == "review"
     first_err = captured_errs[-1]
     assert "逐条审阅" in first_err and "是/否" in first_err
     assert "数据中的答复：" in first_err
     assert all("answer" in item for item in pending["items"])
+    exported = list(csv.reader(io.StringIO(target.read_text(encoding="utf-8-sig"))))
+    assert exported[0] == ["行ID", "题目输入", "数据中的答复（供审阅）", "审阅结论（填写是或否）"]
+    assert exported[1:] == [
+        [item["row_id"], item["input"], item["answer"], ""] for item in pending["items"]
+    ]
+    assert "不屏蔽电子表格公式" in first_err
 
     # 提交:第一条认可,第二条否决 → 审阅未通过
     row_yes = pending["items"][0]["row_id"]
@@ -295,6 +304,25 @@ def test_cli_label_verify_export_csv_not_written_when_sampling_rejected(
     _, err = capsys.readouterr()
     assert not csv_path.exists()
     assert "任务已更新" in err
+
+
+def test_reproduce_sheet_never_exports_answer_even_if_item_contains_one():
+    from scripts.data_intake import _verification_questions_to_csv
+
+    items = [{"row_id": "r000001", "input": "题目", "answer": "不应泄露的标签"}]
+    data = _verification_questions_to_csv(items, mode="reproduce").decode("utf-8-sig")
+    assert "不应泄露的标签" not in data
+    assert list(csv.reader(io.StringIO(data)))[1] == ["r000001", "题目", ""]
+
+
+def test_review_sheet_refuses_missing_answer_or_unknown_mode():
+    from scripts.data_intake import _verification_questions_to_csv
+
+    items = [{"row_id": "r000001", "input": "题目"}]
+    with pytest.raises(ValueError, match="缺少数据中的答复"):
+        _verification_questions_to_csv(items, mode="review")
+    with pytest.raises(ValueError, match="不支持的核验方式"):
+        _verification_questions_to_csv(items, mode="unknown")
 
 
 def test_cli_label_verify_submit_failure_prints_triage_lines(store, monkeypatch, capsys):

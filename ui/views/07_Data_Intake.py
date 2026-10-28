@@ -157,6 +157,7 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
         answer_sheet_lineage,
         answer_sheet_lines,
         answer_sheet_source,
+        answer_sheet_xlsx,
         missing_answer_rows,
     )
 
@@ -183,18 +184,32 @@ def show_missing_label_next_step(rows, *, full=False) -> None:
     # 介入点 10 编码:填写人拿到的是只含待补行的填写表(行ID+题目输入+待填列),
     # 而不是一段口头指引;交接三条规则(answer_sheet_lines 单一来源)与 CLI 同源。
     if field_names:
+        scope = "全量" if full else "样例"
+        key = "full" if full else "sample"
+        source = answer_sheet_source(session, full=full)
+        lineage = answer_sheet_lineage(session, full=full, rows=missing)
+        try:
+            sheet = answer_sheet_xlsx(missing, field_names, source=source, lineage=lineage)
+        except ValueError as exc:
+            st.warning(f"Excel 清单暂不可生成：{exc}")
+        except ImportError:
+            st.warning("Excel 清单需要安装 openpyxl；仍可下载原始 CSV。")
+        else:
+            st.download_button(
+                "导出待补答案清单（交给填写人）",
+                data=sheet,
+                file_name=f"待补答案清单-{scope}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key=f"answer_sheet_{key}",
+            )
         st.download_button(
-            "导出待补答案清单（交给填写人）",
-            data=answer_sheet_csv(
-                missing,
-                field_names,
-                source=answer_sheet_source(session, full=full),
-                lineage=answer_sheet_lineage(session, full=full, rows=missing),
-            ),
-            file_name=f"待补答案清单-{'全量' if full else '样例'}.csv",
+            "下载原始 CSV（供程序读取）",
+            data=answer_sheet_csv(missing, field_names, source=source, lineage=lineage),
+            file_name=f"待补答案清单-{scope}.csv",
             mime="text/csv",
-            key=f"answer_sheet_{'full' if full else 'sample'}",
+            key=f"answer_sheet_csv_{key}",
         )
+        st.caption("Excel 清单按文本保存；原始 CSV 供程序读取，表格软件可能将部分内容识别为公式。")
     for line in answer_sheet_lines(len(missing)):
         st.caption(line)
 

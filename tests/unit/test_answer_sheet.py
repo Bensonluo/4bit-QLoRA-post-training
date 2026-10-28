@@ -61,7 +61,7 @@ def test_missing_answer_rows_defaults_to_no_policy():
 
 
 def test_answer_sheet_csv_is_bom_excel_csv_with_blank_fill_columns():
-    """BOM 保证 Excel 直开;列固定 行ID/题目输入/每字段一个待填列,待填格为空。"""
+    """CSV 带 BOM；字段与待填空格保留原值，供程序读取。"""
     rows = [_row("r000001", "needs_label"), _row("r000002", "needs_label")]
     data = answer_sheet_csv(rows, ["类别"])
     assert data.startswith(b"\xef\xbb\xbf")  # utf-8-sig BOM
